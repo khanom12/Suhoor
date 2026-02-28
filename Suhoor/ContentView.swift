@@ -3,12 +3,11 @@ import UIKit
 
 struct ContentView: View {
     enum Tab {
-        case alarm
-        case schedule
+        case alarms
         case settings
     }
 
-    @State private var selectedTab: Tab = .alarm
+    @State private var selectedTab: Tab = .alarms
 
     var body: some View {
         ZStack {
@@ -16,33 +15,32 @@ struct ContentView: View {
                 .ignoresSafeArea()
 
             TabView(selection: $selectedTab) {
-                AlarmsListView()
+                AlarmsHomeView()
                     .tabItem {
-                        Label("Alarm", systemImage: "alarm")
+                        Label("Alarms", systemImage: "alarm")
                     }
-                    .tag(Tab.alarm)
-
-                ScheduleRootView()
-                    .tabItem {
-                        Label("Schedule", systemImage: "calendar")
-                    }
-                    .tag(Tab.schedule)
+                    .tag(Tab.alarms)
 
                 SettingsRootView()
                     .tabItem {
                         Label("Settings", systemImage: "gearshape")
                     }
                     .tag(Tab.settings)
+
+                // Tracker tab placeholder (no functionality yet).
+                // TrackerView()
+                //     .tabItem { Label("Tracker", systemImage: "checkmark.circle") }
+                //     .tag(Tab.tracker)
             }
         }
         // Force the root container to occupy the full screen to avoid a centered "panel" layout on iPhone.
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .modifier(RootSizeGuard())
         .onReceive(NotificationCenter.default.publisher(for: .switchToScheduleTab)) { _ in
-            selectedTab = .schedule
+            selectedTab = .alarms
         }
         .onReceive(NotificationCenter.default.publisher(for: .switchToAlarmTab)) { _ in
-            selectedTab = .alarm
+            selectedTab = .alarms
         }
         .onReceive(NotificationCenter.default.publisher(for: .switchToSettingsTab)) { _ in
             selectedTab = .settings

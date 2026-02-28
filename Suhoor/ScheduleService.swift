@@ -22,6 +22,7 @@ final class ScheduleManager: ObservableObject {
     @Published var notificationAuthorizationText: String = "--"
 
     private let settingsStore: SuhoorSettingsStore
+    private let alarmConfigStore: AlarmConfigStore
     private let locationService: LocationService
     private let cacheStore = ScheduleCacheStore()
     private let calculator = PrayerTimeCalculator()
@@ -34,12 +35,14 @@ final class ScheduleManager: ObservableObject {
     private var alarmKitScheduler: AlarmKitScheduler?
     private let notificationScheduler = NotificationScheduler()
     private let routineScheduler: RoutineScheduler
+    private let alarmScheduler: AlarmScheduler
     private let alarmCoordinator: AlarmCoordinator?
     private let countdownManager: CountdownManager
     private let alarmEventRouter: AlarmEventRouter?
 
-    init(settingsStore: SuhoorSettingsStore, locationService: LocationService) {
+    init(settingsStore: SuhoorSettingsStore, locationService: LocationService, alarmConfigStore: AlarmConfigStore) {
         self.settingsStore = settingsStore
+        self.alarmConfigStore = alarmConfigStore
         self.locationService = locationService
         var resolvedAlarmKit: AlarmKitScheduler?
         #if !targetEnvironment(simulator)
@@ -72,6 +75,7 @@ final class ScheduleManager: ObservableObject {
             alarmKitScheduler: resolvedAlarmKit,
             alarmCoordinator: resolvedCoordinator
         )
+        self.alarmScheduler = AlarmScheduler(routineScheduler: routineScheduler)
         if FeatureFlags.enableCountdown, #available(iOS 26.0, *), alarmCoordinator != nil {
             self.alarmEventRouter = AlarmEventRouter(
                 recordStore: alarmRecordStore,
@@ -99,7 +103,7 @@ final class ScheduleManager: ObservableObject {
     }
 
     var usesNotificationFallback: Bool {
-        settingsStore.settings.isEnabled && schedulingMode == .notifications
+        hasAnyEnabledAlarms && schedulingMode == .notifications
     }
 
     var isAlarmKitDenied: Bool {
@@ -177,9 +181,9 @@ final class ScheduleManager: ObservableObject {
         }
 
         settingsStore.update { draft in
-            draft.isEnabled = true
             draft.isConfigured = true
         }
+        alarmConfigStore.defaults.suhoorEnabledDefault = true
 
         await refreshSchedules(force: true)
         return true
@@ -187,26 +191,15 @@ final class ScheduleManager: ObservableObject {
 
     func disableFromUserAction() async {
         lastEnableFailureMessage = nil
-        settingsStore.update { draft in
-            draft.isEnabled = false
-        }
+        alarmConfigStore.defaults.suhoorEnabledDefault = false
+        alarmConfigStore.defaults.reminderEnabledDefault = false
+        alarmConfigStore.defaults.fajrEnabledDefault = false
         await refreshSchedules(force: true)
     }
 
     func refreshSchedules(force: Bool) async {
         let settings = settingsStore.settings
         EventTimelineLog.shared.record(category: "schedule", message: "refreshSchedules(force=\(force))")
-
-        let anyAlertsEnabled = settings.isEnabled
-            || settings.hasAnyReminderEnabled
-            || settings.hasAnyAtFajrEnabled
-        guard anyAlertsEnabled else {
-            await cancelAll()
-            schedules = []
-            schedulingMode = .none
-            statusText = "Off"
-            return
-        }
 
         guard isLocationAuthorized else {
             statusText = "Location permission required."
@@ -241,62 +234,138 @@ final class ScheduleManager: ObservableObject {
         let startDate = DateHelpers.startOfToday(in: timeZone)
         let canUseAlarmKit = await alarmKitAvailableAndAuthorized()
         let mode: SchedulingMode = canUseAlarmKit ? .alarmKit : .notifications
-        let daysToSchedule = max(1, settings.schedulePreviewDays)
-        let maxScheduleDays = 30
-        let ruleEngine = RuleEngine(settings: settings, timeZone: timeZone)
+        let windowDays = max(1, alarmConfigStore.defaults.scheduleWindowDays)
+        let maxScheduleDays = 60
+        let scheduleDays = max(windowDays, maxScheduleDays)
+        let ruleEngine = RuleEngine(settings: settings, configStore: alarmConfigStore, timeZone: timeZone)
         let scheduleDates = scheduledDates(
             startingFrom: startDate,
-            defaultDays: daysToSchedule,
+            defaultDays: scheduleDays,
             maxDays: maxScheduleDays,
             ruleEngine: ruleEngine,
             timeZone: timeZone
         )
 
-        let generated = generateSchedules(
+        let entries = generateSchedules(
             for: scheduleDates,
             coordinate: coordinate,
             timeZone: timeZone,
             method: method,
             adjustmentMinutes: settings.fajrAdjustmentMinutes,
-            ruleSummaryProvider: { ruleEngine.ruleSummary(for: $0) },
-            reminderEnabledProvider: { ruleEngine.effectiveReminderEnabled(for: $0) },
-            reminderMinutesProvider: { ruleEngine.effectiveReminderMinutes(for: $0) },
-            atFajrEnabledProvider: { ruleEngine.effectiveAtFajrEnabled(for: $0) },
-            atFajrSoundProvider: { ruleEngine.effectiveAtFajrSoundChoice(for: $0) },
+            effectiveConfigProvider: { date in
+                alarmConfigStore.effectiveConfig(
+                    for: date,
+                    ruleSummary: ruleEngine.ruleSummary(for: date),
+                    settings: settings,
+                    timeZone: timeZone
+                )
+            },
             locationDescription: "Based on your location"
         )
 
-        let now = Date()
-        let upcoming = generated.filter { RoutineScheduler.isScheduleUpcoming($0, settings: settings, now: now) }
-
-        schedules = upcoming
-        schedulingMode = mode
+        let displaySchedules = Array(entries.prefix(windowDays)).map { $0.0 }
+        schedules = displaySchedules
         lastUpdated = Date()
 
-        let scheduled = await routineScheduler.scheduleAllEnabledEvents(
-            schedules: upcoming,
-            settings: settings,
-            canUseAlarmKit: canUseAlarmKit
-        )
-        statusText = scheduled ? "Scheduled" : "Unable to schedule"
+        let hasAnyEnabled = entries.contains { entry in
+            let config = entry.1
+            return !config.skipDay && config.hasAnyEnabled
+        }
+
+        if hasAnyEnabled {
+            schedulingMode = mode
+            let scheduled = await alarmScheduler.scheduleAll(
+                entries: entries,
+                settings: settings,
+                canUseAlarmKit: canUseAlarmKit,
+                cancelWindowDays: maxScheduleDays
+            )
+            statusText = scheduled ? "Scheduled" : "Unable to schedule"
+        } else {
+            await cancelAll()
+            schedulingMode = .none
+            statusText = "Off"
+        }
 
         settingsStore.update { draft in
             draft.lastScheduledDate = Date()
-            draft.lastSchedulingMode = mode
+            draft.lastSchedulingMode = schedulingMode
         }
 
         cacheStore.save(
             ScheduleCacheStore.Cache(
                 lastScheduledDate: settingsStore.settings.lastScheduledDate,
                 lastUpdated: lastUpdated,
-                schedulingMode: mode,
-                schedules: upcoming
+                schedulingMode: schedulingMode,
+                schedules: displaySchedules
             )
         )
 
         permissionSummary = await permissionSummaryText()
         alarmAuthorizationText = await alarmAuthorizationStateText()
         notificationAuthorizationText = await notificationAuthorizationStateText()
+    }
+
+    func rescheduleDay(_ date: Date) async {
+        guard isLocationAuthorized else { return }
+        guard let coordinate = currentCoordinate() else { return }
+
+        let settings = settingsStore.settings
+        let timeZone = TimeZone.current
+        let method = settings.calculationMethod
+        let ruleEngine = RuleEngine(settings: settings, configStore: alarmConfigStore, timeZone: timeZone)
+        let effectiveConfig = alarmConfigStore.effectiveConfig(
+            for: date,
+            ruleSummary: ruleEngine.ruleSummary(for: date),
+            settings: settings,
+            timeZone: timeZone
+        )
+
+        guard let schedule = buildSchedule(
+            for: date,
+            coordinate: coordinate,
+            timeZone: timeZone,
+            method: method,
+            adjustmentMinutes: settings.fajrAdjustmentMinutes,
+            effectiveConfig: effectiveConfig,
+            locationDescription: "Based on your location"
+        ) else { return }
+
+        let canUseAlarmKit = await alarmKitAvailableAndAuthorized()
+        _ = await alarmScheduler.scheduleDay(
+            schedule: schedule,
+            config: effectiveConfig,
+            settings: settings,
+            canUseAlarmKit: canUseAlarmKit
+        )
+
+        let start = DateHelpers.startOfToday(in: timeZone)
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let end = calendar.date(
+            byAdding: .day,
+            value: max(0, alarmConfigStore.defaults.scheduleWindowDays - 1),
+            to: start
+        ) ?? start
+
+        if schedule.date >= start && schedule.date <= end {
+            if let index = schedules.firstIndex(where: { DateHelpers.isSameDay($0.date, date, in: timeZone) }) {
+                schedules[index] = schedule
+            } else {
+                schedules.append(schedule)
+                schedules.sort { $0.date < $1.date }
+            }
+        }
+
+        lastUpdated = Date()
+        cacheStore.save(
+            ScheduleCacheStore.Cache(
+                lastScheduledDate: settingsStore.settings.lastScheduledDate,
+                lastUpdated: lastUpdated,
+                schedulingMode: schedulingMode,
+                schedules: schedules
+            )
+        )
     }
 
     func requestAlarmAuthorization() async -> Bool {
@@ -557,7 +626,7 @@ final class ScheduleManager: ObservableObject {
         let timeZone = TimeZone.current
         let now = Date()
         let canUseAlarmKit = await alarmKitAvailableAndAuthorized()
-        let ruleEngine = RuleEngine(settings: settings, timeZone: timeZone)
+        let ruleEngine = RuleEngine(settings: settings, configStore: alarmConfigStore, timeZone: timeZone)
 
         guard let coordinate = currentCoordinate() else {
             let mismatch = AuditMismatch(severity: .error, message: "Location unavailable; unable to compute expected events.")
@@ -576,22 +645,24 @@ final class ScheduleManager: ObservableObject {
         var expectedEvents: [ExpectedScheduledEvent] = []
 
         for date in dates {
+            let effectiveConfig = alarmConfigStore.effectiveConfig(
+                for: date,
+                ruleSummary: ruleEngine.ruleSummary(for: date),
+                settings: settings,
+                timeZone: timeZone
+            )
             guard let schedule = buildSchedule(
                 for: date,
                 coordinate: coordinate,
                 timeZone: timeZone,
                 method: settings.calculationMethod,
                 adjustmentMinutes: settings.fajrAdjustmentMinutes,
-                ruleSummaryProvider: { ruleEngine.ruleSummary(for: $0) },
-                reminderEnabledProvider: { ruleEngine.effectiveReminderEnabled(for: $0) },
-                reminderMinutesProvider: { ruleEngine.effectiveReminderMinutes(for: $0) },
-                atFajrEnabledProvider: { ruleEngine.effectiveAtFajrEnabled(for: $0) },
-                atFajrSoundProvider: { ruleEngine.effectiveAtFajrSoundChoice(for: $0) },
+                effectiveConfig: effectiveConfig,
                 locationDescription: "Audit"
             ) else { continue }
 
             let dayLabelText = dayLabel(for: date)
-            if settings.isEnabled {
+            if effectiveConfig.suhoorEnabled && !effectiveConfig.skipDay {
                 let channel: ExpectedScheduledEvent.Channel = canUseAlarmKit ? .alarmKit : .notification
                 let identifier = channel == .alarmKit
                     ? SchedulingIdentifiers.alarmID(for: schedule, kind: .wake).uuidString
@@ -609,7 +680,7 @@ final class ScheduleManager: ObservableObject {
                 )
             }
 
-            if let reminderDate = schedule.reminderDate {
+            if effectiveConfig.reminderEnabled, !effectiveConfig.skipDay, let reminderDate = schedule.reminderDate {
                 let channel: ExpectedScheduledEvent.Channel = canUseAlarmKit ? .alarmKit : .notification
                 let identifier = channel == .alarmKit
                     ? SchedulingIdentifiers.alarmID(for: schedule, kind: .reminder).uuidString
@@ -627,7 +698,7 @@ final class ScheduleManager: ObservableObject {
                 )
             }
 
-            if let boundaryDate = schedule.boundaryDate {
+            if effectiveConfig.fajrEnabled, !effectiveConfig.skipDay, let boundaryDate = schedule.boundaryDate {
                 let channel: ExpectedScheduledEvent.Channel = canUseAlarmKit ? .alarmKit : .notification
                 let identifier = channel == .alarmKit
                     ? SchedulingIdentifiers.alarmID(for: schedule, kind: .boundary).uuidString
@@ -676,6 +747,10 @@ final class ScheduleManager: ObservableObject {
 
     private var isLocationAuthorized: Bool {
         locationService.authorizationStatus == .authorizedAlways || locationService.authorizationStatus == .authorizedWhenInUse
+    }
+
+    private var hasAnyEnabledAlarms: Bool {
+        alarmConfigStore.hasAnyEnabledDefaults || alarmConfigStore.hasAnyEnabledOverride()
     }
 
     private func currentCoordinate() -> CLLocationCoordinate2D? {
@@ -815,17 +890,11 @@ final class ScheduleManager: ObservableObject {
         timeZone: TimeZone,
         method: CalculationMethod,
         adjustmentMinutes: Int,
-        ruleSummaryProvider: (Date) -> RuleSummary,
-        reminderEnabledProvider: (Date) -> Bool,
-        reminderMinutesProvider: (Date) -> Int,
-        atFajrEnabledProvider: (Date) -> Bool,
-        atFajrSoundProvider: (Date) -> SoundChoice,
+        effectiveConfig: EffectiveDailyConfig,
         locationDescription: String
     ) -> DaySchedule? {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = timeZone
-        let summary = ruleSummaryProvider(day)
-        if summary.disabledForDay { return nil }
 
         guard let fajr = calculator.fajrDate(
             for: day,
@@ -835,13 +904,25 @@ final class ScheduleManager: ObservableObject {
             adjustmentMinutes: adjustmentMinutes
         ) else { return nil }
 
-        let offsetMinutes = summary.finalOffsetMinutes
-        let wake = ScheduleEventCalculator.wakeDate(for: fajr, offsetMinutes: offsetMinutes, calendar: calendar)
-        let reminder = reminderEnabledProvider(day)
-            ? ScheduleEventCalculator.reminderDate(for: fajr, reminderMinutes: reminderMinutesProvider(day), calendar: calendar)
-            : nil
-        let boundary = atFajrEnabledProvider(day) ? fajr : nil
-        let fajrSoundChoice = atFajrSoundProvider(day)
+        let wake = resolvedSuhoorDate(for: day, fajr: fajr, config: effectiveConfig, calendar: calendar)
+        let offsetMinutes = Int(round(fajr.timeIntervalSince(wake) / 60))
+        var reminder: Date?
+        if effectiveConfig.reminderEnabled {
+            if let overrideMinutes = effectiveConfig.reminderTimeOverrideMinutesFromMidnight {
+                reminder = dateFromMidnight(for: day, minutes: overrideMinutes, calendar: calendar)
+            } else {
+                reminder = ScheduleEventCalculator.reminderDate(
+                    for: fajr,
+                    reminderMinutes: effectiveConfig.reminderOffsetMinutes,
+                    calendar: calendar
+                )
+            }
+            if let reminderDate = reminder, reminderDate < wake {
+                reminder = wake
+            }
+        }
+        let boundary = effectiveConfig.fajrEnabled ? fajr : nil
+        let fajrSoundChoice = effectiveConfig.fajrSoundChoice
 
         return DaySchedule(
             date: day,
@@ -863,32 +944,45 @@ final class ScheduleManager: ObservableObject {
         timeZone: TimeZone,
         method: CalculationMethod,
         adjustmentMinutes: Int,
-        ruleSummaryProvider: (Date) -> RuleSummary,
-        reminderEnabledProvider: (Date) -> Bool,
-        reminderMinutesProvider: (Date) -> Int,
-        atFajrEnabledProvider: (Date) -> Bool,
-        atFajrSoundProvider: (Date) -> SoundChoice,
+        effectiveConfigProvider: (Date) -> EffectiveDailyConfig,
         locationDescription: String
-    ) -> [DaySchedule] {
-        var results: [DaySchedule] = []
+    ) -> [(DaySchedule, EffectiveDailyConfig)] {
+        var results: [(DaySchedule, EffectiveDailyConfig)] = []
         for day in dates {
+            let config = effectiveConfigProvider(day)
             if let schedule = buildSchedule(
                 for: day,
                 coordinate: coordinate,
                 timeZone: timeZone,
                 method: method,
                 adjustmentMinutes: adjustmentMinutes,
-                ruleSummaryProvider: ruleSummaryProvider,
-                reminderEnabledProvider: reminderEnabledProvider,
-                reminderMinutesProvider: reminderMinutesProvider,
-                atFajrEnabledProvider: atFajrEnabledProvider,
-                atFajrSoundProvider: atFajrSoundProvider,
+                effectiveConfig: config,
                 locationDescription: locationDescription
             ) {
-                results.append(schedule)
+                results.append((schedule, config))
             }
         }
         return results
+    }
+
+    private func resolvedSuhoorDate(
+        for day: Date,
+        fajr: Date,
+        config: EffectiveDailyConfig,
+        calendar: Calendar
+    ) -> Date {
+        if let overrideMinutes = config.suhoorTimeOverrideMinutesFromMidnight {
+            return dateFromMidnight(for: day, minutes: overrideMinutes, calendar: calendar)
+        }
+        if config.suhoorTimeMode == .fixedTime {
+            return dateFromMidnight(for: day, minutes: config.suhoorOffsetMinutes, calendar: calendar)
+        }
+        return ScheduleEventCalculator.wakeDate(for: fajr, offsetMinutes: config.suhoorOffsetMinutes, calendar: calendar)
+    }
+
+    private func dateFromMidnight(for day: Date, minutes: Int, calendar: Calendar) -> Date {
+        let start = calendar.startOfDay(for: day)
+        return calendar.date(byAdding: .minute, value: minutes, to: start) ?? start
     }
 
     private func scheduledDates(

@@ -41,6 +41,36 @@ enum Strings {
         static let scheduleUnable = "Schedule couldn’t load. Tap to retry."
     }
 
+    enum AlarmsTab {
+        static let scheduleWindow = "Schedule window"
+        static func nextDays(_ count: Int) -> String { "Next \(count) days" }
+        static let emptyTitle = "No schedule yet"
+        static let emptySubtitle = "Enable defaults or create a day override to schedule alarms."
+        static let customizedBadge = "Customized"
+        static let skippedBadge = "Skipped"
+        static let todayLabel = "Today"
+        static let tomorrowLabel = "Tomorrow"
+        static let suhoorLabel = "Suhoor"
+        static let reminderLabel = "Reminder"
+        static let fajrLabel = "Fajr"
+        static let onLabel = "On"
+        static let offLabel = "Off"
+        static let enabledLabel = "Enabled"
+        static let useFixedTime = "Use fixed time"
+        static let suhoorTime = "Suhoor time"
+        static func suhoorComputed(_ time: String) -> String { "Computed: \(time)" }
+        static func reminderOffsetLabel(_ minutes: Int) -> String { "Minutes before Fajr: \(minutes)m" }
+        static func reminderComputed(_ time: String) -> String { "Computed: \(time)" }
+        static let reminderOff = "Reminder is off for this day."
+        static func fajrComputed(_ time: String) -> String { "Fajr: \(time)" }
+        static let resetDay = "Reset this day to defaults"
+        static let defaultsSection = "Default Alarms"
+        static let suhoorMode = "Suhoor time mode"
+        static let activationMode = "Activation mode"
+        static let activeStartDate = "Start date"
+        static let activeEndDate = "End date"
+    }
+
     enum LocationRationale {
         static let title = "Use your location"
         static let body = "Suhoor uses your location to calculate Fajr times for your area and keep your routine updated."

@@ -55,4 +55,36 @@ enum DateHelpers {
         let dayCount = (calendar.dateComponents([.day], from: start, to: end).day ?? 0) + 1
         return dates(startingFrom: start, count: dayCount, calendar: calendar)
     }
+
+    static func minutesFromMidnight(for date: Date, timeZone: TimeZone = .current) -> Int {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let components = calendar.dateComponents([.hour, .minute], from: date)
+        let hour = components.hour ?? 0
+        let minute = components.minute ?? 0
+        return max(0, min(1439, hour * 60 + minute))
+    }
+
+    static func dateFromMidnight(for day: Date, minutes: Int, timeZone: TimeZone = .current) -> Date {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let clamped = max(0, min(1439, minutes))
+        let hour = clamped / 60
+        let minute = clamped % 60
+        let start = calendar.startOfDay(for: day)
+        let components = DateComponents(hour: hour, minute: minute)
+
+        if let date = calendar.date(bySettingHour: hour, minute: minute, second: 0, of: start) {
+            return date
+        }
+
+        let fallback = calendar.nextDate(
+            after: start,
+            matching: components,
+            matchingPolicy: .nextTime,
+            repeatedTimePolicy: .first,
+            direction: .forward
+        )
+        return fallback ?? start
+    }
 }

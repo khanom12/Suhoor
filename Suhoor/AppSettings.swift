@@ -348,4 +348,10 @@ extension AppSettings {
         copy.lastSchedulingMode = .none
         return copy
     }
+
+    func withSuhoorEnabled(_ isEnabled: Bool) -> AppSettings {
+        var copy = self
+        copy.isEnabled = isEnabled
+        return copy
+    }
 }

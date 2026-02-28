@@ -47,13 +47,22 @@ struct RuleSummary {
 
 struct RuleEngine {
     let settings: AppSettings
+    let defaultConfig: DefaultAlarmConfig
+    let overridesByDay: [String: DailyAlarmOverride]
     let timeZone: TimeZone
 
     private let ramadanRange: RamadanRange?
     private let profileEngine = RamadanProfileEngine()
 
-    init(settings: AppSettings, timeZone: TimeZone = .current) {
+    init(
+        settings: AppSettings,
+        defaultConfig: DefaultAlarmConfig = .default,
+        overridesByDay: [String: DailyAlarmOverride] = [:],
+        timeZone: TimeZone = .current
+    ) {
         self.settings = settings
+        self.defaultConfig = defaultConfig
+        self.overridesByDay = overridesByDay
         self.timeZone = timeZone
         if settings.ramadanModeEnabled {
             ramadanRange = profileEngine.computeRamadanRange(
@@ -67,6 +76,19 @@ struct RuleEngine {
         }
     }
 
+    init(
+        settings: AppSettings,
+        configStore: AlarmConfigStore,
+        timeZone: TimeZone = .current
+    ) {
+        self.init(
+            settings: settings,
+            defaultConfig: configStore.defaults,
+            overridesByDay: configStore.overridesByDay,
+            timeZone: timeZone
+        )
+    }
+
     func effectiveWakeOffsetMinutes(for date: Date) -> Int {
         let summary = ruleSummary(for: date)
         return summary.finalOffsetMinutes
@@ -74,23 +96,23 @@ struct RuleEngine {
 
     func effectiveReminderEnabled(for date: Date) -> Bool {
         let key = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
-        if let override = settings.perDayExceptions[key]?.reminderEnabledOverride {
+        if let override = overridesByDay[key]?.reminderEnabled {
             return override
         }
-        return settings.reminderEnabledGlobal
+        return defaultsActive(on: date) ? defaultConfig.reminderEnabledDefault : false
     }
 
     func effectiveAtFajrEnabled(for date: Date) -> Bool {
         let key = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
-        if let override = settings.perDayExceptions[key]?.atFajrEnabledOverride {
+        if let override = overridesByDay[key]?.fajrEnabled {
             return override
         }
-        return settings.atFajrEnabledGlobal
+        return defaultsActive(on: date) ? defaultConfig.fajrEnabledDefault : false
     }
 
     func effectiveAtFajrSoundChoice(for date: Date) -> SoundChoice {
         let key = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
-        if let override = settings.perDayExceptions[key]?.atFajrSoundOverride {
+        if let override = overridesByDay[key]?.fajrSoundOverride {
             return override
         }
         return settings.atFajrSoundSelectionGlobal
@@ -98,31 +120,31 @@ struct RuleEngine {
 
     func effectiveReminderMinutes(for date: Date) -> Int {
         let key = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
-        if let override = settings.perDayExceptions[key]?.reminderMinutesOverride {
+        if let override = overridesByDay[key]?.reminderOffsetOverrideMinutes {
             return override
         }
-        return settings.reminderMinutesBeforeFajrGlobal
+        return defaultConfig.defaultReminderOffsetMinutes
     }
 
     func ruleSummary(for date: Date) -> RuleSummary {
-        let baseOffset = settings.baseWakeOffsetMinutes
+        let baseOffset = defaultConfig.defaultSuhoorOffsetMinutes
         let key = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
-        if let exception = settings.perDayExceptions[key] {
-            if exception.disabledForDay {
+        if let override = overridesByDay[key] {
+            if override.skipDay {
                 return RuleSummary(
                     baseOffsetMinutes: baseOffset,
                     appliedLayer: nil,
                     finalOffsetMinutes: baseOffset,
-                    overrideOffsetMinutes: exception.wakeOffsetOverrideMinutes,
+                    overrideOffsetMinutes: override.suhoorOffsetOverrideMinutes,
                     disabledForDay: true
                 )
             }
-            if let override = exception.wakeOffsetOverrideMinutes {
+            if let overrideMinutes = override.suhoorOffsetOverrideMinutes {
                 return RuleSummary(
                     baseOffsetMinutes: baseOffset,
                     appliedLayer: nil,
-                    finalOffsetMinutes: override,
-                    overrideOffsetMinutes: override,
+                    finalOffsetMinutes: overrideMinutes,
+                    overrideOffsetMinutes: overrideMinutes,
                     disabledForDay: false
                 )
             }
@@ -157,19 +179,36 @@ struct RuleEngine {
         }
 
         let key = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
-        if let exception = settings.perDayExceptions[key] {
-            if exception.disabledForDay {
+        if let override = overridesByDay[key] {
+            if override.skipDay {
                 return [.custom]
             }
-            if exception.wakeOffsetOverrideMinutes != nil
-                || exception.reminderEnabledOverride != nil
-                || exception.reminderMinutesOverride != nil
-                || exception.atFajrEnabledOverride != nil
-                || exception.atFajrSoundOverride != nil {
+            if override.suhoorOffsetOverrideMinutes != nil
+                || override.reminderEnabled != nil
+                || override.reminderOffsetOverrideMinutes != nil
+                || override.fajrEnabled != nil
+                || override.fajrSoundOverride != nil {
                 badges.append(.custom)
             }
         }
         return badges
+    }
+
+    private func defaultsActive(on date: Date) -> Bool {
+        switch defaultConfig.activationMode {
+        case .alwaysOn:
+            return true
+        case .dateRange:
+            guard let start = defaultConfig.activeStartDate, let end = defaultConfig.activeEndDate else {
+                return false
+            }
+            var calendar = Calendar(identifier: .gregorian)
+            calendar.timeZone = timeZone
+            let target = calendar.startOfDay(for: date)
+            let startDay = calendar.startOfDay(for: start)
+            let endDay = calendar.startOfDay(for: end)
+            return target >= startDay && target <= endDay
+        }
     }
 
     func ramadanRangeForDisplay() -> RamadanRange? {

@@ -5,6 +5,7 @@ import UserNotifications
 struct SuhoorApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var settingsStore: SuhoorSettingsStore
+    @StateObject private var alarmConfigStore: AlarmConfigStore
     @StateObject private var locationService: LocationService
     @StateObject private var scheduleManager: ScheduleManager
 
@@ -12,9 +13,15 @@ struct SuhoorApp: App {
 
     init() {
         let settingsStore = SuhoorSettingsStore()
+        let alarmConfigStore = AlarmConfigStore(legacySettings: settingsStore.settings)
         let locationService = LocationService()
-        let scheduleManager = ScheduleManager(settingsStore: settingsStore, locationService: locationService)
+        let scheduleManager = ScheduleManager(
+            settingsStore: settingsStore,
+            locationService: locationService,
+            alarmConfigStore: alarmConfigStore
+        )
         _settingsStore = StateObject(wrappedValue: settingsStore)
+        _alarmConfigStore = StateObject(wrappedValue: alarmConfigStore)
         _locationService = StateObject(wrappedValue: locationService)
         _scheduleManager = StateObject(wrappedValue: scheduleManager)
         UNUserNotificationCenter.current().delegate = NotificationEventDelegate.shared
@@ -25,6 +32,7 @@ struct SuhoorApp: App {
             ContentView()
                 .tint(.orange)
                 .environmentObject(settingsStore)
+                .environmentObject(alarmConfigStore)
                 .environmentObject(locationService)
                 .environmentObject(scheduleManager)
                 .task {

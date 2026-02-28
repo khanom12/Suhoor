@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		07EF93102F45957100BD8692 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 07EF930F2F45957000BD8692 /* LaunchScreen.storyboard */; };
 		07EF93442F49055C00BD8692 /* TEST_PLAN.md in Resources */ = {isa = PBXBuildFile; fileRef = 07EF93432F49055C00BD8692 /* TEST_PLAN.md */; };
+		07EF934A2F5383F900BD8692 /* AlarmScheduler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07EF93492F5383F900BD8692 /* AlarmScheduler.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -17,6 +18,7 @@
 		07EF91D22F43B70800BD8692 /* Suhoor.xctestplan */ = {isa = PBXFileReference; lastKnownFileType = text; path = Suhoor.xctestplan; sourceTree = "<group>"; };
 		07EF930F2F45957000BD8692 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
 		07EF93432F49055C00BD8692 /* TEST_PLAN.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = TEST_PLAN.md; sourceTree = "<group>"; };
+		07EF93492F5383F900BD8692 /* AlarmScheduler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlarmScheduler.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -46,6 +48,7 @@
 				07EF91CE2F43B5DC00BD8692 /* SuhoorTests */,
 				07EF930F2F45957000BD8692 /* LaunchScreen.storyboard */,
 				07EF93432F49055C00BD8692 /* TEST_PLAN.md */,
+				07EF93492F5383F900BD8692 /* AlarmScheduler.swift */,
 			);
 			sourceTree = "<group>";
 		};
@@ -142,6 +145,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				07EF934A2F5383F900BD8692 /* AlarmScheduler.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
