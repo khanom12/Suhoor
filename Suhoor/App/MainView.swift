@@ -6,7 +6,6 @@ struct MainView: View {
     @EnvironmentObject private var scheduleManager: ScheduleManager
 
     @State private var showAdjustSheet = false
-    @State private var showPreviewSheet = false
 
     var body: some View {
         NavigationStack {
@@ -61,29 +60,12 @@ struct MainView: View {
                     Button("Adjust") { showAdjustSheet = true }
                 }
 
-                if settingsStore.settings.ramadanModeEnabled {
-                    Section {
-                        HStack {
-                            Text("Profile")
-                            Spacer()
-                            Text(settingsStore.settings.selectedRamadanProfile.displayName)
-                                .foregroundStyle(.secondary)
-                        }
-
-                        Button("Preview Schedule") { showPreviewSheet = true }
-                    }
-                }
             }
             .listStyle(.insetGrouped)
             .navigationTitle("Suhoor")
         }
         .sheet(isPresented: $showAdjustSheet) {
             AlarmDetailView()
-        }
-        .sheet(isPresented: $showPreviewSheet) {
-            NavigationStack {
-                RamadanScheduleView(settings: $settingsStore.settings, showCustomOnly: false)
-            }
         }
         .onChange(of: settingsStore.settings) { oldValue, newValue in
             guard newValue.requiresReschedule(comparedTo: oldValue) else { return }
@@ -116,14 +98,14 @@ struct MainView: View {
             return "Wake before Fajr"
         }
         var text = "Wake \(schedule.offsetMinutes) min before Fajr"
-
-        if settingsStore.settings.ramadanModeEnabled {
-            let ruleEngine = RuleEngine(settings: settingsStore.settings, timeZone: .current)
-            if ruleEngine.applicableBadges(for: schedule.date).contains(.custom) {
-                text += " · Custom"
-            } else if let label = ruleEngine.appliedLayerLabel(for: schedule.date) {
-                text += " · \(label)"
-            }
+        let key = DateHelpers.dayIdentifier(for: schedule.date, timeZone: .current)
+        if let exception = settingsStore.settings.perDayExceptions[key],
+           (exception.wakeOffsetOverrideMinutes != nil
+            || exception.reminderEnabledOverride != nil
+            || exception.reminderMinutesOverride != nil
+            || exception.atFajrEnabledOverride != nil
+            || exception.atFajrSoundOverride != nil) {
+            text += " · Custom"
         }
         return text
     }

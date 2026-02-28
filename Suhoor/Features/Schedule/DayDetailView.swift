@@ -2,7 +2,7 @@ import SwiftUI
 
 struct DayDetailView: View {
     @Binding var settings: AppSettings
-    let day: RamadanPreviewDay
+    let day: DaySchedule
 
     @EnvironmentObject private var scheduleManager: ScheduleManager
     @Environment(\.dismiss) private var dismiss

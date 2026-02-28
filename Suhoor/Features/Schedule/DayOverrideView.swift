@@ -2,7 +2,7 @@ import SwiftUI
 
 struct DayOverrideSheet: View {
     @Binding var settings: AppSettings
-    let day: RamadanPreviewDay
+    let day: DaySchedule
 
     @Environment(\.dismiss) private var dismiss
 
@@ -23,9 +23,6 @@ struct DayOverrideSheet: View {
 
                 Section("Applied") {
                     Text("Default: \(settings.baseWakeOffsetMinutes) min")
-                    if let applied = ruleEngine.appliedLayer(for: day.date) {
-                        Text("Applied: \(applied.kind.displayName) (+\(applied.earlierByMinutes)m)")
-                    }
                     if overrideMinutes != nil {
                         Text("Applied: Custom override")
                     }
@@ -71,10 +68,7 @@ struct DayOverrideSheet: View {
     }
 
     private var dayTitle: String {
-        if day.dayNumber > 0 {
-            return "Ramadan Day \(day.dayNumber)"
-        }
-        return TimeFormatters.dayFormatter.string(from: day.date)
+        TimeFormatters.dayFormatter.string(from: day.date)
     }
 
     private var finalOffsetMinutes: Int {

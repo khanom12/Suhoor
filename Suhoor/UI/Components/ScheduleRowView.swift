@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct ScheduleRowView: View {
-    let day: RamadanPreviewDay
+    let day: DaySchedule
     let settings: AppSettings
 
     var body: some View {
@@ -38,8 +38,7 @@ struct ScheduleRowView: View {
     }
 
     private var dayTitle: String {
-        if day.dayNumber > 0 { return "Ramadan Day \(day.dayNumber)" }
-        return TimeFormatters.weekdayDate.string(from: day.date)
+        TimeFormatters.weekdayDate.string(from: day.date)
     }
 
     private var ruleEngine: RuleEngine {
@@ -78,21 +77,22 @@ struct ScheduleRowView: View {
     private var badgeRow: some View {
         if isOff {
             PillBadge(text: Strings.Schedule.offBadge, style: .off)
-        } else if !day.badges.isEmpty {
-            HStack(spacing: DesignTokens.spacingXS) {
-                ForEach(day.badges) { badge in
-                    PillBadge(text: badge.label, style: badgeStyle(for: badge))
-                }
-            }
+        } else if isCustomRule {
+            PillBadge(text: Strings.Schedule.customBadge, style: .custom)
         }
     }
 
-    private func badgeStyle(for badge: RamadanBadge) -> PillBadge.Style {
-        switch badge {
-        case .custom:
-            return .custom
-        case .weekend, .last10, .laylatulQadr:
-            return .default
-        }
+    private var exception: DayException? {
+        let key = DateHelpers.dayIdentifier(for: day.date, timeZone: .current)
+        return settings.perDayExceptions[key]
+    }
+
+    private var isCustomRule: Bool {
+        guard let exception else { return false }
+        return exception.wakeOffsetOverrideMinutes != nil
+            || exception.reminderEnabledOverride != nil
+            || exception.reminderMinutesOverride != nil
+            || exception.atFajrEnabledOverride != nil
+            || exception.atFajrSoundOverride != nil
     }
 }

@@ -19,18 +19,6 @@ struct AppSettings: Codable, Equatable {
     var lastScheduledDate: Date?
     var lastSchedulingMode: SchedulingMode
 
-    var ramadanModeEnabled: Bool
-    var selectedRamadanProfile: RamadanProfile
-    var ramadanStartAdjustmentDays: Int
-    var ramadanEndAdjustmentDays: Int
-    var weekendBoostEnabled: Bool
-    var weekendBoostMinutes: Int
-    var last10Enabled: Bool
-    var last10BoostMinutes: Int
-    var lqEnabled: Bool
-    var lqBoostMinutes: Int
-    var lqNightNumbers: Set<Int>
-    var lqSpecificDateKey: String?
     var perDayExceptions: [String: DayException]
     var perDayOverrideOffsets: [String: Int]
 
@@ -52,18 +40,6 @@ struct AppSettings: Codable, Equatable {
         fixedLocation: nil,
         lastScheduledDate: nil,
         lastSchedulingMode: .none,
-        ramadanModeEnabled: false,
-        selectedRamadanProfile: .ramadan2026,
-        ramadanStartAdjustmentDays: 0,
-        ramadanEndAdjustmentDays: 0,
-        weekendBoostEnabled: false,
-        weekendBoostMinutes: 15,
-        last10Enabled: false,
-        last10BoostMinutes: 30,
-        lqEnabled: false,
-        lqBoostMinutes: 60,
-        lqNightNumbers: [27],
-        lqSpecificDateKey: nil,
         perDayExceptions: [:],
         perDayOverrideOffsets: [:]
     )
@@ -92,18 +68,6 @@ extension AppSettings {
         case lastSchedulingMode
         case snoozeEnabled
         case snoozeMinutes
-        case ramadanModeEnabled
-        case selectedRamadanProfile
-        case ramadanStartAdjustmentDays
-        case ramadanEndAdjustmentDays
-        case weekendBoostEnabled
-        case weekendBoostMinutes
-        case last10Enabled
-        case last10BoostMinutes
-        case lqEnabled
-        case lqBoostMinutes
-        case lqNightNumbers
-        case lqSpecificDateKey
         case perDayExceptions
         case perDayOverrideOffsets
 
@@ -163,18 +127,6 @@ extension AppSettings {
         lastScheduledDate = try container.decodeIfPresent(Date.self, forKey: .lastScheduledDate)
         lastSchedulingMode = try container.decodeIfPresent(SchedulingMode.self, forKey: .lastSchedulingMode) ?? .none
 
-        ramadanModeEnabled = try container.decodeIfPresent(Bool.self, forKey: .ramadanModeEnabled) ?? false
-        selectedRamadanProfile = try container.decodeIfPresent(RamadanProfile.self, forKey: .selectedRamadanProfile) ?? .ramadan2026
-        ramadanStartAdjustmentDays = try container.decodeIfPresent(Int.self, forKey: .ramadanStartAdjustmentDays) ?? 0
-        ramadanEndAdjustmentDays = try container.decodeIfPresent(Int.self, forKey: .ramadanEndAdjustmentDays) ?? 0
-        weekendBoostEnabled = try container.decodeIfPresent(Bool.self, forKey: .weekendBoostEnabled) ?? false
-        weekendBoostMinutes = try container.decodeIfPresent(Int.self, forKey: .weekendBoostMinutes) ?? 15
-        last10Enabled = try container.decodeIfPresent(Bool.self, forKey: .last10Enabled) ?? false
-        last10BoostMinutes = try container.decodeIfPresent(Int.self, forKey: .last10BoostMinutes) ?? 30
-        lqEnabled = try container.decodeIfPresent(Bool.self, forKey: .lqEnabled) ?? false
-        lqBoostMinutes = try container.decodeIfPresent(Int.self, forKey: .lqBoostMinutes) ?? 60
-        lqNightNumbers = try container.decodeIfPresent(Set<Int>.self, forKey: .lqNightNumbers) ?? [27]
-        lqSpecificDateKey = try container.decodeIfPresent(String.self, forKey: .lqSpecificDateKey)
         perDayExceptions = try container.decodeIfPresent([String: DayException].self, forKey: .perDayExceptions) ?? [:]
         perDayOverrideOffsets = try container.decodeIfPresent([String: Int].self, forKey: .perDayOverrideOffsets) ?? [:]
         if perDayExceptions.isEmpty, !perDayOverrideOffsets.isEmpty {
@@ -210,18 +162,6 @@ extension AppSettings {
         try container.encodeIfPresent(fixedLocation, forKey: .fixedLocation)
         try container.encodeIfPresent(lastScheduledDate, forKey: .lastScheduledDate)
         try container.encode(lastSchedulingMode, forKey: .lastSchedulingMode)
-        try container.encode(ramadanModeEnabled, forKey: .ramadanModeEnabled)
-        try container.encode(selectedRamadanProfile, forKey: .selectedRamadanProfile)
-        try container.encode(ramadanStartAdjustmentDays, forKey: .ramadanStartAdjustmentDays)
-        try container.encode(ramadanEndAdjustmentDays, forKey: .ramadanEndAdjustmentDays)
-        try container.encode(weekendBoostEnabled, forKey: .weekendBoostEnabled)
-        try container.encode(weekendBoostMinutes, forKey: .weekendBoostMinutes)
-        try container.encode(last10Enabled, forKey: .last10Enabled)
-        try container.encode(last10BoostMinutes, forKey: .last10BoostMinutes)
-        try container.encode(lqEnabled, forKey: .lqEnabled)
-        try container.encode(lqBoostMinutes, forKey: .lqBoostMinutes)
-        try container.encode(lqNightNumbers, forKey: .lqNightNumbers)
-        try container.encodeIfPresent(lqSpecificDateKey, forKey: .lqSpecificDateKey)
         try container.encode(perDayExceptions, forKey: .perDayExceptions)
         try container.encode(perDayOverrideOffsets, forKey: .perDayOverrideOffsets)
     }

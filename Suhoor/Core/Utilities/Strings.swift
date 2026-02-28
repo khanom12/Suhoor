@@ -115,9 +115,6 @@ enum Strings {
     enum Schedule {
         static let title = "Schedule"
         static func nextDays(_ count: Int) -> String { "Next \(count) days" }
-        static let upcomingSegment = "Upcoming"
-        static let ramadanSegment = "Ramadan"
-        static let ramadanSettings = "Ramadan settings"
         static let reminderOff = "Reminder Off"
         static let defaultBadge = "Default"
         static let customBadge = "Custom"

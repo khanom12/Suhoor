@@ -240,9 +240,7 @@ final class ScheduleManager: ObservableObject {
         let ruleEngine = RuleEngine(settings: settings, configStore: alarmConfigStore, timeZone: timeZone)
         let scheduleDates = scheduledDates(
             startingFrom: startDate,
-            defaultDays: scheduleDays,
-            maxDays: maxScheduleDays,
-            ruleEngine: ruleEngine,
+            days: scheduleDays,
             timeZone: timeZone
         )
 
@@ -987,42 +985,13 @@ final class ScheduleManager: ObservableObject {
 
     private func scheduledDates(
         startingFrom startDate: Date,
-        defaultDays: Int,
-        maxDays: Int,
-        ruleEngine: RuleEngine,
+        days: Int,
         timeZone: TimeZone
     ) -> [Date] {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = timeZone
         let normalizedStart = calendar.startOfDay(for: startDate)
-
-        if let range = ruleEngine.ramadanRangeForDisplay() {
-            let today = calendar.startOfDay(for: Date())
-            let rangeStart = calendar.startOfDay(for: range.startDate)
-            let rangeEnd = calendar.startOfDay(for: range.endDate)
-            let daysUntilStart = calendar.dateComponents([.day], from: today, to: rangeStart).day ?? Int.max
-            let isWithinLead = daysUntilStart >= 0 && daysUntilStart <= defaultDays
-            let isWithinRamadan = today >= rangeStart && today <= rangeEnd
-
-            if isWithinLead || isWithinRamadan {
-                if normalizedStart > rangeEnd {
-                    return DateHelpers.dates(startingFrom: normalizedStart, count: defaultDays, calendar: calendar)
-                }
-
-                var endDate: Date
-                if isWithinRamadan {
-                    let maxEnd = calendar.date(byAdding: .day, value: maxDays - 1, to: normalizedStart) ?? rangeEnd
-                    endDate = min(rangeEnd, maxEnd)
-                } else {
-                    let defaultEnd = calendar.date(byAdding: .day, value: defaultDays - 1, to: normalizedStart) ?? normalizedStart
-                    endDate = min(rangeEnd, defaultEnd)
-                }
-
-                return DateHelpers.dates(from: normalizedStart, to: endDate, calendar: calendar)
-            }
-        }
-
-        return DateHelpers.dates(startingFrom: normalizedStart, count: defaultDays, calendar: calendar)
+        return DateHelpers.dates(startingFrom: normalizedStart, count: days, calendar: calendar)
     }
 }
 
