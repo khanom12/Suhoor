@@ -1,0 +1,27 @@
+import Foundation
+
+struct SchedulingIdentifiers {
+    static func dailyIdentifier(for schedule: DaySchedule, kind: ScheduleEventKind) -> String {
+        "suhoor.\(schedule.id).\(kind.rawValue)"
+    }
+
+    static func legacyDailyIdentifier(for schedule: DaySchedule, kind: ScheduleEventKind) -> String {
+        "suhoor-\(schedule.id)-\(kind.rawValue)"
+    }
+
+    static func alarmID(for schedule: DaySchedule, kind: ScheduleEventKind) -> UUID {
+        DateHelpers.stableUUID(from: dailyIdentifier(for: schedule, kind: kind))
+    }
+
+    static func legacyAlarmID(for schedule: DaySchedule, kind: ScheduleEventKind) -> UUID {
+        DateHelpers.stableUUID(from: legacyDailyIdentifier(for: schedule, kind: kind))
+    }
+
+    static func testIdentifier(for kind: ScheduleEventKind) -> String {
+        "suhoor.test.\(kind.rawValue)"
+    }
+
+    static func testAlarmID(for kind: ScheduleEventKind) -> UUID {
+        DateHelpers.stableUUID(from: testIdentifier(for: kind))
+    }
+}

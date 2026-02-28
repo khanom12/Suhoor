@@ -1,24 +1,93 @@
-//
-//  ContentView.swift
-//  Suhoor
-//
-//  Created by Omar Khan on 2026-02-16.
-//
-
 import SwiftUI
+import UIKit
 
 struct ContentView: View {
+    enum Tab {
+        case alarm
+        case schedule
+        case settings
+    }
+
+    @State private var selectedTab: Tab = .alarm
+
     var body: some View {
-        VStack {
-            Image(systemName: "globe")
-                .imageScale(.large)
-                .foregroundStyle(.tint)
-            Text("Hello, world!")
+        ZStack {
+            Color(.systemBackground)
+                .ignoresSafeArea()
+
+            TabView(selection: $selectedTab) {
+                AlarmsListView()
+                    .tabItem {
+                        Label("Alarm", systemImage: "alarm")
+                    }
+                    .tag(Tab.alarm)
+
+                ScheduleRootView()
+                    .tabItem {
+                        Label("Schedule", systemImage: "calendar")
+                    }
+                    .tag(Tab.schedule)
+
+                SettingsRootView()
+                    .tabItem {
+                        Label("Settings", systemImage: "gearshape")
+                    }
+                    .tag(Tab.settings)
+            }
         }
-        .padding()
+        // Force the root container to occupy the full screen to avoid a centered "panel" layout on iPhone.
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .modifier(RootSizeGuard())
+        .onReceive(NotificationCenter.default.publisher(for: .switchToScheduleTab)) { _ in
+            selectedTab = .schedule
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .switchToAlarmTab)) { _ in
+            selectedTab = .alarm
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .switchToSettingsTab)) { _ in
+            selectedTab = .settings
+        }
     }
 }
 
-#Preview {
-    ContentView()
+extension Notification.Name {
+    static let switchToAlarmTab = Notification.Name("SwitchToAlarmTab")
+    static let switchToScheduleTab = Notification.Name("SwitchToScheduleTab")
+    static let switchToSettingsTab = Notification.Name("SwitchToSettingsTab")
 }
+
+#if DEBUG
+private struct RootSizeGuard: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .background(
+                GeometryReader { proxy in
+                    Color.clear
+                        .onAppear { logIfNeeded(size: proxy.size) }
+                        .onChange(of: proxy.size) { _, newSize in
+                            logIfNeeded(size: newSize)
+                        }
+                }
+            )
+    }
+
+    private func logIfNeeded(size: CGSize) {
+        guard UIDevice.current.userInterfaceIdiom == .phone else { return }
+        let screenSize = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .first?
+            .screen
+            .bounds
+            .size ?? size
+        if size.width + 1 < screenSize.width || size.height + 1 < screenSize.height {
+            print("Root view is smaller than screen on iPhone: \(size) vs \(screenSize)")
+        }
+    }
+}
+#else
+private struct RootSizeGuard: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+    }
+}
+#endif

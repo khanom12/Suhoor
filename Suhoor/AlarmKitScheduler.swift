@@ -1,0 +1,293 @@
+import Foundation
+import AlarmKit
+import ActivityKit
+import SwiftUI
+import os
+
+@available(iOS 26.0, *)
+final class AlarmKitScheduler {
+    private let alarmManager = AlarmManager.shared
+    private let isRunningOnSimulator = ProcessInfo.processInfo.environment["SIMULATOR_DEVICE_NAME"] != nil
+    private var updatesTask: Task<Void, Never>?
+
+    init() {
+        startObservingAlarmUpdates()
+    }
+
+    var isAuthorized: Bool {
+        alarmManager.authorizationState == .authorized
+    }
+
+    var authorizationState: AlarmManager.AuthorizationState {
+        alarmManager.authorizationState
+    }
+
+    var authorizationStateText: String {
+        switch alarmManager.authorizationState {
+        case .authorized: return "Authorized"
+        case .denied: return "Denied"
+        case .notDetermined: return "Not Determined"
+        @unknown default: return "Unknown"
+        }
+    }
+
+    func requestAuthorization() async -> Bool {
+        if isRunningOnSimulator {
+            return false
+        }
+        do {
+            let state = try await alarmManager.requestAuthorization()
+            EventTimelineLog.shared.record(category: "permissions", message: "AlarmKit authorization requested -> \(String(describing: state))")
+            return state == .authorized
+        } catch {
+            Logging.scheduler.error("AlarmKit authorization error: \(error.localizedDescription)")
+            EventTimelineLog.shared.record(category: "permissions", message: "AlarmKit authorization error: \(error.localizedDescription)")
+            return false
+        }
+    }
+
+    func scheduleAlarm(
+        for schedule: DaySchedule,
+        kind: ScheduleEventKind,
+        date: Date,
+        label: String,
+        soundName: String? = nil,
+        snoozeDuration: TimeInterval? = nil
+    ) async throws -> Alarm {
+        let id = SchedulingIdentifiers.alarmID(for: schedule, kind: kind)
+        return try await scheduleAlarm(
+            id: id,
+            kind: kind,
+            date: date,
+            label: label,
+            soundName: soundName,
+            snoozeDuration: snoozeDuration
+        )
+    }
+
+    func scheduleAlarm(
+        id: UUID,
+        kind: ScheduleEventKind,
+        date: Date,
+        label: String,
+        soundName: String? = nil,
+        snoozeDuration: TimeInterval? = nil
+    ) async throws -> Alarm {
+        let title = kind == .wake ? label : kind.title
+        let alertTitle = LocalizedStringResource(stringLiteral: title)
+        let alert = AlarmPresentation.Alert(title: alertTitle, secondaryButton: nil, secondaryButtonBehavior: nil)
+        let presentation = AlarmPresentation(alert: alert)
+        let metadata = SuhoorAlarmMetadata(kind: kind.rawValue, isTest: false)
+        let attributes = AlarmAttributes(presentation: presentation, metadata: metadata, tintColor: .teal)
+        let resolvedSound: AlertConfiguration.AlertSound
+        if let soundName, !soundName.isEmpty {
+            resolvedSound = .named(soundName)
+        } else {
+            resolvedSound = .default
+        }
+        let configuration = AlarmManager.AlarmConfiguration.alarm(
+            schedule: .fixed(date),
+            attributes: attributes,
+            stopIntent: nil,
+            secondaryIntent: nil,
+            sound: resolvedSound
+        )
+        return try await alarmManager.schedule(id: id, configuration: configuration)
+    }
+
+    func cancelAllUpcoming(days: Int) async {
+        let upcoming = upcomingSchedules(days: days)
+        var ids: [UUID] = []
+        for schedule in upcoming {
+            ids.append(SchedulingIdentifiers.alarmID(for: schedule, kind: .wake))
+            ids.append(SchedulingIdentifiers.alarmID(for: schedule, kind: .reminder))
+            ids.append(SchedulingIdentifiers.alarmID(for: schedule, kind: .boundary))
+            ids.append(SchedulingIdentifiers.legacyAlarmID(for: schedule, kind: .wake))
+            ids.append(SchedulingIdentifiers.legacyAlarmID(for: schedule, kind: .reminder))
+            ids.append(SchedulingIdentifiers.legacyAlarmID(for: schedule, kind: .boundary))
+        }
+        cancel(ids: ids)
+    }
+
+    func cancel(schedule: DaySchedule, kind: ScheduleEventKind) {
+        let id = SchedulingIdentifiers.alarmID(for: schedule, kind: kind)
+        try? alarmManager.cancel(id: id)
+        let legacy = SchedulingIdentifiers.legacyAlarmID(for: schedule, kind: kind)
+        try? alarmManager.cancel(id: legacy)
+    }
+
+    func cancel(ids: [UUID]) {
+        for id in ids {
+            try? alarmManager.cancel(id: id)
+        }
+    }
+
+    func scheduleTestAlarm(date: Date, label: String, soundName: String? = nil) async -> Bool {
+        if isRunningOnSimulator {
+            return false
+        }
+        do {
+            let id = SchedulingIdentifiers.testAlarmID(for: .wake)
+            _ = try await scheduleAlarm(id: id, kind: .wake, date: date, label: label, soundName: soundName)
+            return true
+        } catch {
+            Logging.scheduler.error("AlarmKit test alarm error: \(error.localizedDescription)")
+            return false
+        }
+    }
+
+    func scheduleTestAlarm(
+        id: UUID,
+        date: Date,
+        label: String,
+        kind: ScheduleEventKind,
+        soundName: String? = nil
+    ) async -> Bool {
+        if isRunningOnSimulator {
+            return false
+        }
+        do {
+            _ = try await scheduleAlarm(id: id, kind: kind, date: date, label: label, soundName: soundName)
+            return true
+        } catch {
+            Logging.scheduler.error("AlarmKit test alarm error: \(error.localizedDescription)")
+            return false
+        }
+    }
+
+    func fetchScheduledAlarms() -> [AlarmKitAuditItem] {
+        guard let alarms = try? alarmManager.alarms else { return [] }
+        return alarms.map { alarm in
+            let (scheduleDescription, nextDate) = scheduleInfo(for: alarm.schedule)
+            return AlarmKitAuditItem(
+                id: alarm.id,
+                title: "Alarm",
+                scheduleDescription: scheduleDescription,
+                nextTriggerDate: nextDate,
+                stateDescription: "\(alarm.state)"
+            )
+        }
+    }
+
+    private func scheduleInfo(for schedule: Alarm.Schedule?) -> (String, Date?) {
+        guard let schedule else { return ("None", nil) }
+        switch schedule {
+        case .fixed(let date):
+            return ("Fixed", date)
+        case .relative:
+            return ("Relative", nil)
+        @unknown default:
+            return ("Unknown", nil)
+        }
+    }
+
+    func cancelTestAlarms() {
+        let ids = ScheduleEventKind.allCases.map { SchedulingIdentifiers.testAlarmID(for: $0) }
+        cancel(ids: ids)
+    }
+
+    private func upcomingSchedules(days: Int) -> [DaySchedule] {
+        let start = DateHelpers.startOfToday()
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .current
+        var schedules: [DaySchedule] = []
+        for offset in 0..<days {
+            guard let day = calendar.date(byAdding: .day, value: offset, to: start) else { continue }
+            let dummy = DaySchedule(
+                date: day,
+                fajrDate: day,
+                wakeDate: day,
+                reminderDate: nil,
+                boundaryDate: nil,
+                fajrSoundChoice: nil,
+                locationDescription: "",
+                offsetMinutes: 0,
+                calculationMethodName: "",
+                timeZone: .current
+            )
+            schedules.append(dummy)
+        }
+        return schedules
+    }
+
+    private func startObservingAlarmUpdates() {
+        updatesTask?.cancel()
+        updatesTask = Task { [alarmManager] in
+            for await alarms in alarmManager.alarmUpdates {
+                let ids = alarms.map { $0.id.uuidString }.joined(separator: ", ")
+                EventTimelineLog.shared.record(category: "alarmkit", message: "Alarm updates: \(ids)")
+            }
+        }
+    }
+}
+
+@available(iOS 26.0, *)
+struct SuhoorAlarmMetadata: AlarmMetadata, Codable {
+    let kind: String
+    let isTest: Bool
+
+    init(kind: String = "", isTest: Bool = false) {
+        self.kind = kind
+        self.isTest = isTest
+    }
+}
+
+@available(iOS 26.0, *)
+extension AlarmKitScheduler: AlarmScheduling {
+    func scheduleAlarm(
+        id: UUID,
+        kind: ScheduleEventKind,
+        date: Date,
+        label: String,
+        soundName: String?,
+        snoozeDuration: TimeInterval?
+    ) async throws {
+        let _: Alarm = try await scheduleAlarm(
+            id: id,
+            kind: kind,
+            date: date,
+            label: label,
+            soundName: soundName,
+            snoozeDuration: snoozeDuration
+        )
+    }
+
+    func cancel(id: UUID) {
+        try? alarmManager.cancel(id: id)
+    }
+}
+
+@available(iOS 26.0, *)
+extension AlarmKitScheduler: AlarmKitScheduling {
+    func scheduleAlarm(
+        for schedule: DaySchedule,
+        kind: ScheduleEventKind,
+        date: Date,
+        label: String,
+        soundName: String?
+    ) async throws {
+        let _: Alarm = try await scheduleAlarm(
+            for: schedule,
+            kind: kind,
+            date: date,
+            label: label,
+            soundName: soundName
+        )
+    }
+
+    func scheduleAlarm(
+        id: UUID,
+        kind: ScheduleEventKind,
+        date: Date,
+        label: String,
+        soundName: String?
+    ) async throws {
+        let _: Alarm = try await scheduleAlarm(
+            id: id,
+            kind: kind,
+            date: date,
+            label: label,
+            soundName: soundName
+        )
+    }
+}

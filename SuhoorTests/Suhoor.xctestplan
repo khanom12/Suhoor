@@ -1,0 +1,35 @@
+{
+  "configurations" : [
+    {
+      "id" : "B3F4B5F3-9F2A-4E6F-9E62-0B1D8A6E0A2D",
+      "name" : "Default",
+      "options" : {
+        "codeCoverage" : true,
+        "targetForVariableExpansion" : {
+          "containerPath" : "container:Suhoor.xcodeproj",
+          "identifier" : "Suhoor",
+          "name" : "Suhoor"
+        }
+      }
+    }
+  ],
+  "defaultOptions" : {
+    "codeCoverage" : true,
+    "targetForVariableExpansion" : {
+      "containerPath" : "container:Suhoor.xcodeproj",
+      "identifier" : "Suhoor",
+      "name" : "Suhoor"
+    }
+  },
+  "testTargets" : [
+    {
+      "parallelizable" : false,
+      "target" : {
+        "containerPath" : "container:Suhoor.xcodeproj",
+        "identifier" : "SuhoorTests",
+        "name" : "SuhoorTests"
+      }
+    }
+  ],
+  "version" : 1
+}
