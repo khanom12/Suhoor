@@ -62,12 +62,23 @@ enum Strings {
         static let offLabel = "Off"
         static let enabledLabel = "Enabled"
         static let useFixedTime = "Use fixed time"
+        static let timeModeLabel = "Time mode"
+        static let beforeFajrLabel = "Before Fajr"
+        static let fixedTimeLabel = "Fixed"
+        static let minutesBeforeFajr = "Minutes before Fajr"
+        static let alarmOffLabel = "Off"
+        static let fajrAdhanLabel = "Fajr (Adhan)"
+        static let dayDisabledHelper = "If off, no alarms will run on this date."
+        static let dayEnableToConfigureHelper = "Turn on \"Enable this day\" to configure alarms."
         static let suhoorTime = "Suhoor time"
         static func suhoorComputed(_ time: String) -> String { "Computed: \(time)" }
         static func reminderOffsetLabel(_ minutes: Int) -> String { "Minutes before Fajr: \(minutes)m" }
         static func reminderComputed(_ time: String) -> String { "Computed: \(time)" }
         static let reminderOff = "Reminder is off for this day."
         static func fajrComputed(_ time: String) -> String { "Fajr: \(time)" }
+        static func fajrTime(_ time: String) -> String { "Fajr \(time)" }
+        static func willRingAt(_ time: String) -> String { "Will ring at \(time)" }
+        static func willPlayAt(_ time: String) -> String { "Will play at \(time)" }
         static let resetDay = "Reset this day to defaults"
         static let defaultsSection = "Default Alarms"
         static let suhoorMode = "Suhoor time mode"

@@ -54,6 +54,7 @@ final class AlarmConfigStore: ObservableObject {
     }
 
     func isDefaultsActive(on date: Date, timeZone: TimeZone = .current) -> Bool {
+        if isDeletedDate(on: date, timeZone: timeZone) { return false }
         switch defaults.activationMode {
         case .alwaysOn:
             return true
@@ -101,11 +102,28 @@ final class AlarmConfigStore: ObservableObject {
     func addExtraOneOffDate(_ date: Date, timeZone: TimeZone = .current) {
         let key = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
         defaults.extraOneOffDates.insert(key)
+        defaults.deletedDates.remove(key)
     }
 
     func removeExtraOneOffDate(_ date: Date, timeZone: TimeZone = .current) {
         let key = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
         defaults.extraOneOffDates.remove(key)
+    }
+
+    func isDeletedDate(on date: Date, timeZone: TimeZone = .current) -> Bool {
+        let key = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
+        return defaults.deletedDates.contains(key)
+    }
+
+    func addDeletedDate(_ date: Date, timeZone: TimeZone = .current) {
+        let key = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
+        defaults.deletedDates.insert(key)
+        defaults.extraOneOffDates.remove(key)
+    }
+
+    func removeDeletedDate(_ date: Date, timeZone: TimeZone = .current) {
+        let key = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
+        defaults.deletedDates.remove(key)
     }
 
     func effectiveConfig(for date: Date, ruleSummary: RuleSummary, settings: AppSettings, timeZone: TimeZone = .current) -> EffectiveDailyConfig {

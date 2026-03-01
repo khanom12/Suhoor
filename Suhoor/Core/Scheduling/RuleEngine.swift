@@ -107,9 +107,16 @@ struct RuleEngine {
     private func defaultsActive(on date: Date) -> Bool {
         switch defaultConfig.activationMode {
         case .alwaysOn:
+            let key = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
+            if defaultConfig.deletedDates.contains(key) {
+                return false
+            }
             return true
         case .dateRange:
             let key = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
+            if defaultConfig.deletedDates.contains(key) {
+                return false
+            }
             if defaultConfig.extraOneOffDates.contains(key) {
                 return true
             }

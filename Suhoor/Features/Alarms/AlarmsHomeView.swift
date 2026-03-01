@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct AlarmsHomeView: View {
     @EnvironmentObject private var settingsStore: SuhoorSettingsStore
@@ -15,8 +16,15 @@ struct AlarmsHomeView: View {
         contentView
             .navigationTitle(Strings.AlarmList.title)
             .navigationBarTitleDisplayMode(.large)
-            .toolbarBackground(.hidden, for: .navigationBar)
-            .toolbar { toolbarContent }
+            .background(
+                NavigationBarConfigurator(
+                    isEditing: isEditing,
+                    showsAddButton: showsAddButton,
+                    onEdit: { isEditing.toggle() },
+                    onAdd: { showAddDaySheet = true },
+                    onSettings: { showSettingsSheet = true }
+                )
+            )
             .navigationDestination(isPresented: navigationIsActiveBinding) {
                 if let schedule = selectedSchedule {
                     AlarmDayDetailView(schedule: schedule)
@@ -93,7 +101,7 @@ struct AlarmsHomeView: View {
                 config: entry.config,
                 primaryDisplay: entry.primary,
                 isEditing: isEditing,
-                showsDeleteControl: entry.isOneOff,
+                showsDeleteControl: true,
                 onDelete: { deleteOneOff(entry) }
             ) {
                 selectedSchedule = entry.schedule
@@ -106,33 +114,6 @@ struct AlarmsHomeView: View {
             }
         }
     }
-
-    @ToolbarContentBuilder
-    private var toolbarContent: some ToolbarContent {
-        ToolbarItem(placement: .topBarLeading) {
-            Button(isEditing ? "Done" : "Edit") {
-                isEditing.toggle()
-            }
-        }
-        ToolbarItemGroup(placement: .topBarTrailing) {
-            if showsAddButton {
-                Button {
-                    showAddDaySheet = true
-                } label: {
-                    GlassCircleIcon(systemName: "plus")
-                }
-                .buttonStyle(.plain)
-            }
-
-            Button {
-                showSettingsSheet = true
-            } label: {
-                GlassCircleIcon(systemName: "gearshape")
-            }
-            .buttonStyle(.plain)
-        }
-    }
-
 
     private var emptyStateView: some View {
         VStack(alignment: .leading, spacing: DesignTokens.spacingS) {
@@ -163,12 +144,12 @@ struct AlarmsHomeView: View {
             let windowDays = max(1, alarmConfigStore.defaults.scheduleWindowDays)
             let entries = scheduleManager.schedules.compactMap { schedule -> AlarmRowEntry? in
                 if schedule.date < startOfToday { return nil }
+                if alarmConfigStore.isDeletedDate(on: schedule.date, timeZone: timeZone) { return nil }
                 let config = effectiveConfig(for: schedule)
                 let primary = config.primaryDisplay(schedule: schedule)
                 if schedule.date == startOfToday,
-                   let primary,
-                   primary.time <= now,
-                   config.hasAnyEnabled {
+                   config.hasAnyEnabled,
+                   shouldHideToday(schedule: schedule, config: config, now: now) {
                     return nil
                 }
                 let isOneOff = alarmConfigStore.isExtraOneOffDate(on: schedule.date, timeZone: timeZone)
@@ -187,9 +168,8 @@ struct AlarmsHomeView: View {
                 let config = effectiveConfig(for: schedule)
                 let primary = config.primaryDisplay(schedule: schedule)
                 if schedule.date == startOfToday,
-                   let primary,
-                   primary.time <= now,
-                   config.hasAnyEnabled {
+                   config.hasAnyEnabled,
+                   shouldHideToday(schedule: schedule, config: config, now: now) {
                     return nil
                 }
                 let isOneOff = alarmConfigStore.isExtraOneOffDate(on: schedule.date, timeZone: timeZone)
@@ -215,7 +195,7 @@ struct AlarmsHomeView: View {
     }
 
     private var showsAddButton: Bool {
-        alarmConfigStore.defaults.activationMode == .dateRange && !isEditing
+        !isEditing
     }
 
     private func displayDatesForDateRange(startOfToday: Date, timeZone: TimeZone) -> [Date] {
@@ -239,6 +219,7 @@ struct AlarmsHomeView: View {
         return dates.sorted().filter { date in
             guard date >= startOfToday else { return false }
             let key = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
+            if alarmConfigStore.defaults.deletedDates.contains(key) { return false }
             if seenKeys.contains(key) { return false }
             seenKeys.insert(key)
             return true
@@ -263,9 +244,18 @@ struct AlarmsHomeView: View {
     private func deleteOneOff(_ entry: AlarmRowEntry) {
         let date = entry.schedule.date
         let timeZone = TimeZone.current
-        alarmConfigStore.removeExtraOneOffDate(date, timeZone: timeZone)
+        alarmConfigStore.addDeletedDate(date, timeZone: timeZone)
         alarmConfigStore.removeOverride(for: date, timeZone: timeZone)
         Task { await scheduleManager.cancelDay(date) }
+    }
+
+    private func shouldHideToday(schedule: DaySchedule, config: EffectiveDailyConfig, now: Date) -> Bool {
+        if config.fajrEnabled {
+            return schedule.fajrDate <= now
+        }
+        let primary = config.primaryDisplay(schedule: schedule)
+        guard let primary else { return false }
+        return primary.time <= now
     }
 }
 
@@ -309,15 +299,184 @@ private struct AddFastDaySheet: View {
 
     private var isAlreadyActive: Bool {
         let timeZone = TimeZone.current
-        return alarmConfigStore.isDateInActiveRange(on: selectedDate, timeZone: timeZone)
-            || alarmConfigStore.isExtraOneOffDate(on: selectedDate, timeZone: timeZone)
+        if alarmConfigStore.isDeletedDate(on: selectedDate, timeZone: timeZone) {
+            return false
+        }
+        return alarmConfigStore.isDefaultsActive(on: selectedDate, timeZone: timeZone)
     }
 
     private func addSelectedDate() {
         let timeZone = TimeZone.current
+        alarmConfigStore.removeDeletedDate(selectedDate, timeZone: timeZone)
         alarmConfigStore.addExtraOneOffDate(selectedDate, timeZone: timeZone)
         Task { await scheduleManager.rescheduleDay(selectedDate) }
         isPresented = false
+    }
+}
+
+private struct NavigationBarConfigurator: UIViewControllerRepresentable {
+    let isEditing: Bool
+    let showsAddButton: Bool
+    let onEdit: () -> Void
+    let onAdd: () -> Void
+    let onSettings: () -> Void
+
+    func makeUIViewController(context: Context) -> UIViewController {
+        UIViewController()
+    }
+
+    func updateUIViewController(_ uiViewController: UIViewController, context: Context) {
+        context.coordinator.onEdit = onEdit
+        context.coordinator.onAdd = onAdd
+        context.coordinator.onSettings = onSettings
+
+        if let navigationBar = uiViewController.parent?.navigationController?.navigationBar {
+            applyUngroupedButtonAppearance(to: navigationBar, coordinator: context.coordinator)
+        }
+
+        let targetItem = uiViewController.parent?.navigationItem ?? uiViewController.navigationItem
+        targetItem.leftBarButtonItem = UIBarButtonItem(
+            title: isEditing ? "Done" : "Edit",
+            style: .plain,
+            target: context.coordinator,
+            action: #selector(Coordinator.editTapped)
+        )
+
+        var rightItems: [UIBarButtonItem] = []
+        if showsAddButton {
+            rightItems.append(
+                makeIconBarButtonItem(
+                    systemName: "plus",
+                    accessibilityLabel: "Add day",
+                    selector: #selector(Coordinator.addTapped),
+                    coordinator: context.coordinator
+                )
+            )
+        }
+        rightItems.insert(
+            makeIconBarButtonItem(
+                systemName: "gearshape",
+                accessibilityLabel: "Settings",
+                selector: #selector(Coordinator.settingsTapped),
+                coordinator: context.coordinator
+            ),
+            at: 0
+        )
+        targetItem.rightBarButtonItems = rightItems
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
+    static func dismantleUIViewController(_ uiViewController: UIViewController, coordinator: Coordinator) {
+        guard let navigationBar = uiViewController.parent?.navigationController?.navigationBar else { return }
+        if let cached = coordinator.cachedAppearances {
+            navigationBar.standardAppearance = cached.standard
+            navigationBar.scrollEdgeAppearance = cached.scrollEdge
+            navigationBar.compactAppearance = cached.compact
+        }
+    }
+
+    final class Coordinator: NSObject {
+        var onEdit: (() -> Void)?
+        var onAdd: (() -> Void)?
+        var onSettings: (() -> Void)?
+        fileprivate var cachedAppearances: NavigationBarAppearances?
+
+        @objc func editTapped() {
+            onEdit?()
+        }
+
+        @objc func addTapped() {
+            onAdd?()
+        }
+
+        @objc func settingsTapped() {
+            onSettings?()
+        }
+    }
+
+    fileprivate struct NavigationBarAppearances {
+        let standard: UINavigationBarAppearance
+        let scrollEdge: UINavigationBarAppearance?
+        let compact: UINavigationBarAppearance?
+    }
+
+    private func applyUngroupedButtonAppearance(to navigationBar: UINavigationBar, coordinator: Coordinator) {
+        if coordinator.cachedAppearances == nil {
+            coordinator.cachedAppearances = NavigationBarAppearances(
+                standard: navigationBar.standardAppearance,
+                scrollEdge: navigationBar.scrollEdgeAppearance,
+                compact: navigationBar.compactAppearance
+            )
+        }
+
+        let standard = copyAppearance(navigationBar.standardAppearance)
+        let scrollEdge = copyAppearance(navigationBar.scrollEdgeAppearance ?? navigationBar.standardAppearance)
+        let compact = copyAppearance(navigationBar.compactAppearance ?? navigationBar.standardAppearance)
+
+        clearButtonBackgrounds(standard.buttonAppearance)
+        clearButtonBackgrounds(scrollEdge.buttonAppearance)
+        clearButtonBackgrounds(compact.buttonAppearance)
+
+        navigationBar.standardAppearance = standard
+        navigationBar.scrollEdgeAppearance = scrollEdge
+        navigationBar.compactAppearance = compact
+    }
+
+    private func copyAppearance(_ appearance: UINavigationBarAppearance) -> UINavigationBarAppearance {
+        return appearance.copy()
+    }
+
+    private func clearButtonBackgrounds(_ appearance: UIBarButtonItemAppearance) {
+        let states: [UIBarButtonItemStateAppearance] = [
+            appearance.normal,
+            appearance.highlighted,
+            appearance.disabled,
+            appearance.focused
+        ]
+        for state in states {
+            state.backgroundImage = UIImage()
+        }
+    }
+
+    private func makeIconBarButtonItem(
+        systemName: String,
+        accessibilityLabel: String,
+        selector: Selector,
+        coordinator: Coordinator
+    ) -> UIBarButtonItem {
+        let button = UIButton(type: .system)
+        button.setImage(UIImage(systemName: systemName), for: .normal)
+        button.tintColor = .label
+        button.accessibilityLabel = accessibilityLabel
+        button.addTarget(coordinator, action: selector, for: .touchUpInside)
+
+        let materialView = UIVisualEffectView(effect: UIBlurEffect(style: .systemUltraThinMaterial))
+        materialView.isUserInteractionEnabled = false
+        materialView.translatesAutoresizingMaskIntoConstraints = false
+        materialView.layer.cornerRadius = 16
+        materialView.layer.masksToBounds = true
+
+        let container = UIView()
+        container.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(materialView)
+        container.addSubview(button)
+
+        button.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            container.widthAnchor.constraint(equalToConstant: 32),
+            container.heightAnchor.constraint(equalToConstant: 32),
+            materialView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            materialView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            materialView.topAnchor.constraint(equalTo: container.topAnchor),
+            materialView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+            button.centerXAnchor.constraint(equalTo: container.centerXAnchor),
+            button.centerYAnchor.constraint(equalTo: container.centerYAnchor)
+        ])
+
+        return UIBarButtonItem(customView: container)
     }
 }
 
@@ -327,15 +486,44 @@ private struct GlassCircleIcon: View {
     var body: some View {
         Image(systemName: systemName)
             .font(.body.weight(.semibold))
-            .frame(width: 34, height: 34)
+            .foregroundStyle(.white)
+            .frame(width: 32, height: 32)
             .background(
                 Circle()
-                    .fill(.thinMaterial)
-                    .overlay(
-                        Circle()
-                            .stroke(Color.white.opacity(strokeOpacity), lineWidth: 1)
-                    )
+                    .fill(Color.white.opacity(fillOpacity))
+                    .stroke(Color.white.opacity(strokeOpacity), lineWidth: 1)
             )
+    }
+
+    private var fillOpacity: Double {
+        colorScheme == .dark ? 0.14 : 0.22
+    }
+
+    private var strokeOpacity: Double {
+        colorScheme == .dark ? 0.18 : 0.35
+    }
+
+    @Environment(\.colorScheme) private var colorScheme
+}
+
+private struct GlassPillLabel: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(.body.weight(.semibold))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 12)
+            .frame(height: 32)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(Color.white.opacity(fillOpacity))
+                    .stroke(Color.white.opacity(strokeOpacity), lineWidth: 1)
+            )
+    }
+
+    private var fillOpacity: Double {
+        colorScheme == .dark ? 0.14 : 0.22
     }
 
     private var strokeOpacity: Double {

@@ -810,7 +810,7 @@ private struct AdditionalActiveDaysView: View {
         let dates = extraOneOffDates
         for index in offsets {
             let date = dates[index]
-            alarmConfigStore.removeExtraOneOffDate(date, timeZone: .current)
+            alarmConfigStore.addDeletedDate(date, timeZone: .current)
             alarmConfigStore.removeOverride(for: date, timeZone: .current)
             Task { await scheduleManager.cancelDay(date) }
         }

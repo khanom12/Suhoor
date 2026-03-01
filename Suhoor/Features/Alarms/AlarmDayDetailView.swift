@@ -13,95 +13,127 @@ struct AlarmDayDetailView: View {
     var body: some View {
         Form {
             Section {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(HijriDateFormatter.shared.string(from: schedule.date))
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-
-                    Text(TimeFormatters.timeFormatter.string(from: suhoorTime))
-                        .font(.system(size: 56, weight: .light, design: .default))
-                        .monospacedDigit()
-
-                    Text("Fajr \(TimeFormatters.timeFormatter.string(from: schedule.fajrDate))")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.vertical, 4)
+                SummaryHeader(
+                    gregorianText: fullGregorianDate,
+                    hijriText: HijriDateFormatter.shared.string(from: schedule.date),
+                    primaryText: primaryDisplayText,
+                    primaryLabel: primaryDisplayLabel,
+                    fajrText: Strings.AlarmsTab.fajrTime(TimeFormatters.timeFormatter.string(from: schedule.fajrDate)),
+                    isOff: primaryDisplayKind == nil
+                )
+                .padding(.vertical, 16)
             }
+            .listRowBackground(Color.clear)
+            .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 8, trailing: 16))
+            .listRowSeparator(.hidden)
 
             Section {
                 Toggle("Enable this day", isOn: dayActiveBinding)
 
+                Text(Strings.AlarmsTab.dayDisabledHelper)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+
                 if !dayActiveBinding.wrappedValue {
-                    Text("No alarms will run on this date.")
+                    Text(Strings.AlarmsTab.dayEnableToConfigureHelper)
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
             }
 
-            Section(Strings.AlarmsTab.suhoorLabel) {
-                Toggle(Strings.AlarmsTab.enabledLabel, isOn: suhoorEnabledBinding)
-                    .disabled(isSkippingDay)
+            if dayActiveBinding.wrappedValue {
+                Section(Strings.AlarmsTab.suhoorLabel) {
+                    Toggle(Strings.AlarmsTab.suhoorLabel, isOn: suhoorEnabledBinding)
+                        .disabled(isSkippingDay)
 
-                Toggle(Strings.AlarmsTab.useFixedTime, isOn: suhoorFixedTimeBinding)
-                    .disabled(isSkippingDay)
+                    if effectiveConfig.suhoorEnabled {
+                        Picker(Strings.AlarmsTab.timeModeLabel, selection: suhoorTimeModeBinding) {
+                            ForEach(DayTimeMode.allCases) { mode in
+                                Text(mode.displayLabel).tag(mode)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+                        .disabled(isSkippingDay)
 
-                if usesFixedSuhoorTime {
-                    DatePicker(
-                        Strings.AlarmsTab.suhoorTime,
-                        selection: suhoorTimeBinding,
-                        displayedComponents: [.hourAndMinute]
-                    )
-                    .disabled(isSkippingDay)
-                } else {
-                    Stepper(value: suhoorOffsetBinding, in: 5...240, step: 5) {
-                        Text("Minutes before Fajr: \(suhoorOffsetBinding.wrappedValue)m")
+                        if usesFixedSuhoorTime {
+                            DatePicker(
+                                Strings.AlarmsTab.suhoorTime,
+                                selection: suhoorTimeBinding,
+                                displayedComponents: [.hourAndMinute]
+                            )
+                            .disabled(isSkippingDay)
+                        } else {
+                            Stepper(value: suhoorOffsetBinding, in: 5...240, step: 5) {
+                                HStack {
+                                    Text(Strings.AlarmsTab.minutesBeforeFajr)
+                                    Spacer()
+                                    Text("\(suhoorOffsetBinding.wrappedValue)")
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            .disabled(isSkippingDay)
+                        }
+
+                        Text(Strings.AlarmsTab.willRingAt(TimeFormatters.timeFormatter.string(from: suhoorTime)))
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
                     }
-                    .disabled(isSkippingDay)
                 }
 
-                Text(Strings.AlarmsTab.suhoorComputed(TimeFormatters.timeFormatter.string(from: suhoorTime)))
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
+                Section(Strings.AlarmsTab.reminderLabel) {
+                    Toggle(Strings.AlarmsTab.reminderLabel, isOn: reminderEnabledBinding)
+                        .disabled(isSkippingDay)
 
-            Section(Strings.AlarmsTab.reminderLabel) {
-                Toggle(Strings.AlarmsTab.enabledLabel, isOn: reminderEnabledBinding)
-                    .disabled(isSkippingDay)
+                    if effectiveConfig.reminderEnabled {
+                        Picker(Strings.AlarmsTab.timeModeLabel, selection: reminderTimeModeBinding) {
+                            ForEach(DayTimeMode.allCases) { mode in
+                                Text(mode.displayLabel).tag(mode)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+                        .disabled(isSkippingDay)
 
-                if usesFixedReminderTime {
-                    DatePicker(
-                        Strings.Settings.reminderTime,
-                        selection: reminderFixedTimeBinding,
-                        displayedComponents: [.hourAndMinute]
-                    )
-                    .disabled(isSkippingDay || !effectiveConfig.reminderEnabled)
-                } else {
-                    Stepper(value: reminderOffsetBinding, in: 1...maxReminderOffsetMinutes, step: 1) {
-                        Text(Strings.AlarmsTab.reminderOffsetLabel(reminderOffsetBinding.wrappedValue))
+                        if usesFixedReminderTime {
+                            DatePicker(
+                                Strings.Settings.reminderTime,
+                                selection: reminderFixedTimeBinding,
+                                displayedComponents: [.hourAndMinute]
+                            )
+                            .disabled(isSkippingDay)
+                        } else {
+                            Stepper(value: reminderOffsetBinding, in: reminderOffsetRange, step: 5) {
+                                HStack {
+                                    Text(Strings.AlarmsTab.minutesBeforeFajr)
+                                    Spacer()
+                                    Text("\(reminderOffsetBinding.wrappedValue)")
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            .disabled(isSkippingDay)
+                        }
+
+                        Text(reminderFooterText)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+
+                        if reminderTimeClamped || reminderValidationResult?.wasClampedToSuhoor == true {
+                            Text(Strings.Settings.reminderBeforeSuhoorWarning)
+                                .font(.footnote)
+                                .foregroundStyle(.red)
+                        }
                     }
-                    .disabled(isSkippingDay || !effectiveConfig.reminderEnabled)
                 }
 
-                Text(reminderFooterText)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                Section(Strings.AlarmList.fajrTitle) {
+                    Toggle(Strings.AlarmList.fajrTitle, isOn: fajrEnabledBinding)
+                        .disabled(isSkippingDay)
 
-                if reminderTimeClamped || reminderValidationResult?.wasClampedToSuhoor == true {
-                    Text(Strings.Settings.reminderBeforeSuhoorWarning)
-                        .font(.footnote)
-                        .foregroundStyle(.orange)
+                    if effectiveConfig.fajrEnabled {
+                        Text(Strings.AlarmsTab.willPlayAt(TimeFormatters.timeFormatter.string(from: schedule.fajrDate)))
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
                 }
-            }
-
-            Section(Strings.AlarmsTab.fajrLabel) {
-                Toggle(Strings.AlarmsTab.enabledLabel, isOn: fajrEnabledBinding)
-                    .disabled(isSkippingDay)
-
-                Text(Strings.AlarmsTab.fajrComputed(TimeFormatters.timeFormatter.string(from: schedule.fajrDate)))
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
             }
 
             Section {
@@ -112,6 +144,7 @@ struct AlarmDayDetailView: View {
             }
         }
         .formStyle(.grouped)
+        .listStyle(.insetGrouped)
         .navigationTitle(GregorianDateFormatter.shared.cardString(for: schedule.date))
         .navigationBarTitleDisplayMode(.inline)
     }
@@ -251,7 +284,7 @@ struct AlarmDayDetailView: View {
             return Strings.AlarmsTab.reminderOff
         }
         if let reminderDate = reminderTime {
-            return Strings.AlarmsTab.reminderComputed(TimeFormatters.timeFormatter.string(from: reminderDate))
+            return Strings.AlarmsTab.willRingAt(TimeFormatters.timeFormatter.string(from: reminderDate))
         }
         return Strings.AlarmsTab.reminderOff
     }
@@ -259,6 +292,11 @@ struct AlarmDayDetailView: View {
     private var maxReminderOffsetMinutes: Int {
         let minutesBetween = Int(round(schedule.fajrDate.timeIntervalSince(suhoorTime) / 60))
         return max(1, minutesBetween)
+    }
+
+    private var reminderOffsetRange: ClosedRange<Int> {
+        let lowerBound = min(5, maxReminderOffsetMinutes)
+        return lowerBound...maxReminderOffsetMinutes
     }
 
     private var suhoorTime: Date {
@@ -333,5 +371,133 @@ struct AlarmDayDetailView: View {
     private func dateFromMidnight(for day: Date, minutes: Int) -> Date {
         let start = calendar.startOfDay(for: day)
         return calendar.date(byAdding: .minute, value: minutes, to: start) ?? start
+    }
+
+    private var primaryDisplayText: String {
+        guard let primaryDisplayKind else { return Strings.AlarmList.offLabel }
+        switch primaryDisplayKind {
+        case .suhoor:
+            return TimeFormatters.timeFormatter.string(from: suhoorTime)
+        case .reminder:
+            if let reminderTime {
+                return TimeFormatters.timeFormatter.string(from: reminderTime)
+            }
+            return TimeFormatters.timeFormatter.string(from: schedule.fajrDate)
+        case .fajr:
+            return TimeFormatters.timeFormatter.string(from: schedule.fajrDate)
+        }
+    }
+
+    private var primaryDisplayLabel: String {
+        guard let primaryDisplayKind else { return Strings.AlarmsTab.alarmOffLabel }
+        switch primaryDisplayKind {
+        case .suhoor:
+            return Strings.AlarmsTab.suhoorLabel
+        case .reminder:
+            return Strings.AlarmsTab.reminderLabel
+        case .fajr:
+            return Strings.AlarmsTab.fajrAdhanLabel
+        }
+    }
+
+    private var primaryDisplayKind: PrimaryDisplayKind? {
+        if effectiveConfig.suhoorEnabled {
+            return .suhoor
+        }
+        if effectiveConfig.reminderEnabled {
+            return .reminder
+        }
+        if effectiveConfig.fajrEnabled {
+            return .fajr
+        }
+        return nil
+    }
+
+    private var fullGregorianDate: String {
+        SummaryHeader.fullDateFormatter.string(from: schedule.date)
+    }
+
+    private var suhoorTimeModeBinding: Binding<DayTimeMode> {
+        Binding(get: {
+            usesFixedSuhoorTime ? .fixed : .beforeFajr
+        }, set: { newValue in
+            suhoorFixedTimeBinding.wrappedValue = newValue == .fixed
+        })
+    }
+
+    private var reminderTimeModeBinding: Binding<DayTimeMode> {
+        Binding(get: {
+            usesFixedReminderTime ? .fixed : .beforeFajr
+        }, set: { newValue in
+            switch newValue {
+            case .fixed:
+                let reminderDate = reminderTime
+                    ?? dateFromMidnight(for: schedule.date, minutes: effectiveConfig.reminderFixedTimeMinutes)
+                reminderFixedTimeBinding.wrappedValue = reminderDate
+            case .beforeFajr:
+                reminderOffsetBinding.wrappedValue = effectiveConfig.reminderMinutesBeforeFajr
+            }
+        })
+    }
+}
+
+private enum DayTimeMode: String, CaseIterable, Identifiable {
+    case beforeFajr
+    case fixed
+
+    var id: String { rawValue }
+
+    var displayLabel: String {
+        switch self {
+        case .beforeFajr:
+            return Strings.AlarmsTab.beforeFajrLabel
+        case .fixed:
+            return Strings.AlarmsTab.fixedTimeLabel
+        }
+    }
+}
+
+private struct SummaryHeader: View {
+    let gregorianText: String
+    let hijriText: String
+    let primaryText: String
+    let primaryLabel: String
+    let fajrText: String
+    let isOff: Bool
+
+    static let fullDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "EEEE, MMMM d"
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.timeZone = .current
+        formatter.locale = .current
+        return formatter
+    }()
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(gregorianText)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+
+            Text(hijriText)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+
+            Text(primaryText)
+                .font(.system(size: 50, weight: .light))
+                .padding(.top, 6)
+                .foregroundStyle(isOff ? .secondary : .primary)
+                .monospacedDigit()
+
+            Text(primaryLabel)
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(.secondary)
+
+            Text(fajrText)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
