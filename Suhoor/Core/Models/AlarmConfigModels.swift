@@ -70,6 +70,7 @@ struct DefaultAlarmConfig: Codable, Equatable {
     var activeStartDate: Date?
     var activeEndDate: Date?
     var scheduleWindowDays: Int
+    var extraActiveDates: Set<String>
 
     init(
         suhoorEnabledDefault: Bool,
@@ -83,7 +84,8 @@ struct DefaultAlarmConfig: Codable, Equatable {
         activationMode: AlarmActivationMode,
         activeStartDate: Date?,
         activeEndDate: Date?,
-        scheduleWindowDays: Int
+        scheduleWindowDays: Int,
+        extraActiveDates: Set<String> = []
     ) {
         self.suhoorEnabledDefault = suhoorEnabledDefault
         self.reminderEnabledDefault = reminderEnabledDefault
@@ -97,6 +99,7 @@ struct DefaultAlarmConfig: Codable, Equatable {
         self.activeStartDate = activeStartDate
         self.activeEndDate = activeEndDate
         self.scheduleWindowDays = scheduleWindowDays
+        self.extraActiveDates = extraActiveDates
     }
 
     static let `default` = DefaultAlarmConfig(
@@ -111,7 +114,8 @@ struct DefaultAlarmConfig: Codable, Equatable {
         activationMode: .alwaysOn,
         activeStartDate: nil,
         activeEndDate: nil,
-        scheduleWindowDays: 14
+        scheduleWindowDays: 14,
+        extraActiveDates: []
     )
 
     enum CodingKeys: String, CodingKey {
@@ -127,6 +131,7 @@ struct DefaultAlarmConfig: Codable, Equatable {
         case activeStartDate
         case activeEndDate
         case scheduleWindowDays
+        case extraActiveDates
         case legacyDefaultReminderOffsetMinutes = "defaultReminderOffsetMinutes"
         case legacyDefaultReminderMinutesAfterSuhoor = "defaultReminderMinutesAfterSuhoor"
     }
@@ -152,6 +157,7 @@ struct DefaultAlarmConfig: Codable, Equatable {
         activeStartDate = try container.decodeIfPresent(Date.self, forKey: .activeStartDate)
         activeEndDate = try container.decodeIfPresent(Date.self, forKey: .activeEndDate)
         scheduleWindowDays = try container.decodeIfPresent(Int.self, forKey: .scheduleWindowDays) ?? 14
+        extraActiveDates = try container.decodeIfPresent(Set<String>.self, forKey: .extraActiveDates) ?? []
     }
 
     func encode(to encoder: Encoder) throws {
@@ -168,6 +174,7 @@ struct DefaultAlarmConfig: Codable, Equatable {
         try container.encodeIfPresent(activeStartDate, forKey: .activeStartDate)
         try container.encodeIfPresent(activeEndDate, forKey: .activeEndDate)
         try container.encode(scheduleWindowDays, forKey: .scheduleWindowDays)
+        try container.encode(extraActiveDates, forKey: .extraActiveDates)
     }
 }
 

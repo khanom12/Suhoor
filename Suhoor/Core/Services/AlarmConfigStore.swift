@@ -54,6 +54,11 @@ final class AlarmConfigStore: ObservableObject {
     }
 
     func isDefaultsActive(on date: Date, timeZone: TimeZone = .current) -> Bool {
+        if isExtraActive(on: date, timeZone: timeZone) { return true }
+        return isWithinActiveRange(on: date, timeZone: timeZone)
+    }
+
+    func isWithinActiveRange(on date: Date, timeZone: TimeZone = .current) -> Bool {
         switch defaults.activationMode {
         case .alwaysOn:
             return true
@@ -68,6 +73,21 @@ final class AlarmConfigStore: ObservableObject {
             let endDay = calendar.startOfDay(for: end)
             return target >= startDay && target <= endDay
         }
+    }
+
+    func isExtraActive(on date: Date, timeZone: TimeZone = .current) -> Bool {
+        let key = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
+        return defaults.extraActiveDates.contains(key)
+    }
+
+    func addExtraActiveDate(_ date: Date, timeZone: TimeZone = .current) {
+        let key = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
+        defaults.extraActiveDates.insert(key)
+    }
+
+    func removeExtraActiveDate(_ date: Date, timeZone: TimeZone = .current) {
+        let key = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
+        defaults.extraActiveDates.remove(key)
     }
 
     func effectiveConfig(for date: Date, ruleSummary: RuleSummary, settings: AppSettings, timeZone: TimeZone = .current) -> EffectiveDailyConfig {

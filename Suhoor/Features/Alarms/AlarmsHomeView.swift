@@ -7,69 +7,117 @@ struct AlarmsHomeView: View {
     @EnvironmentObject private var locationService: LocationService
 
     @State private var selectedSchedule: DaySchedule?
+    @State private var showSettingsSheet = false
+    @State private var showAddDaySheet = false
 
     var body: some View {
+        contentView
+            .navigationTitle(Strings.AlarmList.title)
+            .navigationBarTitleDisplayMode(.large)
+            .toolbarBackground(.hidden, for: .navigationBar)
+            .toolbar { toolbarContent }
+            .navigationDestination(isPresented: navigationIsActiveBinding) {
+                if let schedule = selectedSchedule {
+                    AlarmDayDetailView(schedule: schedule)
+                }
+            }
+            .onChange(of: alarmConfigStore.defaults) { _, _ in
+                Task { await scheduleManager.refreshSchedules(force: true) }
+            }
+            .onChange(of: alarmConfigStore.overridesByDay) { _, _ in
+                Task { await scheduleManager.refreshSchedules(force: true) }
+            }
+            .onChange(of: settingsStore.settings.calculationMethod) { _, _ in
+                Task { await scheduleManager.refreshSchedules(force: true) }
+            }
+            .onChange(of: settingsStore.settings.fajrAdjustmentMinutes) { _, _ in
+                Task { await scheduleManager.refreshSchedules(force: true) }
+            }
+            .onChange(of: settingsStore.settings.locationMode) { _, _ in
+                Task { await scheduleManager.refreshSchedules(force: true) }
+            }
+            .onChange(of: settingsStore.settings.fixedLocation) { _, _ in
+                Task { await scheduleManager.refreshSchedules(force: true) }
+            }
+            .onChange(of: locationService.lastLocation) { _, _ in
+                Task { await scheduleManager.refreshSchedules(force: true) }
+            }
+            .sheet(isPresented: $showSettingsSheet) {
+                NavigationStack {
+                    SettingsRootView()
+                }
+            }
+            .sheet(isPresented: $showAddDaySheet) {
+                NavigationStack {
+                    AddFastDaySheet(isPresented: $showAddDaySheet)
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .switchToSettingsTab)) { _ in
+                showSettingsSheet = true
+            }
+    }
+
+    private var contentView: some View {
         ZStack {
             Color(.systemBackground)
                 .ignoresSafeArea()
 
             ScrollView {
-                LazyVStack(spacing: 0) {
-                    if displayEntries.isEmpty {
-                        emptyStateView
-                    } else {
-                        let lastIndex = displayEntries.count - 1
-                        ForEach(displayEntries.indices, id: \.self) { index in
-                            let entry = displayEntries[index]
-
-                            AlarmDayRowView(
-                                schedule: entry.schedule,
-                                config: entry.config,
-                                primaryDisplay: entry.primary
-                            ) {
-                                selectedSchedule = entry.schedule
-                            }
-
-                            if index < lastIndex {
-                                Divider()
-                                    .padding(.leading, DesignTokens.spacingL)
-                                    .padding(.trailing, 84)
-                            }
-                        }
-                    }
-                }
-                .padding(.horizontal, DesignTokens.spacingL)
-                .padding(.top, DesignTokens.spacingS)
-                .padding(.bottom, DesignTokens.spacingM)
+                listContent
             }
         }
-        .navigationTitle(Strings.AlarmList.title)
-        .navigationBarTitleDisplayMode(.large)
-        .navigationDestination(isPresented: navigationIsActiveBinding) {
-            if let schedule = selectedSchedule {
-                AlarmDayDetailView(schedule: schedule)
+    }
+
+    @ViewBuilder
+    private var listContent: some View {
+        LazyVStack(spacing: 0) {
+            if displayEntries.isEmpty {
+                emptyStateView
+            } else {
+                listEntries
             }
         }
-        .onChange(of: alarmConfigStore.defaults) { _, _ in
-            Task { await scheduleManager.refreshSchedules(force: true) }
+        .padding(.horizontal, DesignTokens.spacingL)
+        .padding(.top, DesignTokens.spacingS)
+        .padding(.bottom, DesignTokens.spacingM)
+    }
+
+    private var listEntries: some View {
+        let lastIndex = displayEntries.count - 1
+        return ForEach(displayEntries.indices, id: \.self) { index in
+            let entry = displayEntries[index]
+
+            AlarmDayRowView(
+                schedule: entry.schedule,
+                config: entry.config,
+                primaryDisplay: entry.primary
+            ) {
+                selectedSchedule = entry.schedule
+            }
+
+            if index < lastIndex {
+                Divider()
+                    .padding(.leading, DesignTokens.spacingL)
+                    .padding(.trailing, 84)
+            }
         }
-        .onChange(of: alarmConfigStore.overridesByDay) { _, _ in
-            Task { await scheduleManager.refreshSchedules(force: true) }
-        }
-        .onChange(of: settingsStore.settings.calculationMethod) { _, _ in
-            Task { await scheduleManager.refreshSchedules(force: true) }
-        }
-        .onChange(of: settingsStore.settings.fajrAdjustmentMinutes) { _, _ in
-            Task { await scheduleManager.refreshSchedules(force: true) }
-        }
-        .onChange(of: settingsStore.settings.locationMode) { _, _ in
-            Task { await scheduleManager.refreshSchedules(force: true) }
-        }
-        .onChange(of: settingsStore.settings.fixedLocation) { _, _ in
-            Task { await scheduleManager.refreshSchedules(force: true) }
-        }
-        .onChange(of: locationService.lastLocation) { _, _ in
-            Task { await scheduleManager.refreshSchedules(force: true) }
+    }
+
+    private var toolbarContent: some ToolbarContent {
+        ToolbarItemGroup(placement: .topBarTrailing) {
+            Button {
+                showAddDaySheet = true
+            } label: {
+                GlassCircleIcon(systemName: "plus")
+            }
+            .buttonStyle(.plain)
+
+            Button {
+                showSettingsSheet = true
+            } label: {
+                GlassCircleIcon(systemName: "gearshape")
+            }
+            .buttonStyle(.plain)
         }
     }
 
@@ -123,6 +171,80 @@ struct AlarmsHomeView: View {
             timeZone: timeZone
         )
     }
+}
+
+private struct AddFastDaySheet: View {
+    @EnvironmentObject private var alarmConfigStore: AlarmConfigStore
+    @EnvironmentObject private var scheduleManager: ScheduleManager
+
+    @Binding var isPresented: Bool
+    @State private var selectedDate = DateHelpers.startOfToday()
+
+    var body: some View {
+        Form {
+            Section {
+                DatePicker(
+                    "Date",
+                    selection: $selectedDate,
+                    displayedComponents: [.date]
+                )
+                .datePickerStyle(.graphical)
+            }
+
+            if isAlreadyActive {
+                Text("This day is already active.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
+        .navigationTitle("Add a fasting day")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Cancel") { isPresented = false }
+            }
+            ToolbarItem(placement: .confirmationAction) {
+                Button("Add") { addSelectedDate() }
+                    .disabled(isAlreadyActive)
+            }
+        }
+    }
+
+    private var isAlreadyActive: Bool {
+        alarmConfigStore.isDefaultsActive(on: selectedDate, timeZone: .current)
+    }
+
+    private func addSelectedDate() {
+        let timeZone = TimeZone.current
+        alarmConfigStore.addExtraActiveDate(selectedDate, timeZone: timeZone)
+        Task { await scheduleManager.rescheduleDay(selectedDate) }
+        isPresented = false
+    }
+}
+
+private struct GlassCircleIcon: View {
+    let systemName: String
+
+    var body: some View {
+        Image(systemName: systemName)
+            .font(.body.weight(.semibold))
+            .frame(width: 34, height: 34)
+            .background(
+                Circle()
+                    .fill(.thinMaterial)
+                    .overlay(
+                        Circle()
+                            .stroke(Color.white.opacity(strokeOpacity), lineWidth: 1)
+                    )
+            )
+    }
+
+    private var strokeOpacity: Double {
+        colorScheme == .dark ? 0.18 : 0.35
+    }
+
+    @Environment(\.colorScheme) private var colorScheme
 }
 
 private struct AlarmRowEntry {
@@ -224,6 +346,14 @@ private struct AlarmDayRowView: View {
             config.hasAnyEnabled
         }, set: { isOn in
             let timeZone = TimeZone.current
+            let isWithinRange = alarmConfigStore.isWithinActiveRange(on: schedule.date, timeZone: timeZone)
+            let isExtraActive = alarmConfigStore.isExtraActive(on: schedule.date, timeZone: timeZone)
+            if isOn, !isWithinRange && !isExtraActive {
+                alarmConfigStore.addExtraActiveDate(schedule.date, timeZone: timeZone)
+            }
+            if !isOn, !isWithinRange {
+                alarmConfigStore.removeExtraActiveDate(schedule.date, timeZone: timeZone)
+            }
             alarmConfigStore.updateOverride(for: schedule.date, timeZone: timeZone) { override in
                 override.skipDay = !isOn
             }

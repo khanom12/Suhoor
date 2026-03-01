@@ -22,7 +22,6 @@ struct SettingsRootView: View {
                 Toggle(Strings.Settings.defaultReminderToggle, isOn: reminderDefaultBinding)
                 Toggle(Strings.Settings.defaultFajrToggle, isOn: fajrDefaultBinding)
             }
-
             Section(Strings.Settings.suhoorTimingSection) {
                 Text(Strings.Settings.suhoorTimingHelper)
                     .font(.footnote)
@@ -108,6 +107,17 @@ struct SettingsRootView: View {
                         selection: activeEndDateBinding,
                         displayedComponents: [.date]
                     )
+                }
+
+                NavigationLink {
+                    AdditionalActiveDaysView()
+                } label: {
+                    HStack {
+                        Text("Additional active days")
+                        Spacer()
+                        Text("\(extraActiveDates.count)")
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
 
@@ -518,6 +528,16 @@ struct SettingsRootView: View {
         return text
     }
 
+    private var extraActiveDates: [Date] {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.timeZone = .current
+        formatter.dateFormat = "yyyy-MM-dd"
+        return alarmConfigStore.defaults.extraActiveDates
+            .compactMap { formatter.date(from: $0) }
+            .sorted()
+    }
+
     private func openAppSettings() {
         if let url = URL(string: UIApplication.openSettingsURLString) {
             UIApplication.shared.open(url)
@@ -751,5 +771,47 @@ struct SettingsRootView: View {
     private func dateFromMidnight(for day: Date, minutes: Int) -> Date {
         let start = calendar.startOfDay(for: day)
         return calendar.date(byAdding: .minute, value: minutes, to: start) ?? start
+    }
+}
+
+private struct AdditionalActiveDaysView: View {
+    @EnvironmentObject private var alarmConfigStore: AlarmConfigStore
+    @EnvironmentObject private var scheduleManager: ScheduleManager
+
+    var body: some View {
+        List {
+            if extraActiveDates.isEmpty {
+                Text("No additional active days yet.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(extraActiveDates, id: \.self) { date in
+                    Text(GregorianDateFormatter.shared.headerString(for: date))
+                }
+                .onDelete(perform: delete)
+            }
+        }
+        .listStyle(.insetGrouped)
+        .navigationTitle("Additional active days")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private var extraActiveDates: [Date] {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.timeZone = .current
+        formatter.dateFormat = "yyyy-MM-dd"
+        return alarmConfigStore.defaults.extraActiveDates
+            .compactMap { formatter.date(from: $0) }
+            .sorted()
+    }
+
+    private func delete(at offsets: IndexSet) {
+        let dates = extraActiveDates
+        for index in offsets {
+            let date = dates[index]
+            alarmConfigStore.removeExtraActiveDate(date, timeZone: .current)
+            Task { await scheduleManager.rescheduleDay(date) }
+        }
     }
 }

@@ -2,8 +2,6 @@ import SwiftUI
 import UIKit
 
 struct ContentView: View {
-    @State private var showSettingsSheet = false
-
     var body: some View {
         ZStack {
             Color(.systemBackground)
@@ -11,30 +9,14 @@ struct ContentView: View {
 
             NavigationStack {
                 AlarmsHomeView()
-                    .toolbar {
-                        ToolbarItem(placement: .topBarTrailing) {
-                            Button {
-                                showSettingsSheet = true
-                            } label: {
-                                Image(systemName: "gearshape")
-                            }
-                        }
-                    }
             }
         }
         // Force the root container to occupy the full screen to avoid a centered "panel" layout on iPhone.
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .modifier(RootSizeGuard())
-        .onReceive(NotificationCenter.default.publisher(for: .switchToSettingsTab)) { _ in
-            showSettingsSheet = true
-        }
-        .sheet(isPresented: $showSettingsSheet) {
-            NavigationStack {
-                SettingsRootView()
-            }
-        }
     }
 }
+
 
 extension Notification.Name {
     static let switchToAlarmTab = Notification.Name("SwitchToAlarmTab")

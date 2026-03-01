@@ -105,6 +105,10 @@ struct RuleEngine {
     }
 
     private func defaultsActive(on date: Date) -> Bool {
+        let key = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
+        if defaultConfig.extraActiveDates.contains(key) {
+            return true
+        }
         switch defaultConfig.activationMode {
         case .alwaysOn:
             return true
