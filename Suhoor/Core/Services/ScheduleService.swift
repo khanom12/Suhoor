@@ -906,18 +906,13 @@ final class ScheduleManager: ObservableObject {
         let offsetMinutes = Int(round(fajr.timeIntervalSince(wake) / 60))
         var reminder: Date?
         if effectiveConfig.reminderEnabled {
-            if let overrideMinutes = effectiveConfig.reminderTimeOverrideMinutesFromMidnight {
-                reminder = dateFromMidnight(for: day, minutes: overrideMinutes, calendar: calendar)
-            } else {
-                reminder = ScheduleEventCalculator.reminderDate(
-                    for: fajr,
-                    reminderMinutes: effectiveConfig.reminderOffsetMinutes,
-                    calendar: calendar
-                )
-            }
-            if let reminderDate = reminder, reminderDate < wake {
-                reminder = wake
-            }
+            reminder = resolvedReminderDate(
+                for: day,
+                suhoor: wake,
+                fajr: fajr,
+                config: effectiveConfig,
+                calendar: calendar
+            )
         }
         let boundary = effectiveConfig.fajrEnabled ? fajr : nil
         let fajrSoundChoice = effectiveConfig.fajrSoundChoice
@@ -976,6 +971,48 @@ final class ScheduleManager: ObservableObject {
             return dateFromMidnight(for: day, minutes: config.suhoorOffsetMinutes, calendar: calendar)
         }
         return ScheduleEventCalculator.wakeDate(for: fajr, offsetMinutes: config.suhoorOffsetMinutes, calendar: calendar)
+    }
+
+    private func resolvedReminderDate(
+        for day: Date,
+        suhoor: Date,
+        fajr: Date,
+        config: EffectiveDailyConfig,
+        calendar: Calendar
+    ) -> Date? {
+        let result = computedReminderTime(
+            for: day,
+            suhoor: suhoor,
+            fajr: fajr,
+            config: config,
+            calendar: calendar
+        )
+        if result.wasClampedToSuhoor {
+            Logging.scheduler.info("Reminder clamped to Suhoor for \\(DateHelpers.dayIdentifier(for: day, timeZone: calendar.timeZone)).")
+        }
+        return result.reminderTime
+    }
+
+    private func computedReminderTime(
+        for day: Date,
+        suhoor: Date,
+        fajr: Date,
+        config: EffectiveDailyConfig,
+        calendar: Calendar
+    ) -> TimeValidationResult {
+        let reminderDate: Date
+        if let overrideMinutes = config.reminderTimeOverrideMinutesFromMidnight {
+            reminderDate = dateFromMidnight(for: day, minutes: overrideMinutes, calendar: calendar)
+        } else if config.reminderTimeMode == .fixedTime {
+            reminderDate = dateFromMidnight(for: day, minutes: config.reminderFixedTimeMinutes, calendar: calendar)
+        } else {
+            reminderDate = ScheduleEventCalculator.reminderDate(
+                for: fajr,
+                reminderMinutes: config.reminderMinutesBeforeFajr,
+                calendar: calendar
+            )
+        }
+        return TimeValidation.validateDailyTimes(suhoorTime: suhoor, reminderTime: reminderDate)
     }
 
     private func dateFromMidnight(for day: Date, minutes: Int, calendar: Calendar) -> Date {

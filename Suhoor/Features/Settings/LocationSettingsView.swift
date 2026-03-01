@@ -10,81 +10,52 @@ struct LocationSettingsView: View {
     @State private var showOnlineSearch = false
 
     var body: some View {
-        ZStack {
-            LinearGradient(
-                colors: [DawnColor.bgWarmTop, DawnColor.bgWarmBottom],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .ignoresSafeArea()
-
-            ScrollView {
-                VStack(spacing: DesignTokens.spacingL) {
-                    GlassCard(style: .normal) {
-                        VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
-                            SectionHeaderView(Strings.Settings.locationSection)
-
-                            Picker("", selection: $settingsStore.settings.locationMode) {
-                                Text("Auto").tag(LocationMode.auto)
-                                Text("City").tag(LocationMode.fixed)
-                            }
-                            .pickerStyle(.segmented)
-                            .onChange(of: settingsStore.settings.locationMode) { _, _ in
-                                if settingsStore.settings.locationMode == .fixed,
-                                   settingsStore.settings.fixedLocation == nil {
-                                    applySelectedCity()
-                                }
-                                Task { await scheduleManager.ensureScheduleWindow(reason: .settingsChanged) }
-                            }
-
-                            if settingsStore.settings.locationMode == .auto {
-                                Text(Strings.Settings.locationHelper)
-                                    .font(.footnote)
-                                    .foregroundStyle(.secondary)
-                            } else {
-                                Text(Strings.Settings.locationSelected(cityName(for: selectedCityId)))
-                                    .font(.footnote.weight(.semibold))
-                                    .foregroundStyle(.secondary)
-
-                                NavigationLink {
-                                    CityPickerView(selectedCityId: $selectedCityId)
-                                } label: {
-                                    ActionRowView(title: cityName(for: selectedCityId), systemImage: "building.2")
-                                }
-                                .buttonStyle(PressableRowButtonStyle())
-
-                                Button {
-                                    showOnlineSearch = true
-                                } label: {
-                                    ActionRowView(title: Strings.Settings.locationSearchOnline, systemImage: "magnifyingglass")
-                                }
-                                .buttonStyle(PressableRowButtonStyle())
-
-                                Text(Strings.Settings.locationSearchRequiresInternet)
-                                    .font(.footnote)
-                                    .foregroundStyle(.secondary)
-                            }
-
-                            Button(Strings.Settings.openAppSettings) { openAppSettings() }
-                                .font(.footnote.weight(.semibold))
-                        }
-                    }
+        Form {
+            Section(Strings.Settings.locationSection) {
+                Picker("", selection: $settingsStore.settings.locationMode) {
+                    Text("Auto").tag(LocationMode.auto)
+                    Text("City").tag(LocationMode.fixed)
                 }
-                .padding(.horizontal, DesignTokens.spacingL)
-                .padding(.top, DesignTokens.spacingL)
-                .padding(.bottom, DesignTokens.spacingM)
+                .pickerStyle(.segmented)
+                .onChange(of: settingsStore.settings.locationMode) { _, _ in
+                    if settingsStore.settings.locationMode == .fixed,
+                       settingsStore.settings.fixedLocation == nil {
+                        applySelectedCity()
+                    }
+                    Task { await scheduleManager.ensureScheduleWindow(reason: .settingsChanged) }
+                }
+
+                if settingsStore.settings.locationMode == .auto {
+                    Text(Strings.Settings.locationHelper)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text(Strings.Settings.locationSelected(cityName(for: selectedCityId)))
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+
+                    NavigationLink {
+                        CityPickerView(selectedCityId: $selectedCityId)
+                    } label: {
+                        Text(cityName(for: selectedCityId))
+                    }
+
+                    Button(Strings.Settings.locationSearchOnline) {
+                        showOnlineSearch = true
+                    }
+
+                    Text(Strings.Settings.locationSearchRequiresInternet)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+
+                Button(Strings.Settings.openAppSettings) { openAppSettings() }
+                    .font(.footnote.weight(.semibold))
             }
         }
-        .navigationTitle("")
+        .formStyle(.grouped)
+        .navigationTitle(Strings.Settings.locationSection)
         .navigationBarTitleDisplayMode(.inline)
-        .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
-        .toolbarBackground(.visible, for: .navigationBar)
-        .toolbarColorScheme(.light, for: .navigationBar)
-        .toolbar {
-            ToolbarItem(placement: .principal) {
-                SingleLineTitleView(titleLine: Strings.Settings.locationSection)
-            }
-        }
         .onAppear {
             selectedCityId = currentCityId()
         }
@@ -99,7 +70,6 @@ struct LocationSettingsView: View {
                 applyMapItem(mapItem)
                 Task { await scheduleManager.ensureScheduleWindow(reason: .settingsChanged) }
             }
-            .sheetMaterialBackground()
         }
     }
 

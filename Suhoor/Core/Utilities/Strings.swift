@@ -42,8 +42,13 @@ enum Strings {
     }
 
     enum AlarmsTab {
-        static let scheduleWindow = "Schedule window"
+        static let scheduleWindow = "Days shown"
         static func nextDays(_ count: Int) -> String { "Next \(count) days" }
+        static func todayHeader(gregorian: String, hijri: String) -> String {
+            "Today: \(gregorian) • \(hijri)"
+        }
+        static let listRangeTitle = "Alarms list range"
+        static let listRangeHelper = "Controls how many days are shown in the Alarms tab list."
         static let emptyTitle = "No schedule yet"
         static let emptySubtitle = "Enable defaults or create a day override to schedule alarms."
         static let customizedBadge = "Customized"
@@ -141,6 +146,29 @@ enum Strings {
 
     enum Settings {
         static let title = "Settings"
+        static let defaultsEnabledSection = "Default enabled alarms"
+        static let defaultsEnabledHelper = "These defaults apply when a day has no custom overrides."
+        static let defaultSuhoorToggle = "Suhoor alarm enabled by default"
+        static let defaultReminderToggle = "Reminder alarm enabled by default"
+        static let defaultFajrToggle = "Fajr event enabled by default"
+        static let suhoorTimingSection = "Suhoor timing"
+        static let suhoorTimingHelper = "Applies to the Suhoor alarm only."
+        static let suhoorTimeBasedOn = "Suhoor time is based on"
+        static let suhoorMinutesBeforeFajr = "Minutes before Fajr"
+        static let reminderTimingSection = "Reminder timing"
+        static let reminderTimingHelper = "Applies to the Reminder alarm only."
+        static let reminderTimeBasedOn = "Reminder time is based on"
+        static let reminderMinutesBeforeFajr = "Minutes before Fajr"
+        static let reminderTime = "Reminder time"
+        static let reminderBeforeSuhoorWarning = "Reminder can’t be earlier than Suhoor."
+        static let activePeriodSection = "Active period"
+        static let activePeriodHelper = "Limits scheduling and default behavior to a time range. You can still manually enable alarms on specific days."
+        static let defaultsActive = "Defaults active"
+        static let activeAlways = "Always"
+        static let activeDateRange = "Date range"
+        static let alarmsListRangeSection = "Alarms list range"
+        static let alarmsListRangeHelper = "Controls how many days are shown in the Alarms tab list."
+        static let alarmsListRangeLabel = "Show next"
         static let routineDefaultsSection = "Routine Defaults"
         static let reminderToggle = "Reminder before Fajr"
         static let reminderHelper = "Applies to all days."

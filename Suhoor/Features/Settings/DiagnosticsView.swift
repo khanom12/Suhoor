@@ -149,6 +149,7 @@ struct DiagnosticsView: View {
         }
         .navigationTitle("Diagnostics")
         .navigationBarTitleDisplayMode(.inline)
+        .formStyle(.grouped)
         .task {
             await refreshAudit()
             timelineEntries = EventTimelineLog.shared.entries()

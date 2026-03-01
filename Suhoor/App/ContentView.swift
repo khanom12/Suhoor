@@ -2,48 +2,36 @@ import SwiftUI
 import UIKit
 
 struct ContentView: View {
-    enum Tab {
-        case alarms
-        case settings
-    }
-
-    @State private var selectedTab: Tab = .alarms
+    @State private var showSettingsSheet = false
 
     var body: some View {
         ZStack {
             Color(.systemBackground)
                 .ignoresSafeArea()
 
-            TabView(selection: $selectedTab) {
+            NavigationStack {
                 AlarmsHomeView()
-                    .tabItem {
-                        Label("Alarms", systemImage: "alarm")
+                    .toolbar {
+                        ToolbarItem(placement: .topBarTrailing) {
+                            Button {
+                                showSettingsSheet = true
+                            } label: {
+                                Image(systemName: "gearshape")
+                            }
+                        }
                     }
-                    .tag(Tab.alarms)
-
-                SettingsRootView()
-                    .tabItem {
-                        Label("Settings", systemImage: "gearshape")
-                    }
-                    .tag(Tab.settings)
-
-                // Tracker tab placeholder (no functionality yet).
-                // TrackerView()
-                //     .tabItem { Label("Tracker", systemImage: "checkmark.circle") }
-                //     .tag(Tab.tracker)
             }
         }
         // Force the root container to occupy the full screen to avoid a centered "panel" layout on iPhone.
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .modifier(RootSizeGuard())
-        .onReceive(NotificationCenter.default.publisher(for: .switchToScheduleTab)) { _ in
-            selectedTab = .alarms
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .switchToAlarmTab)) { _ in
-            selectedTab = .alarms
-        }
         .onReceive(NotificationCenter.default.publisher(for: .switchToSettingsTab)) { _ in
-            selectedTab = .settings
+            showSettingsSheet = true
+        }
+        .sheet(isPresented: $showSettingsSheet) {
+            NavigationStack {
+                SettingsRootView()
+            }
         }
     }
 }

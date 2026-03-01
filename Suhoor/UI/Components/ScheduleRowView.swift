@@ -61,11 +61,10 @@ struct ScheduleRowView: View {
 
         var parts: [String] = ["Fajr \(fajr)"]
         if ruleEngine.effectiveReminderEnabled(for: day.date) {
-            var calendar = Calendar(identifier: .gregorian)
-            calendar.timeZone = .current
-            let reminderDate = calendar.date(byAdding: .minute, value: -ruleEngine.effectiveReminderMinutes(for: day.date), to: day.fajrDate) ?? day.fajrDate
-            let reminder = TimeFormatters.timeFormatter.string(from: reminderDate)
-            parts.append("Rem \(reminder)")
+            if let reminderDate = day.reminderDate {
+                let reminder = TimeFormatters.timeFormatter.string(from: reminderDate)
+                parts.append("Rem \(reminder)")
+            }
         }
         if ruleEngine.effectiveAtFajrEnabled(for: day.date) {
             parts.append("Adhan \(fajr)")

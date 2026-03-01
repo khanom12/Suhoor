@@ -84,14 +84,18 @@ final class AlarmConfigStore: ObservableObject {
         var reminderEnabled = override?.reminderEnabled ?? baseReminderEnabled
         var fajrEnabled = override?.fajrEnabled ?? baseFajrEnabled
 
-        var reminderOffset = override?.reminderOffsetOverrideMinutes ?? defaults.defaultReminderOffsetMinutes
+        let reminderOffset = override?.reminderOffsetOverrideMinutes ?? defaults.defaultReminderMinutesBeforeFajr
+        let reminderTimeMode: ReminderTimeMode
+        if override?.reminderTimeOverrideMinutesFromMidnight != nil {
+            reminderTimeMode = .fixedTime
+        } else if override?.reminderOffsetOverrideMinutes != nil {
+            reminderTimeMode = .beforeFajr
+        } else {
+            reminderTimeMode = defaults.defaultReminderTimeMode
+        }
         let suhoorOffset = ruleSummary.finalOffsetMinutes
         let suhoorTimeOverride = override?.suhoorTimeOverrideMinutesFromMidnight
         let reminderTimeOverride = override?.reminderTimeOverrideMinutesFromMidnight
-
-        if reminderOffset >= suhoorOffset {
-            reminderOffset = max(1, suhoorOffset - 1)
-        }
 
         if skipDay || ruleSummary.disabledForDay {
             suhoorEnabled = false
@@ -111,7 +115,9 @@ final class AlarmConfigStore: ObservableObject {
             fajrEnabled: fajrEnabled,
             suhoorTimeMode: defaults.defaultSuhoorTimeMode,
             suhoorOffsetMinutes: suhoorOffset,
-            reminderOffsetMinutes: reminderOffset,
+            reminderTimeMode: reminderTimeMode,
+            reminderMinutesBeforeFajr: reminderOffset,
+            reminderFixedTimeMinutes: defaults.defaultReminderFixedTimeMinutes,
             suhoorTimeOverrideMinutesFromMidnight: suhoorTimeOverride,
             reminderTimeOverrideMinutesFromMidnight: reminderTimeOverride,
             fajrSoundChoice: fajrSoundChoice,
@@ -153,7 +159,9 @@ final class AlarmConfigStore: ObservableObject {
             fajrEnabledDefault: legacySettings.atFajrEnabledGlobal,
             defaultSuhoorTimeMode: .relativeToFajrMinusMinutes,
             defaultSuhoorOffsetMinutes: legacySettings.baseWakeOffsetMinutes,
-            defaultReminderOffsetMinutes: legacySettings.reminderMinutesBeforeFajrGlobal,
+            defaultReminderTimeMode: .beforeFajr,
+            defaultReminderMinutesBeforeFajr: max(legacySettings.reminderMinutesBeforeFajrGlobal, 10),
+            defaultReminderFixedTimeMinutes: 0,
             activationMode: .alwaysOn,
             activeStartDate: nil,
             activeEndDate: nil,

@@ -71,7 +71,7 @@ struct RuleEngine {
         if let override = overridesByDay[key]?.reminderOffsetOverrideMinutes {
             return override
         }
-        return defaultConfig.defaultReminderOffsetMinutes
+        return defaultConfig.defaultReminderMinutesBeforeFajr
     }
 
     func ruleSummary(for date: Date) -> RuleSummary {

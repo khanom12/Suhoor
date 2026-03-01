@@ -182,9 +182,9 @@ struct AlarmsListView: View {
         guard ruleEngine.effectiveReminderEnabled(for: schedule.date) else {
             return Strings.AlarmList.offLabel
         }
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = .current
-        let reminderDate = calendar.date(byAdding: .minute, value: -nextReminderMinutesEffective, to: schedule.fajrDate) ?? schedule.fajrDate
+        guard let reminderDate = schedule.reminderDate else {
+            return Strings.AlarmList.offLabel
+        }
         return TimeFormatters.timeFormatter.string(from: reminderDate)
     }
 

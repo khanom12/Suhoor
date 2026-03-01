@@ -44,6 +44,8 @@ struct OnlineCitySearchView: View {
                 }
             }
             .navigationTitle(Strings.Settings.locationSearchTitle)
+            .navigationBarTitleDisplayMode(.inline)
+            .listStyle(.insetGrouped)
             .searchable(text: $query, prompt: Strings.Settings.locationSearchPlaceholder)
             .onSubmit(of: .search) {
                 Task { await performSearch() }

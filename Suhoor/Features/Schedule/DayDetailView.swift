@@ -192,10 +192,10 @@ struct DayDetailView: View {
     }
 
     private var reminderTimeText: String {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = .current
-        let reminderDate = calendar.date(byAdding: .minute, value: -reminderMinutesEffective, to: day.fajrDate) ?? day.fajrDate
-        return TimeFormatters.timeFormatter.string(from: reminderDate)
+        if let reminderDate = day.reminderDate {
+            return TimeFormatters.timeFormatter.string(from: reminderDate)
+        }
+        return TimeFormatters.timeFormatter.string(from: day.fajrDate)
     }
 
     private var wakeTimeText: String {

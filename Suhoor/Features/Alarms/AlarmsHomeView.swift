@@ -4,107 +4,86 @@ struct AlarmsHomeView: View {
     @EnvironmentObject private var settingsStore: SuhoorSettingsStore
     @EnvironmentObject private var alarmConfigStore: AlarmConfigStore
     @EnvironmentObject private var scheduleManager: ScheduleManager
+    @EnvironmentObject private var locationService: LocationService
 
-    @State private var scrollOffset: CGFloat = 0
-    @State private var topInset: CGFloat = 0
+    @State private var selectedSchedule: DaySchedule?
 
     var body: some View {
-        NavigationStack {
-            ZStack {
-                LinearGradient(
-                    colors: [DawnColor.bgWarmTop, DawnColor.bgWarmBottom],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
+        ZStack {
+            Color(.systemBackground)
                 .ignoresSafeArea()
 
-                ScrollView {
-                    Color.clear
-                        .frame(height: 0)
-                        .background(
-                            GeometryReader { proxy in
-                                Color.clear.preference(
-                                    key: ScrollOffsetPreferenceKey.self,
-                                    value: proxy.frame(in: .named("alarmsScroll")).minY
-                                )
+            ScrollView {
+                LazyVStack(spacing: 0) {
+                    if displayEntries.isEmpty {
+                        emptyStateView
+                    } else {
+                        let lastIndex = displayEntries.count - 1
+                        ForEach(displayEntries.indices, id: \.self) { index in
+                            let entry = displayEntries[index]
+
+                            AlarmDayRowView(
+                                schedule: entry.schedule,
+                                config: entry.config,
+                                primaryDisplay: entry.primary
+                            ) {
+                                selectedSchedule = entry.schedule
                             }
-                        )
 
-                    VStack(spacing: DesignTokens.spacingL) {
-                        scheduleRangeCard
-
-                        if displaySchedules.isEmpty {
-                            emptyStateCard
-                        } else {
-                            ForEach(displaySchedules) { schedule in
-                                NavigationLink {
-                                    AlarmDayDetailView(schedule: schedule)
-                                } label: {
-                                    GlassCard(style: .normal) {
-                                        AlarmDayCardView(
-                                            schedule: schedule,
-                                            config: effectiveConfig(for: schedule)
-                                        )
-                                    }
-                                }
-                                .buttonStyle(PressableRowButtonStyle())
+                            if index < lastIndex {
+                                Divider()
+                                    .padding(.leading, DesignTokens.spacingL)
+                                    .padding(.trailing, 84)
                             }
                         }
                     }
-                    .padding(.horizontal, DesignTokens.spacingL)
-                    .padding(.top, DesignTokens.headerMaxHeight + topInset + DesignTokens.spacingS)
-                    .padding(.bottom, DesignTokens.spacingM)
                 }
-                .coordinateSpace(name: "alarmsScroll")
-                .onPreferenceChange(ScrollOffsetPreferenceKey.self) { value in
-                    scrollOffset = value
-                }
+                .padding(.horizontal, DesignTokens.spacingL)
+                .padding(.top, DesignTokens.spacingS)
+                .padding(.bottom, DesignTokens.spacingM)
             }
-            .navigationTitle("")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar(.hidden, for: .navigationBar)
-            .readTopSafeAreaInset { topInset = $0 }
-            .overlay(alignment: .top) {
-                let maxCollapse = DesignTokens.headerMaxHeight - DesignTokens.headerMinHeight
-                let progress = min(1, max(0, (-scrollOffset) / maxCollapse))
-                CollapsingHeaderView(
-                    title: Strings.AlarmList.title,
-                    subtitle: Strings.AlarmsTab.nextDays(alarmConfigStore.defaults.scheduleWindowDays),
-                    tertiary: nil,
-                    progress: progress,
-                    topInset: topInset
-                )
+        }
+        .navigationTitle(Strings.AlarmList.title)
+        .navigationBarTitleDisplayMode(.large)
+        .navigationDestination(isPresented: navigationIsActiveBinding) {
+            if let schedule = selectedSchedule {
+                AlarmDayDetailView(schedule: schedule)
             }
+        }
+        .onChange(of: alarmConfigStore.defaults) { _, _ in
+            Task { await scheduleManager.refreshSchedules(force: true) }
+        }
+        .onChange(of: alarmConfigStore.overridesByDay) { _, _ in
+            Task { await scheduleManager.refreshSchedules(force: true) }
+        }
+        .onChange(of: settingsStore.settings.calculationMethod) { _, _ in
+            Task { await scheduleManager.refreshSchedules(force: true) }
+        }
+        .onChange(of: settingsStore.settings.fajrAdjustmentMinutes) { _, _ in
+            Task { await scheduleManager.refreshSchedules(force: true) }
+        }
+        .onChange(of: settingsStore.settings.locationMode) { _, _ in
+            Task { await scheduleManager.refreshSchedules(force: true) }
+        }
+        .onChange(of: settingsStore.settings.fixedLocation) { _, _ in
+            Task { await scheduleManager.refreshSchedules(force: true) }
+        }
+        .onChange(of: locationService.lastLocation) { _, _ in
+            Task { await scheduleManager.refreshSchedules(force: true) }
         }
     }
 
-    private var scheduleRangeCard: some View {
-        GlassCard(style: .normal, padding: DesignTokens.spacingM) {
-            VStack(alignment: .leading, spacing: DesignTokens.spacingS) {
-                Text(Strings.AlarmsTab.scheduleWindow)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.secondary)
 
-                Picker(Strings.AlarmsTab.scheduleWindow, selection: scheduleWindowBinding) {
-                    Text("7 days").tag(7)
-                    Text("14 days").tag(14)
-                    Text("30 days").tag(30)
-                }
-                .pickerStyle(.segmented)
-            }
+    private var emptyStateView: some View {
+        VStack(alignment: .leading, spacing: DesignTokens.spacingS) {
+            Text(Strings.AlarmsTab.emptyTitle)
+                .font(.headline.weight(.semibold))
+            Text(emptyStateDetail)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
         }
-    }
-
-    private var emptyStateCard: some View {
-        GlassCard(style: .normal) {
-            VStack(alignment: .leading, spacing: DesignTokens.spacingS) {
-                Text(Strings.AlarmsTab.emptyTitle)
-                    .font(.headline.weight(.semibold))
-                Text(emptyStateDetail)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, DesignTokens.spacingL)
     }
 
     private var emptyStateDetail: String {
@@ -114,18 +93,24 @@ struct AlarmsHomeView: View {
         return Strings.AlarmsTab.emptySubtitle
     }
 
-    private var displaySchedules: [DaySchedule] {
+    private var displayEntries: [AlarmRowEntry] {
+        let now = Date()
+        let timeZone = TimeZone.current
+        let startOfToday = DateHelpers.startOfToday(in: timeZone)
         let windowDays = max(1, alarmConfigStore.defaults.scheduleWindowDays)
-        return Array(scheduleManager.schedules.prefix(windowDays))
-    }
-
-    private var scheduleWindowBinding: Binding<Int> {
-        Binding(get: {
-            alarmConfigStore.defaults.scheduleWindowDays
-        }, set: { newValue in
-            alarmConfigStore.defaults.scheduleWindowDays = newValue
-            Task { await scheduleManager.ensureScheduleWindow(reason: .settingsChanged) }
-        })
+        let entries = scheduleManager.schedules.compactMap { schedule -> AlarmRowEntry? in
+            if schedule.date < startOfToday { return nil }
+            let config = effectiveConfig(for: schedule)
+            let primary = config.primaryDisplay(schedule: schedule)
+            if schedule.date == startOfToday,
+               let primary,
+               primary.time <= now,
+               config.hasAnyEnabled {
+                return nil
+            }
+            return AlarmRowEntry(schedule: schedule, config: config, primary: primary)
+        }
+        return Array(entries.prefix(windowDays))
     }
 
     private func effectiveConfig(for schedule: DaySchedule) -> EffectiveDailyConfig {
@@ -140,76 +125,152 @@ struct AlarmsHomeView: View {
     }
 }
 
-private struct AlarmDayCardView: View {
+private struct AlarmRowEntry {
     let schedule: DaySchedule
     let config: EffectiveDailyConfig
+    let primary: PrimaryDisplay?
+}
+
+private struct AlarmDayRowView: View {
+    @EnvironmentObject private var alarmConfigStore: AlarmConfigStore
+    @EnvironmentObject private var scheduleManager: ScheduleManager
+
+    let schedule: DaySchedule
+    let config: EffectiveDailyConfig
+    let primaryDisplay: PrimaryDisplay?
+    let onSelect: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: DesignTokens.spacingS) {
-            HStack(alignment: .firstTextBaseline) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(dayTitle)
-                        .font(DesignTokens.rowTitleFont)
-                    Text(TimeFormatters.shortDate.string(from: schedule.date))
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-
-                Spacer()
-
-                if config.skipDay {
-                    PillBadge(text: Strings.AlarmsTab.skippedBadge, style: .off)
-                } else if config.hasOverrides {
-                    PillBadge(text: Strings.AlarmsTab.customizedBadge, style: .custom)
-                }
-            }
-
+        HStack(alignment: .center, spacing: DesignTokens.spacingM) {
             VStack(alignment: .leading, spacing: 4) {
-                alarmLine(title: Strings.AlarmsTab.suhoorLabel, time: suhoorTimeText, enabled: config.suhoorEnabled)
-                alarmLine(title: Strings.AlarmsTab.reminderLabel, time: reminderTimeText, enabled: config.reminderEnabled)
-                alarmLine(title: Strings.AlarmsTab.fajrLabel, time: fajrTimeText, enabled: config.fajrEnabled)
+                Text(dateLine)
+                    .font(.footnote)
+                    .foregroundStyle(isDisabled ? .tertiary : .secondary)
+
+                Text(primaryTimeText)
+                    .font(.system(size: 48, weight: .light, design: .default))
+                    .monospacedDigit()
+                    .foregroundStyle(isDisabled ? .tertiary : .primary)
+
+                Text(secondaryLineText)
+                    .font(.footnote)
+                    .foregroundStyle(isDisabled ? .tertiary : .secondary)
             }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(accessibilitySummary)
+
+            Spacer()
+
+            Toggle("", isOn: dayActiveBinding)
+                .labelsHidden()
+                .accessibilityLabel("Enable alarms for this day")
         }
-        .padding(.vertical, 2)
-    }
-
-    private var dayTitle: String {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = .current
-        if calendar.isDateInToday(schedule.date) { return Strings.AlarmsTab.todayLabel }
-        if calendar.isDateInTomorrow(schedule.date) { return Strings.AlarmsTab.tomorrowLabel }
-        return TimeFormatters.dayFormatter.string(from: schedule.date)
-    }
-
-    private var suhoorTimeText: String {
-        TimeFormatters.timeFormatter.string(from: schedule.wakeDate)
-    }
-
-    private var reminderTimeText: String {
-        guard let reminderDate = schedule.reminderDate else { return Strings.AlarmList.offLabel }
-        return TimeFormatters.timeFormatter.string(from: reminderDate)
+        .padding(.vertical, 14)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            onSelect()
+        }
     }
 
     private var fajrTimeText: String {
         TimeFormatters.timeFormatter.string(from: schedule.fajrDate)
     }
 
-    private func alarmLine(title: String, time: String, enabled: Bool) -> some View {
-        HStack(spacing: DesignTokens.spacingS) {
-            Text(title)
-                .font(.subheadline.weight(.semibold))
-                .frame(width: 86, alignment: .leading)
-
-            Text(time)
-                .font(.subheadline)
-                .foregroundStyle(enabled ? .primary : .secondary)
-                .monospacedDigit()
-
-            Spacer()
-
-            Text(enabled ? Strings.AlarmsTab.onLabel : Strings.AlarmsTab.offLabel)
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(enabled ? .primary : .secondary)
+    private var primaryTimeText: String {
+        if let primaryDisplay {
+            return TimeFormatters.timeFormatter.string(from: primaryDisplay.time)
         }
+        return TimeFormatters.timeFormatter.string(from: schedule.wakeDate)
+    }
+
+    private var secondaryLineText: String {
+        guard let primaryDisplay else {
+            return "Off"
+        }
+        if primaryDisplay.kind == .fajr {
+            return "Fajr (Adhan)"
+        }
+        return "Fajr \(fajrTimeText)"
+    }
+
+    private var dateLine: String {
+        let dateText = GregorianDateFormatter.shared.cardString(for: schedule.date)
+        if isToday {
+            return "\(Strings.AlarmsTab.todayLabel), \(dateText)"
+        }
+        if isTomorrow {
+            return "\(Strings.AlarmsTab.tomorrowLabel), \(dateText)"
+        }
+        return dateText
+    }
+
+    private var isToday: Bool {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .current
+        let startOfToday = calendar.startOfDay(for: Date())
+        return calendar.isDate(schedule.date, inSameDayAs: startOfToday)
+    }
+
+    private var isTomorrow: Bool {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .current
+        let startOfToday = calendar.startOfDay(for: Date())
+        let startOfTomorrow = calendar.date(byAdding: .day, value: 1, to: startOfToday) ?? startOfToday
+        return calendar.isDate(schedule.date, inSameDayAs: startOfTomorrow)
+    }
+
+    private var dayActiveBinding: Binding<Bool> {
+        Binding(get: {
+            config.hasAnyEnabled
+        }, set: { isOn in
+            let timeZone = TimeZone.current
+            alarmConfigStore.updateOverride(for: schedule.date, timeZone: timeZone) { override in
+                override.skipDay = !isOn
+            }
+            Task { await scheduleManager.rescheduleDay(schedule.date) }
+        })
+    }
+
+    private var accessibilitySummary: String {
+        let statusText = config.skipDay ? "skipped" : "active"
+        return "\(dateLabelWithPrefix), \(primaryLabelText) \(primaryTimeText), Fajr \(fajrTimeText), \(statusText)"
+    }
+
+    private var primaryLabelText: String {
+        switch primaryDisplay?.kind ?? .suhoor {
+        case .suhoor:
+            return "Suhoor"
+        case .reminder:
+            return "Reminder"
+        case .fajr:
+            return "Fajr"
+        }
+    }
+
+    private var isDisabled: Bool {
+        !config.hasAnyEnabled
+    }
+
+    private var dateLabelWithPrefix: String {
+        let dateText = GregorianDateFormatter.shared.cardString(for: schedule.date)
+        if isToday {
+            return "\(Strings.AlarmsTab.todayLabel), \(dateText)"
+        }
+        if isTomorrow {
+            return "\(Strings.AlarmsTab.tomorrowLabel), \(dateText)"
+        }
+        return dateText
+    }
+}
+
+private extension AlarmsHomeView {
+    var navigationIsActiveBinding: Binding<Bool> {
+        Binding(get: {
+            selectedSchedule != nil
+        }, set: { isActive in
+            if !isActive {
+                selectedSchedule = nil
+            }
+        })
     }
 }

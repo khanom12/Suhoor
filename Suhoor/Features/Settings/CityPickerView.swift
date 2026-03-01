@@ -28,6 +28,8 @@ struct CityPickerView: View {
             }
         }
         .navigationTitle("Choose City")
+        .navigationBarTitleDisplayMode(.inline)
+        .listStyle(.insetGrouped)
         .searchable(text: $searchText)
     }
 }

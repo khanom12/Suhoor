@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 final class AlarmScheduler {
     private let routineScheduler: RoutineScheduler
@@ -50,11 +51,16 @@ final class AlarmScheduler {
         }
 
         if config.reminderEnabled {
-            success = await routineScheduler.scheduleReminder(
-                for: schedule,
-                settings: settings,
-                canUseAlarmKit: canUseAlarmKit
-            ) && success
+            if let reminderDate = schedule.reminderDate, reminderDate < schedule.wakeDate {
+                Logging.scheduler.warning("Reminder earlier than Suhoor for \(schedule.id). Skipping reminder scheduling.")
+                await routineScheduler.cancelReminder(for: schedule)
+            } else {
+                success = await routineScheduler.scheduleReminder(
+                    for: schedule,
+                    settings: settings,
+                    canUseAlarmKit: canUseAlarmKit
+                ) && success
+            }
         } else {
             await routineScheduler.cancelReminder(for: schedule)
         }

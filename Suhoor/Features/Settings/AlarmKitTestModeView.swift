@@ -143,6 +143,7 @@ struct AlarmKitTestModeView: View {
         }
         .navigationTitle("AlarmKit Test Mode")
         .navigationBarTitleDisplayMode(.inline)
+        .formStyle(.grouped)
         .task {
             refreshSnapshot()
         }

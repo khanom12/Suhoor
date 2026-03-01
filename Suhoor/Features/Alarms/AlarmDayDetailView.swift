@@ -8,60 +8,39 @@ struct AlarmDayDetailView: View {
     @EnvironmentObject private var scheduleManager: ScheduleManager
 
     private let timeZone: TimeZone = .current
+    @State private var reminderTimeClamped = false
 
     var body: some View {
-        ZStack {
-            LinearGradient(
-                colors: [DawnColor.bgWarmTop, DawnColor.bgWarmBottom],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .ignoresSafeArea()
+        Form {
+            Section {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(HijriDateFormatter.shared.string(from: schedule.date))
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
 
-            ScrollView {
-                VStack(spacing: DesignTokens.spacingL) {
-                    headerCard
-                    skipCard
-                    suhoorCard
-                    reminderCard
-                    fajrCard
-                    resetCard
+                    Text(TimeFormatters.timeFormatter.string(from: suhoorTime))
+                        .font(.system(size: 56, weight: .light, design: .default))
+                        .monospacedDigit()
+
+                    Text("Fajr \(TimeFormatters.timeFormatter.string(from: schedule.fajrDate))")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                 }
-                .padding(.horizontal, DesignTokens.spacingL)
-                .padding(.top, DesignTokens.spacingL)
-                .padding(.bottom, DesignTokens.spacingM)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.vertical, 4)
             }
-        }
-        .navigationBarTitleDisplayMode(.inline)
-        .navigationTitle("")
-    }
 
-    private var headerCard: some View {
-        GlassCard(style: .header, padding: DesignTokens.spacingM) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text(TimeFormatters.dayFormatter.string(from: schedule.date))
-                    .font(DesignTokens.screenTitleFont)
-                Text(TimeFormatters.fullDateTitle.string(from: schedule.date))
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+            Section {
+                Toggle("Enable this day", isOn: dayActiveBinding)
+
+                if !dayActiveBinding.wrappedValue {
+                    Text("No alarms will run on this date.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
             }
-        }
-    }
 
-    private var skipCard: some View {
-        GlassCard(style: .normal) {
-            VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
-                SectionHeaderView(Strings.DayDetail.exceptionSection)
-                Toggle(Strings.DayDetail.skipDay, isOn: skipBinding)
-            }
-        }
-    }
-
-    private var suhoorCard: some View {
-        GlassCard(style: .normal) {
-            VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
-                SectionHeaderView(Strings.AlarmsTab.suhoorLabel)
-
+            Section(Strings.AlarmsTab.suhoorLabel) {
                 Toggle(Strings.AlarmsTab.enabledLabel, isOn: suhoorEnabledBinding)
                     .disabled(isSkippingDay)
 
@@ -76,13 +55,9 @@ struct AlarmDayDetailView: View {
                     )
                     .disabled(isSkippingDay)
                 } else {
-                    OffsetPickerView(
-                        baseMinutes: suhoorOffsetBinding,
-                        presetMinutes: [15, 30, 45, 60, 90],
-                        range: 5...240,
-                        step: 5,
-                        sentenceText: { "Wake me \($0) min before Fajr." }
-                    )
+                    Stepper(value: suhoorOffsetBinding, in: 5...240, step: 5) {
+                        Text("Minutes before Fajr: \(suhoorOffsetBinding.wrappedValue)m")
+                    }
                     .disabled(isSkippingDay)
                 }
 
@@ -90,34 +65,37 @@ struct AlarmDayDetailView: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
-        }
-    }
 
-    private var reminderCard: some View {
-        GlassCard(style: .normal) {
-            VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
-                SectionHeaderView(Strings.AlarmsTab.reminderLabel)
-
+            Section(Strings.AlarmsTab.reminderLabel) {
                 Toggle(Strings.AlarmsTab.enabledLabel, isOn: reminderEnabledBinding)
                     .disabled(isSkippingDay)
 
-                Stepper(value: reminderOffsetBinding, in: 1...maxReminderOffsetMinutes, step: 1) {
-                    Text(Strings.AlarmsTab.reminderOffsetLabel(reminderOffsetBinding.wrappedValue))
+                if usesFixedReminderTime {
+                    DatePicker(
+                        Strings.Settings.reminderTime,
+                        selection: reminderFixedTimeBinding,
+                        displayedComponents: [.hourAndMinute]
+                    )
+                    .disabled(isSkippingDay || !effectiveConfig.reminderEnabled)
+                } else {
+                    Stepper(value: reminderOffsetBinding, in: 1...maxReminderOffsetMinutes, step: 1) {
+                        Text(Strings.AlarmsTab.reminderOffsetLabel(reminderOffsetBinding.wrappedValue))
+                    }
+                    .disabled(isSkippingDay || !effectiveConfig.reminderEnabled)
                 }
-                .disabled(isSkippingDay || !effectiveConfig.reminderEnabled)
 
                 Text(reminderFooterText)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
+
+                if reminderTimeClamped || reminderValidationResult?.wasClampedToSuhoor == true {
+                    Text(Strings.Settings.reminderBeforeSuhoorWarning)
+                        .font(.footnote)
+                        .foregroundStyle(.orange)
+                }
             }
-        }
-    }
 
-    private var fajrCard: some View {
-        GlassCard(style: .normal) {
-            VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
-                SectionHeaderView(Strings.AlarmsTab.fajrLabel)
-
+            Section(Strings.AlarmsTab.fajrLabel) {
                 Toggle(Strings.AlarmsTab.enabledLabel, isOn: fajrEnabledBinding)
                     .disabled(isSkippingDay)
 
@@ -125,17 +103,17 @@ struct AlarmDayDetailView: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
-        }
-    }
 
-    private var resetCard: some View {
-        GlassCard(style: .normal) {
-            Button(Strings.AlarmsTab.resetDay) {
-                alarmConfigStore.removeOverride(for: schedule.date, timeZone: timeZone)
-                Task { await scheduleManager.rescheduleDay(schedule.date) }
+            Section {
+                Button(Strings.AlarmsTab.resetDay, role: .destructive) {
+                    alarmConfigStore.removeOverride(for: schedule.date, timeZone: timeZone)
+                    Task { await scheduleManager.rescheduleDay(schedule.date) }
+                }
             }
-            .frame(maxWidth: .infinity, alignment: .center)
         }
+        .formStyle(.grouped)
+        .navigationTitle(GregorianDateFormatter.shared.cardString(for: schedule.date))
+        .navigationBarTitleDisplayMode(.inline)
     }
 
     private var ruleEngine: RuleEngine {
@@ -160,6 +138,14 @@ struct AlarmDayDetailView: View {
             alarmConfigStore.override(for: schedule.date, timeZone: timeZone)?.skipDay ?? false
         }, set: { newValue in
             updateOverride { $0.skipDay = newValue }
+        })
+    }
+
+    private var dayActiveBinding: Binding<Bool> {
+        Binding(get: {
+            !skipBinding.wrappedValue
+        }, set: { newValue in
+            updateOverride { $0.skipDay = !newValue }
         })
     }
 
@@ -233,10 +219,30 @@ struct AlarmDayDetailView: View {
     private var reminderOffsetBinding: Binding<Int> {
         Binding(get: {
             alarmConfigStore.override(for: schedule.date, timeZone: timeZone)?.reminderOffsetOverrideMinutes
-                ?? effectiveConfig.reminderOffsetMinutes
+                ?? effectiveConfig.reminderMinutesBeforeFajr
         }, set: { newValue in
             let clamped = min(newValue, maxReminderOffsetMinutes)
-            updateOverride { $0.reminderOffsetOverrideMinutes = clamped }
+            updateOverride { override in
+                override.reminderOffsetOverrideMinutes = clamped
+                override.reminderTimeOverrideMinutesFromMidnight = nil
+            }
+            reminderTimeClamped = clamped != newValue
+        })
+    }
+
+    private var reminderFixedTimeBinding: Binding<Date> {
+        Binding(get: {
+            if let overrideMinutes = alarmConfigStore.override(for: schedule.date, timeZone: timeZone)?.reminderTimeOverrideMinutesFromMidnight {
+                return dateFromMidnight(for: schedule.date, minutes: overrideMinutes)
+            }
+            return dateFromMidnight(for: schedule.date, minutes: effectiveConfig.reminderFixedTimeMinutes)
+        }, set: { newValue in
+            let validation = TimeValidation.validateDailyTimes(suhoorTime: suhoorTime, reminderTime: newValue)
+            updateOverride { override in
+                override.reminderTimeOverrideMinutesFromMidnight = minutesFromMidnight(for: validation.reminderTime)
+                override.reminderOffsetOverrideMinutes = nil
+            }
+            reminderTimeClamped = validation.wasClampedToSuhoor
         })
     }
 
@@ -252,7 +258,7 @@ struct AlarmDayDetailView: View {
 
     private var maxReminderOffsetMinutes: Int {
         let minutesBetween = Int(round(schedule.fajrDate.timeIntervalSince(suhoorTime) / 60))
-        return max(1, minutesBetween - 1)
+        return max(1, minutesBetween)
     }
 
     private var suhoorTime: Date {
@@ -270,21 +276,31 @@ struct AlarmDayDetailView: View {
     }
 
     private var reminderTime: Date? {
+        reminderValidationResult?.reminderTime
+    }
+
+    private var usesFixedReminderTime: Bool {
+        if alarmConfigStore.override(for: schedule.date, timeZone: timeZone)?.reminderTimeOverrideMinutesFromMidnight != nil {
+            return true
+        }
+        return effectiveConfig.reminderTimeMode == .fixedTime
+    }
+
+    private var reminderValidationResult: TimeValidationResult? {
         guard effectiveConfig.reminderEnabled else { return nil }
         let reminderDate: Date
         if let overrideMinutes = effectiveConfig.reminderTimeOverrideMinutesFromMidnight {
             reminderDate = dateFromMidnight(for: schedule.date, minutes: overrideMinutes)
+        } else if effectiveConfig.reminderTimeMode == .fixedTime {
+            reminderDate = dateFromMidnight(for: schedule.date, minutes: effectiveConfig.reminderFixedTimeMinutes)
         } else {
             reminderDate = ScheduleEventCalculator.reminderDate(
                 for: schedule.fajrDate,
-                reminderMinutes: effectiveConfig.reminderOffsetMinutes,
+                reminderMinutes: effectiveConfig.reminderMinutesBeforeFajr,
                 calendar: calendar
             )
         }
-        if reminderDate < suhoorTime {
-            return suhoorTime
-        }
-        return reminderDate
+        return TimeValidation.validateDailyTimes(suhoorTime: suhoorTime, reminderTime: reminderDate)
     }
 
     private var calendar: Calendar {
