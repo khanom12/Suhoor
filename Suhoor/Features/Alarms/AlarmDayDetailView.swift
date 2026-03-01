@@ -7,7 +7,6 @@ struct AlarmDayDetailView: View {
     @EnvironmentObject private var alarmConfigStore: AlarmConfigStore
     @EnvironmentObject private var scheduleManager: ScheduleManager
     @EnvironmentObject private var fastTagStore: FastTagStore
-    @AppStorage("fiqhRuleset") private var ruleset: FiqhRuleset = .strict
 
     private let timeZone: TimeZone = .current
     @State private var reminderTimeClamped = false
@@ -90,7 +89,7 @@ struct AlarmDayDetailView: View {
         let results = TagComputationEngine.results(
             schedules: scheduleManager.schedules,
             selections: fastTagStore.selections,
-            ruleset: ruleset,
+            ruleset: .strict,
             timeZone: timeZone
         )
         if let result = results[key] {
@@ -100,7 +99,7 @@ struct AlarmDayDetailView: View {
             for: schedule.date,
             schedules: scheduleManager.schedules,
             selections: fastTagStore.selections,
-            ruleset: ruleset,
+            ruleset: .strict,
             timeZone: timeZone,
             overrideSelection: userIntentSelection.hasMeaningfulTags ? userIntentSelection : nil
         )

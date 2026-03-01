@@ -8,8 +8,7 @@ struct AdvancedSettingsView: View {
     @EnvironmentObject private var locationService: LocationService
 
     @Environment(\.dismiss) private var dismiss
-    @AppStorage("fiqhRuleset") private var fiqhRuleset: FiqhRuleset = .strict
-    @State private var selectedAbout: FastTagAbout?
+    // Ruleset is strict-only; no user selection.
 
     var body: some View {
         Form {
@@ -42,33 +41,6 @@ struct AdvancedSettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
-            Section("Fiqh Ruleset") {
-                Picker("Ruleset", selection: $fiqhRuleset) {
-                    ForEach(FiqhRuleset.allCases) { ruleset in
-                        Text(ruleset.displayName).tag(ruleset)
-                    }
-                }
-                HStack(spacing: 8) {
-                    Text("Strict (default): Obligatory and voluntary intentions are kept separate.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    Button {
-                        selectedAbout = FastTagAbout.rulesetAbout
-                    } label: {
-                        Image(systemName: "info.circle")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                            .frame(width: 28, height: 28)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("About ruleset")
-                }
-                Text("Permissive: Allows voluntary tags alongside an obligatory primary intent.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-
             Section("Diagnostics") {
                 Text("Last updated: \(lastUpdatedText)")
                 Text("Scheduling: \(schedulingText)")
@@ -92,9 +64,6 @@ struct AdvancedSettingsView: View {
             ToolbarItem(placement: .topBarTrailing) {
                 Button("Done") { dismiss() }
             }
-        }
-        .sheet(item: $selectedAbout) { about in
-            AboutTagSheet(about: about)
         }
         .task {
             await scheduleManager.refreshPermissionSummary()
