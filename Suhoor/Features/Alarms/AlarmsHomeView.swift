@@ -19,29 +19,26 @@ struct AlarmsHomeView: View {
                         emptyStateView
                     }
                 } else {
-                    let groupedEntries = sectionedEntries
-                    ForEach(FastSectionCategory.ordered, id: \.self) { category in
-                        if let entries = groupedEntries[category], !entries.isEmpty {
-                            Section {
-                                ForEach(entries.indices, id: \.self) { index in
-                                    let entry = entries[index]
-                                    AlarmRowView(
-                                        schedule: entry.schedule,
-                                        config: entry.config,
-                                        primaryDisplay: entry.primary,
-                                        onSelect: {
-                                            selectedSchedule = entry.schedule
-                                        }
-                                    )
-                                    .deleteDisabled(!entry.isOneOff)
-                                }
-                                .onDelete { offsets in
-                                    deleteEntries(in: entries, at: offsets)
-                                }
-                            } header: {
-                                Text(category.displayTitle)
-                                    .textCase(nil)
+                    ForEach(hijriMonthSections, id: \.key) { section in
+                        Section {
+                            ForEach(section.entries.indices, id: \.self) { index in
+                                let entry = section.entries[index]
+                                AlarmRowView(
+                                    schedule: entry.schedule,
+                                    config: entry.config,
+                                    primaryDisplay: entry.primary,
+                                    onSelect: {
+                                        selectedSchedule = entry.schedule
+                                    }
+                                )
+                                .deleteDisabled(!entry.isOneOff)
                             }
+                            .onDelete { offsets in
+                                deleteEntries(in: section.entries, at: offsets)
+                            }
+                        } header: {
+                            Text(section.key.title)
+                                .textCase(nil)
                         }
                     }
                 }
@@ -178,20 +175,18 @@ struct AlarmsHomeView: View {
         }
     }
 
-    private var sectionedEntries: [FastSectionCategory: [AlarmRowEntry]] {
+    private var hijriMonthSections: [HijriMonthSection] {
         let timeZone = TimeZone.current
-        let dates = displayEntries.map { $0.schedule.date }
-        let shawwalIdentifiers = FastSectionClassifier.shawwalFirstSixDayIdentifiers(for: dates, timeZone: timeZone)
-        var grouped: [FastSectionCategory: [AlarmRowEntry]] = [:]
+        var grouped: [HijriMonthKey: [AlarmRowEntry]] = [:]
         for entry in displayEntries {
-            let category = FastSectionClassifier.category(
-                for: entry.schedule.date,
-                shawwalFirstSixDayIdentifiers: shawwalIdentifiers,
-                timeZone: timeZone
-            )
-            grouped[category, default: []].append(entry)
+            guard let key = FastIntentEngine.hijriMonthKey(for: entry.schedule.date, timeZone: timeZone) else { continue }
+            grouped[key, default: []].append(entry)
         }
-        return grouped
+        let sorted = grouped.map { key, entries in
+            let firstDate = entries.first?.schedule.date ?? Date.distantPast
+            return (key: key, entries: entries, firstDate: firstDate)
+        }.sorted { $0.firstDate < $1.firstDate }
+        return sorted.map { HijriMonthSection(key: $0.key, entries: $0.entries) }
     }
 
     private func effectiveConfig(for schedule: DaySchedule) -> EffectiveDailyConfig {
@@ -282,9 +277,12 @@ struct AlarmsHomeView: View {
 private struct AddFastDaySheet: View {
     @EnvironmentObject private var alarmConfigStore: AlarmConfigStore
     @EnvironmentObject private var scheduleManager: ScheduleManager
+    @EnvironmentObject private var fastTagStore: FastTagStore
 
     @Binding var isPresented: Bool
     @State private var selectedDate = DateHelpers.startOfToday()
+    @State private var tagSelection = FastIntentSelection.default
+    @State private var showsTagPicker = false
 
     var body: some View {
         Form {
@@ -295,6 +293,26 @@ private struct AddFastDaySheet: View {
                     displayedComponents: [.date]
                 )
                 .datePickerStyle(.graphical)
+            }
+
+            Section("Tags") {
+                Button {
+                    showsTagPicker = true
+                } label: {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Edit Tags")
+                                .foregroundStyle(.primary)
+                            Text(tagSummaryText)
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.tertiary)
+                    }
+                }
             }
 
             if isAlreadyActive {
@@ -315,6 +333,25 @@ private struct AddFastDaySheet: View {
                     .disabled(isAlreadyActive)
             }
         }
+        .sheet(isPresented: $showsTagPicker) {
+            NavigationStack {
+                FastTagPickerSheet(
+                    date: selectedDate,
+                    initialSelection: tagSelection,
+                    onSave: { selection in
+                        tagSelection = selection
+                        fastTagStore.setSelection(selection, for: selectedDate, timeZone: .current)
+                    }
+                )
+            }
+            .presentationDetents([.medium, .large])
+        }
+        .onAppear {
+            tagSelection = fastTagStore.selection(for: selectedDate, timeZone: .current) ?? .default
+        }
+        .onChange(of: selectedDate) { _, newValue in
+            tagSelection = fastTagStore.selection(for: newValue, timeZone: .current) ?? .default
+        }
     }
 
     private var isAlreadyActive: Bool {
@@ -329,8 +366,18 @@ private struct AddFastDaySheet: View {
         let timeZone = TimeZone.current
         alarmConfigStore.removeDeletedDate(selectedDate, timeZone: timeZone)
         alarmConfigStore.addExtraOneOffDate(selectedDate, timeZone: timeZone)
+        fastTagStore.setSelection(tagSelection, for: selectedDate, timeZone: timeZone)
         Task { await scheduleManager.rescheduleDay(selectedDate) }
         isPresented = false
+    }
+
+    private var tagSummaryText: String {
+        var parts: [String] = [tagSelection.primaryIntent.shortTitle]
+        let secondary = tagSelection.secondaryTags.sorted { $0.title < $1.title }
+        if !secondary.isEmpty {
+            parts.append(secondary.map { $0.shortTitle }.joined(separator: ", "))
+        }
+        return parts.joined(separator: " • ")
     }
 }
 
@@ -339,6 +386,11 @@ private struct AlarmRowEntry {
     let config: EffectiveDailyConfig
     let primary: PrimaryDisplay?
     let isOneOff: Bool
+}
+
+private struct HijriMonthSection {
+    let key: HijriMonthKey
+    let entries: [AlarmRowEntry]
 }
 
 private struct AlarmRowView: View {

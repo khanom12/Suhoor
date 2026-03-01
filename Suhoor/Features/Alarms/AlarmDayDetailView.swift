@@ -6,12 +6,15 @@ struct AlarmDayDetailView: View {
     @EnvironmentObject private var settingsStore: SuhoorSettingsStore
     @EnvironmentObject private var alarmConfigStore: AlarmConfigStore
     @EnvironmentObject private var scheduleManager: ScheduleManager
+    @EnvironmentObject private var fastTagStore: FastTagStore
 
     private let timeZone: TimeZone = .current
     @State private var reminderTimeClamped = false
     @State private var showsResetConfirmation = false
     @State private var expandedAlarm: ExpandedAlarm?
     @State private var dayEnabledSnapshot: DayEnabledSnapshot?
+    @State private var showsTagPicker = false
+    @State private var selectedAbout: FastTagAbout?
 
     var body: some View {
         configurationList
@@ -28,6 +31,21 @@ struct AlarmDayDetailView: View {
                 Task { await scheduleManager.rescheduleDay(schedule.date) }
             }
             Button(Strings.Settings.cancel, role: .cancel) {}
+        }
+        .sheet(isPresented: $showsTagPicker) {
+            NavigationStack {
+                FastTagPickerSheet(
+                    date: schedule.date,
+                    initialSelection: intentSelection,
+                    onSave: { selection in
+                        fastTagStore.setSelection(selection, for: schedule.date, timeZone: timeZone)
+                    }
+                )
+            }
+            .presentationDetents([.medium, .large])
+        }
+        .sheet(item: $selectedAbout) { about in
+            AboutTagSheet(about: about)
         }
     }
 
@@ -54,6 +72,23 @@ struct AlarmDayDetailView: View {
         }, set: { newValue in
             updateOverride { $0.skipDay = newValue }
         })
+    }
+
+    private var intentSelection: FastIntentSelection {
+        fastTagStore.selection(for: schedule.date, timeZone: timeZone) ?? .default
+    }
+
+    private var intentWarnings: [FastWarning] {
+        FastIntentEngine.warnings(for: schedule.date, timeZone: timeZone)
+    }
+
+    private var intentSummaryText: String {
+        var parts: [String] = [intentSelection.primaryIntent.shortTitle]
+        let secondary = intentSelection.secondaryTags.sorted { $0.title < $1.title }
+        if !secondary.isEmpty {
+            parts.append(secondary.map { $0.shortTitle }.joined(separator: ", "))
+        }
+        return parts.joined(separator: " • ")
     }
 
     private var dayActiveBinding: Binding<Bool> {
@@ -226,13 +261,41 @@ struct AlarmDayDetailView: View {
                     primaryTime: primaryDisplayTime,
                     titleLabel: heroTitleLabel,
                     fajrText: Strings.AlarmsTab.fajrTime(TimeFormatters.timeFormatter.string(from: schedule.fajrDate)),
-                    isOff: primaryDisplayKind == nil
+                    isOff: primaryDisplayKind == nil,
+                    intentSelection: intentSelection,
+                    warnings: intentWarnings,
+                    onWarningInfo: { warning in
+                        selectedAbout = warning.about
+                    }
                 )
                 .padding(.vertical, 12)
                 .padding(.horizontal, 16)
             }
             .listRowSeparator(.hidden)
             .listRowBackground(Color(.secondarySystemGroupedBackground))
+
+            Section {
+                Button {
+                    showsTagPicker = true
+                } label: {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Edit Tags")
+                                .foregroundStyle(.primary)
+                            Text(intentSummaryText)
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+            } header: {
+                Text("Intent")
+                    .textCase(nil)
+            }
 
             Section {
                 Toggle("Enable this day", isOn: dayToggleBinding)
@@ -713,6 +776,9 @@ private struct SummaryHeader: View {
     let titleLabel: String
     let fajrText: String
     let isOff: Bool
+    let intentSelection: FastIntentSelection
+    let warnings: [FastWarning]
+    let onWarningInfo: (FastWarning) -> Void
     @ScaledMetric(relativeTo: .largeTitle) private var timeFontSize: CGFloat = 42
 
     private static let timeMainFormatter: DateFormatter = {
@@ -755,6 +821,20 @@ private struct SummaryHeader: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
+
+            FlowLayout(spacing: 6) {
+                FastPrimaryIntentCapsule(intent: intentSelection.primaryIntent)
+                ForEach(intentSelection.secondaryTags.sorted { $0.title < $1.title }, id: \.self) { tag in
+                    FastSecondaryTagCapsule(tag: tag)
+                }
+                ForEach(warnings, id: \.self) { warning in
+                    WarningChipWithInfo(
+                        warning: warning,
+                        onInfo: { onWarningInfo(warning) }
+                    )
+                }
+            }
+            .padding(.top, 8)
 
             Spacer()
                 .frame(height: 12)
@@ -802,5 +882,176 @@ private struct SummaryHeader: View {
 
     private var accessibilitySummary: String {
         "\(titleLabel), \(primaryText). \(fajrText)."
+    }
+}
+private struct FastPrimaryIntentCapsule: View {
+    let intent: FastPrimaryIntent
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    var body: some View {
+        let style = intent.style
+        let isAccessibility = dynamicTypeSize.isAccessibilitySize
+        CapsuleLabelView(
+            title: style.title,
+            shortTitle: style.shortTitle,
+            systemImage: style.systemImage,
+            color: style.color,
+            prominence: .strong,
+            useIconOnly: isAccessibility
+        )
+    }
+}
+
+private struct FastSecondaryTagCapsule: View {
+    let tag: FastSecondaryVirtueTag
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    var body: some View {
+        let style = tag.style
+        let isAccessibility = dynamicTypeSize.isAccessibilitySize
+        CapsuleLabelView(
+            title: style.title,
+            shortTitle: style.shortTitle,
+            systemImage: style.systemImage,
+            color: style.color,
+            prominence: .subtle,
+            useIconOnly: isAccessibility
+        )
+    }
+}
+
+private struct WarningChipWithInfo: View {
+    let warning: FastWarning
+    let onInfo: () -> Void
+
+    var body: some View {
+        HStack(spacing: 4) {
+            FastWarningCapsule(warning: warning)
+            Button(action: onInfo) {
+                Image(systemName: "info.circle")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 24, height: 24)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("About \(warning.title)")
+        }
+    }
+}
+
+private struct FastWarningCapsule: View {
+    let warning: FastWarning
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    var body: some View {
+        CapsuleLabelView(
+            title: warning.title,
+            shortTitle: warning.title,
+            systemImage: warning.systemImage,
+            color: .red,
+            prominence: .outline,
+            useIconOnly: dynamicTypeSize.isAccessibilitySize
+        )
+        .accessibilityLabel(warning.title)
+    }
+}
+
+private struct CapsuleLabelView: View {
+    enum Prominence {
+        case strong
+        case subtle
+        case outline
+    }
+
+    let title: String
+    let shortTitle: String
+    let systemImage: String?
+    let color: Color
+    let prominence: Prominence
+    let useIconOnly: Bool
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            labelView(text: title, allowText: true)
+            labelView(text: shortTitle, allowText: true)
+            labelView(text: "", allowText: false)
+        }
+        .font(font)
+        .foregroundStyle(foregroundColor)
+        .padding(.vertical, 4)
+        .padding(.horizontal, 8)
+        .background(background)
+        .clipShape(Capsule())
+        .overlay(
+            Capsule()
+                .stroke(borderColor, lineWidth: borderWidth)
+        )
+        .accessibilityLabel(title)
+    }
+
+    private var font: Font {
+        switch prominence {
+        case .strong:
+            return .caption.weight(.semibold)
+        case .subtle, .outline:
+            return .caption2.weight(.semibold)
+        }
+    }
+
+    private var foregroundColor: Color {
+        switch prominence {
+        case .outline:
+            return .red
+        case .strong, .subtle:
+            return color
+        }
+    }
+
+    private var background: some View {
+        Group {
+            switch prominence {
+            case .strong:
+                color.opacity(0.22)
+            case .subtle:
+                color.opacity(0.14)
+            case .outline:
+                Color.clear
+            }
+        }
+    }
+
+    private var borderColor: Color {
+        switch prominence {
+        case .strong:
+            return color.opacity(0.4)
+        case .subtle:
+            return color.opacity(0.25)
+        case .outline:
+            return Color.red.opacity(0.6)
+        }
+    }
+
+    private var borderWidth: CGFloat {
+        switch prominence {
+        case .outline:
+            return 0.8
+        case .strong, .subtle:
+            return 0.6
+        }
+    }
+
+    @ViewBuilder
+    private func labelView(text: String, allowText: Bool) -> some View {
+        HStack(spacing: 4) {
+            if let systemImage {
+                Image(systemName: systemImage)
+                    .font(.caption2.weight(.semibold))
+            }
+            if allowText, !text.isEmpty, !useIconOnly {
+                Text(text)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+            }
+        }
     }
 }
