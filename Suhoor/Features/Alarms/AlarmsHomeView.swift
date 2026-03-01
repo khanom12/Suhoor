@@ -9,6 +9,7 @@ struct AlarmsHomeView: View {
     @State private var selectedSchedule: DaySchedule?
     @State private var showSettingsSheet = false
     @State private var showAddDaySheet = false
+    @State private var isEditing = false
 
     var body: some View {
         contentView
@@ -90,7 +91,10 @@ struct AlarmsHomeView: View {
             AlarmDayRowView(
                 schedule: entry.schedule,
                 config: entry.config,
-                primaryDisplay: entry.primary
+                primaryDisplay: entry.primary,
+                isEditing: isEditing,
+                showsDeleteControl: entry.isOneOff,
+                onDelete: { deleteOneOff(entry) }
             ) {
                 selectedSchedule = entry.schedule
             }
@@ -103,14 +107,22 @@ struct AlarmsHomeView: View {
         }
     }
 
+    @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
-        ToolbarItemGroup(placement: .topBarTrailing) {
-            Button {
-                showAddDaySheet = true
-            } label: {
-                GlassCircleIcon(systemName: "plus")
+        ToolbarItem(placement: .topBarLeading) {
+            Button(isEditing ? "Done" : "Edit") {
+                isEditing.toggle()
             }
-            .buttonStyle(.plain)
+        }
+        ToolbarItemGroup(placement: .topBarTrailing) {
+            if showsAddButton {
+                Button {
+                    showAddDaySheet = true
+                } label: {
+                    GlassCircleIcon(systemName: "plus")
+                }
+                .buttonStyle(.plain)
+            }
 
             Button {
                 showSettingsSheet = true
@@ -145,20 +157,50 @@ struct AlarmsHomeView: View {
         let now = Date()
         let timeZone = TimeZone.current
         let startOfToday = DateHelpers.startOfToday(in: timeZone)
-        let windowDays = max(1, alarmConfigStore.defaults.scheduleWindowDays)
-        let entries = scheduleManager.schedules.compactMap { schedule -> AlarmRowEntry? in
-            if schedule.date < startOfToday { return nil }
-            let config = effectiveConfig(for: schedule)
-            let primary = config.primaryDisplay(schedule: schedule)
-            if schedule.date == startOfToday,
-               let primary,
-               primary.time <= now,
-               config.hasAnyEnabled {
-                return nil
+
+        switch alarmConfigStore.defaults.activationMode {
+        case .alwaysOn:
+            let windowDays = max(1, alarmConfigStore.defaults.scheduleWindowDays)
+            let entries = scheduleManager.schedules.compactMap { schedule -> AlarmRowEntry? in
+                if schedule.date < startOfToday { return nil }
+                let config = effectiveConfig(for: schedule)
+                let primary = config.primaryDisplay(schedule: schedule)
+                if schedule.date == startOfToday,
+                   let primary,
+                   primary.time <= now,
+                   config.hasAnyEnabled {
+                    return nil
+                }
+                let isOneOff = alarmConfigStore.isExtraOneOffDate(on: schedule.date, timeZone: timeZone)
+                return AlarmRowEntry(
+                    schedule: schedule,
+                    config: config,
+                    primary: primary,
+                    isOneOff: isOneOff
+                )
             }
-            return AlarmRowEntry(schedule: schedule, config: config, primary: primary)
+            return Array(entries.prefix(windowDays))
+        case .dateRange:
+            let dates = displayDatesForDateRange(startOfToday: startOfToday, timeZone: timeZone)
+            return dates.compactMap { date -> AlarmRowEntry? in
+                guard let schedule = scheduleForDisplay(on: date, timeZone: timeZone) else { return nil }
+                let config = effectiveConfig(for: schedule)
+                let primary = config.primaryDisplay(schedule: schedule)
+                if schedule.date == startOfToday,
+                   let primary,
+                   primary.time <= now,
+                   config.hasAnyEnabled {
+                    return nil
+                }
+                let isOneOff = alarmConfigStore.isExtraOneOffDate(on: schedule.date, timeZone: timeZone)
+                return AlarmRowEntry(
+                    schedule: schedule,
+                    config: config,
+                    primary: primary,
+                    isOneOff: isOneOff
+                )
+            }
         }
-        return Array(entries.prefix(windowDays))
     }
 
     private func effectiveConfig(for schedule: DaySchedule) -> EffectiveDailyConfig {
@@ -170,6 +212,60 @@ struct AlarmsHomeView: View {
             settings: settingsStore.settings,
             timeZone: timeZone
         )
+    }
+
+    private var showsAddButton: Bool {
+        alarmConfigStore.defaults.activationMode == .dateRange && !isEditing
+    }
+
+    private func displayDatesForDateRange(startOfToday: Date, timeZone: TimeZone) -> [Date] {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+
+        var dates: [Date] = []
+        if let start = alarmConfigStore.defaults.activeStartDate,
+           let end = alarmConfigStore.defaults.activeEndDate {
+            let startDay = calendar.startOfDay(for: start)
+            let endDay = calendar.startOfDay(for: end)
+            dates.append(contentsOf: DateHelpers.dates(from: startDay, to: endDay, calendar: calendar))
+        }
+
+        let oneOffDates = alarmConfigStore.defaults.extraOneOffDates
+            .compactMap { dateFromKey($0, timeZone: timeZone) }
+            .map { calendar.startOfDay(for: $0) }
+        dates.append(contentsOf: oneOffDates)
+
+        var seenKeys = Set<String>()
+        return dates.sorted().filter { date in
+            guard date >= startOfToday else { return false }
+            let key = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
+            if seenKeys.contains(key) { return false }
+            seenKeys.insert(key)
+            return true
+        }
+    }
+
+    private func scheduleForDisplay(on date: Date, timeZone: TimeZone) -> DaySchedule? {
+        if let schedule = scheduleManager.schedules.first(where: { DateHelpers.isSameDay($0.date, date, in: timeZone) }) {
+            return schedule
+        }
+        return scheduleManager.schedule(for: date)
+    }
+
+    private func dateFromKey(_ key: String, timeZone: TimeZone) -> Date? {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.timeZone = timeZone
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.date(from: key)
+    }
+
+    private func deleteOneOff(_ entry: AlarmRowEntry) {
+        let date = entry.schedule.date
+        let timeZone = TimeZone.current
+        alarmConfigStore.removeExtraOneOffDate(date, timeZone: timeZone)
+        alarmConfigStore.removeOverride(for: date, timeZone: timeZone)
+        Task { await scheduleManager.cancelDay(date) }
     }
 }
 
@@ -212,12 +308,14 @@ private struct AddFastDaySheet: View {
     }
 
     private var isAlreadyActive: Bool {
-        alarmConfigStore.isDefaultsActive(on: selectedDate, timeZone: .current)
+        let timeZone = TimeZone.current
+        return alarmConfigStore.isDateInActiveRange(on: selectedDate, timeZone: timeZone)
+            || alarmConfigStore.isExtraOneOffDate(on: selectedDate, timeZone: timeZone)
     }
 
     private func addSelectedDate() {
         let timeZone = TimeZone.current
-        alarmConfigStore.addExtraActiveDate(selectedDate, timeZone: timeZone)
+        alarmConfigStore.addExtraOneOffDate(selectedDate, timeZone: timeZone)
         Task { await scheduleManager.rescheduleDay(selectedDate) }
         isPresented = false
     }
@@ -251,6 +349,7 @@ private struct AlarmRowEntry {
     let schedule: DaySchedule
     let config: EffectiveDailyConfig
     let primary: PrimaryDisplay?
+    let isOneOff: Bool
 }
 
 private struct AlarmDayRowView: View {
@@ -260,10 +359,16 @@ private struct AlarmDayRowView: View {
     let schedule: DaySchedule
     let config: EffectiveDailyConfig
     let primaryDisplay: PrimaryDisplay?
+    let isEditing: Bool
+    let showsDeleteControl: Bool
+    let onDelete: () -> Void
     let onSelect: () -> Void
 
     var body: some View {
         HStack(alignment: .center, spacing: DesignTokens.spacingM) {
+            if isEditing && showsDeleteControl {
+                deleteButton
+            }
             VStack(alignment: .leading, spacing: 4) {
                 Text(dateLine)
                     .font(.footnote)
@@ -290,8 +395,20 @@ private struct AlarmDayRowView: View {
         .padding(.vertical, 14)
         .contentShape(Rectangle())
         .onTapGesture {
-            onSelect()
+            if !isEditing {
+                onSelect()
+            }
         }
+    }
+
+    private var deleteButton: some View {
+        Button(action: onDelete) {
+            Image(systemName: "minus.circle.fill")
+                .font(.title3)
+                .foregroundStyle(.red)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Delete one-off day")
     }
 
     private var fajrTimeText: String {
@@ -346,13 +463,11 @@ private struct AlarmDayRowView: View {
             config.hasAnyEnabled
         }, set: { isOn in
             let timeZone = TimeZone.current
-            let isWithinRange = alarmConfigStore.isWithinActiveRange(on: schedule.date, timeZone: timeZone)
-            let isExtraActive = alarmConfigStore.isExtraActive(on: schedule.date, timeZone: timeZone)
-            if isOn, !isWithinRange && !isExtraActive {
-                alarmConfigStore.addExtraActiveDate(schedule.date, timeZone: timeZone)
-            }
-            if !isOn, !isWithinRange {
-                alarmConfigStore.removeExtraActiveDate(schedule.date, timeZone: timeZone)
+            let isDateRangeMode = alarmConfigStore.defaults.activationMode == .dateRange
+            let isWithinRange = alarmConfigStore.isDateInActiveRange(on: schedule.date, timeZone: timeZone)
+            let isOneOff = alarmConfigStore.isExtraOneOffDate(on: schedule.date, timeZone: timeZone)
+            if isDateRangeMode, isOn, !isWithinRange && !isOneOff {
+                alarmConfigStore.addExtraOneOffDate(schedule.date, timeZone: timeZone)
             }
             alarmConfigStore.updateOverride(for: schedule.date, timeZone: timeZone) { override in
                 override.skipDay = !isOn

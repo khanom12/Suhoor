@@ -115,7 +115,7 @@ struct SettingsRootView: View {
                     HStack {
                         Text("Additional active days")
                         Spacer()
-                        Text("\(extraActiveDates.count)")
+                        Text("\(extraOneOffDates.count)")
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -528,12 +528,12 @@ struct SettingsRootView: View {
         return text
     }
 
-    private var extraActiveDates: [Date] {
+    private var extraOneOffDates: [Date] {
         let formatter = DateFormatter()
         formatter.calendar = Calendar(identifier: .gregorian)
         formatter.timeZone = .current
         formatter.dateFormat = "yyyy-MM-dd"
-        return alarmConfigStore.defaults.extraActiveDates
+        return alarmConfigStore.defaults.extraOneOffDates
             .compactMap { formatter.date(from: $0) }
             .sorted()
     }
@@ -780,12 +780,12 @@ private struct AdditionalActiveDaysView: View {
 
     var body: some View {
         List {
-            if extraActiveDates.isEmpty {
+            if extraOneOffDates.isEmpty {
                 Text("No additional active days yet.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             } else {
-                ForEach(extraActiveDates, id: \.self) { date in
+                ForEach(extraOneOffDates, id: \.self) { date in
                     Text(GregorianDateFormatter.shared.headerString(for: date))
                 }
                 .onDelete(perform: delete)
@@ -796,22 +796,23 @@ private struct AdditionalActiveDaysView: View {
         .navigationBarTitleDisplayMode(.inline)
     }
 
-    private var extraActiveDates: [Date] {
+    private var extraOneOffDates: [Date] {
         let formatter = DateFormatter()
         formatter.calendar = Calendar(identifier: .gregorian)
         formatter.timeZone = .current
         formatter.dateFormat = "yyyy-MM-dd"
-        return alarmConfigStore.defaults.extraActiveDates
+        return alarmConfigStore.defaults.extraOneOffDates
             .compactMap { formatter.date(from: $0) }
             .sorted()
     }
 
     private func delete(at offsets: IndexSet) {
-        let dates = extraActiveDates
+        let dates = extraOneOffDates
         for index in offsets {
             let date = dates[index]
-            alarmConfigStore.removeExtraActiveDate(date, timeZone: .current)
-            Task { await scheduleManager.rescheduleDay(date) }
+            alarmConfigStore.removeExtraOneOffDate(date, timeZone: .current)
+            alarmConfigStore.removeOverride(for: date, timeZone: .current)
+            Task { await scheduleManager.cancelDay(date) }
         }
     }
 }

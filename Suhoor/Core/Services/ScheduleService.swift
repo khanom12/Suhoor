@@ -366,6 +366,37 @@ final class ScheduleManager: ObservableObject {
         )
     }
 
+    func schedule(for date: Date) -> DaySchedule? {
+        guard isLocationAuthorized else { return nil }
+        guard let coordinate = currentCoordinate() else { return nil }
+
+        let settings = settingsStore.settings
+        let timeZone = TimeZone.current
+        let method = settings.calculationMethod
+        let ruleEngine = RuleEngine(settings: settings, configStore: alarmConfigStore, timeZone: timeZone)
+        let effectiveConfig = alarmConfigStore.effectiveConfig(
+            for: date,
+            ruleSummary: ruleEngine.ruleSummary(for: date),
+            settings: settings,
+            timeZone: timeZone
+        )
+
+        return buildSchedule(
+            for: date,
+            coordinate: coordinate,
+            timeZone: timeZone,
+            method: method,
+            adjustmentMinutes: settings.fajrAdjustmentMinutes,
+            effectiveConfig: effectiveConfig,
+            locationDescription: "Based on your location"
+        )
+    }
+
+    func cancelDay(_ date: Date) async {
+        guard let schedule = scheduleForCancellation(on: date) else { return }
+        await alarmScheduler.cancelDay(schedule: schedule)
+    }
+
     func requestAlarmAuthorization() async -> Bool {
         #if targetEnvironment(simulator)
         return false
@@ -880,6 +911,14 @@ final class ScheduleManager: ObservableObject {
         await routineScheduler.cancelAllUpcoming(days: 30)
         alarmRecordStore.clearAll()
         alarmStateStore.clear()
+    }
+
+    private func scheduleForCancellation(on date: Date) -> DaySchedule? {
+        let timeZone = TimeZone.current
+        if let existing = schedules.first(where: { DateHelpers.isSameDay($0.date, date, in: timeZone) }) {
+            return existing
+        }
+        return schedule(for: date)
     }
 
     private func buildSchedule(

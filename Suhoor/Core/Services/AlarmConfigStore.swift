@@ -54,8 +54,13 @@ final class AlarmConfigStore: ObservableObject {
     }
 
     func isDefaultsActive(on date: Date, timeZone: TimeZone = .current) -> Bool {
-        if isExtraActive(on: date, timeZone: timeZone) { return true }
-        return isWithinActiveRange(on: date, timeZone: timeZone)
+        switch defaults.activationMode {
+        case .alwaysOn:
+            return true
+        case .dateRange:
+            return isDateInActiveRange(on: date, timeZone: timeZone)
+                || isExtraOneOffDate(on: date, timeZone: timeZone)
+        }
     }
 
     func isWithinActiveRange(on date: Date, timeZone: TimeZone = .current) -> Bool {
@@ -75,19 +80,32 @@ final class AlarmConfigStore: ObservableObject {
         }
     }
 
-    func isExtraActive(on date: Date, timeZone: TimeZone = .current) -> Bool {
-        let key = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
-        return defaults.extraActiveDates.contains(key)
+    func isDateInActiveRange(on date: Date, timeZone: TimeZone = .current) -> Bool {
+        guard defaults.activationMode == .dateRange else { return false }
+        guard let start = defaults.activeStartDate, let end = defaults.activeEndDate else {
+            return false
+        }
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let target = calendar.startOfDay(for: date)
+        let startDay = calendar.startOfDay(for: start)
+        let endDay = calendar.startOfDay(for: end)
+        return target >= startDay && target <= endDay
     }
 
-    func addExtraActiveDate(_ date: Date, timeZone: TimeZone = .current) {
+    func isExtraOneOffDate(on date: Date, timeZone: TimeZone = .current) -> Bool {
         let key = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
-        defaults.extraActiveDates.insert(key)
+        return defaults.extraOneOffDates.contains(key)
     }
 
-    func removeExtraActiveDate(_ date: Date, timeZone: TimeZone = .current) {
+    func addExtraOneOffDate(_ date: Date, timeZone: TimeZone = .current) {
         let key = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
-        defaults.extraActiveDates.remove(key)
+        defaults.extraOneOffDates.insert(key)
+    }
+
+    func removeExtraOneOffDate(_ date: Date, timeZone: TimeZone = .current) {
+        let key = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
+        defaults.extraOneOffDates.remove(key)
     }
 
     func effectiveConfig(for date: Date, ruleSummary: RuleSummary, settings: AppSettings, timeZone: TimeZone = .current) -> EffectiveDailyConfig {
