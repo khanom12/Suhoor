@@ -5,12 +5,59 @@ struct TimeText: View {
     let text: String
     let font: Font
     var isEnabled: Bool = true
+    private let amPmScale: CGFloat = 0.6
 
     var body: some View {
-        Text(text)
-            .font(font)
-            .monospacedDigit()
-            .foregroundStyle(isEnabled ? .primary : .secondary)
+        if let parts = timeParts {
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                Text(parts.main)
+                    .font(font)
+                    .monospacedDigit()
+                    .foregroundStyle(isEnabled ? .primary : .secondary)
+                Text(parts.suffix)
+                    .font(font)
+                    .scaleEffect(amPmScale, anchor: .bottomLeading)
+                    .foregroundStyle(isEnabled ? .primary : .secondary)
+            }
+        } else {
+            Text(text)
+                .font(font)
+                .monospacedDigit()
+                .foregroundStyle(isEnabled ? .primary : .secondary)
+        }
+    }
+
+    private var timeParts: (main: String, suffix: String)? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let (main, suffix) = splitTimeSuffix(from: trimmed) else { return nil }
+        return (main, suffix)
+    }
+
+    private func splitTimeSuffix(from value: String) -> (String, String)? {
+        guard !value.isEmpty else { return nil }
+        let scalars = Array(value.unicodeScalars)
+        var suffixStartIndex = scalars.count
+        var sawLetter = false
+
+        for idx in scalars.indices.reversed() {
+            let scalar = scalars[idx]
+            if CharacterSet.letters.contains(scalar) || scalar == "." {
+                sawLetter = sawLetter || CharacterSet.letters.contains(scalar)
+                suffixStartIndex = idx
+                continue
+            }
+            break
+        }
+
+        guard sawLetter, suffixStartIndex < scalars.count else { return nil }
+        let suffixScalars = scalars[suffixStartIndex...]
+        let suffix = String(String.UnicodeScalarView(suffixScalars))
+        let mainScalars = scalars[..<suffixStartIndex]
+        let main = String(String.UnicodeScalarView(mainScalars))
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "\u{00A0}"))
+        guard !main.isEmpty else { return nil }
+        return (main, suffix)
     }
 }
 

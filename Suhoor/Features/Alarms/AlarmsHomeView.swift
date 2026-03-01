@@ -548,6 +548,23 @@ private struct AlarmDayRowView: View {
     let showsDeleteControl: Bool
     let onDelete: () -> Void
     let onSelect: () -> Void
+    @ScaledMetric(relativeTo: .largeTitle) private var timeFontSize: CGFloat = 48
+
+    private static let timeMainFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "h:mm"
+        formatter.timeZone = .current
+        formatter.locale = .current
+        return formatter
+    }()
+
+    private static let timeSuffixFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "a"
+        formatter.timeZone = .current
+        formatter.locale = .current
+        return formatter
+    }()
 
     var body: some View {
         HStack(alignment: .center, spacing: DesignTokens.spacingM) {
@@ -559,10 +576,20 @@ private struct AlarmDayRowView: View {
                     .font(.footnote)
                     .foregroundStyle(isDisabled ? .tertiary : .secondary)
 
-                Text(primaryTimeText)
-                    .font(.system(size: 48, weight: .light, design: .default))
-                    .monospacedDigit()
-                    .foregroundStyle(isDisabled ? .tertiary : .primary)
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(primaryTimeMain)
+                        .font(.system(size: timeFontSize, weight: .light, design: .default))
+                        .monospacedDigit()
+                        .foregroundStyle(isDisabled ? .tertiary : .primary)
+                        .minimumScaleFactor(0.8)
+
+                    if let primaryTimeSuffix {
+                        Text(primaryTimeSuffix)
+                            .font(.system(size: timeFontSize * 0.6, weight: .medium, design: .default))
+                            .foregroundStyle(isDisabled ? .tertiary : .primary)
+                            .baselineOffset(1)
+                    }
+                }
 
                 Text(secondaryLineText)
                     .font(.footnote)
@@ -605,6 +632,18 @@ private struct AlarmDayRowView: View {
             return TimeFormatters.timeFormatter.string(from: primaryDisplay.time)
         }
         return TimeFormatters.timeFormatter.string(from: schedule.wakeDate)
+    }
+
+    private var primaryTimeDate: Date {
+        primaryDisplay?.time ?? schedule.wakeDate
+    }
+
+    private var primaryTimeMain: String {
+        AlarmDayRowView.timeMainFormatter.string(from: primaryTimeDate)
+    }
+
+    private var primaryTimeSuffix: String? {
+        AlarmDayRowView.timeSuffixFormatter.string(from: primaryTimeDate)
     }
 
     private var secondaryLineText: String {

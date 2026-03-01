@@ -15,7 +15,7 @@ struct AlarmDayDetailView: View {
 
     var body: some View {
         configurationList
-            .background(Color(.systemBackground))
+            .background(Color(.systemGroupedBackground))
         .navigationTitle(GregorianDateFormatter.shared.cardString(for: schedule.date))
         .navigationBarTitleDisplayMode(.inline)
         .confirmationDialog(
@@ -223,27 +223,28 @@ struct AlarmDayDetailView: View {
                     gregorianText: fullGregorianDate,
                     hijriText: HijriDateFormatter.shared.string(from: schedule.date),
                     primaryText: primaryDisplayText,
-                    primaryLabel: primaryDisplayLabel,
+                    primaryTime: primaryDisplayTime,
+                    titleLabel: heroTitleLabel,
                     fajrText: Strings.AlarmsTab.fajrTime(TimeFormatters.timeFormatter.string(from: schedule.fajrDate)),
                     isOff: primaryDisplayKind == nil
                 )
-                .padding(.vertical, 20)
+                .padding(.vertical, 12)
                 .padding(.horizontal, 16)
             }
             .listRowSeparator(.hidden)
+            .listRowBackground(Color(.secondarySystemGroupedBackground))
 
             Section {
-                staticAlarmRow(
-                    title: "Enable this day",
-                    subtitle: Strings.AlarmsTab.dayDisabledHelper,
-                    toggle: Toggle(isOn: dayToggleBinding) { EmptyView() }
-                )
+                Toggle("Enable this day", isOn: dayToggleBinding)
             } header: {
                 Text("Day")
+                    .textCase(nil)
+            } footer: {
+                Text(Strings.AlarmsTab.dayDisabledHelper)
             }
             .animation(.easeInOut(duration: 0.2), value: dayToggleBinding.wrappedValue)
 
-            Section("Alarms") {
+            Section {
                 expandableAlarmRow(
                     title: "Suhoor Alarm",
                     subtitle: suhoorSummaryText,
@@ -399,22 +400,26 @@ struct AlarmDayDetailView: View {
                     subtitle: fajrSummaryText,
                     toggle: Toggle(isOn: fajrEnabledBinding) { EmptyView() }
                 )
+            } header: {
+                Text("Alarms")
+                    .textCase(nil)
             }
             .animation(.easeInOut(duration: 0.2), value: expandedAlarm)
             .disabled(!dayToggleBinding.wrappedValue)
             .opacity(dayToggleBinding.wrappedValue ? 1.0 : 0.5)
 
-            Section("Reset") {
+            Section {
                 Button(Strings.AlarmsTab.resetDay, role: .destructive) {
                     showsResetConfirmation = true
                 }
+            } header: {
+                Text("Reset")
+                    .textCase(nil)
             }
             .disabled(!dayToggleBinding.wrappedValue)
             .opacity(dayToggleBinding.wrappedValue ? 1.0 : 0.5)
         }
-        .listStyle(.plain)
-        .listRowSeparator(.visible)
-        .scrollContentBackground(.hidden)
+        .listStyle(.insetGrouped)
         .onChange(of: dayToggleBinding.wrappedValue) { _, newValue in
             if !newValue {
                 expandedAlarm = nil
@@ -540,6 +545,18 @@ struct AlarmDayDetailView: View {
         }
     }
 
+    private var primaryDisplayTime: Date? {
+        guard let primaryDisplayKind else { return nil }
+        switch primaryDisplayKind {
+        case .suhoor:
+            return suhoorTime
+        case .reminder:
+            return reminderTime ?? schedule.fajrDate
+        case .fajr:
+            return schedule.fajrDate
+        }
+    }
+
     private var primaryDisplayLabel: String {
         guard let primaryDisplayKind else { return Strings.AlarmsTab.alarmOffLabel }
         switch primaryDisplayKind {
@@ -547,6 +564,18 @@ struct AlarmDayDetailView: View {
             return Strings.AlarmsTab.suhoorLabel
         case .reminder:
             return Strings.AlarmsTab.reminderLabel
+        case .fajr:
+            return Strings.AlarmsTab.fajrAdhanLabel
+        }
+    }
+
+    private var heroTitleLabel: String {
+        guard let primaryDisplayKind else { return Strings.AlarmsTab.alarmOffLabel }
+        switch primaryDisplayKind {
+        case .suhoor:
+            return "Suhoor Alarm"
+        case .reminder:
+            return "Reminder Alarm"
         case .fajr:
             return Strings.AlarmsTab.fajrAdhanLabel
         }
@@ -680,9 +709,27 @@ private struct SummaryHeader: View {
     let gregorianText: String
     let hijriText: String
     let primaryText: String
-    let primaryLabel: String
+    let primaryTime: Date?
+    let titleLabel: String
     let fajrText: String
     let isOff: Bool
+    @ScaledMetric(relativeTo: .largeTitle) private var timeFontSize: CGFloat = 42
+
+    private static let timeMainFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "h:mm"
+        formatter.timeZone = .current
+        formatter.locale = .current
+        return formatter
+    }()
+
+    private static let timeSuffixFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "a"
+        formatter.timeZone = .current
+        formatter.locale = .current
+        return formatter
+    }()
 
     static let fullDateFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -694,29 +741,66 @@ private struct SummaryHeader: View {
     }()
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(gregorianText)
-                .font(.footnote)
-                .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(gregorianText)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
 
-            Text(hijriText)
-                .font(.footnote)
-                .foregroundStyle(.secondary)
+                Text(hijriText)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
 
-            Text(primaryText)
-                .font(.system(size: 50, weight: .light))
-                .padding(.top, 10)
-                .foregroundStyle(isOff ? .secondary : .primary)
-                .monospacedDigit()
+                Text(titleLabel)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
 
-            Text(primaryLabel)
-                .font(.footnote.weight(.medium))
-                .foregroundStyle(.secondary)
+            Spacer()
+                .frame(height: 12)
+
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(primaryTimeMain)
+                    .font(.system(size: timeFontSize, weight: .light))
+                    .foregroundStyle(isOff ? .secondary : .primary)
+                    .monospacedDigit()
+                    .minimumScaleFactor(0.8)
+
+                if let primaryTimeSuffix {
+                    Text(primaryTimeSuffix)
+                        .font(.system(size: timeFontSize * 0.6, weight: .medium))
+                        .foregroundStyle(isOff ? .secondary : .primary)
+                        .opacity(isOff ? 1 : 0.84)
+                        .baselineOffset(1)
+                }
+            }
+
+            Spacer()
+                .frame(height: 7)
 
             Text(fajrText)
                 .font(.footnote)
                 .foregroundStyle(.secondary)
+                .monospacedDigit()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilitySummary)
+    }
+
+    private var primaryTimeMain: String {
+        if let primaryTime {
+            return SummaryHeader.timeMainFormatter.string(from: primaryTime)
+        }
+        return primaryText
+    }
+
+    private var primaryTimeSuffix: String? {
+        guard let primaryTime else { return nil }
+        return SummaryHeader.timeSuffixFormatter.string(from: primaryTime)
+    }
+
+    private var accessibilitySummary: String {
+        "\(titleLabel), \(primaryText). \(fajrText)."
     }
 }
