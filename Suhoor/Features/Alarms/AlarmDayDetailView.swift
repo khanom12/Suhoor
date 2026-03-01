@@ -7,6 +7,7 @@ struct AlarmDayDetailView: View {
     @EnvironmentObject private var alarmConfigStore: AlarmConfigStore
     @EnvironmentObject private var scheduleManager: ScheduleManager
     @EnvironmentObject private var fastTagStore: FastTagStore
+    @AppStorage("fiqhRuleset") private var ruleset: FiqhRuleset = .strict
 
     private let timeZone: TimeZone = .current
     @State private var reminderTimeClamped = false
@@ -36,7 +37,9 @@ struct AlarmDayDetailView: View {
             NavigationStack {
                 FastTagPickerSheet(
                     date: schedule.date,
-                    initialSelection: intentSelection,
+                    initialSelection: userIntentSelection,
+                    schedules: scheduleManager.schedules,
+                    selections: fastTagStore.selections,
                     onSave: { selection in
                         fastTagStore.setSelection(selection, for: schedule.date, timeZone: timeZone)
                     }
@@ -74,7 +77,7 @@ struct AlarmDayDetailView: View {
         })
     }
 
-    private var intentSelection: FastIntentSelection {
+    private var userIntentSelection: FastIntentSelection {
         fastTagStore.selection(for: schedule.date, timeZone: timeZone) ?? .default
     }
 
@@ -82,9 +85,37 @@ struct AlarmDayDetailView: View {
         FastIntentEngine.warnings(for: schedule.date, timeZone: timeZone)
     }
 
+    private var computedTagResult: TagComputationResult {
+        let key = DateHelpers.dayIdentifier(for: schedule.date, timeZone: timeZone)
+        let results = TagComputationEngine.results(
+            schedules: scheduleManager.schedules,
+            selections: fastTagStore.selections,
+            ruleset: ruleset,
+            timeZone: timeZone
+        )
+        if let result = results[key] {
+            return result
+        }
+        return TagComputationEngine.result(
+            for: schedule.date,
+            schedules: scheduleManager.schedules,
+            selections: fastTagStore.selections,
+            ruleset: ruleset,
+            timeZone: timeZone,
+            overrideSelection: userIntentSelection.hasMeaningfulTags ? userIntentSelection : nil
+        )
+    }
+
+    private var computedIntentSelection: FastIntentSelection {
+        FastIntentSelection(
+            primaryIntent: computedTagResult.computedPrimaryIntent,
+            secondaryTags: computedTagResult.computedSecondaryTags
+        )
+    }
+
     private var intentSummaryText: String {
-        var parts: [String] = [intentSelection.primaryIntent.shortTitle]
-        let secondary = intentSelection.secondaryTags.sorted { $0.title < $1.title }
+        var parts: [String] = [computedIntentSelection.primaryIntent.shortTitle]
+        let secondary = computedIntentSelection.secondaryTags.sorted { $0.title < $1.title }
         if !secondary.isEmpty {
             parts.append(secondary.map { $0.shortTitle }.joined(separator: ", "))
         }
@@ -262,7 +293,7 @@ struct AlarmDayDetailView: View {
                     titleLabel: heroTitleLabel,
                     fajrText: Strings.AlarmsTab.fajrTime(TimeFormatters.timeFormatter.string(from: schedule.fajrDate)),
                     isOff: primaryDisplayKind == nil,
-                    intentSelection: intentSelection,
+                    intentSelection: computedIntentSelection,
                     warnings: intentWarnings,
                     onWarningInfo: { warning in
                         selectedAbout = warning.about

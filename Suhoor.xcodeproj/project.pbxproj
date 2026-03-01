@@ -12,6 +12,7 @@
 
 /* Begin PBXFileReference section */
 		07135B722F439A5A007CEEF7 /* Suhoor.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Suhoor.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		0731CC082F54CA1200C6864E /* TagComputationEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TagComputationEngineTests.swift; sourceTree = "<group>"; };
 		076EFDFD2F54B8BE00F577DC /* FastClassificationEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FastClassificationEngineTests.swift; sourceTree = "<group>"; };
 		07EF91CF2F43B5E600BD8692 /* SuhoorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SuhoorTests.swift; sourceTree = "<group>"; };
 		07EF91D22F43B70800BD8692 /* Suhoor.xctestplan */ = {isa = PBXFileReference; lastKnownFileType = text; path = Suhoor.xctestplan; sourceTree = "<group>"; };
@@ -61,6 +62,7 @@
 				07EF91CF2F43B5E600BD8692 /* SuhoorTests.swift */,
 				07EF91D22F43B70800BD8692 /* Suhoor.xctestplan */,
 				076EFDFD2F54B8BE00F577DC /* FastClassificationEngineTests.swift */,
+				0731CC082F54CA1200C6864E /* TagComputationEngineTests.swift */,
 			);
 			path = SuhoorTests;
 			sourceTree = "<group>";

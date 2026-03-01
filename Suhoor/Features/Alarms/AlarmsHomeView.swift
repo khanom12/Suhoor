@@ -338,6 +338,8 @@ private struct AddFastDaySheet: View {
                 FastTagPickerSheet(
                     date: selectedDate,
                     initialSelection: tagSelection,
+                    schedules: scheduleManager.schedules,
+                    selections: fastTagStore.selections,
                     onSave: { selection in
                         tagSelection = selection
                         fastTagStore.setSelection(selection, for: selectedDate, timeZone: .current)

@@ -3,6 +3,8 @@ import SwiftUI
 struct FastTagPickerSheet: View {
     let date: Date
     let initialSelection: FastIntentSelection
+    let schedules: [DaySchedule]
+    let selections: [String: FastIntentSelection]
     let onSave: (FastIntentSelection) -> Void
 
     @Environment(\.dismiss) private var dismiss
@@ -12,10 +14,19 @@ struct FastTagPickerSheet: View {
     @State private var inlineError: String?
     @State private var noteText: String?
     @State private var selectedAbout: FastTagAbout?
+    @State private var showsRulesetInfo = false
 
-    init(date: Date, initialSelection: FastIntentSelection, onSave: @escaping (FastIntentSelection) -> Void) {
+    init(
+        date: Date,
+        initialSelection: FastIntentSelection,
+        schedules: [DaySchedule],
+        selections: [String: FastIntentSelection],
+        onSave: @escaping (FastIntentSelection) -> Void
+    ) {
         self.date = date
         self.initialSelection = initialSelection
+        self.schedules = schedules
+        self.selections = selections
         self.onSave = onSave
         _selection = State(initialValue: initialSelection)
     }
@@ -24,9 +35,17 @@ struct FastTagPickerSheet: View {
         let timeZone = TimeZone.current
         let suggestions = FastIntentEngine.suggestions(for: date, timeZone: timeZone)
         let warnings = FastIntentEngine.warnings(for: date, timeZone: timeZone)
+        let computedResult = TagComputationEngine.result(
+            for: date,
+            schedules: schedules,
+            selections: selections,
+            ruleset: ruleset,
+            timeZone: timeZone,
+            overrideSelection: selection.hasMeaningfulTags ? selection : nil
+        )
 
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 20) {
                 if let note = suggestions.note {
                     Text(note)
                         .font(.footnote)
@@ -44,112 +63,43 @@ struct FastTagPickerSheet: View {
                     }
                 }
 
-                sectionHeader(title: "Purpose", suggestionAvailable: suggestions.suggestedPrimary != nil)
+                Text("Purpose")
+                    .font(.headline)
 
-                if let suggestedPrimary = suggestions.suggestedPrimary {
-                    HStack(spacing: 8) {
-                        Text("Suggested")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                        Button {
-                            applySuggestedPrimary(suggestedPrimary)
-                        } label: {
-                            TagChip(
-                                title: suggestedPrimary.title,
-                                shortTitle: suggestedPrimary.shortTitle,
-                                systemImage: suggestedPrimary.style.systemImage,
-                                color: suggestedPrimary.style.color,
-                                isSelected: selection.primaryIntent == suggestedPrimary,
-                                isPrimary: true,
-                                isDisabled: false
-                            )
-                        }
-                        .buttonStyle(.plain)
-                        Button {
-                            selectedAbout = suggestedPrimary.about
-                        } label: {
-                            Image(systemName: "info.circle")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .frame(width: 24, height: 24)
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("About \(suggestedPrimary.about.title)")
-                    }
-                }
-
-                VStack(spacing: 12) {
+                VStack(spacing: 0) {
                     ForEach(FastPrimaryIntent.allCases) { intent in
                         TagOptionRow(
                             title: intent.about.title,
                             subtitle: intent.about.subtitle,
-                            chipTitle: intent.title,
-                            chipShortTitle: intent.shortTitle,
                             systemImage: intent.style.systemImage,
                             color: intent.style.color,
                             isSelected: selection.primaryIntent == intent,
                             isPrimary: true,
                             isDisabled: false,
+                            isSuggested: intent == suggestions.suggestedPrimary,
+                            isAutoApplied: false,
                             onSelect: { selectPrimary(intent) },
                             onInfo: { selectedAbout = intent.about }
                         )
                     }
                 }
 
-                sectionHeader(title: "This day also matches", suggestionAvailable: !suggestions.suggestedSecondary.isEmpty)
+                Text("Also matches")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
 
-                if !suggestions.suggestedSecondary.isEmpty {
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack(spacing: 8) {
-                            Text("Suggested")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.secondary)
-                            Button("Apply all") {
-                                applySuggestedSecondary(suggestions.suggestedSecondary)
-                            }
-                            .font(.caption.weight(.semibold))
-                            .buttonStyle(.borderless)
-                        }
-                        FlowLayout(spacing: 6) {
-                            ForEach(suggestions.suggestedSecondary, id: \.self) { tag in
-                                HStack(spacing: 4) {
-                                    TagChip(
-                                        title: tag.title,
-                                        shortTitle: tag.shortTitle,
-                                        systemImage: tag.style.systemImage,
-                                        color: tag.style.color,
-                                        isSelected: selection.secondaryTags.contains(tag),
-                                        isPrimary: false,
-                                        isDisabled: !allowsSecondary
-                                    )
-                                    Button {
-                                        selectedAbout = tag.about
-                                    } label: {
-                                        Image(systemName: "info.circle")
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                            .frame(width: 24, height: 24)
-                                    }
-                                    .buttonStyle(.plain)
-                                    .accessibilityLabel("About \(tag.about.title)")
-                                }
-                            }
-                        }
-                    }
-                }
-
-                VStack(spacing: 12) {
+                VStack(spacing: 0) {
                     ForEach(FastSecondaryVirtueTag.allCases) { tag in
                         TagOptionRow(
                             title: tag.about.title,
                             subtitle: tag.about.subtitle,
-                            chipTitle: tag.title,
-                            chipShortTitle: tag.shortTitle,
                             systemImage: tag.style.systemImage,
                             color: tag.style.color,
-                            isSelected: selection.secondaryTags.contains(tag),
+                            isSelected: computedResult.computedSecondaryTags.contains(tag),
                             isPrimary: false,
                             isDisabled: !allowsSecondary,
+                            isSuggested: suggestions.suggestedSecondary.contains(tag),
+                            isAutoApplied: computedResult.autoSecondaryTags.contains(tag),
                             onSelect: { toggleSecondary(tag) },
                             onInfo: { selectedAbout = tag.about }
                         )
@@ -157,6 +107,12 @@ struct FastTagPickerSheet: View {
                 }
 
                 rulesetInfoRow
+
+                if !allowsSecondary, ruleset == .strict, selection.primaryIntent.isObligatory {
+                    Text("Disabled because this fast is obligatory.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
 
                 if let inlineError {
                     Text(inlineError)
@@ -172,20 +128,17 @@ struct FastTagPickerSheet: View {
                         .transition(.opacity)
                 }
 
-                if ruleset == .permissive, selection.primaryIntent.isObligatory, !selection.secondaryTags.isEmpty {
-                    Text("Primary intention remains \\(selection.primaryIntent.shortTitle).")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
+                Button("Clear Selection") {
+                    selection = .default
+                    Haptics.light()
                 }
-
-                if ruleset == .strict, selection.primaryIntent.isObligatory {
-                    Text("Secondary tags are disabled for obligatory intentions in Strict mode.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
+                .font(.footnote)
+                .foregroundStyle(.red)
+                .buttonStyle(.plain)
             }
             .padding(.horizontal, 16)
-            .padding(.vertical, 20)
+            .padding(.top, 24)
+            .padding(.bottom, 24)
         }
         .navigationTitle("Tags")
         .navigationBarTitleDisplayMode(.inline)
@@ -199,15 +152,12 @@ struct FastTagPickerSheet: View {
                     dismiss()
                 }
             }
-            ToolbarItem(placement: .bottomBar) {
-                Button("Clear") {
-                    selection = .default
-                    Haptics.light()
-                }
-            }
         }
         .sheet(item: $selectedAbout) { about in
             AboutTagSheet(about: about)
+        }
+        .sheet(isPresented: $showsRulesetInfo) {
+            AboutRulesetSheet()
         }
         .onAppear {
             enforceRulesIfNeeded()
@@ -219,27 +169,33 @@ struct FastTagPickerSheet: View {
     }
 
     private var rulesetInfoRow: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 8) {
-                Text("Ruleset")
-                    .font(.footnote.weight(.semibold))
-                Spacer()
-                Button {
-                    selectedAbout = FastTagAbout.rulesetAbout
-                } label: {
-                    Image(systemName: "info.circle")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .frame(width: 28, height: 28)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("About ruleset")
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text("Ruleset")
+                .font(.body.weight(.medium))
+                .foregroundStyle(.primary)
+            Spacer()
+            Text(rulesetLabel)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            Button {
+                showsRulesetInfo = true
+            } label: {
+                Image(systemName: "info.circle")
+                    .foregroundStyle(.secondary)
+                    .frame(width: 44, height: 44)
             }
-            Text("Strict (default): Obligatory and voluntary intentions are kept separate.")
-            Text("Permissive: Allows voluntary tags alongside an obligatory primary intent.")
+            .buttonStyle(.plain)
+            .accessibilityLabel("About ruleset")
         }
-        .font(.footnote)
-        .foregroundStyle(.secondary)
+    }
+
+    private var rulesetLabel: String {
+        switch ruleset {
+        case .strict:
+            return "Strict (default)"
+        case .permissive:
+            return "Permissive"
+        }
     }
 
     private func selectPrimary(_ intent: FastPrimaryIntent) {
@@ -256,7 +212,7 @@ struct FastTagPickerSheet: View {
 
     private func toggleSecondary(_ tag: FastSecondaryVirtueTag) {
         guard allowsSecondary else {
-            inlineError = "Secondary tags are disabled for obligatory intentions in Strict mode."
+            inlineError = "Disabled because this fast is obligatory."
             Haptics.medium()
             return
         }
@@ -265,26 +221,6 @@ struct FastTagPickerSheet: View {
             selection.secondaryTags.remove(tag)
         } else {
             selection.secondaryTags.insert(tag)
-        }
-        Haptics.light()
-    }
-
-    private func applySuggestedPrimary(_ intent: FastPrimaryIntent) {
-        selectPrimary(intent)
-    }
-
-    private func applySuggestedSecondary(_ tags: [FastSecondaryVirtueTag]) {
-        guard allowsSecondary else {
-            inlineError = "Secondary tags are disabled for obligatory intentions in Strict mode."
-            Haptics.medium()
-            return
-        }
-        inlineError = nil
-        for tag in tags {
-            selection.secondaryTags.insert(tag)
-        }
-        if selection.primaryIntent == .other {
-            selection.primaryIntent = .voluntarySunnah
         }
         Haptics.light()
     }
@@ -306,29 +242,18 @@ struct FastTagPickerSheet: View {
         }
     }
 
-    private func sectionHeader(title: String, suggestionAvailable: Bool) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text(title)
-                .font(.headline)
-            if suggestionAvailable {
-                Text("Suggested")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-            }
-        }
-    }
 }
 
 private struct TagOptionRow: View {
     let title: String
     let subtitle: String?
-    let chipTitle: String
-    let chipShortTitle: String
     let systemImage: String?
     let color: Color
     let isSelected: Bool
     let isPrimary: Bool
     let isDisabled: Bool
+    let isSuggested: Bool
+    let isAutoApplied: Bool
     let onSelect: () -> Void
     let onInfo: () -> Void
 
@@ -338,19 +263,16 @@ private struct TagOptionRow: View {
         HStack(alignment: .top, spacing: 12) {
             Button(action: onSelect) {
                 HStack(alignment: .top, spacing: 12) {
-                    TagChip(
-                        title: chipTitle,
-                        shortTitle: chipShortTitle,
+                    TagIconCapsule(
                         systemImage: systemImage,
                         color: color,
                         isSelected: isSelected,
-                        isPrimary: isPrimary,
-                        isDisabled: isDisabled
+                        isPrimary: isPrimary
                     )
 
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: 6) {
                         Text(title)
-                            .font(.subheadline.weight(.semibold))
+                            .font(.body.weight(.medium))
                             .foregroundStyle(.primary)
                             .fixedSize(horizontal: false, vertical: true)
                         if let subtitle {
@@ -358,6 +280,16 @@ private struct TagOptionRow: View {
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
                                 .fixedSize(horizontal: false, vertical: true)
+                        }
+                        if isSuggested {
+                            Text("Suggested for this date")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        if isAutoApplied {
+                            Text("Auto-applied for this date")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
                         }
                     }
                 }
@@ -371,12 +303,49 @@ private struct TagOptionRow: View {
                 Image(systemName: "info.circle")
                     .font(dynamicTypeSize.isAccessibilitySize ? .body : .footnote)
                     .foregroundStyle(.secondary)
-                    .frame(width: 28, height: 28)
+                    .frame(width: 44, height: 44)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("About \(title)")
         }
-        .opacity(isDisabled ? 0.6 : 1.0)
+        .padding(.vertical, 12)
+        .opacity(isDisabled ? 0.5 : 1.0)
+    }
+}
+
+private struct TagIconCapsule: View {
+    let systemImage: String?
+    let color: Color
+    let isSelected: Bool
+    let isPrimary: Bool
+
+    var body: some View {
+        let imageName = systemImage ?? "tag"
+        Image(systemName: imageName)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(isSelected ? color : .secondary)
+            .padding(.vertical, 6)
+            .padding(.horizontal, 10)
+            .background(backgroundColor)
+            .clipShape(Capsule())
+            .overlay(
+                Capsule()
+                    .stroke(borderColor, lineWidth: isSelected ? 1.2 : 0.8)
+            )
+    }
+
+    private var backgroundColor: Color {
+        if isSelected {
+            return color.opacity(isPrimary ? 0.22 : 0.16)
+        }
+        return Color(.secondarySystemBackground)
+    }
+
+    private var borderColor: Color {
+        if isSelected {
+            return color.opacity(0.55)
+        }
+        return Color(.tertiaryLabel)
     }
 }
 
@@ -399,63 +368,25 @@ private struct WarningChipWithInfo: View {
     }
 }
 
-private struct TagChip: View {
-    let title: String
-    let shortTitle: String
-    let systemImage: String?
-    let color: Color
-    let isSelected: Bool
-    let isPrimary: Bool
-    let isDisabled: Bool
-
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+private struct AboutRulesetSheet: View {
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        let isAccessibility = dynamicTypeSize.isAccessibilitySize
-        ViewThatFits(in: .horizontal) {
-            chipLabel(text: title, useIconOnly: isAccessibility)
-            chipLabel(text: shortTitle, useIconOnly: isAccessibility)
-            chipLabel(text: "", useIconOnly: true)
-        }
-        .font(isPrimary ? .subheadline.weight(.semibold) : .caption.weight(.semibold))
-        .foregroundStyle(isSelected ? color : .secondary)
-        .padding(.vertical, 6)
-        .padding(.horizontal, 12)
-        .background(backgroundColor)
-        .clipShape(Capsule())
-        .overlay(
-            Capsule()
-                .stroke(borderColor, lineWidth: isSelected ? 1.2 : 0.8)
-        )
-        .opacity(isDisabled ? 0.4 : 1.0)
-        .accessibilityLabel(title)
-    }
-
-    private var backgroundColor: Color {
-        if isSelected {
-            return color.opacity(isPrimary ? 0.22 : 0.16)
-        }
-        return Color(.secondarySystemBackground)
-    }
-
-    private var borderColor: Color {
-        if isSelected {
-            return color.opacity(0.55)
-        }
-        return Color(.tertiaryLabel)
-    }
-
-    @ViewBuilder
-    private func chipLabel(text: String, useIconOnly: Bool) -> some View {
-        HStack(spacing: 6) {
-            if let systemImage {
-                Image(systemName: systemImage)
-                    .font(.caption2.weight(.semibold))
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("Scholars differ on whether some intentions can be combined. Choose the mode you follow. This only affects tagging and guidance, not when alarms fire.")
+                        .font(.body)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(16)
             }
-            if !useIconOnly, !text.isEmpty {
-                Text(text)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.85)
+            .navigationTitle("About ruleset")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Close") { dismiss() }
+                }
             }
         }
     }
