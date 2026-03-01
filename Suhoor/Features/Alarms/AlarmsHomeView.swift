@@ -33,9 +33,6 @@ struct AlarmsHomeView: View {
             .onChange(of: alarmConfigStore.defaults) { _, _ in
                 Task { await scheduleManager.refreshSchedules(force: true) }
             }
-            .onChange(of: alarmConfigStore.overridesByDay) { _, _ in
-                Task { await scheduleManager.refreshSchedules(force: true) }
-            }
             .onChange(of: settingsStore.settings.calculationMethod) { _, _ in
                 Task { await scheduleManager.refreshSchedules(force: true) }
             }
@@ -456,7 +453,7 @@ private struct NavigationBarConfigurator: UIViewControllerRepresentable {
         let materialView = UIVisualEffectView(effect: UIBlurEffect(style: .systemUltraThinMaterial))
         materialView.isUserInteractionEnabled = false
         materialView.translatesAutoresizingMaskIntoConstraints = false
-        materialView.layer.cornerRadius = 16
+        materialView.layer.cornerRadius = 18
         materialView.layer.masksToBounds = true
 
         let container = UIView()
@@ -466,8 +463,8 @@ private struct NavigationBarConfigurator: UIViewControllerRepresentable {
 
         button.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
-            container.widthAnchor.constraint(equalToConstant: 32),
-            container.heightAnchor.constraint(equalToConstant: 32),
+            container.widthAnchor.constraint(equalToConstant: 36),
+            container.heightAnchor.constraint(equalToConstant: 36),
             materialView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
             materialView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
             materialView.topAnchor.constraint(equalTo: container.topAnchor),

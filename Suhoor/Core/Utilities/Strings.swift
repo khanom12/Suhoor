@@ -81,6 +81,7 @@ enum Strings {
         static func fajrTime(_ time: String) -> String { "Fajr \(time)" }
         static func willRingAt(_ time: String) -> String { "Will ring at \(time)" }
         static func willPlayAt(_ time: String) -> String { "Will play at \(time)" }
+        static func computedAt(_ time: String) -> String { "Computed: \(time)" }
         static let fajrHelper = "Matches your calculated Fajr time."
         static let resetDay = "Reset this day to defaults"
         static let defaultsSection = "Default Alarms"

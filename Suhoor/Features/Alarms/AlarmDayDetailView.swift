@@ -9,154 +9,26 @@ struct AlarmDayDetailView: View {
 
     private let timeZone: TimeZone = .current
     @State private var reminderTimeClamped = false
+    @State private var showsResetConfirmation = false
+    @State private var expandedAlarm: ExpandedAlarm?
+    @State private var dayEnabledSnapshot: DayEnabledSnapshot?
 
     var body: some View {
-        Form {
-            Section {
-                SummaryHeader(
-                    gregorianText: fullGregorianDate,
-                    hijriText: HijriDateFormatter.shared.string(from: schedule.date),
-                    primaryText: primaryDisplayText,
-                    primaryLabel: primaryDisplayLabel,
-                    fajrText: Strings.AlarmsTab.fajrTime(TimeFormatters.timeFormatter.string(from: schedule.fajrDate)),
-                    isOff: primaryDisplayKind == nil
-                )
-                .padding(.vertical, 20)
-            }
-            .listRowBackground(Color.clear)
-            .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 12, trailing: 16))
-            .listRowSeparator(.hidden)
-
-            Section {
-                Toggle("Enable this day", isOn: dayActiveBinding)
-            } header: {
-                Text("Day")
-            } footer: {
-                Text(Strings.AlarmsTab.dayDisabledHelper)
-            }
-            .animation(.easeInOut(duration: 0.2), value: dayActiveBinding.wrappedValue)
-
-            if dayActiveBinding.wrappedValue {
-                Section {
-                    Toggle(Strings.AlarmsTab.suhoorAlarmLabel, isOn: suhoorEnabledBinding)
-                        .disabled(isSkippingDay)
-
-                    if effectiveConfig.suhoorEnabled {
-                        Picker(Strings.AlarmsTab.timeModeLabel, selection: suhoorTimeModeBinding) {
-                            ForEach(DayTimeMode.allCases) { mode in
-                                Text(mode.displayLabel).tag(mode)
-                            }
-                        }
-                        .pickerStyle(.segmented)
-                        .disabled(isSkippingDay)
-
-                        if usesFixedSuhoorTime {
-                            DatePicker(
-                                Strings.AlarmsTab.suhoorTime,
-                                selection: suhoorTimeBinding,
-                                displayedComponents: [.hourAndMinute]
-                            )
-                            .disabled(isSkippingDay)
-                        } else {
-                            Stepper(value: suhoorOffsetBinding, in: 5...240, step: 5) {
-                                HStack {
-                                    Text(Strings.AlarmsTab.minutesBeforeFajr)
-                                    Spacer()
-                                    Text("\(suhoorOffsetBinding.wrappedValue)")
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
-                            .font(.callout)
-                            .tint(.secondary)
-                            .disabled(isSkippingDay)
-                        }
-                    }
-                } footer: {
-                    if effectiveConfig.suhoorEnabled {
-                        Text(Strings.AlarmsTab.willRingAt(TimeFormatters.timeFormatter.string(from: suhoorTime)))
-                    }
-                }
-                .animation(.easeInOut(duration: 0.2), value: effectiveConfig.suhoorEnabled)
-
-                Section {
-                    Toggle(Strings.AlarmsTab.reminderAlarmLabel, isOn: reminderEnabledBinding)
-                        .disabled(isSkippingDay)
-
-                    if effectiveConfig.reminderEnabled {
-                        Picker(Strings.AlarmsTab.timeModeLabel, selection: reminderTimeModeBinding) {
-                            ForEach(DayTimeMode.allCases) { mode in
-                                Text(mode.displayLabel).tag(mode)
-                            }
-                        }
-                        .pickerStyle(.segmented)
-                        .disabled(isSkippingDay)
-
-                        if usesFixedReminderTime {
-                            DatePicker(
-                                Strings.Settings.reminderTime,
-                                selection: reminderFixedTimeBinding,
-                                displayedComponents: [.hourAndMinute]
-                            )
-                            .disabled(isSkippingDay)
-                        } else {
-                            Stepper(value: reminderOffsetBinding, in: reminderOffsetRange, step: 5) {
-                                HStack {
-                                    Text(Strings.AlarmsTab.minutesBeforeFajr)
-                                    Spacer()
-                                    Text("\(reminderOffsetBinding.wrappedValue)")
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
-                            .font(.callout)
-                            .tint(.secondary)
-                            .disabled(isSkippingDay)
-                        }
-
-                        if reminderTimeClamped || reminderValidationResult?.wasClampedToSuhoor == true {
-                            Text(Strings.Settings.reminderBeforeSuhoorWarning)
-                                .font(.footnote)
-                                .foregroundStyle(.red)
-                        }
-                    }
-                } footer: {
-                    if effectiveConfig.reminderEnabled {
-                        Text(reminderFooterText)
-                    }
-                }
-                .animation(.easeInOut(duration: 0.2), value: effectiveConfig.reminderEnabled)
-
-                Section {
-                    Toggle(Strings.AlarmList.fajrTitle, isOn: fajrEnabledBinding)
-                        .disabled(isSkippingDay)
-                } footer: {
-                    if effectiveConfig.fajrEnabled {
-                        Text(Strings.AlarmsTab.willPlayAt(TimeFormatters.timeFormatter.string(from: schedule.fajrDate)))
-                    } else {
-                        Text(Strings.AlarmsTab.fajrTime(TimeFormatters.timeFormatter.string(from: schedule.fajrDate)))
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .animation(.easeInOut(duration: 0.2), value: effectiveConfig.fajrEnabled)
-            } else {
-                Section {
-                    Text(Strings.AlarmsTab.dayEnableToConfigureHelper)
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            Section {
-                Button(Strings.AlarmsTab.resetDay, role: .destructive) {
-                    alarmConfigStore.removeOverride(for: schedule.date, timeZone: timeZone)
-                    Task { await scheduleManager.rescheduleDay(schedule.date) }
-                }
-            } header: {
-                Text("Reset")
-            }
-        }
-        .formStyle(.grouped)
-        .listStyle(.insetGrouped)
+        configurationList
+            .background(Color(.systemBackground))
         .navigationTitle(GregorianDateFormatter.shared.cardString(for: schedule.date))
         .navigationBarTitleDisplayMode(.inline)
+        .confirmationDialog(
+            "Reset this day to defaults?",
+            isPresented: $showsResetConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button(Strings.AlarmsTab.resetDay, role: .destructive) {
+                alarmConfigStore.removeOverride(for: schedule.date, timeZone: timeZone)
+                Task { await scheduleManager.rescheduleDay(schedule.date) }
+            }
+            Button(Strings.Settings.cancel, role: .cancel) {}
+        }
     }
 
     private var ruleEngine: RuleEngine {
@@ -327,6 +199,217 @@ struct AlarmDayDetailView: View {
         reminderValidationResult?.reminderTime
     }
 
+    private var dayToggleBinding: Binding<Bool> {
+        Binding(get: {
+            dayActiveBinding.wrappedValue
+        }, set: { newValue in
+            if newValue {
+                restoreDayEnabledStates()
+            } else {
+                dayEnabledSnapshot = DayEnabledSnapshot(
+                    suhoorEnabled: effectiveConfig.suhoorEnabled,
+                    reminderEnabled: effectiveConfig.reminderEnabled,
+                    fajrEnabled: effectiveConfig.fajrEnabled
+                )
+                updateOverride { $0.skipDay = true }
+            }
+        })
+    }
+
+    private var configurationList: some View {
+        List {
+            Section {
+                SummaryHeader(
+                    gregorianText: fullGregorianDate,
+                    hijriText: HijriDateFormatter.shared.string(from: schedule.date),
+                    primaryText: primaryDisplayText,
+                    primaryLabel: primaryDisplayLabel,
+                    fajrText: Strings.AlarmsTab.fajrTime(TimeFormatters.timeFormatter.string(from: schedule.fajrDate)),
+                    isOff: primaryDisplayKind == nil
+                )
+                .padding(.vertical, 20)
+                .padding(.horizontal, 16)
+            }
+            .listRowSeparator(.hidden)
+
+            Section {
+                Toggle("Enable this day", isOn: dayToggleBinding)
+            } header: {
+                Text("Day")
+            } footer: {
+                Text(Strings.AlarmsTab.dayDisabledHelper)
+            }
+            .animation(.easeInOut(duration: 0.2), value: dayToggleBinding.wrappedValue)
+
+            Section("Alarms") {
+                expandableAlarmRow(
+                    title: "Suhoor Alarm",
+                    subtitle: suhoorSummaryText,
+                    isExpanded: expandedAlarm == .suhoor,
+                    onToggleExpanded: { toggleExpanded(.suhoor) },
+                    toggle: Toggle(isOn: suhoorEnabledBinding) { EmptyView() }
+                )
+
+                if effectiveConfig.suhoorEnabled && expandedAlarm == .suhoor {
+                    Picker(Strings.AlarmsTab.timeModeLabel, selection: suhoorTimeModeBinding) {
+                        ForEach(DayTimeMode.allCases) { mode in
+                            Text(mode.displayLabel).tag(mode)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .disabled(isSkippingDay)
+
+                    if usesFixedSuhoorTime {
+                        DatePicker(
+                            Strings.AlarmsTab.suhoorTime,
+                            selection: suhoorTimeBinding,
+                            displayedComponents: [.hourAndMinute]
+                        )
+                        .disabled(isSkippingDay)
+
+                        Text(Strings.AlarmsTab.computedAt(TimeFormatters.timeFormatter.string(from: suhoorTime)))
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Stepper(value: suhoorOffsetBinding, in: 5...240, step: 5) {
+                            HStack {
+                                Text(Strings.AlarmsTab.minutesBeforeFajr)
+                                Spacer()
+                                Text("\(suhoorOffsetBinding.wrappedValue)")
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .disabled(isSkippingDay)
+
+                        Text(Strings.AlarmsTab.willRingAt(TimeFormatters.timeFormatter.string(from: suhoorTime)))
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                expandableAlarmRow(
+                    title: "Reminder Alarm",
+                    subtitle: reminderSummaryText,
+                    isExpanded: expandedAlarm == .reminder,
+                    onToggleExpanded: { toggleExpanded(.reminder) },
+                    toggle: Toggle(isOn: reminderEnabledBinding) { EmptyView() }
+                )
+
+                if effectiveConfig.reminderEnabled && expandedAlarm == .reminder {
+                    Picker(Strings.AlarmsTab.timeModeLabel, selection: reminderTimeModeBinding) {
+                        ForEach(DayTimeMode.allCases) { mode in
+                            Text(mode.displayLabel).tag(mode)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .disabled(isSkippingDay)
+
+                    if usesFixedReminderTime {
+                        DatePicker(
+                            Strings.Settings.reminderTime,
+                            selection: reminderFixedTimeBinding,
+                            displayedComponents: [.hourAndMinute]
+                        )
+                        .disabled(isSkippingDay)
+
+                        if let reminderTime {
+                            Text(Strings.AlarmsTab.computedAt(TimeFormatters.timeFormatter.string(from: reminderTime)))
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                    } else {
+                        Stepper(value: reminderOffsetBinding, in: reminderOffsetRange, step: 5) {
+                            HStack {
+                                Text(Strings.AlarmsTab.minutesBeforeFajr)
+                                Spacer()
+                                Text("\(reminderOffsetBinding.wrappedValue)")
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .disabled(isSkippingDay)
+
+                        Text(reminderFooterText)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    if reminderTimeClamped || reminderValidationResult?.wasClampedToSuhoor == true {
+                        Text(Strings.Settings.reminderBeforeSuhoorWarning)
+                            .font(.footnote)
+                            .foregroundStyle(.red)
+                    }
+                }
+
+                staticAlarmRow(
+                    title: "Fajr Adhan",
+                    subtitle: fajrSummaryText,
+                    toggle: Toggle(isOn: fajrEnabledBinding) { EmptyView() }
+                )
+            }
+            .animation(.easeInOut(duration: 0.2), value: expandedAlarm)
+            .disabled(!dayToggleBinding.wrappedValue)
+            .opacity(dayToggleBinding.wrappedValue ? 1.0 : 0.5)
+
+            Section("Reset") {
+                Button(Strings.AlarmsTab.resetDay, role: .destructive) {
+                    showsResetConfirmation = true
+                }
+            }
+            .disabled(!dayToggleBinding.wrappedValue)
+            .opacity(dayToggleBinding.wrappedValue ? 1.0 : 0.5)
+        }
+        .listStyle(.plain)
+        .listRowSeparator(.visible)
+        .scrollContentBackground(.hidden)
+        .onChange(of: dayToggleBinding.wrappedValue) { _, newValue in
+            if !newValue {
+                expandedAlarm = nil
+            }
+        }
+    }
+
+    private var suhoorSummaryText: String {
+        guard effectiveConfig.suhoorEnabled, dayToggleBinding.wrappedValue else {
+            return Strings.AlarmList.offLabel
+        }
+        return Strings.AlarmsTab.willRingAt(TimeFormatters.timeFormatter.string(from: suhoorTime))
+    }
+
+    private var reminderSummaryText: String {
+        guard effectiveConfig.reminderEnabled, dayToggleBinding.wrappedValue else {
+            return Strings.AlarmList.offLabel
+        }
+        return reminderFooterText
+    }
+
+    private var fajrSummaryText: String {
+        guard effectiveConfig.fajrEnabled, dayToggleBinding.wrappedValue else {
+            return Strings.AlarmList.offLabel
+        }
+        return Strings.AlarmsTab.willPlayAt(TimeFormatters.timeFormatter.string(from: schedule.fajrDate))
+    }
+
+    private func toggleExpanded(_ alarm: ExpandedAlarm) {
+        if expandedAlarm == alarm {
+            expandedAlarm = nil
+        } else {
+            expandedAlarm = alarm
+        }
+    }
+
+    private func restoreDayEnabledStates() {
+        if let snapshot = dayEnabledSnapshot {
+            updateOverride { override in
+                override.skipDay = false
+                override.suhoorEnabled = snapshot.suhoorEnabled
+                override.reminderEnabled = snapshot.reminderEnabled
+                override.fajrEnabled = snapshot.fajrEnabled
+            }
+        } else {
+            updateOverride { $0.skipDay = false }
+        }
+    }
+
     private var usesFixedReminderTime: Bool {
         if alarmConfigStore.override(for: schedule.date, timeZone: timeZone)?.reminderTimeOverrideMinutesFromMidnight != nil {
             return true
@@ -465,6 +548,73 @@ private enum DayTimeMode: String, CaseIterable, Identifiable {
             return Strings.AlarmsTab.fixedTimeLabel
         }
     }
+}
+
+private extension AlarmDayDetailView {
+    @ViewBuilder
+    func expandableAlarmRow(
+        title: String,
+        subtitle: String,
+        isExpanded: Bool,
+        onToggleExpanded: @escaping () -> Void,
+        toggle: Toggle<EmptyView>
+    ) -> some View {
+        HStack(spacing: 12) {
+            Button(action: onToggleExpanded) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(title)
+                            .foregroundStyle(.primary)
+                        Text(subtitle)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                        .animation(.easeInOut(duration: 0.2), value: isExpanded)
+                }
+            }
+            .buttonStyle(.plain)
+
+            toggle
+                .labelsHidden()
+        }
+        .contentShape(Rectangle())
+    }
+
+    @ViewBuilder
+    func staticAlarmRow(
+        title: String,
+        subtitle: String,
+        toggle: Toggle<EmptyView>
+    ) -> some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .foregroundStyle(.primary)
+                Text(subtitle)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            toggle
+                .labelsHidden()
+        }
+    }
+}
+
+private enum ExpandedAlarm {
+    case suhoor
+    case reminder
+}
+
+private struct DayEnabledSnapshot {
+    let suhoorEnabled: Bool
+    let reminderEnabled: Bool
+    let fajrEnabled: Bool
 }
 
 private struct SummaryHeader: View {
