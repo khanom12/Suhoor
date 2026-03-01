@@ -21,29 +21,24 @@ struct AlarmDayDetailView: View {
                     fajrText: Strings.AlarmsTab.fajrTime(TimeFormatters.timeFormatter.string(from: schedule.fajrDate)),
                     isOff: primaryDisplayKind == nil
                 )
-                .padding(.vertical, 16)
+                .padding(.vertical, 20)
             }
             .listRowBackground(Color.clear)
-            .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 8, trailing: 16))
+            .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 12, trailing: 16))
             .listRowSeparator(.hidden)
 
             Section {
                 Toggle("Enable this day", isOn: dayActiveBinding)
-
+            } header: {
+                Text("Day")
+            } footer: {
                 Text(Strings.AlarmsTab.dayDisabledHelper)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-
-                if !dayActiveBinding.wrappedValue {
-                    Text(Strings.AlarmsTab.dayEnableToConfigureHelper)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
             }
+            .animation(.easeInOut(duration: 0.2), value: dayActiveBinding.wrappedValue)
 
             if dayActiveBinding.wrappedValue {
-                Section(Strings.AlarmsTab.suhoorLabel) {
-                    Toggle(Strings.AlarmsTab.suhoorLabel, isOn: suhoorEnabledBinding)
+                Section {
+                    Toggle(Strings.AlarmsTab.suhoorAlarmLabel, isOn: suhoorEnabledBinding)
                         .disabled(isSkippingDay)
 
                     if effectiveConfig.suhoorEnabled {
@@ -71,17 +66,20 @@ struct AlarmDayDetailView: View {
                                         .foregroundStyle(.secondary)
                                 }
                             }
+                            .font(.callout)
+                            .tint(.secondary)
                             .disabled(isSkippingDay)
                         }
-
+                    }
+                } footer: {
+                    if effectiveConfig.suhoorEnabled {
                         Text(Strings.AlarmsTab.willRingAt(TimeFormatters.timeFormatter.string(from: suhoorTime)))
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
                     }
                 }
+                .animation(.easeInOut(duration: 0.2), value: effectiveConfig.suhoorEnabled)
 
-                Section(Strings.AlarmsTab.reminderLabel) {
-                    Toggle(Strings.AlarmsTab.reminderLabel, isOn: reminderEnabledBinding)
+                Section {
+                    Toggle(Strings.AlarmsTab.reminderAlarmLabel, isOn: reminderEnabledBinding)
                         .disabled(isSkippingDay)
 
                     if effectiveConfig.reminderEnabled {
@@ -109,12 +107,10 @@ struct AlarmDayDetailView: View {
                                         .foregroundStyle(.secondary)
                                 }
                             }
+                            .font(.callout)
+                            .tint(.secondary)
                             .disabled(isSkippingDay)
                         }
-
-                        Text(reminderFooterText)
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
 
                         if reminderTimeClamped || reminderValidationResult?.wasClampedToSuhoor == true {
                             Text(Strings.Settings.reminderBeforeSuhoorWarning)
@@ -122,17 +118,29 @@ struct AlarmDayDetailView: View {
                                 .foregroundStyle(.red)
                         }
                     }
+                } footer: {
+                    if effectiveConfig.reminderEnabled {
+                        Text(reminderFooterText)
+                    }
                 }
+                .animation(.easeInOut(duration: 0.2), value: effectiveConfig.reminderEnabled)
 
-                Section(Strings.AlarmList.fajrTitle) {
+                Section {
                     Toggle(Strings.AlarmList.fajrTitle, isOn: fajrEnabledBinding)
                         .disabled(isSkippingDay)
-
+                } footer: {
                     if effectiveConfig.fajrEnabled {
                         Text(Strings.AlarmsTab.willPlayAt(TimeFormatters.timeFormatter.string(from: schedule.fajrDate)))
-                            .font(.footnote)
+                    } else {
+                        Text(Strings.AlarmsTab.fajrTime(TimeFormatters.timeFormatter.string(from: schedule.fajrDate)))
                             .foregroundStyle(.secondary)
                     }
+                }
+                .animation(.easeInOut(duration: 0.2), value: effectiveConfig.fajrEnabled)
+            } else {
+                Section {
+                    Text(Strings.AlarmsTab.dayEnableToConfigureHelper)
+                        .foregroundStyle(.secondary)
                 }
             }
 
@@ -141,6 +149,8 @@ struct AlarmDayDetailView: View {
                     alarmConfigStore.removeOverride(for: schedule.date, timeZone: timeZone)
                     Task { await scheduleManager.rescheduleDay(schedule.date) }
                 }
+            } header: {
+                Text("Reset")
             }
         }
         .formStyle(.grouped)
@@ -475,7 +485,7 @@ private struct SummaryHeader: View {
     }()
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
             Text(gregorianText)
                 .font(.footnote)
                 .foregroundStyle(.secondary)
@@ -486,12 +496,12 @@ private struct SummaryHeader: View {
 
             Text(primaryText)
                 .font(.system(size: 50, weight: .light))
-                .padding(.top, 6)
+                .padding(.top, 10)
                 .foregroundStyle(isOff ? .secondary : .primary)
                 .monospacedDigit()
 
             Text(primaryLabel)
-                .font(.footnote.weight(.semibold))
+                .font(.footnote.weight(.medium))
                 .foregroundStyle(.secondary)
 
             Text(fajrText)

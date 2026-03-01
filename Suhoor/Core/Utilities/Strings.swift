@@ -68,6 +68,8 @@ enum Strings {
         static let minutesBeforeFajr = "Minutes before Fajr"
         static let alarmOffLabel = "Off"
         static let fajrAdhanLabel = "Fajr (Adhan)"
+        static let suhoorAlarmLabel = "Suhoor Alarm"
+        static let reminderAlarmLabel = "Reminder Alarm"
         static let dayDisabledHelper = "If off, no alarms will run on this date."
         static let dayEnableToConfigureHelper = "Turn on \"Enable this day\" to configure alarms."
         static let suhoorTime = "Suhoor time"
@@ -79,6 +81,7 @@ enum Strings {
         static func fajrTime(_ time: String) -> String { "Fajr \(time)" }
         static func willRingAt(_ time: String) -> String { "Will ring at \(time)" }
         static func willPlayAt(_ time: String) -> String { "Will play at \(time)" }
+        static let fajrHelper = "Matches your calculated Fajr time."
         static let resetDay = "Reset this day to defaults"
         static let defaultsSection = "Default Alarms"
         static let suhoorMode = "Suhoor time mode"
