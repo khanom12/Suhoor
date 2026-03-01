@@ -19,20 +19,30 @@ struct AlarmsHomeView: View {
                         emptyStateView
                     }
                 } else {
-                    Section {
-                        ForEach(displayEntries.indices, id: \.self) { index in
-                            let entry = displayEntries[index]
-                            AlarmRowView(
-                                schedule: entry.schedule,
-                                config: entry.config,
-                                primaryDisplay: entry.primary,
-                                onSelect: {
-                                    selectedSchedule = entry.schedule
+                    let groupedEntries = sectionedEntries
+                    ForEach(FastSectionCategory.ordered, id: \.self) { category in
+                        if let entries = groupedEntries[category], !entries.isEmpty {
+                            Section {
+                                ForEach(entries.indices, id: \.self) { index in
+                                    let entry = entries[index]
+                                    AlarmRowView(
+                                        schedule: entry.schedule,
+                                        config: entry.config,
+                                        primaryDisplay: entry.primary,
+                                        onSelect: {
+                                            selectedSchedule = entry.schedule
+                                        }
+                                    )
+                                    .deleteDisabled(!entry.isOneOff)
                                 }
-                            )
-                            .deleteDisabled(!entry.isOneOff)
+                                .onDelete { offsets in
+                                    deleteEntries(in: entries, at: offsets)
+                                }
+                            } header: {
+                                Text(category.displayTitle)
+                                    .textCase(nil)
+                            }
                         }
-                        .onDelete(perform: deleteEntries)
                     }
                 }
             }
@@ -168,6 +178,22 @@ struct AlarmsHomeView: View {
         }
     }
 
+    private var sectionedEntries: [FastSectionCategory: [AlarmRowEntry]] {
+        let timeZone = TimeZone.current
+        let dates = displayEntries.map { $0.schedule.date }
+        let shawwalIdentifiers = FastSectionClassifier.shawwalFirstSixDayIdentifiers(for: dates, timeZone: timeZone)
+        var grouped: [FastSectionCategory: [AlarmRowEntry]] = [:]
+        for entry in displayEntries {
+            let category = FastSectionClassifier.category(
+                for: entry.schedule.date,
+                shawwalFirstSixDayIdentifiers: shawwalIdentifiers,
+                timeZone: timeZone
+            )
+            grouped[category, default: []].append(entry)
+        }
+        return grouped
+    }
+
     private func effectiveConfig(for schedule: DaySchedule) -> EffectiveDailyConfig {
         let timeZone = TimeZone.current
         let ruleEngine = RuleEngine(settings: settingsStore.settings, configStore: alarmConfigStore, timeZone: timeZone)
@@ -183,8 +209,7 @@ struct AlarmsHomeView: View {
         !editMode.isEditing
     }
 
-    private func deleteEntries(at offsets: IndexSet) {
-        let entries = displayEntries
+    private func deleteEntries(in entries: [AlarmRowEntry], at offsets: IndexSet) {
         for index in offsets {
             guard entries.indices.contains(index) else { continue }
             let entry = entries[index]
