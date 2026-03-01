@@ -233,11 +233,13 @@ struct AlarmDayDetailView: View {
             .listRowSeparator(.hidden)
 
             Section {
-                Toggle("Enable this day", isOn: dayToggleBinding)
+                staticAlarmRow(
+                    title: "Enable this day",
+                    subtitle: Strings.AlarmsTab.dayDisabledHelper,
+                    toggle: Toggle(isOn: dayToggleBinding) { EmptyView() }
+                )
             } header: {
                 Text("Day")
-            } footer: {
-                Text(Strings.AlarmsTab.dayDisabledHelper)
             }
             .animation(.easeInOut(duration: 0.2), value: dayToggleBinding.wrappedValue)
 
@@ -257,33 +259,59 @@ struct AlarmDayDetailView: View {
                         }
                     }
                     .pickerStyle(.segmented)
+                    .listRowSeparator(.hidden)
                     .disabled(isSkippingDay)
 
                     if usesFixedSuhoorTime {
                         DatePicker(
-                            Strings.AlarmsTab.suhoorTime,
                             selection: suhoorTimeBinding,
                             displayedComponents: [.hourAndMinute]
-                        )
-                        .disabled(isSkippingDay)
-
-                        Text(Strings.AlarmsTab.computedAt(TimeFormatters.timeFormatter.string(from: suhoorTime)))
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    } else {
-                        Stepper(value: suhoorOffsetBinding, in: 5...240, step: 5) {
-                            HStack {
-                                Text(Strings.AlarmsTab.minutesBeforeFajr)
-                                Spacer()
-                                Text("\(suhoorOffsetBinding.wrappedValue)")
+                        ) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(Strings.AlarmsTab.suhoorTime)
+                                Text(Strings.AlarmsTab.willRingAt(TimeFormatters.timeFormatter.string(from: suhoorTime)))
+                                    .font(.footnote)
                                     .foregroundStyle(.secondary)
                             }
                         }
                         .disabled(isSkippingDay)
-
-                        Text(Strings.AlarmsTab.willRingAt(TimeFormatters.timeFormatter.string(from: suhoorTime)))
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
+                    } else {
+                        HStack(alignment: .center) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(Strings.AlarmsTab.minutesBeforeFajr)
+                                Text(Strings.AlarmsTab.willRingAt(TimeFormatters.timeFormatter.string(from: suhoorTime)))
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            HStack(spacing: 8) {
+                                Button {
+                                    stepValue(suhoorOffsetBinding, delta: -5, range: 5...240)
+                                } label: {
+                                    Image(systemName: "minus")
+                                        .font(.system(size: 14, weight: .semibold))
+                                        .frame(width: 28, height: 28)
+                                }
+                                .buttonStyle(.bordered)
+                                .buttonBorderShape(.circle)
+                                .controlSize(.mini)
+                                Text("\(suhoorOffsetBinding.wrappedValue)")
+                                    .font(.callout)
+                                    .foregroundStyle(.secondary)
+                                    .monospacedDigit()
+                                Button {
+                                    stepValue(suhoorOffsetBinding, delta: 5, range: 5...240)
+                                } label: {
+                                    Image(systemName: "plus")
+                                        .font(.system(size: 14, weight: .semibold))
+                                        .frame(width: 28, height: 28)
+                                }
+                                .buttonStyle(.bordered)
+                                .buttonBorderShape(.circle)
+                                .controlSize(.mini)
+                            }
+                            .disabled(isSkippingDay)
+                        }
                     }
                 }
 
@@ -302,35 +330,61 @@ struct AlarmDayDetailView: View {
                         }
                     }
                     .pickerStyle(.segmented)
+                    .listRowSeparator(.hidden)
                     .disabled(isSkippingDay)
 
                     if usesFixedReminderTime {
                         DatePicker(
-                            Strings.Settings.reminderTime,
                             selection: reminderFixedTimeBinding,
                             displayedComponents: [.hourAndMinute]
-                        )
-                        .disabled(isSkippingDay)
-
-                        if let reminderTime {
-                            Text(Strings.AlarmsTab.computedAt(TimeFormatters.timeFormatter.string(from: reminderTime)))
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                        }
-                    } else {
-                        Stepper(value: reminderOffsetBinding, in: reminderOffsetRange, step: 5) {
-                            HStack {
-                                Text(Strings.AlarmsTab.minutesBeforeFajr)
-                                Spacer()
-                                Text("\(reminderOffsetBinding.wrappedValue)")
-                                    .foregroundStyle(.secondary)
+                        ) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(Strings.Settings.reminderTime)
+                                if let reminderTime {
+                                    Text(Strings.AlarmsTab.willRingAt(TimeFormatters.timeFormatter.string(from: reminderTime)))
+                                        .font(.footnote)
+                                        .foregroundStyle(.secondary)
+                                }
                             }
                         }
                         .disabled(isSkippingDay)
-
-                        Text(reminderFooterText)
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
+                    } else {
+                        HStack(alignment: .center) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(Strings.AlarmsTab.minutesBeforeFajr)
+                                Text(reminderFooterText)
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            HStack(spacing: 8) {
+                                Button {
+                                    stepValue(reminderOffsetBinding, delta: -5, range: reminderOffsetRange)
+                                } label: {
+                                    Image(systemName: "minus")
+                                        .font(.system(size: 14, weight: .semibold))
+                                        .frame(width: 28, height: 28)
+                                }
+                                .buttonStyle(.bordered)
+                                .buttonBorderShape(.circle)
+                                .controlSize(.mini)
+                                Text("\(reminderOffsetBinding.wrappedValue)")
+                                    .font(.callout)
+                                    .foregroundStyle(.secondary)
+                                    .monospacedDigit()
+                                Button {
+                                    stepValue(reminderOffsetBinding, delta: 5, range: reminderOffsetRange)
+                                } label: {
+                                    Image(systemName: "plus")
+                                        .font(.system(size: 14, weight: .semibold))
+                                        .frame(width: 28, height: 28)
+                                }
+                                .buttonStyle(.bordered)
+                                .buttonBorderShape(.circle)
+                                .controlSize(.mini)
+                            }
+                            .disabled(isSkippingDay)
+                        }
                     }
 
                     if reminderTimeClamped || reminderValidationResult?.wasClampedToSuhoor == true {
@@ -395,6 +449,11 @@ struct AlarmDayDetailView: View {
         } else {
             expandedAlarm = alarm
         }
+    }
+
+    private func stepValue(_ binding: Binding<Int>, delta: Int, range: ClosedRange<Int>) {
+        let newValue = min(max(binding.wrappedValue + delta, range.lowerBound), range.upperBound)
+        binding.wrappedValue = newValue
     }
 
     private func restoreDayEnabledStates() {
