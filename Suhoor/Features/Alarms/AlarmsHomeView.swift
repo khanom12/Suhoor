@@ -1,5 +1,4 @@
 import SwiftUI
-import UIKit
 
 struct AlarmsHomeView: View {
     @EnvironmentObject private var settingsStore: SuhoorSettingsStore
@@ -10,21 +9,58 @@ struct AlarmsHomeView: View {
     @State private var selectedSchedule: DaySchedule?
     @State private var showSettingsSheet = false
     @State private var showAddDaySheet = false
-    @State private var isEditing = false
+    @State private var editMode: EditMode = .inactive
 
     var body: some View {
-        contentView
-            .navigationTitle(Strings.AlarmList.title)
-            .navigationBarTitleDisplayMode(.large)
-            .background(
-                NavigationBarConfigurator(
-                    isEditing: isEditing,
-                    showsAddButton: showsAddButton,
-                    onEdit: { isEditing.toggle() },
-                    onAdd: { showAddDaySheet = true },
-                    onSettings: { showSettingsSheet = true }
-                )
-            )
+        NavigationStack {
+            List {
+                if displayEntries.isEmpty {
+                    Section {
+                        emptyStateView
+                    }
+                } else {
+                    Section {
+                        ForEach(displayEntries.indices, id: \.self) { index in
+                            let entry = displayEntries[index]
+                            AlarmRowView(
+                                schedule: entry.schedule,
+                                config: entry.config,
+                                primaryDisplay: entry.primary,
+                                onSelect: {
+                                    selectedSchedule = entry.schedule
+                                }
+                            )
+                            .deleteDisabled(!entry.isOneOff)
+                        }
+                        .onDelete(perform: deleteEntries)
+                    }
+                }
+            }
+            .listStyle(.insetGrouped)
+            .navigationTitle("Alarms")
+            .navigationBarTitleDisplayMode(.inline)
+            .environment(\.editMode, $editMode)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button(editMode.isEditing ? "Done" : "Edit") {
+                        editMode = editMode.isEditing ? .inactive : .active
+                    }
+                }
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                    if showsAddButton {
+                        Button {
+                            showAddDaySheet = true
+                        } label: {
+                            Image(systemName: "plus")
+                        }
+                    }
+                    Button {
+                        showSettingsSheet = true
+                    } label: {
+                        Image(systemName: "gearshape")
+                    }
+                }
+            }
             .navigationDestination(isPresented: navigationIsActiveBinding) {
                 if let schedule = selectedSchedule {
                     AlarmDayDetailView(schedule: schedule)
@@ -60,54 +96,6 @@ struct AlarmsHomeView: View {
             }
             .onReceive(NotificationCenter.default.publisher(for: .switchToSettingsTab)) { _ in
                 showSettingsSheet = true
-            }
-    }
-
-    private var contentView: some View {
-        ZStack {
-            Color(.systemBackground)
-                .ignoresSafeArea()
-
-            ScrollView {
-                listContent
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var listContent: some View {
-        LazyVStack(spacing: 0) {
-            if displayEntries.isEmpty {
-                emptyStateView
-            } else {
-                listEntries
-            }
-        }
-        .padding(.horizontal, DesignTokens.spacingL)
-        .padding(.top, DesignTokens.spacingS)
-        .padding(.bottom, DesignTokens.spacingM)
-    }
-
-    private var listEntries: some View {
-        let lastIndex = displayEntries.count - 1
-        return ForEach(displayEntries.indices, id: \.self) { index in
-            let entry = displayEntries[index]
-
-            AlarmDayRowView(
-                schedule: entry.schedule,
-                config: entry.config,
-                primaryDisplay: entry.primary,
-                isEditing: isEditing,
-                showsDeleteControl: true,
-                onDelete: { deleteOneOff(entry) }
-            ) {
-                selectedSchedule = entry.schedule
-            }
-
-            if index < lastIndex {
-                Divider()
-                    .padding(.leading, DesignTokens.spacingL)
-                    .padding(.trailing, 84)
             }
         }
     }
@@ -192,7 +180,17 @@ struct AlarmsHomeView: View {
     }
 
     private var showsAddButton: Bool {
-        !isEditing
+        !editMode.isEditing
+    }
+
+    private func deleteEntries(at offsets: IndexSet) {
+        let entries = displayEntries
+        for index in offsets {
+            guard entries.indices.contains(index) else { continue }
+            let entry = entries[index]
+            guard entry.isOneOff else { continue }
+            deleteOneOff(entry)
+        }
     }
 
     private func displayDatesForDateRange(startOfToday: Date, timeZone: TimeZone) -> [Date] {
@@ -311,225 +309,6 @@ private struct AddFastDaySheet: View {
     }
 }
 
-private struct NavigationBarConfigurator: UIViewControllerRepresentable {
-    let isEditing: Bool
-    let showsAddButton: Bool
-    let onEdit: () -> Void
-    let onAdd: () -> Void
-    let onSettings: () -> Void
-
-    func makeUIViewController(context: Context) -> UIViewController {
-        UIViewController()
-    }
-
-    func updateUIViewController(_ uiViewController: UIViewController, context: Context) {
-        context.coordinator.onEdit = onEdit
-        context.coordinator.onAdd = onAdd
-        context.coordinator.onSettings = onSettings
-
-        if let navigationBar = uiViewController.parent?.navigationController?.navigationBar {
-            applyUngroupedButtonAppearance(to: navigationBar, coordinator: context.coordinator)
-        }
-
-        let targetItem = uiViewController.parent?.navigationItem ?? uiViewController.navigationItem
-        targetItem.leftBarButtonItem = UIBarButtonItem(
-            title: isEditing ? "Done" : "Edit",
-            style: .plain,
-            target: context.coordinator,
-            action: #selector(Coordinator.editTapped)
-        )
-
-        var rightItems: [UIBarButtonItem] = []
-        if showsAddButton {
-            rightItems.append(
-                makeIconBarButtonItem(
-                    systemName: "plus",
-                    accessibilityLabel: "Add day",
-                    selector: #selector(Coordinator.addTapped),
-                    coordinator: context.coordinator
-                )
-            )
-        }
-        rightItems.insert(
-            makeIconBarButtonItem(
-                systemName: "gearshape",
-                accessibilityLabel: "Settings",
-                selector: #selector(Coordinator.settingsTapped),
-                coordinator: context.coordinator
-            ),
-            at: 0
-        )
-        targetItem.rightBarButtonItems = rightItems
-    }
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator()
-    }
-
-    static func dismantleUIViewController(_ uiViewController: UIViewController, coordinator: Coordinator) {
-        guard let navigationBar = uiViewController.parent?.navigationController?.navigationBar else { return }
-        if let cached = coordinator.cachedAppearances {
-            navigationBar.standardAppearance = cached.standard
-            navigationBar.scrollEdgeAppearance = cached.scrollEdge
-            navigationBar.compactAppearance = cached.compact
-        }
-    }
-
-    final class Coordinator: NSObject {
-        var onEdit: (() -> Void)?
-        var onAdd: (() -> Void)?
-        var onSettings: (() -> Void)?
-        fileprivate var cachedAppearances: NavigationBarAppearances?
-
-        @objc func editTapped() {
-            onEdit?()
-        }
-
-        @objc func addTapped() {
-            onAdd?()
-        }
-
-        @objc func settingsTapped() {
-            onSettings?()
-        }
-    }
-
-    fileprivate struct NavigationBarAppearances {
-        let standard: UINavigationBarAppearance
-        let scrollEdge: UINavigationBarAppearance?
-        let compact: UINavigationBarAppearance?
-    }
-
-    private func applyUngroupedButtonAppearance(to navigationBar: UINavigationBar, coordinator: Coordinator) {
-        if coordinator.cachedAppearances == nil {
-            coordinator.cachedAppearances = NavigationBarAppearances(
-                standard: navigationBar.standardAppearance,
-                scrollEdge: navigationBar.scrollEdgeAppearance,
-                compact: navigationBar.compactAppearance
-            )
-        }
-
-        let standard = copyAppearance(navigationBar.standardAppearance)
-        let scrollEdge = copyAppearance(navigationBar.scrollEdgeAppearance ?? navigationBar.standardAppearance)
-        let compact = copyAppearance(navigationBar.compactAppearance ?? navigationBar.standardAppearance)
-
-        clearButtonBackgrounds(standard.buttonAppearance)
-        clearButtonBackgrounds(scrollEdge.buttonAppearance)
-        clearButtonBackgrounds(compact.buttonAppearance)
-
-        navigationBar.standardAppearance = standard
-        navigationBar.scrollEdgeAppearance = scrollEdge
-        navigationBar.compactAppearance = compact
-    }
-
-    private func copyAppearance(_ appearance: UINavigationBarAppearance) -> UINavigationBarAppearance {
-        return appearance.copy()
-    }
-
-    private func clearButtonBackgrounds(_ appearance: UIBarButtonItemAppearance) {
-        let states: [UIBarButtonItemStateAppearance] = [
-            appearance.normal,
-            appearance.highlighted,
-            appearance.disabled,
-            appearance.focused
-        ]
-        for state in states {
-            state.backgroundImage = UIImage()
-        }
-    }
-
-    private func makeIconBarButtonItem(
-        systemName: String,
-        accessibilityLabel: String,
-        selector: Selector,
-        coordinator: Coordinator
-    ) -> UIBarButtonItem {
-        let button = UIButton(type: .system)
-        button.setImage(UIImage(systemName: systemName), for: .normal)
-        button.tintColor = .label
-        button.accessibilityLabel = accessibilityLabel
-        button.addTarget(coordinator, action: selector, for: .touchUpInside)
-
-        let materialView = UIVisualEffectView(effect: UIBlurEffect(style: .systemUltraThinMaterial))
-        materialView.isUserInteractionEnabled = false
-        materialView.translatesAutoresizingMaskIntoConstraints = false
-        materialView.layer.cornerRadius = 18
-        materialView.layer.masksToBounds = true
-
-        let container = UIView()
-        container.translatesAutoresizingMaskIntoConstraints = false
-        container.addSubview(materialView)
-        container.addSubview(button)
-
-        button.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([
-            container.widthAnchor.constraint(equalToConstant: 36),
-            container.heightAnchor.constraint(equalToConstant: 36),
-            materialView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            materialView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            materialView.topAnchor.constraint(equalTo: container.topAnchor),
-            materialView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
-            button.centerXAnchor.constraint(equalTo: container.centerXAnchor),
-            button.centerYAnchor.constraint(equalTo: container.centerYAnchor)
-        ])
-
-        return UIBarButtonItem(customView: container)
-    }
-}
-
-private struct GlassCircleIcon: View {
-    let systemName: String
-
-    var body: some View {
-        Image(systemName: systemName)
-            .font(.body.weight(.semibold))
-            .foregroundStyle(.white)
-            .frame(width: 32, height: 32)
-            .background(
-                Circle()
-                    .fill(Color.white.opacity(fillOpacity))
-                    .stroke(Color.white.opacity(strokeOpacity), lineWidth: 1)
-            )
-    }
-
-    private var fillOpacity: Double {
-        colorScheme == .dark ? 0.14 : 0.22
-    }
-
-    private var strokeOpacity: Double {
-        colorScheme == .dark ? 0.18 : 0.35
-    }
-
-    @Environment(\.colorScheme) private var colorScheme
-}
-
-private struct GlassPillLabel: View {
-    let text: String
-
-    var body: some View {
-        Text(text)
-            .font(.body.weight(.semibold))
-            .foregroundStyle(.white)
-            .padding(.horizontal, 12)
-            .frame(height: 32)
-            .background(
-                Capsule(style: .continuous)
-                    .fill(Color.white.opacity(fillOpacity))
-                    .stroke(Color.white.opacity(strokeOpacity), lineWidth: 1)
-            )
-    }
-
-    private var fillOpacity: Double {
-        colorScheme == .dark ? 0.14 : 0.22
-    }
-
-    private var strokeOpacity: Double {
-        colorScheme == .dark ? 0.18 : 0.35
-    }
-
-    @Environment(\.colorScheme) private var colorScheme
-}
-
 private struct AlarmRowEntry {
     let schedule: DaySchedule
     let config: EffectiveDailyConfig
@@ -537,18 +316,16 @@ private struct AlarmRowEntry {
     let isOneOff: Bool
 }
 
-private struct AlarmDayRowView: View {
+private struct AlarmRowView: View {
     @EnvironmentObject private var alarmConfigStore: AlarmConfigStore
     @EnvironmentObject private var scheduleManager: ScheduleManager
+    @Environment(\.editMode) private var editMode
 
     let schedule: DaySchedule
     let config: EffectiveDailyConfig
     let primaryDisplay: PrimaryDisplay?
-    let isEditing: Bool
-    let showsDeleteControl: Bool
-    let onDelete: () -> Void
     let onSelect: () -> Void
-    @ScaledMetric(relativeTo: .largeTitle) private var timeFontSize: CGFloat = 48
+    @ScaledMetric(relativeTo: .largeTitle) private var timeFontSize: CGFloat = 46
 
     private static let timeMainFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -568,59 +345,49 @@ private struct AlarmDayRowView: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: DesignTokens.spacingM) {
-            if isEditing && showsDeleteControl {
-                deleteButton
-            }
             VStack(alignment: .leading, spacing: 4) {
-                Text(dateLine)
+                Text(dateLabel)
                     .font(.footnote)
                     .foregroundStyle(isDisabled ? .tertiary : .secondary)
 
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
                     Text(primaryTimeMain)
-                        .font(.system(size: timeFontSize, weight: .light, design: .default))
+                        .font(.system(size: timeFontSize, weight: .regular, design: .default))
                         .monospacedDigit()
                         .foregroundStyle(isDisabled ? .tertiary : .primary)
                         .minimumScaleFactor(0.8)
 
                     if let primaryTimeSuffix {
                         Text(primaryTimeSuffix)
-                            .font(.system(size: timeFontSize * 0.6, weight: .medium, design: .default))
-                            .foregroundStyle(isDisabled ? .tertiary : .primary)
+                            .font(.system(size: timeFontSize * 0.55, weight: .regular, design: .default))
+                            .monospacedDigit()
+                            .foregroundStyle(isDisabled ? .tertiary : .secondary)
                             .baselineOffset(1)
                     }
                 }
 
-                Text(secondaryLineText)
-                    .font(.footnote)
+                Text(fajrLineText)
+                    .font(.callout)
                     .foregroundStyle(isDisabled ? .tertiary : .secondary)
+                    .monospacedDigit()
             }
-            .accessibilityElement(children: .combine)
+            .accessibilityElement(children: .ignore)
             .accessibilityLabel(accessibilitySummary)
 
             Spacer()
 
             Toggle("", isOn: dayActiveBinding)
                 .labelsHidden()
-                .accessibilityLabel("Enable alarms for this day")
+                .tint(DawnColor.accent)
+                .accessibilityLabel("\(primaryLabelText) alarm")
         }
-        .padding(.vertical, 14)
+        .padding(.vertical, 6)
         .contentShape(Rectangle())
         .onTapGesture {
-            if !isEditing {
+            if editMode?.wrappedValue.isEditing != true {
                 onSelect()
             }
         }
-    }
-
-    private var deleteButton: some View {
-        Button(action: onDelete) {
-            Image(systemName: "minus.circle.fill")
-                .font(.title3)
-                .foregroundStyle(.red)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Delete one-off day")
     }
 
     private var fajrTimeText: String {
@@ -639,30 +406,24 @@ private struct AlarmDayRowView: View {
     }
 
     private var primaryTimeMain: String {
-        AlarmDayRowView.timeMainFormatter.string(from: primaryTimeDate)
+        AlarmRowView.timeMainFormatter.string(from: primaryTimeDate)
     }
 
     private var primaryTimeSuffix: String? {
-        AlarmDayRowView.timeSuffixFormatter.string(from: primaryTimeDate)
+        AlarmRowView.timeSuffixFormatter.string(from: primaryTimeDate)
     }
 
-    private var secondaryLineText: String {
-        guard let primaryDisplay else {
-            return "Off"
-        }
-        if primaryDisplay.kind == .fajr {
-            return "Fajr (Adhan)"
-        }
-        return "Fajr \(fajrTimeText)"
+    private var fajrLineText: String {
+        "Fajr \(fajrTimeText)"
     }
 
-    private var dateLine: String {
-        let dateText = GregorianDateFormatter.shared.cardString(for: schedule.date)
-        if isToday {
-            return "\(Strings.AlarmsTab.todayLabel), \(dateText)"
-        }
+    private var dateLabel: String {
+        let dateText = AlarmRowView.dateLabelFormatter.string(from: schedule.date)
         if isTomorrow {
-            return "\(Strings.AlarmsTab.tomorrowLabel), \(dateText)"
+            return "\(Strings.AlarmsTab.tomorrowLabel) • \(dateText)"
+        }
+        if isToday {
+            return "\(Strings.AlarmsTab.todayLabel) • \(dateText)"
         }
         return dateText
     }
@@ -701,8 +462,7 @@ private struct AlarmDayRowView: View {
     }
 
     private var accessibilitySummary: String {
-        let statusText = config.skipDay ? "skipped" : "active"
-        return "\(dateLabelWithPrefix), \(primaryLabelText) \(primaryTimeText), Fajr \(fajrTimeText), \(statusText)"
+        "\(dateLabelWithPrefix). \(primaryLabelText) alarm. \(primaryTimeText). Fajr \(fajrTimeText)."
     }
 
     private var primaryLabelText: String {
@@ -721,7 +481,7 @@ private struct AlarmDayRowView: View {
     }
 
     private var dateLabelWithPrefix: String {
-        let dateText = GregorianDateFormatter.shared.cardString(for: schedule.date)
+        let dateText = AlarmRowView.dateLabelFormatter.string(from: schedule.date)
         if isToday {
             return "\(Strings.AlarmsTab.todayLabel), \(dateText)"
         }
@@ -730,6 +490,14 @@ private struct AlarmDayRowView: View {
         }
         return dateText
     }
+
+    private static let dateLabelFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "EEE, MMM d"
+        formatter.timeZone = .current
+        formatter.locale = .current
+        return formatter
+    }()
 }
 
 private extension AlarmsHomeView {
