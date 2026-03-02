@@ -24,8 +24,14 @@ final class FastTagStore: ObservableObject {
 
     func setSelection(_ selection: FastIntentSelection, for date: Date, timeZone: TimeZone) {
         let key = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
-        if selection.hasMeaningfulTags {
-            selections[key] = selection
+        let normalized = FastIntentEngine.normalizedSelection(
+            selection,
+            for: date,
+            ruleset: .strict,
+            timeZone: timeZone
+        )
+        if normalized.hasMeaningfulTags {
+            selections[key] = normalized
         } else {
             selections[key] = nil
         }

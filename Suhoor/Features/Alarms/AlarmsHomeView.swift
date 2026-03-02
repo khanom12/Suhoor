@@ -393,8 +393,17 @@ private struct AddFastDaySheet: View {
     }
 
     private var tagSummaryText: String {
-        var parts: [String] = [tagSelection.primaryIntent.shortTitle]
-        let secondary = tagSelection.secondaryTags.sorted { $0.title < $1.title }
+        let computed = TagComputationEngine.result(
+            for: selectedDate,
+            schedules: scheduleManager.schedules,
+            selections: fastTagStore.selections,
+            ruleset: .strict,
+            timeZone: .current,
+            overrideSelection: tagSelection.hasMeaningfulTags ? tagSelection : nil
+        )
+
+        var parts: [String] = [computed.computedPrimaryIntent.shortTitle]
+        let secondary = computed.computedSecondaryTags.sorted { $0.title < $1.title }
         if !secondary.isEmpty {
             parts.append(secondary.map { $0.shortTitle }.joined(separator: ", "))
         }

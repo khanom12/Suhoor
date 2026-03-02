@@ -68,7 +68,7 @@ extension FastPrimaryIntent {
                 id: "voluntary",
                 title: "Voluntary (Sunnah)",
                 subtitle: "Optional fast for extra reward.",
-                aboutText: "Use this for voluntary fasting. You can also add ‘This day also matches…’ tags when a voluntary fast coincides with specific recommended days."
+                aboutText: "Use this for voluntary fasting. When a date matches a recognized observance, the app derives those observance tags automatically under the strict rules."
             )
         case .other:
             return FastTagAbout(
@@ -89,42 +89,68 @@ extension FastSecondaryVirtueTag {
                 id: "shawwal-six",
                 title: "Six of Shawwāl",
                 subtitle: "One of the six recommended days after Ramadan.",
-                aboutText: "These are six voluntary fasts in Shawwāl (the month after Ramadan). People can fast any six days in the month."
+                aboutText: "These are six voluntary fasts in Shawwāl (the month after Ramadan). This app tracks them as a six-day series, not as a label for every day in Shawwāl.",
+                bullets: [
+                    "Only eligible voluntary Shawwāl days can count.",
+                    "A day used for make-up, vow, or expiation does not count toward the six.",
+                    "If an earlier eligible day stops counting, the next eligible Shawwāl day is picked automatically."
+                ]
             )
         case .arafah:
             return FastTagAbout(
                 id: "arafah",
                 title: "Day of ʿArafah",
                 subtitle: "9th of Dhul Hijjah.",
-                aboutText: "A voluntary fast on the 9th of Dhul Hijjah (for those not performing Hajj)."
+                aboutText: "A voluntary fast on the 9th of Dhul Hijjah (for those not performing Hajj).",
+                bullets: [
+                    "Appears automatically only on 9 Dhul Hijjah.",
+                    "Can appear alongside the broader ‘First 9 Days of Dhul Hijjah’ observance."
+                ]
             )
         case .ashura:
             return FastTagAbout(
                 id: "ashura",
                 title: "ʿĀshūrāʾ",
                 subtitle: "9th or 10th of Muharram.",
-                aboutText: "A voluntary fast associated with the 10th of Muharram, often paired with the 9th (or the 11th) to be distinct."
+                aboutText: "A voluntary fast associated with the 10th of Muharram, often paired with the 9th (or the 11th) to be distinct.",
+                bullets: [
+                    "Appears automatically only on 9, 10, or 11 Muharram.",
+                    "Does not overlap with Dhul Hijjah observances or Shawwāl counting."
+                ]
             )
         case .whiteDays:
             return FastTagAbout(
                 id: "white-days",
                 title: "White Days (13–15)",
                 subtitle: "The 13th, 14th, and 15th of each Hijri month.",
-                aboutText: "Called the ‘White Days’ because the moon is full and the nights are bright. These are recurring voluntary fast days each Hijri month."
+                aboutText: "Called the ‘White Days’ because the moon is full and the nights are bright. These are recurring voluntary fast days each Hijri month.",
+                bullets: [
+                    "Appears automatically on the 13th, 14th, and 15th of the Hijri month.",
+                    "Can stack with Monday or Thursday when the dates coincide.",
+                    "Can also stack with Shawwāl counting if one of the six counted days falls on 13, 14, or 15 Shawwāl."
+                ]
             )
         case .mondayThursday:
             return FastTagAbout(
                 id: "monday-thursday",
                 title: "Mondays & Thursdays",
                 subtitle: "Weekly voluntary fasts.",
-                aboutText: "A common voluntary fasting pattern: Mondays and Thursdays each week."
+                aboutText: "A common voluntary fasting pattern: Mondays and Thursdays each week.",
+                bullets: [
+                    "Appears automatically whenever the date falls on a Monday or Thursday.",
+                    "May appear alongside White Days, ʿArafah, ʿĀshūrāʾ, Dhul Hijjah, or Shawwāl counting when the dates coincide."
+                ]
             )
         case .dhulHijjahFirstNine:
             return FastTagAbout(
                 id: "dhul-hijjah-first-nine",
                 title: "First 9 Days of Dhul Hijjah",
                 subtitle: "The first nine days of Dhul Hijjah.",
-                aboutText: "Some people choose to fast during the first nine days of Dhul Hijjah, with the 9th (ʿArafah) as the peak."
+                aboutText: "Some people choose to fast during the first nine days of Dhul Hijjah, with the 9th (ʿArafah) as the peak.",
+                bullets: [
+                    "Appears automatically only on 1 through 9 Dhul Hijjah.",
+                    "Includes 9 Dhul Hijjah, where it may appear together with ʿArafah."
+                ]
             )
         }
     }
@@ -144,14 +170,14 @@ extension FastWarning {
             return FastTagAbout(
                 id: "warning-eid-al-adha",
                 title: "Eid al-Adha",
-                aboutText: "Fasting on Eid al-Adha is generally not practiced.",
+                aboutText: "Fasting on Eid al-Adha is generally not practiced. This app shows a warning and suppresses derived observance tags on that date.",
                 showsScheduleNote: false
             )
         case .tashreeq:
             return FastTagAbout(
                 id: "warning-tashreeq",
                 title: "Days of Tashreeq",
-                aboutText: "The days of Tashreeq (11–13 Dhul Hijjah) are generally not fasted.",
+                aboutText: "The days of Tashreeq (11–13 Dhul Hijjah) are generally not fasted. This app does not model every pilgrimage-specific exception, so it shows a warning and suppresses derived observance tags by default.",
                 showsScheduleNote: false
             )
         }

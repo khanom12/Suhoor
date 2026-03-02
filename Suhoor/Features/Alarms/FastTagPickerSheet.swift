@@ -74,16 +74,21 @@ struct FastTagPickerSheet: View {
 
                 VStack(spacing: 0) {
                     ForEach(FastPrimaryIntent.allCases) { intent in
-                        TagOptionRow(
+                        let isCalendarSelectable = FastIntentEngine.isPrimarySelectable(intent, on: date, timeZone: timeZone)
+                        PrimaryOptionRow(
                             title: intent.about.title,
                             subtitle: intent.about.subtitle,
                             systemImage: intent.style.systemImage,
                             color: intent.style.color,
                             isSelected: policy.isPurposeLocked ? intent == .ramadanObligatory : computedResult.computedPrimaryIntent == intent,
                             isPrimary: true,
-                            isDisabled: policy.isPurposeLocked && intent != .ramadanObligatory,
-                            isSuggested: intent == suggestions.suggestedPrimary,
-                            isAutoApplied: false,
+                            isDisabled: (policy.isPurposeLocked && intent != .ramadanObligatory) || !isCalendarSelectable,
+                            statusText: FastIntentEngine.primaryStatusText(
+                                for: intent,
+                                on: date,
+                                timeZone: timeZone,
+                                isSuggested: intent == suggestions.suggestedPrimary
+                            ),
                             onSelect: { selectPrimary(intent) },
                             onInfo: { selectedAbout = intent.about }
                         )
@@ -101,17 +106,18 @@ struct FastTagPickerSheet: View {
 
                 VStack(spacing: 0) {
                     ForEach(FastSecondaryVirtueTag.allCases) { tag in
-                        TagOptionRow(
+                        let isApplicable = FastIntentEngine.isCalendarApplicable(tag: tag, on: date, timeZone: timeZone)
+                        let isSuppressed = computedResult.suppressedSecondaryTags.contains(tag)
+                        let isEligibleButNotCounted = tag == .shawwalSix && isApplicable && !isSuppressed && !computedResult.computedSecondaryTags.contains(tag)
+                        ObservanceStatusRow(
                             title: tag.about.title,
                             subtitle: tag.about.subtitle,
                             systemImage: tag.style.systemImage,
                             color: tag.style.color,
                             isSelected: computedResult.computedSecondaryTags.contains(tag),
-                            isPrimary: false,
-                            isDisabled: policy.areSecondaryTagsLocked,
-                            isSuggested: suggestions.suggestedSecondary.contains(tag),
-                            isAutoApplied: computedResult.autoSecondaryTags.contains(tag),
-                            onSelect: { toggleSecondary(tag) },
+                            statusText: statusText(for: tag, computedResult: computedResult, timeZone: timeZone),
+                            isSuppressed: isSuppressed,
+                            isDimmed: !computedResult.computedSecondaryTags.contains(tag) && !isEligibleButNotCounted,
                             onInfo: { selectedAbout = tag.about }
                         )
                     }
@@ -158,6 +164,10 @@ struct FastTagPickerSheet: View {
     }
 
     private func selectPrimary(_ intent: FastPrimaryIntent) {
+        guard FastIntentEngine.isPrimarySelectable(intent, on: date, timeZone: .current) else {
+            Haptics.medium()
+            return
+        }
         let policy = TagEditPolicy(
             date: date,
             effectivePrimary: TagComputationEngine.result(
@@ -176,45 +186,41 @@ struct FastTagPickerSheet: View {
         }
         guard selection.primaryIntent != intent else { return }
         selection.primaryIntent = intent
-        Haptics.light()
-
-        if intent.isObligatory, !selection.secondaryTags.isEmpty {
-            selection.secondaryTags = []
-            showNote("Secondary tags cleared.")
-        }
-    }
-
-    private func toggleSecondary(_ tag: FastSecondaryVirtueTag) {
-        let policy = TagEditPolicy(
-            date: date,
-            effectivePrimary: TagComputationEngine.result(
-                for: date,
-                schedules: schedules,
-                selections: selections,
-                ruleset: .strict,
-                timeZone: TimeZone.current,
-                overrideSelection: selection.hasMeaningfulTags ? selection : nil
-            ).computedPrimaryIntent,
-            timeZone: TimeZone.current
-        )
-        guard !policy.areSecondaryTagsLocked else {
-            Haptics.medium()
-            return
-        }
-        if selection.secondaryTags.contains(tag) {
-            selection.secondaryTags.remove(tag)
-        } else {
-            selection.secondaryTags.insert(tag)
-        }
+        selection.secondaryTags = []
         Haptics.light()
     }
 
     private func enforceRulesIfNeeded() {
-        let normalized = FastIntentEngine.normalizedSelection(selection, ruleset: .strict)
+        let normalized = FastIntentEngine.normalizedSelection(
+            selection,
+            for: date,
+            ruleset: .strict,
+            timeZone: .current
+        )
         if normalized != selection {
             selection = normalized
-            showNote("Secondary tags cleared.")
+            showNote("Tag rules updated for this date.")
         }
+    }
+
+    private func statusText(
+        for tag: FastSecondaryVirtueTag,
+        computedResult: TagComputationResult,
+        timeZone: TimeZone
+    ) -> String {
+        if computedResult.computedSecondaryTags.contains(tag) {
+            if tag == .shawwalSix {
+                return "Counts toward your six Shawwal fasts"
+            }
+            return "Applies automatically on this date"
+        }
+        if let detail = computedResult.secondaryDetails[tag], detail.source == .suppressedByPolicy {
+            return detail.reason
+        }
+        if FastIntentEngine.isCalendarApplicable(tag: tag, on: date, timeZone: timeZone), tag == .shawwalSix {
+            return "Eligible Shawwal date, but only the first six voluntary days count"
+        }
+        return "Not applicable on this date"
     }
 
     private func showNote(_ text: String) {
@@ -228,7 +234,7 @@ struct FastTagPickerSheet: View {
 
 }
 
-private struct TagOptionRow: View {
+private struct PrimaryOptionRow: View {
     let title: String
     let subtitle: String?
     let systemImage: String?
@@ -236,8 +242,7 @@ private struct TagOptionRow: View {
     let isSelected: Bool
     let isPrimary: Bool
     let isDisabled: Bool
-    let isSuggested: Bool
-    let isAutoApplied: Bool
+    let statusText: String?
     let onSelect: () -> Void
     let onInfo: () -> Void
 
@@ -265,13 +270,8 @@ private struct TagOptionRow: View {
                                 .foregroundStyle(.secondary)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
-                        if isSuggested {
-                            Text("Suggested for this date")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        if isAutoApplied {
-                            Text("Auto-applied for this date")
+                        if let statusText {
+                            Text(statusText)
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
@@ -294,6 +294,61 @@ private struct TagOptionRow: View {
         }
         .padding(.vertical, 12)
         .opacity(isDisabled ? 0.5 : 1.0)
+    }
+}
+
+private struct ObservanceStatusRow: View {
+    let title: String
+    let subtitle: String?
+    let systemImage: String?
+    let color: Color
+    let isSelected: Bool
+    let statusText: String
+    let isSuppressed: Bool
+    let isDimmed: Bool
+    let onInfo: () -> Void
+
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            TagIconCapsule(
+                systemImage: systemImage,
+                color: color,
+                isSelected: isSelected,
+                isPrimary: false
+            )
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text(title)
+                    .font(.body.weight(.medium))
+                    .foregroundStyle(isDimmed ? .secondary : .primary)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let subtitle {
+                    Text(subtitle)
+                        .font(.footnote)
+                        .foregroundStyle(isDimmed ? .tertiary : .secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Text(statusText)
+                    .font(.caption)
+                    .foregroundStyle(isSuppressed ? .secondary : (isDimmed ? .tertiary : .secondary))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 8)
+
+            Button(action: onInfo) {
+                Image(systemName: "info.circle")
+                    .font(dynamicTypeSize.isAccessibilitySize ? .body : .footnote)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 44, height: 44)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("About \(title)")
+        }
+        .padding(.vertical, 12)
+        .opacity(isDimmed ? 0.55 : 1.0)
     }
 }
 
@@ -370,10 +425,13 @@ private struct TagEditPolicy {
 
         if isRamadan {
             self.purposeHelperText = "Locked for Ramadan: this fast is obligatory."
-            self.secondaryHelperText = "Voluntary tags are unavailable during Ramadan."
+            self.secondaryHelperText = "Observance tags are hidden during Ramadan."
         } else if isObligatoryPrimary {
             self.purposeHelperText = nil
-            self.secondaryHelperText = "Voluntary tags can’t be combined with an obligatory fast."
+            self.secondaryHelperText = "Observance tags are suppressed when the purpose is obligatory."
+        } else if effectivePrimary == .other {
+            self.purposeHelperText = nil
+            self.secondaryHelperText = "Choose Voluntary to see date-derived observances."
         } else {
             self.purposeHelperText = nil
             self.secondaryHelperText = nil
@@ -381,9 +439,7 @@ private struct TagEditPolicy {
     }
 
     private static func isRamadan(date: Date, timeZone: TimeZone) -> Bool {
-        var calendar = Calendar(identifier: .islamicCivil)
-        calendar.timeZone = timeZone
-        return calendar.component(.month, from: date) == 9
+        FastIntentEngine.isRamadan(date, timeZone: timeZone)
     }
 }
 

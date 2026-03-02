@@ -3,6 +3,7 @@ import SwiftUI
 
 enum FiqhRuleset: String, CaseIterable, Identifiable, Codable {
     case strict
+    // Legacy-only compatibility case. The app remains strict-only.
     case permissive
 
     var id: String { rawValue }
@@ -148,6 +149,29 @@ enum FastSecondaryVirtueTag: String, CaseIterable, Codable, Identifiable, Hashab
             return FastTagStyle(title: title, shortTitle: shortTitle, systemImage: "sun.max", color: .yellow)
         }
     }
+
+    var category: FastObservanceCategory {
+        switch self {
+        case .mondayThursday:
+            return .recurringWeekly
+        case .whiteDays:
+            return .recurringMonthly
+        case .arafah, .ashura:
+            return .singleDay
+        case .shawwalSix:
+            return .seasonalSeries
+        case .dhulHijjahFirstNine:
+            return .seasonalWindow
+        }
+    }
+
+    var isAutoDerivedOnly: Bool { true }
+
+    var suppressedByObligatoryPrimary: Bool { true }
+
+    func allowsCoexistence(with other: FastSecondaryVirtueTag) -> Bool {
+        FastIntentEngine.observanceTagsCanCoexist(self, other)
+    }
 }
 
 enum FastWarning: String, CaseIterable, Codable, Hashable, Identifiable {
@@ -178,6 +202,26 @@ struct FastTagStyle {
     let color: Color
 }
 
+enum FastObservanceCategory: String, Codable, Hashable {
+    case recurringWeekly
+    case recurringMonthly
+    case singleDay
+    case seasonalSeries
+    case seasonalWindow
+}
+
+enum FastTagSource: String, Codable, Hashable {
+    case autoDerived
+    case userSelected
+    case suppressedByPolicy
+}
+
+struct TagEvaluationDetail: Hashable {
+    let tag: FastSecondaryVirtueTag
+    let source: FastTagSource
+    let reason: String
+}
+
 struct FastIntentSelection: Codable, Hashable {
     var primaryIntent: FastPrimaryIntent
     var secondaryTags: Set<FastSecondaryVirtueTag>
@@ -196,41 +240,31 @@ struct FastIntentSuggestions: Hashable {
 }
 
 enum FastIntentEngine {
+    static var adjustedHijriCalendar = AdjustedHijriCalendar.shared
+
     static func hijriMonthTitle(for date: Date, timeZone: TimeZone) -> String {
-        let formatter = DateFormatter()
-        formatter.calendar = hijriCalendar(timeZone: timeZone)
-        formatter.timeZone = timeZone
-        formatter.locale = .current
-        formatter.dateFormat = "MMMM yyyy"
-        return formatter.string(from: date)
+        adjustedHijriCalendar.monthTitle(for: date, timeZone: timeZone) ?? "Hijri"
     }
 
     static func hijriMonthKey(for date: Date, timeZone: TimeZone) -> HijriMonthKey? {
-        let components = hijriComponents(for: date, timeZone: timeZone)
-        guard let year = components.year, let month = components.month else { return nil }
-        let title = hijriMonthTitle(for: date, timeZone: timeZone)
-        return HijriMonthKey(year: year, month: month, title: title)
+        adjustedHijriCalendar.adjustedMonthKey(for: date, timeZone: timeZone)
     }
 
     static func warnings(for date: Date, timeZone: TimeZone) -> [FastWarning] {
-        let components = hijriComponents(for: date, timeZone: timeZone)
-        guard let month = components.month, let day = components.day else { return [] }
+        guard let components = adjustedComponents(for: date, timeZone: timeZone) else { return [] }
         var warnings: [FastWarning] = []
-        if month == 10, day == 1 { warnings.append(.eidAlFitr) }
-        if month == 12, day == 10 { warnings.append(.eidAlAdha) }
-        if month == 12, (11...13).contains(day) { warnings.append(.tashreeq) }
+        if components.month == .shawwal, components.day == 1 { warnings.append(.eidAlFitr) }
+        if components.month == .dhulHijjah, components.day == 10 { warnings.append(.eidAlAdha) }
+        if components.month == .dhulHijjah, (11...13).contains(components.day) { warnings.append(.tashreeq) }
         return warnings
     }
 
     static func suggestions(for date: Date, timeZone: TimeZone) -> FastIntentSuggestions {
-        let components = hijriComponents(for: date, timeZone: timeZone)
-        let month = components.month ?? 0
-        let day = components.day ?? 0
         var suggestedPrimary: FastPrimaryIntent?
         var suggestedSecondary: [FastSecondaryVirtueTag] = []
         var note: String?
 
-        if month == 9 {
+        if isRamadan(date, timeZone: timeZone) {
             suggestedPrimary = .ramadanObligatory
             note = "Ramadan takes precedence over other Sunnah patterns."
             return FastIntentSuggestions(
@@ -240,10 +274,8 @@ enum FastIntentEngine {
             )
         }
 
-        if month == 12, day == 9 { suggestedSecondary.append(.arafah) }
-        if month == 1, [9, 10, 11].contains(day) { suggestedSecondary.append(.ashura) }
-        if [13, 14, 15].contains(day) { suggestedSecondary.append(.whiteDays) }
-        if isMondayOrThursday(date, timeZone: timeZone) { suggestedSecondary.append(.mondayThursday) }
+        suggestedSecondary = Array(dateDerivedObservanceTags(for: date, timeZone: timeZone, includeShawwalPotential: true))
+            .sorted { $0.title < $1.title }
 
         if !suggestedSecondary.isEmpty {
             suggestedPrimary = .voluntarySunnah
@@ -259,7 +291,7 @@ enum FastIntentEngine {
     static func allowsSecondaryTags(primary: FastPrimaryIntent, ruleset: FiqhRuleset) -> Bool {
         switch ruleset {
         case .strict:
-            return !primary.isObligatory
+            return primary == .voluntarySunnah
         case .permissive:
             return true
         }
@@ -272,6 +304,170 @@ enum FastIntentEngine {
         return FastIntentSelection(primaryIntent: selection.primaryIntent, secondaryTags: [])
     }
 
+    static func normalizedSelection(
+        _ selection: FastIntentSelection,
+        for date: Date,
+        ruleset: FiqhRuleset,
+        timeZone: TimeZone
+    ) -> FastIntentSelection {
+        if isRamadan(date, timeZone: timeZone) {
+            return FastIntentSelection(primaryIntent: .ramadanObligatory, secondaryTags: [])
+        }
+
+        guard ruleset == .strict else {
+            return normalizedSelection(selection, ruleset: ruleset)
+        }
+
+        let normalizedPrimary = normalizedPrimaryIntent(selection.primaryIntent, on: date, timeZone: timeZone)
+
+        guard normalizedPrimary == .voluntarySunnah else {
+            return FastIntentSelection(primaryIntent: normalizedPrimary, secondaryTags: [])
+        }
+
+        let applicable = selection.secondaryTags.filter { isCalendarApplicable(tag: $0, on: date, timeZone: timeZone) }
+        let compatible = compatibleObservanceTags(from: Set(applicable))
+        return FastIntentSelection(primaryIntent: .voluntarySunnah, secondaryTags: compatible)
+    }
+
+    static func normalizedPrimaryIntent(_ primary: FastPrimaryIntent, on date: Date, timeZone: TimeZone) -> FastPrimaryIntent {
+        if isRamadan(date, timeZone: timeZone) {
+            return .ramadanObligatory
+        }
+
+        if primary == .ramadanObligatory {
+            return .other
+        }
+
+        return primary
+    }
+
+    static func isPrimarySelectable(_ primary: FastPrimaryIntent, on date: Date, timeZone: TimeZone) -> Bool {
+        if primary == .ramadanObligatory {
+            return isRamadan(date, timeZone: timeZone)
+        }
+        return true
+    }
+
+    static func primaryStatusText(
+        for primary: FastPrimaryIntent,
+        on date: Date,
+        timeZone: TimeZone,
+        isSuggested: Bool
+    ) -> String? {
+        if primary == .ramadanObligatory, !isRamadan(date, timeZone: timeZone) {
+            return "Only available during Ramadan"
+        }
+        if isSuggested {
+            return "Suggested for this date"
+        }
+        return nil
+    }
+
+    static func dateDerivedObservanceTags(
+        for date: Date,
+        timeZone: TimeZone,
+        includeShawwalPotential: Bool
+    ) -> Set<FastSecondaryVirtueTag> {
+        guard warnings(for: date, timeZone: timeZone).isEmpty else { return [] }
+
+        guard let components = adjustedComponents(for: date, timeZone: timeZone) else { return [] }
+        var tags: Set<FastSecondaryVirtueTag> = []
+
+        if isMondayOrThursday(date, timeZone: timeZone) {
+            tags.insert(.mondayThursday)
+        }
+        if [13, 14, 15].contains(components.day) {
+            tags.insert(.whiteDays)
+        }
+        if components.month == .dhulHijjah, components.day == 9 {
+            tags.insert(.arafah)
+        }
+        if components.month == .muharram, [9, 10, 11].contains(components.day) {
+            tags.insert(.ashura)
+        }
+        if components.month == .dhulHijjah, (1...9).contains(components.day) {
+            tags.insert(.dhulHijjahFirstNine)
+        }
+        if includeShawwalPotential, components.month == .shawwal, components.day != 1 {
+            tags.insert(.shawwalSix)
+        }
+
+        return compatibleObservanceTags(from: tags)
+    }
+
+    static func isCalendarApplicable(tag: FastSecondaryVirtueTag, on date: Date, timeZone: TimeZone) -> Bool {
+        dateDerivedObservanceTags(for: date, timeZone: timeZone, includeShawwalPotential: true).contains(tag)
+    }
+
+    static func observanceTagsCanCoexist(_ lhs: FastSecondaryVirtueTag, _ rhs: FastSecondaryVirtueTag) -> Bool {
+        if lhs == rhs { return true }
+
+        switch (lhs, rhs) {
+        case (.mondayThursday, _), (_, .mondayThursday):
+            return true
+        case (.whiteDays, .shawwalSix), (.shawwalSix, .whiteDays):
+            return true
+        case (.arafah, .dhulHijjahFirstNine), (.dhulHijjahFirstNine, .arafah):
+            return true
+        case (.whiteDays, .whiteDays),
+             (.shawwalSix, .shawwalSix),
+             (.arafah, .arafah),
+             (.ashura, .ashura),
+             (.dhulHijjahFirstNine, .dhulHijjahFirstNine):
+            return true
+        default:
+            return false
+        }
+    }
+
+    static func compatibleObservanceTags(from tags: Set<FastSecondaryVirtueTag>) -> Set<FastSecondaryVirtueTag> {
+        let ordered = tags.sorted {
+            observancePriority(for: $0) < observancePriority(for: $1)
+        }
+
+        var accepted: [FastSecondaryVirtueTag] = []
+        for tag in ordered {
+            guard accepted.allSatisfy({ observanceTagsCanCoexist($0, tag) }) else { continue }
+            accepted.append(tag)
+        }
+        return Set(accepted)
+    }
+
+    static func observanceReason(for tag: FastSecondaryVirtueTag, on date: Date, timeZone: TimeZone) -> String {
+        let day = adjustedComponents(for: date, timeZone: timeZone)?.day ?? 0
+
+        switch tag {
+        case .mondayThursday:
+            return "Applies automatically when the date falls on a Monday or Thursday."
+        case .whiteDays:
+            return "Applies automatically on the 13th, 14th, or 15th of the Hijri month."
+        case .arafah:
+            return "Applies automatically on 9 Dhul Hijjah."
+        case .ashura:
+            return "Applies automatically on the 9th, 10th, or 11th of Muharram."
+        case .shawwalSix:
+            return "Counts only when this Shawwal day is one of the first six eligible voluntary fasts."
+        case .dhulHijjahFirstNine:
+            if day == 9 {
+                return "Applies automatically during the first nine days of Dhul Hijjah, including alongside Arafah on day 9."
+            }
+            return "Applies automatically during the first nine days of Dhul Hijjah."
+        }
+    }
+
+    static func suppressionReason(
+        for tag: FastSecondaryVirtueTag,
+        primary: FastPrimaryIntent
+    ) -> String {
+        if primary.isObligatory {
+            return "Suppressed by obligatory intent."
+        }
+        if primary == .other {
+            return "Hidden until you choose Voluntary as the purpose."
+        }
+        return "Suppressed by strict compatibility rules."
+    }
+
     private static func isMondayOrThursday(_ date: Date, timeZone: TimeZone) -> Bool {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = timeZone
@@ -279,15 +475,29 @@ enum FastIntentEngine {
         return weekday == 2 || weekday == 5
     }
 
-    private static func hijriComponents(for date: Date, timeZone: TimeZone) -> DateComponents {
-        let calendar = hijriCalendar(timeZone: timeZone)
-        return calendar.dateComponents([.year, .month, .day], from: date)
+    static func isRamadan(_ date: Date, timeZone: TimeZone) -> Bool {
+        adjustedHijriCalendar.isRamadan(date: date, timeZone: timeZone)
     }
 
-    private static func hijriCalendar(timeZone: TimeZone) -> Calendar {
-        var calendar = Calendar(identifier: .islamicCivil)
-        calendar.timeZone = timeZone
-        return calendar
+    static func adjustedComponents(for date: Date, timeZone: TimeZone) -> AdjustedHijriDateComponents? {
+        adjustedHijriCalendar.adjustedComponents(for: date, timeZone: timeZone)
+    }
+
+    private static func observancePriority(for tag: FastSecondaryVirtueTag) -> Int {
+        switch tag {
+        case .arafah:
+            return 0
+        case .ashura:
+            return 1
+        case .dhulHijjahFirstNine:
+            return 2
+        case .shawwalSix:
+            return 3
+        case .whiteDays:
+            return 4
+        case .mondayThursday:
+            return 5
+        }
     }
 }
 
