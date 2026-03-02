@@ -3,83 +3,111 @@ import SwiftUI
 struct HijriCalendarSettingsView: View {
     @EnvironmentObject private var scheduleManager: ScheduleManager
 
+    private let adjustableMonths: [HijriMonth] = [.muharram, .ramadan, .shawwal, .dhulHijjah]
+
     var body: some View {
         Form {
             Section {
-                Text("These corrections affect Hijri dates shown in the app, date-based tags, and any Islamic-date schedules you add.")
+                Text(Strings.Settings.hijriCalendarHelper)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
-            Section("Local Hijri Calendar Correction") {
-                Text("Use this if your community starts a Hijri month one day earlier or later than the app’s built-in calendar. This changes Hijri dates shown in the app and any related schedules.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-
-                hijriMonthAdjustmentRow(.muharram)
-                hijriMonthAdjustmentRow(.ramadan)
-                hijriMonthAdjustmentRow(.shawwal)
-                hijriMonthAdjustmentRow(.dhulHijjah)
+            Section {
+                ForEach(adjustableMonths, id: \.self) { month in
+                    NavigationLink {
+                        HijriMonthAdjustmentDetailView(month: month)
+                    } label: {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(month.displayName)
+                                    .foregroundStyle(.primary)
+                                Text(effectText(for: month))
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(2)
+                            }
+                            Spacer()
+                            Text(adjustmentValueText(for: month))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            } header: {
+                Text(Strings.Settings.hijriMonthCorrectionsTitle)
             }
         }
         .formStyle(.grouped)
-        .navigationTitle("Hijri Calendar")
+        .navigationTitle(Strings.Settings.hijriCalendarTitle)
         .navigationBarTitleDisplayMode(.inline)
     }
 
-    @ViewBuilder
-    private func hijriMonthAdjustmentRow(_ month: HijriMonth) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(month.displayName)
-                    .font(.body.weight(.medium))
-                Text(effectText(for: month))
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-
-            Picker(month.displayName, selection: hijriAdjustmentBinding(for: month)) {
-                Text("-1").tag(-1)
-                Text("0").tag(0)
-                Text("+1").tag(1)
-            }
-            .pickerStyle(.segmented)
-
-            if !scheduleManager.hasHijriBaseline(for: month) {
-                Text("Needs calendar data for this month")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            } else if let preview = scheduleManager.hijriMonthStartPreview(for: month) {
-                Text("Built-in start: \(dateText(preview.baselineStart))")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                Text("Your corrected start: \(dateText(preview.adjustedStart))")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
+    private func adjustmentValueText(for month: HijriMonth) -> String {
+        let value = scheduleManager.hijriAdjustment(for: month)
+        switch value {
+        case -1:
+            return Strings.Settings.hijriMinusOneDay
+        case 1:
+            return Strings.Settings.hijriPlusOneDay
+        default:
+            return Strings.Settings.hijriNoChange
         }
     }
 
     private func effectText(for month: HijriMonth) -> String {
         switch month {
         case .muharram:
-            return "Affects Ashura and Muharram dates."
+            return Strings.SettingsHijri.muharram
         case .ramadan:
-            return "Affects Ramadan dates and reminders."
+            return Strings.SettingsHijri.ramadan
         case .shawwal:
-            return "Affects Eid al-Fitr and Shawwal dates."
+            return Strings.SettingsHijri.shawwal
         case .dhulHijjah:
-            return "Affects Arafah, Eid al-Adha, and Dhul Hijjah dates."
+            return Strings.SettingsHijri.dhulHijjah
         default:
             return ""
         }
     }
+}
 
-    private func dateText(_ date: Date) -> String {
-        DateFormatter.localizedString(from: date, dateStyle: .medium, timeStyle: .none)
+private struct HijriMonthAdjustmentDetailView: View {
+    @EnvironmentObject private var scheduleManager: ScheduleManager
+
+    let month: HijriMonth
+
+    var body: some View {
+        Form {
+            Section {
+                Picker(month.displayName, selection: adjustmentBinding) {
+                    Text(Strings.Settings.hijriMinusOneDay).tag(-1)
+                    Text(Strings.Settings.hijriNoChange).tag(0)
+                    Text(Strings.Settings.hijriPlusOneDay).tag(1)
+                }
+                .pickerStyle(.segmented)
+            } footer: {
+                Text(effectText)
+            }
+
+            Section {
+                if !scheduleManager.hasHijriBaseline(for: month) {
+                    Text(Strings.Settings.hijriPreviewUnavailable)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                } else if let preview = scheduleManager.hijriMonthStartPreview(for: month) {
+                    previewRow(title: Strings.Settings.hijriBuiltInStart, value: dateText(preview.baselineStart))
+                    previewRow(title: Strings.Settings.hijriCorrectedStart, value: dateText(preview.adjustedStart))
+                }
+            } header: {
+                Text(Strings.Settings.previewSection)
+            }
+        }
+        .formStyle(.grouped)
+        .navigationTitle(month.displayName)
+        .navigationBarTitleDisplayMode(.inline)
     }
 
-    private func hijriAdjustmentBinding(for month: HijriMonth) -> Binding<Int> {
+    private var adjustmentBinding: Binding<Int> {
         Binding(
             get: { scheduleManager.hijriAdjustment(for: month) },
             set: { newValue in
@@ -88,5 +116,33 @@ struct HijriCalendarSettingsView: View {
                 }
             }
         )
+    }
+
+    private var effectText: String {
+        switch month {
+        case .muharram:
+            return Strings.SettingsHijri.muharram
+        case .ramadan:
+            return Strings.SettingsHijri.ramadan
+        case .shawwal:
+            return Strings.SettingsHijri.shawwal
+        case .dhulHijjah:
+            return Strings.SettingsHijri.dhulHijjah
+        default:
+            return ""
+        }
+    }
+
+    private func previewRow(title: String, value: String) -> some View {
+        HStack {
+            Text(title)
+            Spacer()
+            Text(value)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func dateText(_ date: Date) -> String {
+        DateFormatter.localizedString(from: date, dateStyle: .medium, timeStyle: .none)
     }
 }

@@ -102,22 +102,12 @@ struct AlarmsListView: View {
                 )
             }
         }
-        .onChange(of: settingsStore.settings) { oldValue, newValue in
-            guard newValue.requiresReschedule(comparedTo: oldValue) else { return }
-            Task { await scheduleManager.ensureScheduleWindow(reason: .settingsChanged) }
-        }
-        .onChange(of: locationService.lastLocation) { _, _ in
-            Task { await scheduleManager.ensureScheduleWindow(reason: .locationUpdated) }
-        }
         .onChange(of: settingsStore.settings.baseWakeOffsetMinutes) { _, newValue in
             guard newValue > 0 else { return }
             let maxReminder = max(1, newValue - 1)
             if settingsStore.settings.reminderMinutesBeforeFajrGlobal >= maxReminder {
                 settingsStore.settings.reminderMinutesBeforeFajrGlobal = maxReminder
             }
-        }
-        .task {
-            await scheduleManager.refreshPermissionSummary()
         }
         .onChange(of: locationService.authorizationStatus) { _, newValue in
             if pendingEnable,

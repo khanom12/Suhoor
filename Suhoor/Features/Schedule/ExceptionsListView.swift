@@ -76,7 +76,7 @@ struct ExceptionsListView: View {
             let key = items[index].key
             settings.perDayExceptions.removeValue(forKey: key)
         }
-        Task { await scheduleManager.ensureScheduleWindow(reason: .settingsChanged) }
+        scheduleManager.requestRefresh(reason: .settingsChanged)
     }
 }
 
@@ -164,7 +164,7 @@ struct AddExceptionView: View {
         let key = DateHelpers.dayIdentifier(for: date, timeZone: .current)
         let exception = buildException()
         settings.perDayExceptions[key] = exception
-        Task { await scheduleManager.ensureScheduleWindow(reason: .settingsChanged) }
+        scheduleManager.requestRefresh(reason: .settingsChanged)
     }
 
     private func buildException() -> DayException {

@@ -26,12 +26,15 @@ final class GregorianDateFormatter {
 
     private let headerFormatter: DateFormatter
     private let cardFormatter: DateFormatter
+    private let monthYearFormatter: DateFormatter
 
     private init() {
         headerFormatter = DateFormatter()
         cardFormatter = DateFormatter()
+        monthYearFormatter = DateFormatter()
         headerFormatter.dateFormat = "EEE, MMM d, yyyy"
         cardFormatter.dateFormat = "EEE, MMM d"
+        monthYearFormatter.dateFormat = "MMMM yyyy"
     }
 
     func headerString(for date: Date) -> String {
@@ -44,6 +47,12 @@ final class GregorianDateFormatter {
         let normalized = normalizedDate(for: date)
         configure(formatter: cardFormatter)
         return cardFormatter.string(from: normalized)
+    }
+
+    func monthYearString(for date: Date) -> String {
+        let normalized = normalizedDate(for: date)
+        configure(formatter: monthYearFormatter)
+        return monthYearFormatter.string(from: normalized)
     }
 
     private func normalizedDate(for date: Date) -> Date {

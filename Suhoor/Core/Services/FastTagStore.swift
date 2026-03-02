@@ -6,6 +6,10 @@ final class FastTagStore: ObservableObject {
 
     private let defaults: UserDefaults
     private let storageKey = "Suhoor.FastIntentSelections"
+    private let persistence = DebouncedPersistenceController(
+        label: "com.suhoor.app.fast-tag-store",
+        delay: 0.2
+    )
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -45,7 +49,10 @@ final class FastTagStore: ObservableObject {
     }
 
     private func persist() {
-        guard let data = try? JSONEncoder().encode(selections) else { return }
-        defaults.set(data, forKey: storageKey)
+        let snapshot = selections
+        persistence.schedule { [defaults, storageKey] in
+            guard let data = try? JSONEncoder().encode(snapshot) else { return }
+            defaults.set(data, forKey: storageKey)
+        }
     }
 }

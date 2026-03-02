@@ -1,6 +1,6 @@
 import Foundation
 
-enum ScheduleEventKind: String, CaseIterable, Codable {
+enum ScheduleEventKind: String, CaseIterable, Codable, Sendable {
     case wake
     case reminder
     case boundary

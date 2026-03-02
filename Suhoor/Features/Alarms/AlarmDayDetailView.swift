@@ -16,53 +16,84 @@ struct AlarmDayDetailView: View {
     @State private var dayEnabledSnapshot: DayEnabledSnapshot?
     @State private var showsTagPicker = false
     @State private var selectedAbout: FastTagAbout?
+    @State private var cachedEditorContext: DayAlarmEditorContext?
 
     var body: some View {
         configurationList
             .background(Color(.systemGroupedBackground))
-        .navigationTitle(GregorianDateFormatter.shared.cardString(for: schedule.date))
-        .navigationBarTitleDisplayMode(.inline)
-        .confirmationDialog(
-            "Reset this day to defaults?",
-            isPresented: $showsResetConfirmation,
-            titleVisibility: .visible
-        ) {
-            Button(Strings.AlarmsTab.resetDay, role: .destructive) {
-                alarmConfigStore.removeOverride(for: schedule.date, timeZone: timeZone)
-                Task { await scheduleManager.rescheduleDay(schedule.date) }
+            .navigationTitle(GregorianDateFormatter.shared.cardString(for: schedule.date))
+            .navigationBarTitleDisplayMode(.inline)
+            .confirmationDialog(
+                "Reset this day to defaults?",
+                isPresented: $showsResetConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button(Strings.AlarmsTab.resetDay, role: .destructive) {
+                    alarmConfigStore.removeOverride(for: schedule.date, timeZone: timeZone)
+                    scheduleManager.requestRescheduleDay(schedule.date)
+                }
+                Button(Strings.Settings.cancel, role: .cancel) {}
             }
-            Button(Strings.Settings.cancel, role: .cancel) {}
-        }
-        .sheet(isPresented: $showsTagPicker) {
-            NavigationStack {
-                FastTagPickerSheet(
-                    date: schedule.date,
-                    initialSelection: userIntentSelection,
-                    schedules: scheduleManager.schedules,
-                    selections: fastTagStore.selections,
-                    onSave: { selection in
-                        fastTagStore.setSelection(selection, for: schedule.date, timeZone: timeZone)
-                    }
-                )
+            .sheet(isPresented: $showsTagPicker) {
+                NavigationStack {
+                    FastTagPickerSheet(
+                        date: schedule.date,
+                        initialSelection: userIntentSelection,
+                        seeds: scheduleManager.activeWindowSnapshot.visibleDays.map(\.tagSeed),
+                        selections: fastTagStore.selections,
+                        onSave: { selection in
+                            fastTagStore.setSelection(selection, for: schedule.date, timeZone: timeZone)
+                        }
+                    )
+                }
+                .presentationDetents([.medium, .large])
             }
-            .presentationDetents([.medium, .large])
-        }
-        .sheet(item: $selectedAbout) { about in
-            AboutTagSheet(about: about)
-        }
+            .sheet(item: $selectedAbout) { about in
+                AboutTagSheet(about: about)
+            }
+            .task {
+                rebuildEditorContext()
+            }
+            .onChange(of: alarmConfigStore.defaults) { _, _ in
+                rebuildEditorContext()
+            }
+            .onChange(of: alarmConfigStore.overridesByDay) { _, _ in
+                rebuildEditorContext()
+            }
+            .onChange(of: scheduleManager.activeWindowSnapshot) { _, _ in
+                rebuildEditorContext()
+            }
+            .onChange(of: fastTagStore.selections) { _, _ in
+                rebuildEditorContext()
+            }
+            .onChange(of: settingsStore.settings.atFajrSoundSelectionGlobal) { _, _ in
+                rebuildEditorContext()
+            }
+    }
+
+    private var editorContext: DayAlarmEditorContext {
+        cachedEditorContext ?? buildEditorContext()
+    }
+
+    private var currentSchedule: DaySchedule {
+        scheduleManager.activeDay(for: schedule.date, timeZone: timeZone)?.schedule ?? schedule
     }
 
     private var ruleEngine: RuleEngine {
-        RuleEngine(settings: settingsStore.settings, configStore: alarmConfigStore, timeZone: timeZone)
+        RuleEngine(
+            settings: settingsStore.settings,
+            defaultConfig: alarmConfigStore.defaults,
+            overridesByDay: alarmConfigStore.overridesByDay,
+            timeZone: timeZone
+        )
+    }
+
+    private var ruleSummary: RuleSummary {
+        editorContext.ruleSummary
     }
 
     private var effectiveConfig: EffectiveDailyConfig {
-        alarmConfigStore.effectiveConfig(
-            for: schedule.date,
-            ruleSummary: ruleEngine.ruleSummary(for: schedule.date),
-            settings: settingsStore.settings,
-            timeZone: timeZone
-        )
+        editorContext.effectiveConfig
     }
 
     private var isSkippingDay: Bool {
@@ -78,43 +109,19 @@ struct AlarmDayDetailView: View {
     }
 
     private var userIntentSelection: FastIntentSelection {
-        fastTagStore.selection(for: schedule.date, timeZone: timeZone) ?? .default
+        editorContext.userIntentSelection
     }
 
     private var intentWarnings: [FastWarning] {
-        FastIntentEngine.warnings(for: schedule.date, timeZone: timeZone)
-    }
-
-    private var computedTagResult: TagComputationResult {
-        let key = DateHelpers.dayIdentifier(for: schedule.date, timeZone: timeZone)
-        let results = TagComputationEngine.results(
-            schedules: scheduleManager.schedules,
-            selections: fastTagStore.selections,
-            ruleset: .strict,
-            timeZone: timeZone
-        )
-        if let result = results[key] {
-            return result
-        }
-        return TagComputationEngine.result(
-            for: schedule.date,
-            schedules: scheduleManager.schedules,
-            selections: fastTagStore.selections,
-            ruleset: .strict,
-            timeZone: timeZone,
-            overrideSelection: userIntentSelection.hasMeaningfulTags ? userIntentSelection : nil
-        )
+        editorContext.intentWarnings
     }
 
     private var computedIntentSelection: FastIntentSelection {
-        FastIntentSelection(
-            primaryIntent: computedTagResult.computedPrimaryIntent,
-            secondaryTags: computedTagResult.computedSecondaryTags
-        )
+        editorContext.computedIntentSelection
     }
 
     private var sourceProvenances: [ResolvedScheduledDateProvenance] {
-        scheduleManager.provenance(for: schedule.date, timeZone: timeZone)
+        editorContext.sourceProvenances
     }
 
     private var explicitSourceProvenances: [ResolvedScheduledDateProvenance] {
@@ -178,7 +185,7 @@ struct AlarmDayDetailView: View {
     private var suhoorOffsetBinding: Binding<Int> {
         Binding(get: {
             alarmConfigStore.override(for: schedule.date, timeZone: timeZone)?.suhoorOffsetOverrideMinutes
-                ?? ruleEngine.ruleSummary(for: schedule.date).finalOffsetMinutes
+                ?? ruleSummary.finalOffsetMinutes
         }, set: { newValue in
             updateOverride { $0.suhoorOffsetOverrideMinutes = newValue }
             clampReminderOffsetIfNeeded()
@@ -191,7 +198,7 @@ struct AlarmDayDetailView: View {
         }, set: { newValue in
             updateOverride { override in
                 if newValue {
-                    override.suhoorTimeOverrideMinutesFromMidnight = minutesFromMidnight(for: schedule.wakeDate)
+                    override.suhoorTimeOverrideMinutesFromMidnight = minutesFromMidnight(for: currentSchedule.wakeDate)
                 } else {
                     override.suhoorTimeOverrideMinutesFromMidnight = nil
                 }
@@ -259,7 +266,7 @@ struct AlarmDayDetailView: View {
     }
 
     private var maxReminderOffsetMinutes: Int {
-        let minutesBetween = Int(round(schedule.fajrDate.timeIntervalSince(suhoorTime) / 60))
+        let minutesBetween = Int(round(currentSchedule.fajrDate.timeIntervalSince(suhoorTime) / 60))
         return max(1, minutesBetween)
     }
 
@@ -276,7 +283,7 @@ struct AlarmDayDetailView: View {
             return dateFromMidnight(for: schedule.date, minutes: effectiveConfig.suhoorOffsetMinutes)
         }
         return ScheduleEventCalculator.wakeDate(
-            for: schedule.fajrDate,
+            for: currentSchedule.fajrDate,
             offsetMinutes: effectiveConfig.suhoorOffsetMinutes,
             calendar: calendar
         )
@@ -312,7 +319,7 @@ struct AlarmDayDetailView: View {
                     primaryText: primaryDisplayText,
                     primaryTime: primaryDisplayTime,
                     titleLabel: heroTitleLabel,
-                    fajrText: Strings.AlarmsTab.fajrTime(TimeFormatters.timeFormatter.string(from: schedule.fajrDate)),
+                    fajrText: Strings.AlarmsTab.fajrTime(TimeFormatters.timeFormatter.string(from: currentSchedule.fajrDate)),
                     isOff: primaryDisplayKind == nil,
                     intentSelection: computedIntentSelection,
                     warnings: intentWarnings,
@@ -617,7 +624,7 @@ struct AlarmDayDetailView: View {
         guard effectiveConfig.fajrEnabled, dayToggleBinding.wrappedValue else {
             return Strings.AlarmList.offLabel
         }
-        return Strings.AlarmsTab.willPlayAt(TimeFormatters.timeFormatter.string(from: schedule.fajrDate))
+        return Strings.AlarmsTab.willPlayAt(TimeFormatters.timeFormatter.string(from: currentSchedule.fajrDate))
     }
 
     private func toggleExpanded(_ alarm: ExpandedAlarm) {
@@ -662,7 +669,7 @@ struct AlarmDayDetailView: View {
             reminderDate = dateFromMidnight(for: schedule.date, minutes: effectiveConfig.reminderFixedTimeMinutes)
         } else {
             reminderDate = ScheduleEventCalculator.reminderDate(
-                for: schedule.fajrDate,
+                for: currentSchedule.fajrDate,
                 reminderMinutes: effectiveConfig.reminderMinutesBeforeFajr,
                 calendar: calendar
             )
@@ -678,7 +685,8 @@ struct AlarmDayDetailView: View {
 
     private func updateOverride(_ update: (inout DailyAlarmOverride) -> Void) {
         alarmConfigStore.updateOverride(for: schedule.date, timeZone: timeZone, update: update)
-        Task { await scheduleManager.rescheduleDay(schedule.date) }
+        scheduleManager.requestRescheduleDay(schedule.date)
+        rebuildEditorContext()
     }
 
     private func clampReminderOffsetIfNeeded() {
@@ -689,7 +697,44 @@ struct AlarmDayDetailView: View {
         alarmConfigStore.updateOverride(for: schedule.date, timeZone: timeZone) { draft in
             draft.reminderOffsetOverrideMinutes = clamped
         }
-        Task { await scheduleManager.rescheduleDay(schedule.date) }
+        scheduleManager.requestRescheduleDay(schedule.date)
+        rebuildEditorContext()
+    }
+
+    private func rebuildEditorContext() {
+        let token = PerformanceTrace.begin("alarm.day-detail.snapshot", metadata: schedule.id)
+        cachedEditorContext = buildEditorContext()
+        PerformanceTrace.end(token)
+    }
+
+    private func buildEditorContext() -> DayAlarmEditorContext {
+        let summary = ruleEngine.ruleSummary(for: schedule.date)
+        let effectiveConfig = alarmConfigStore.effectiveConfig(
+            for: schedule.date,
+            ruleSummary: summary,
+            settings: settingsStore.settings,
+            timeZone: timeZone
+        )
+        let userIntentSelection = fastTagStore.selection(for: schedule.date, timeZone: timeZone) ?? .default
+        let activeDay = scheduleManager.activeDay(for: schedule.date, timeZone: timeZone)
+        let computedTagResult = activeDay?.tagResult
+            ?? scheduleManager.tagPreviewResult(
+                for: schedule.date,
+                overrideSelection: userIntentSelection.hasMeaningfulTags ? userIntentSelection : nil,
+                timeZone: timeZone
+            )
+
+        return DayAlarmEditorContext(
+            ruleSummary: summary,
+            effectiveConfig: effectiveConfig,
+            userIntentSelection: userIntentSelection,
+            computedIntentSelection: FastIntentSelection(
+                primaryIntent: computedTagResult.computedPrimaryIntent,
+                secondaryTags: computedTagResult.computedSecondaryTags
+            ),
+            intentWarnings: FastIntentEngine.warnings(for: schedule.date, timeZone: timeZone),
+            sourceProvenances: activeDay?.provenances ?? scheduleManager.provenance(for: schedule.date, timeZone: timeZone)
+        )
     }
 
     private func minutesFromMidnight(for date: Date) -> Int {
@@ -711,9 +756,9 @@ struct AlarmDayDetailView: View {
             if let reminderTime {
                 return TimeFormatters.timeFormatter.string(from: reminderTime)
             }
-            return TimeFormatters.timeFormatter.string(from: schedule.fajrDate)
+            return TimeFormatters.timeFormatter.string(from: currentSchedule.fajrDate)
         case .fajr:
-            return TimeFormatters.timeFormatter.string(from: schedule.fajrDate)
+            return TimeFormatters.timeFormatter.string(from: currentSchedule.fajrDate)
         }
     }
 
@@ -723,9 +768,9 @@ struct AlarmDayDetailView: View {
         case .suhoor:
             return suhoorTime
         case .reminder:
-            return reminderTime ?? schedule.fajrDate
+            return reminderTime ?? currentSchedule.fajrDate
         case .fajr:
-            return schedule.fajrDate
+            return currentSchedule.fajrDate
         }
     }
 
@@ -875,6 +920,15 @@ private struct DayEnabledSnapshot {
     let suhoorEnabled: Bool
     let reminderEnabled: Bool
     let fajrEnabled: Bool
+}
+
+private struct DayAlarmEditorContext {
+    let ruleSummary: RuleSummary
+    let effectiveConfig: EffectiveDailyConfig
+    let userIntentSelection: FastIntentSelection
+    let computedIntentSelection: FastIntentSelection
+    let intentWarnings: [FastWarning]
+    let sourceProvenances: [ResolvedScheduledDateProvenance]
 }
 
 private struct SummaryHeader: View {

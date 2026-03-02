@@ -1,10 +1,9 @@
 import SwiftUI
 import UIKit
 import CoreLocation
+import os
 
 struct AlarmsHomeView: View {
-    @EnvironmentObject private var settingsStore: SuhoorSettingsStore
-    @EnvironmentObject private var alarmConfigStore: AlarmConfigStore
     @EnvironmentObject private var scheduleManager: ScheduleManager
     @EnvironmentObject private var locationService: LocationService
     @EnvironmentObject private var fastTagStore: FastTagStore
@@ -14,20 +13,21 @@ struct AlarmsHomeView: View {
     @State private var showAddDaySheet = false
     @State private var editMode: EditMode = .inactive
     @State private var sectionCollapseOverrides: [String: Bool] = [:]
+    @State private var listSnapshot: AlarmListSnapshot = .empty
+    @State private var pendingFocusDateKey: String?
 
     var body: some View {
         NavigationStack {
             List {
-                if hijriMonthSections.isEmpty {
+                if listSnapshot.sections.isEmpty {
                     Section {
                         emptyStateView
                     }
                 } else {
-                    ForEach(hijriMonthSections, id: \.key) { section in
+                    ForEach(listSnapshot.sections) { section in
                         Section {
                             if !isSectionCollapsed(section) {
-                                ForEach(section.entries.indices, id: \.self) { index in
-                                    let entry = section.entries[index]
+                                ForEach(section.entries) { entry in
                                     AlarmRowView(
                                         schedule: entry.schedule,
                                         config: entry.config,
@@ -44,10 +44,6 @@ struct AlarmsHomeView: View {
                                 .onDelete { offsets in
                                     deleteEntries(in: section.entries, at: offsets)
                                 }
-                            } else if section.entries.isEmpty {
-                                Text("No scheduled dates")
-                                    .font(.footnote)
-                                    .foregroundStyle(.secondary)
                             }
                         } header: {
                             if section.entries.isEmpty {
@@ -104,23 +100,11 @@ struct AlarmsHomeView: View {
                     AlarmDayDetailView(schedule: schedule)
                 }
             }
-            .onChange(of: alarmConfigStore.defaults) { _, _ in
-                Task { await scheduleManager.refreshSchedules(force: true) }
+            .task {
+                rebuildListSnapshot()
             }
-            .onChange(of: settingsStore.settings.calculationMethod) { _, _ in
-                Task { await scheduleManager.refreshSchedules(force: true) }
-            }
-            .onChange(of: settingsStore.settings.fajrAdjustmentMinutes) { _, _ in
-                Task { await scheduleManager.refreshSchedules(force: true) }
-            }
-            .onChange(of: settingsStore.settings.locationMode) { _, _ in
-                Task { await scheduleManager.refreshSchedules(force: true) }
-            }
-            .onChange(of: settingsStore.settings.fixedLocation) { _, _ in
-                Task { await scheduleManager.refreshSchedules(force: true) }
-            }
-            .onChange(of: locationService.lastLocation) { _, _ in
-                Task { await scheduleManager.refreshSchedules(force: true) }
+            .onChange(of: scheduleManager.activeWindowSnapshot) { _, _ in
+                rebuildListSnapshot()
             }
             .sheet(isPresented: $showSettingsSheet) {
                 NavigationStack {
@@ -129,8 +113,20 @@ struct AlarmsHomeView: View {
             }
             .sheet(isPresented: $showAddDaySheet) {
                 NavigationStack {
-                    AddScheduleSheet(isPresented: $showAddDaySheet)
+                    AddScheduleSheet(isPresented: $showAddDaySheet) { date in
+                        pendingFocusDateKey = DateHelpers.dayIdentifier(for: date, timeZone: .current)
+                        showAddDaySheet = false
+                    }
                 }
+            }
+            .onChange(of: showAddDaySheet) { _, isPresented in
+                guard !isPresented, let pendingFocusDateKey else { return }
+                if let existing = scheduleManager.activeWindowSnapshot.byDateKey[pendingFocusDateKey] {
+                    selectedSchedule = existing.schedule
+                } else if let normalizedDate = dateFromDayIdentifier(pendingFocusDateKey) {
+                    selectedSchedule = scheduleManager.activeDay(for: normalizedDate)?.schedule
+                }
+                self.pendingFocusDateKey = nil
             }
             .onReceive(NotificationCenter.default.publisher(for: .switchToSettingsTab)) { _ in
                 showSettingsSheet = true
@@ -174,63 +170,24 @@ struct AlarmsHomeView: View {
         "\(locationService.authorizationStatus.rawValue)-\(locationService.lastLocation != nil)-\(scheduleManager.alarmAuthorizationText)-\(scheduleManager.notificationAuthorizationText)"
     }
 
-    private var displayEntries: [AlarmRowEntry] {
-        let now = Date()
-        let timeZone = TimeZone.current
-        let startOfToday = DateHelpers.startOfToday(in: timeZone)
-        let tagResults = tagResultsByKey
-        return alarmConfigStore.resolvedScheduledEntries(from: startOfToday, limit: 366, timeZone: timeZone).compactMap { resolved in
-            guard let schedule = scheduleForDisplay(on: resolved.date, timeZone: timeZone) else { return nil }
-            let config = effectiveConfig(for: schedule)
-            let primary = config.primaryDisplay(schedule: schedule)
-            let tagDisplay = tagDisplay(for: schedule.date, resultsByKey: tagResults)
-            if schedule.date == startOfToday,
-               config.hasAnyEnabled,
-               shouldHideToday(schedule: schedule, config: config, now: now) {
-                return nil
-            }
-            return AlarmRowEntry(
-                schedule: schedule,
-                config: config,
-                primary: primary,
-                isOneOff: resolved.isExplicitOneOff,
-                primaryIntent: tagDisplay.primary,
-                secondaryTags: tagDisplay.secondary,
-                showsTags: tagDisplay.showsTags
-            )
-        }
-    }
+    private func rebuildListSnapshot() {
+        let token = PerformanceTrace.begin("alarms.home.snapshot", metadata: "visible=\(scheduleManager.activeWindowSnapshot.visibleDays.count)")
+        defer { PerformanceTrace.end(token) }
 
-    private var hijriMonthSections: [HijriMonthSection] {
         let timeZone = TimeZone.current
+        let displayEntries = scheduleManager.activeWindowSnapshot.visibleDays.map(AlarmRowEntry.init)
+
         var grouped: [HijriMonthKey: [AlarmRowEntry]] = [:]
         for entry in displayEntries {
             guard let key = FastIntentEngine.hijriMonthKey(for: entry.schedule.date, timeZone: timeZone) else { continue }
             grouped[key, default: []].append(entry)
         }
 
-        let scaffoldKeys = scaffoldHijriMonthKeys(timeZone: timeZone)
-        var sections: [HijriMonthSection] = scaffoldKeys.map { key in
-            HijriMonthSection(key: key, entries: grouped.removeValue(forKey: key) ?? [])
-        }
-
-        let remaining = grouped.map { key, entries in
+        let sections = grouped.map { key, entries in
             let firstDate = entries.first?.schedule.date ?? Date.distantPast
             return (key: key, entries: entries, firstDate: firstDate)
         }.sorted { $0.firstDate < $1.firstDate }
-        sections.append(contentsOf: remaining.map { HijriMonthSection(key: $0.key, entries: $0.entries) })
-        return sections
-    }
-
-    private func effectiveConfig(for schedule: DaySchedule) -> EffectiveDailyConfig {
-        let timeZone = TimeZone.current
-        let ruleEngine = RuleEngine(settings: settingsStore.settings, configStore: alarmConfigStore, timeZone: timeZone)
-        return alarmConfigStore.effectiveConfig(
-            for: schedule.date,
-            ruleSummary: ruleEngine.ruleSummary(for: schedule.date),
-            settings: settingsStore.settings,
-            timeZone: timeZone
-        )
+        listSnapshot = AlarmListSnapshot(sections: sections.map { HijriMonthSection(key: $0.key, entries: $0.entries) })
     }
 
     private var showsAddButton: Bool {
@@ -246,59 +203,14 @@ struct AlarmsHomeView: View {
         }
     }
 
-    private func scheduleForDisplay(on date: Date, timeZone: TimeZone) -> DaySchedule? {
-        if let schedule = scheduleManager.schedules.first(where: { DateHelpers.isSameDay($0.date, date, in: timeZone) }) {
-            return schedule
-        }
-        return scheduleManager.schedule(for: date)
-    }
-
     private func deleteOneOff(_ entry: AlarmRowEntry) {
         let date = entry.schedule.date
         Task { await scheduleManager.deleteExplicitScheduledDate(date) }
     }
 
-    private func shouldHideToday(schedule: DaySchedule, config: EffectiveDailyConfig, now: Date) -> Bool {
-        if config.fajrEnabled {
-            return schedule.fajrDate <= now
-        }
-        let primary = config.primaryDisplay(schedule: schedule)
-        guard let primary else { return false }
-        return primary.time <= now
-    }
-
-    private func scaffoldHijriMonthKeys(timeZone: TimeZone) -> [HijriMonthKey] {
-        guard let current = AdjustedHijriCalendar.shared.adjustedComponents(for: Date(), timeZone: timeZone) else {
-            return []
-        }
-
-        var keys: [HijriMonthKey] = []
-        var month = current.month
-        var year = current.hijriYear
-        for _ in 0..<12 {
-            keys.append(
-                HijriMonthKey(
-                    year: year,
-                    month: month.rawValue,
-                    title: "\(month.displayName) \(year)"
-                )
-            )
-            if month == .dhulHijjah {
-                month = .muharram
-                year += 1
-            } else if let nextMonth = HijriMonth(rawValue: month.rawValue + 1) {
-                month = nextMonth
-            } else {
-                break
-            }
-        }
-
-        return keys
-    }
-
     private func isSectionCollapsed(_ section: HijriMonthSection) -> Bool {
         let identifier = sectionIdentifier(section.key)
-        return sectionCollapseOverrides[identifier] ?? section.entries.isEmpty
+        return sectionCollapseOverrides[identifier] ?? false
     }
 
     private func toggleSectionCollapse(_ section: HijriMonthSection) {
@@ -311,425 +223,46 @@ struct AlarmsHomeView: View {
         "\(key.year)-\(key.month)"
     }
 
-    private var tagResultsByKey: [String: TagComputationResult] {
-        TagComputationEngine.results(
-            schedules: scheduleManager.schedules,
-            selections: fastTagStore.selections,
-            ruleset: .strict,
-            timeZone: .current
-        )
-    }
-
-    private func tagDisplay(for date: Date, resultsByKey: [String: TagComputationResult]) -> TagDisplay {
-        let key = DateHelpers.dayIdentifier(for: date, timeZone: .current)
-        let result: TagComputationResult
-        if let stored = resultsByKey[key] {
-            result = stored
-        } else {
-            let selection = fastTagStore.selection(for: date, timeZone: .current) ?? .default
-            result = TagComputationEngine.result(
-                for: date,
-                schedules: scheduleManager.schedules,
-                selections: fastTagStore.selections,
-                ruleset: .strict,
-                timeZone: .current,
-                overrideSelection: selection.hasMeaningfulTags ? selection : nil
-            )
-        }
-
-        let secondary = Array(FastIntentEngine.displaySecondaryTags(result.computedSecondaryTags).prefix(2))
-        let showsTags = !(result.computedPrimaryIntent == .other && secondary.isEmpty)
-        return TagDisplay(
-            primary: result.computedPrimaryIntent,
-            secondary: secondary,
-            showsTags: showsTags
-        )
+    private func dateFromDayIdentifier(_ identifier: String) -> Date? {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.timeZone = .current
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.date(from: identifier)
     }
 }
 
-private struct AddScheduleSheet: View {
-    @EnvironmentObject private var alarmConfigStore: AlarmConfigStore
-    @EnvironmentObject private var scheduleManager: ScheduleManager
-    @EnvironmentObject private var fastTagStore: FastTagStore
+private struct AlarmListSnapshot {
+    let sections: [HijriMonthSection]
 
-    @Binding var isPresented: Bool
-    @State private var mode: AddScheduleMode = .singleDay
-    @State private var selectedDate = DateHelpers.startOfToday()
-    @State private var rangeStartDate = DateHelpers.startOfToday()
-    @State private var rangeEndDate = DateHelpers.startOfToday()
-    @State private var singleDayTagSelection = FastIntentSelection.default
-    @State private var rangeTagSelection = FastIntentSelection.default
-    @State private var showsTagPicker = false
-    @State private var tagEditorTarget: TagEditorTarget = .singleDay
-
-    var body: some View {
-        Form {
-            Section {
-                Picker("Mode", selection: $mode) {
-                    ForEach(AddScheduleMode.allCases) { mode in
-                        Text(mode.title).tag(mode)
-                    }
-                }
-                .pickerStyle(.segmented)
-            }
-
-            switch mode {
-            case .singleDay:
-                singleDayContent
-            case .dateRange:
-                dateRangeContent
-            case .islamicDates:
-                islamicDatesContent
-            }
-        }
-        .formStyle(.grouped)
-        .navigationTitle("Add Schedule")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button("Cancel") { isPresented = false }
-            }
-            ToolbarItem(placement: .confirmationAction) {
-                if mode != .islamicDates {
-                    Button("Add") { submitCurrentMode() }
-                        .disabled(submitDisabled)
-                }
-            }
-        }
-        .sheet(isPresented: $showsTagPicker) {
-            NavigationStack {
-                FastTagPickerSheet(
-                    date: tagEditorDate,
-                    initialSelection: currentTagSelection,
-                    schedules: scheduleManager.schedules,
-                    selections: fastTagStore.selections,
-                    onSave: { selection in
-                        switch tagEditorTarget {
-                        case .singleDay:
-                            singleDayTagSelection = selection
-                        case .dateRange:
-                            rangeTagSelection = selection
-                        }
-                    }
-                )
-            }
-            .presentationDetents([.medium, .large])
-        }
-        .onAppear {
-            singleDayTagSelection = fastTagStore.selection(for: selectedDate, timeZone: .current) ?? .default
-        }
-        .onChange(of: selectedDate) { _, newValue in
-            singleDayTagSelection = fastTagStore.selection(for: newValue, timeZone: .current) ?? .default
-        }
-    }
-
-    private var singleDayContent: some View {
-        Group {
-            Section {
-                DatePicker(
-                    "Date",
-                    selection: $selectedDate,
-                    displayedComponents: [.date]
-                )
-                .datePickerStyle(.graphical)
-            }
-
-            Section("Tags") {
-                tagEditorButton(summary: singleDayTagSummaryText, target: .singleDay)
-            }
-
-            if singleDayAlreadyActive {
-                Text("This day is already scheduled.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-        }
-    }
-
-    private var dateRangeContent: some View {
-        Group {
-            Section {
-                DatePicker(
-                    "Start date",
-                    selection: $rangeStartDate,
-                    displayedComponents: [.date]
-                )
-                .datePickerStyle(.graphical)
-
-                DatePicker(
-                    "End date",
-                    selection: $rangeEndDate,
-                    in: rangeStartDate...,
-                    displayedComponents: [.date]
-                )
-                .datePickerStyle(.compact)
-            }
-
-            Section("Tags") {
-                tagEditorButton(summary: rangeTagSummaryText, target: .dateRange)
-            }
-
-            Section {
-                Text("This creates one schedule source for each Gregorian day in the range, up to 60 days.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                Text("Dates in range: \(rangeLengthDays)")
-                    .font(.footnote)
-                    .foregroundStyle(rangeIsTooLong ? .red : .secondary)
-            }
-        }
-    }
-
-    private var islamicDatesContent: some View {
-        Group {
-            Section {
-                Text("Use corrected Hijri dates for upcoming one-time adds or recurring presets. Alarm times still come from your existing Suhoor, reminder, and Fajr settings.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-
-            Section("Upcoming Once") {
-                ForEach(IslamicQuickAddKind.allCases) { kind in
-                    quickAddRow(for: kind)
-                }
-            }
-
-            Section("Recurring") {
-                ForEach(RecurringIslamicRule.allCases) { rule in
-                    recurringRuleRow(for: rule)
-                }
-            }
-        }
-    }
-
-    private func tagEditorButton(summary: String, target: TagEditorTarget) -> some View {
-        Button {
-            tagEditorTarget = target
-            showsTagPicker = true
-        } label: {
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Edit Tags")
-                        .foregroundStyle(.primary)
-                    Text(summary)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.tertiary)
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func quickAddRow(for kind: IslamicQuickAddKind) -> some View {
-        if let preview = scheduleManager.previewIslamicQuickAdd(kind) {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(alignment: .top, spacing: 12) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(kind.title)
-                            .font(.body.weight(.medium))
-                        Text(kind.detailText)
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    Button("Add") {
-                        Task {
-                            _ = await scheduleManager.addIslamicQuickAdd(kind)
-                            isPresented = false
-                        }
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
-                }
-
-                Text(preview.previewText)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                Text(preview.availabilityText)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-        } else {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(kind.title)
-                    .font(.body.weight(.medium))
-                Text("Needs calendar data for a preview right now.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-        }
-    }
-
-    private func recurringRuleRow(for rule: RecurringIslamicRule) -> some View {
-        HStack(alignment: .top, spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(rule.title)
-                    .font(.body.weight(.medium))
-                Text(rule.detailText)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-            Spacer()
-            Button("Add") {
-                Task {
-                    await scheduleManager.addRecurringIslamicRule(rule)
-                    isPresented = false
-                }
-            }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.small)
-        }
-    }
-
-    private var singleDayAlreadyActive: Bool {
-        alarmConfigStore.isDefaultsActive(on: selectedDate, timeZone: .current)
-    }
-
-    private var submitDisabled: Bool {
-        switch mode {
-        case .singleDay:
-            return singleDayAlreadyActive
-        case .dateRange:
-            return rangeIsTooLong
-        case .islamicDates:
-            return true
-        }
-    }
-
-    private func submitCurrentMode() {
-        switch mode {
-        case .singleDay:
-            Task { await addSelectedDate() }
-        case .dateRange:
-            Task { await addDateRange() }
-        case .islamicDates:
-            break
-        }
-    }
-
-    private func addSelectedDate() async {
-        await scheduleManager.addSingleScheduledDate(selectedDate)
-        fastTagStore.setSelection(singleDayTagSelection, for: selectedDate, timeZone: .current)
-        isPresented = false
-    }
-
-    private func addDateRange() async {
-        let dates = normalizedRangeDates
-        await scheduleManager.addGregorianRange(startDate: rangeStartDate, endDate: rangeEndDate)
-        if rangeTagSelection.hasMeaningfulTags {
-            for date in dates {
-                fastTagStore.setSelection(rangeTagSelection, for: date, timeZone: .current)
-            }
-        }
-        isPresented = false
-    }
-
-    private var normalizedRangeDates: [Date] {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = .current
-        let range = GregorianRangeSource(startDate: rangeStartDate, endDate: rangeEndDate, timeZone: .current)
-        return DateHelpers.dates(from: range.startDate, to: range.endDate, calendar: calendar)
-    }
-
-    private var rangeLengthDays: Int {
-        normalizedRangeDates.count
-    }
-
-    private var rangeIsTooLong: Bool {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = .current
-        let start = calendar.startOfDay(for: min(rangeStartDate, rangeEndDate))
-        let end = calendar.startOfDay(for: max(rangeStartDate, rangeEndDate))
-        let span = (calendar.dateComponents([.day], from: start, to: end).day ?? 0) + 1
-        return span > GregorianRangeSource.maxLengthDays
-    }
-
-    private var currentTagSelection: FastIntentSelection {
-        switch tagEditorTarget {
-        case .singleDay:
-            return singleDayTagSelection
-        case .dateRange:
-            return rangeTagSelection
-        }
-    }
-
-    private var tagEditorDate: Date {
-        switch tagEditorTarget {
-        case .singleDay:
-            return selectedDate
-        case .dateRange:
-            return rangeStartDate
-        }
-    }
-
-    private var singleDayTagSummaryText: String {
-        tagSummaryText(for: selectedDate, selection: singleDayTagSelection)
-    }
-
-    private var rangeTagSummaryText: String {
-        tagSummaryText(for: rangeStartDate, selection: rangeTagSelection)
-    }
-
-    private func tagSummaryText(for date: Date, selection: FastIntentSelection) -> String {
-        let computed = TagComputationEngine.result(
-            for: date,
-            schedules: scheduleManager.schedules,
-            selections: fastTagStore.selections,
-            ruleset: .strict,
-            timeZone: .current,
-            overrideSelection: selection.hasMeaningfulTags ? selection : nil
-        )
-
-        var parts: [String] = [computed.computedPrimaryIntent.shortTitle]
-        let secondary = computed.computedSecondaryTags.sorted { $0.title < $1.title }
-        if !secondary.isEmpty {
-            parts.append(secondary.map { $0.shortTitle }.joined(separator: ", "))
-        }
-        return parts.joined(separator: " • ")
-    }
+    static let empty = AlarmListSnapshot(sections: [])
 }
 
-private enum AddScheduleMode: String, CaseIterable, Identifiable {
-    case singleDay
-    case dateRange
-    case islamicDates
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .singleDay:
-            return "Single Day"
-        case .dateRange:
-            return "Date Range"
-        case .islamicDates:
-            return "Islamic Dates"
-        }
-    }
-}
-
-private enum TagEditorTarget {
-    case singleDay
-    case dateRange
-}
-
-private struct AlarmRowEntry {
-    let schedule: DaySchedule
-    let config: EffectiveDailyConfig
-    let primary: PrimaryDisplay?
-    let isOneOff: Bool
-    let primaryIntent: FastPrimaryIntent
+private struct AlarmRowEntry: Identifiable {
+    let activeDay: ActiveAlarmDay
     let secondaryTags: [FastSecondaryVirtueTag]
     let showsTags: Bool
+
+    init(activeDay: ActiveAlarmDay) {
+        let secondaryTags = Array(FastIntentEngine.displaySecondaryTags(activeDay.tagResult.computedSecondaryTags).prefix(2))
+        self.activeDay = activeDay
+        self.secondaryTags = secondaryTags
+        self.showsTags = !(activeDay.tagResult.computedPrimaryIntent == .other && secondaryTags.isEmpty)
+    }
+
+    var schedule: DaySchedule { activeDay.schedule }
+    var config: EffectiveDailyConfig { activeDay.effectiveConfig }
+    var primary: PrimaryDisplay? { activeDay.primaryDisplay }
+    var isOneOff: Bool { activeDay.isExplicitOneOff }
+    var primaryIntent: FastPrimaryIntent { activeDay.tagResult.computedPrimaryIntent }
+    var id: String { activeDay.dateKey }
 }
 
-private struct HijriMonthSection {
+private struct HijriMonthSection: Identifiable {
     let key: HijriMonthKey
     let entries: [AlarmRowEntry]
+
+    var id: String { "\(key.year)-\(key.month)" }
 }
 
 private struct AlarmRowView: View {
@@ -882,7 +415,7 @@ private struct AlarmRowView: View {
             alarmConfigStore.updateOverride(for: schedule.date, timeZone: timeZone) { override in
                 override.skipDay = !isOn
             }
-            Task { await scheduleManager.rescheduleDay(schedule.date) }
+            scheduleManager.requestRescheduleDay(schedule.date)
         })
     }
 
@@ -958,12 +491,6 @@ private extension AlarmsHomeView {
             }
         })
     }
-}
-
-private struct TagDisplay {
-    let primary: FastPrimaryIntent
-    let secondary: [FastSecondaryVirtueTag]
-    let showsTags: Bool
 }
 
 private struct TagIconStack: View {

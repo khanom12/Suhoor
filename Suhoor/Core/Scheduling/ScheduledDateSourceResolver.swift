@@ -96,9 +96,59 @@ struct ScheduledDateSourceResolver {
     func provenance(for date: Date, timeZone: TimeZone = .current) -> [ResolvedScheduledDateProvenance] {
         let normalized = DateHelpers.startOfDay(date, in: timeZone)
         let key = DateHelpers.dayIdentifier(for: normalized, timeZone: timeZone)
-        return resolvedEntries(from: normalized, limit: 366, timeZone: timeZone)
-            .first(where: { $0.dateKey == key })?
-            .provenances ?? []
+        return provenanceByDate(for: [normalized], timeZone: timeZone)[key] ?? []
+    }
+
+    func provenanceByDate(
+        for dates: [Date],
+        timeZone: TimeZone = .current
+    ) -> [String: [ResolvedScheduledDateProvenance]] {
+        guard !dates.isEmpty else { return [:] }
+
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let normalizedDates = Array(Set(dates.map { calendar.startOfDay(for: $0) })).sorted()
+        var results: [String: [ResolvedScheduledDateProvenance]] = Dictionary(
+            uniqueKeysWithValues: normalizedDates.map {
+                (DateHelpers.dayIdentifier(for: $0, timeZone: timeZone), [])
+            }
+        )
+
+        for source in sourceStore.sources where source.isEnabled {
+            for date in normalizedDates where sourceMatches(source, on: date, timeZone: timeZone) {
+                let key = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
+                guard suppressedDateStore.contains(key) == false else { continue }
+                results[key, default: []].append(
+                    ResolvedScheduledDateProvenance(
+                        sourceID: source.id,
+                        groupID: source.groupID,
+                        label: source.origin.label,
+                        stopSeriesLabel: source.origin.stopSeriesLabel,
+                        isExplicitOneOff: source.origin.isExplicitOneOff,
+                        sourceOrigin: source.origin
+                    )
+                )
+            }
+        }
+
+        for date in normalizedDates where adjustedHijriCalendar.isRamadan(date: date, timeZone: timeZone) {
+            let key = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
+            guard suppressedDateStore.contains(key) == false else { continue }
+            results[key, default: []].append(
+                ResolvedScheduledDateProvenance(
+                    sourceID: DateHelpers.stableUUID(from: "default-ramadan-\(key)"),
+                    groupID: DateHelpers.stableUUID(from: "default-ramadan-group"),
+                    label: ScheduledDateSourceOrigin.defaultRamadan.label,
+                    stopSeriesLabel: nil,
+                    isExplicitOneOff: false,
+                    sourceOrigin: .defaultRamadan
+                )
+            )
+        }
+
+        return results.mapValues { provenances in
+            provenances.sorted { $0.label < $1.label }
+        }
     }
 
     private func materializedDates(
@@ -174,5 +224,28 @@ struct ScheduledDateSourceResolver {
             timeZone: timeZone
         )
         .filter { $0 >= startDate }
+    }
+
+    private func sourceMatches(
+        _ source: ScheduledDateSource,
+        on date: Date,
+        timeZone: TimeZone
+    ) -> Bool {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let normalizedDate = calendar.startOfDay(for: date)
+
+        switch source.kind {
+        case .singleDay(let singleDay):
+            return singleDay.dateKey == DateHelpers.dayIdentifier(for: normalizedDate, timeZone: timeZone)
+        case .gregorianRange(let range):
+            let start = calendar.startOfDay(for: range.startDate)
+            let end = calendar.startOfDay(for: range.endDate)
+            return normalizedDate >= start && normalizedDate <= end
+        case .recurringIslamic(let recurring):
+            let lowerBound = calendar.startOfDay(for: recurring.startDate)
+            guard normalizedDate >= lowerBound else { return false }
+            return matchesRecurringRule(recurring.rule, date: normalizedDate, calendar: calendar)
+        }
     }
 }

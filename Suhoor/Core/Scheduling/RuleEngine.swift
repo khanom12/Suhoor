@@ -1,47 +1,28 @@
 import Foundation
 
-struct RuleSummary {
+struct RuleSummary: Sendable {
     let baseOffsetMinutes: Int
     let finalOffsetMinutes: Int
     let overrideOffsetMinutes: Int?
     let disabledForDay: Bool
 }
 
-struct RuleEngine {
+struct RuleEngine: Sendable {
     let settings: AppSettings
     let defaultConfig: DefaultAlarmConfig
     let overridesByDay: [String: DailyAlarmOverride]
     let timeZone: TimeZone
-    private let defaultsActiveProvider: ((Date) -> Bool)?
 
     init(
         settings: AppSettings,
         defaultConfig: DefaultAlarmConfig = .default,
         overridesByDay: [String: DailyAlarmOverride] = [:],
-        timeZone: TimeZone = .current,
-        defaultsActiveProvider: ((Date) -> Bool)? = nil
+        timeZone: TimeZone = .current
     ) {
         self.settings = settings
         self.defaultConfig = defaultConfig
         self.overridesByDay = overridesByDay
         self.timeZone = timeZone
-        self.defaultsActiveProvider = defaultsActiveProvider
-    }
-
-    init(
-        settings: AppSettings,
-        configStore: AlarmConfigStore,
-        timeZone: TimeZone = .current
-    ) {
-        self.init(
-            settings: settings,
-            defaultConfig: configStore.defaults,
-            overridesByDay: configStore.overridesByDay,
-            timeZone: timeZone,
-            defaultsActiveProvider: { date in
-                configStore.isDefaultsActive(on: date, timeZone: timeZone)
-            }
-        )
     }
 
     func effectiveWakeOffsetMinutes(for date: Date) -> Int {
@@ -111,9 +92,6 @@ struct RuleEngine {
     }
 
     private func defaultsActive(on date: Date) -> Bool {
-        if let defaultsActiveProvider {
-            return defaultsActiveProvider(date)
-        }
         switch defaultConfig.activationMode {
         case .alwaysOn:
             let key = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)

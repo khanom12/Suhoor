@@ -3,12 +3,17 @@ import Foundation
 final class ScheduleCacheStore {
     private let cacheKey = "Suhoor.ScheduleCache"
     private let defaults: UserDefaults
+    private let persistence = DebouncedPersistenceController(
+        label: "com.suhoor.app.schedule-cache",
+        delay: 0.35
+    )
 
     struct Cache: Codable {
         var lastScheduledDate: Date?
         var lastUpdated: Date?
         var schedulingMode: SchedulingMode
         var schedules: [DaySchedule]
+        var activeWindowSnapshot: ActiveAlarmWindowSnapshot?
     }
 
     init(defaults: UserDefaults = .standard) {
@@ -20,16 +25,24 @@ final class ScheduleCacheStore {
            let decoded = try? JSONDecoder().decode(Cache.self, from: data) {
             return decoded
         }
-        return Cache(lastScheduledDate: nil, lastUpdated: nil, schedulingMode: .none, schedules: [])
+        return Cache(
+            lastScheduledDate: nil,
+            lastUpdated: nil,
+            schedulingMode: .none,
+            schedules: [],
+            activeWindowSnapshot: nil
+        )
     }
 
     func save(_ cache: Cache) {
-        if let data = try? JSONEncoder().encode(cache) {
+        persistence.schedule { [defaults, cacheKey] in
+            guard let data = try? JSONEncoder().encode(cache) else { return }
             defaults.set(data, forKey: cacheKey)
         }
     }
 
     func clear() {
+        persistence.cancelPending()
         defaults.removeObject(forKey: cacheKey)
     }
 }

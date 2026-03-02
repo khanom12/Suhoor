@@ -1,6 +1,6 @@
 import Foundation
 
-struct AppSettings: Codable, Equatable {
+struct AppSettings: Codable, Equatable, Sendable {
     var isConfigured: Bool
     var isEnabled: Bool
     var baseWakeOffsetMinutes: Int
@@ -47,7 +47,7 @@ struct AppSettings: Codable, Equatable {
     )
 }
 
-struct HijriSpecialDaySettings: Codable, Equatable {
+struct HijriSpecialDaySettings: Codable, Equatable, Sendable {
     var isEnabled: Bool
     var ramadanDailyEnabled: Bool
     var whiteDaysEnabled: Bool
@@ -192,7 +192,7 @@ extension AppSettings {
     }
 }
 
-enum OffsetPreset: String, Codable, CaseIterable, Identifiable {
+enum OffsetPreset: String, Codable, CaseIterable, Identifiable, Sendable {
     case minutes15
     case minutes30
     case minutes45
@@ -225,7 +225,7 @@ enum OffsetPreset: String, Codable, CaseIterable, Identifiable {
     }
 }
 
-enum SoundChoice: String, Codable, CaseIterable, Identifiable {
+enum SoundChoice: String, Codable, CaseIterable, Identifiable, Sendable {
     case systemDefault
     case adhanSoft
 
@@ -254,13 +254,13 @@ enum SoundChoice: String, Codable, CaseIterable, Identifiable {
     }
 }
 
-enum SchedulingMode: String, Codable {
+enum SchedulingMode: String, Codable, Sendable {
     case alarmKit
     case notifications
     case none
 }
 
-enum LocationMode: String, Codable, CaseIterable, Identifiable {
+enum LocationMode: String, Codable, CaseIterable, Identifiable, Sendable {
     case auto
     case fixed
 
@@ -268,12 +268,12 @@ enum LocationMode: String, Codable, CaseIterable, Identifiable {
     var displayName: String { rawValue.capitalized }
 }
 
-struct FixedLocation: Codable, Equatable {
+struct FixedLocation: Codable, Equatable, Sendable {
     let latitude: Double
     let longitude: Double
 }
 
-struct DayException: Codable, Equatable {
+struct DayException: Codable, Equatable, Sendable {
     var disabledForDay: Bool
     var wakeOffsetOverrideMinutes: Int?
     var reminderEnabledOverride: Bool?

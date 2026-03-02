@@ -16,12 +16,13 @@ struct SuhoorApp: App {
         let settingsStore = SuhoorSettingsStore()
         let alarmConfigStore = AlarmConfigStore(legacySettings: settingsStore.settings)
         let locationService = LocationService()
+        let fastTagStore = FastTagStore()
         let scheduleManager = ScheduleManager(
             settingsStore: settingsStore,
             locationService: locationService,
-            alarmConfigStore: alarmConfigStore
+            alarmConfigStore: alarmConfigStore,
+            fastTagStore: fastTagStore
         )
-        let fastTagStore = FastTagStore()
         _settingsStore = StateObject(wrappedValue: settingsStore)
         _alarmConfigStore = StateObject(wrappedValue: alarmConfigStore)
         _locationService = StateObject(wrappedValue: locationService)
@@ -41,15 +42,25 @@ struct SuhoorApp: App {
                 .environmentObject(scheduleManager)
                 .environmentObject(fastTagStore)
                 .task {
-                    await scheduleManager.ensureScheduleWindow(reason: .appLaunch)
+                    scheduleManager.requestRefresh(reason: .appLaunch)
                 }
                 .onChange(of: scenePhase) { _, newPhase in
                     if newPhase == .active {
-                        Task { await scheduleManager.ensureScheduleWindow(reason: .foreground) }
+                        scheduleManager.requestRefresh(reason: .foreground)
                     }
                 }
+                .onChange(of: settingsStore.settings) { oldValue, newValue in
+                    guard newValue.requiresReschedule(comparedTo: oldValue) else { return }
+                    scheduleManager.requestRefresh(reason: .settingsChanged)
+                }
+                .onChange(of: alarmConfigStore.defaults) { _, _ in
+                    scheduleManager.requestRefresh(reason: .settingsChanged)
+                }
                 .onChange(of: locationService.lastLocation) { _, _ in
-                    Task { await scheduleManager.ensureScheduleWindow(reason: .locationUpdated) }
+                    scheduleManager.requestRefresh(reason: .locationUpdated)
+                }
+                .onChange(of: locationService.authorizationStatus) { _, _ in
+                    scheduleManager.requestRefresh(reason: .locationUpdated)
                 }
         }
     }

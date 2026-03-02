@@ -1,6 +1,6 @@
 import Foundation
 
-enum AlarmActivationMode: String, Codable, CaseIterable, Identifiable {
+enum AlarmActivationMode: String, Codable, CaseIterable, Identifiable, Sendable {
     case alwaysOn
     case dateRange
 
@@ -14,7 +14,7 @@ enum AlarmActivationMode: String, Codable, CaseIterable, Identifiable {
     }
 }
 
-enum SuhoorTimeMode: String, Codable, CaseIterable, Identifiable {
+enum SuhoorTimeMode: String, Codable, CaseIterable, Identifiable, Sendable {
     case relativeToFajrMinusMinutes
     case fixedTime
 
@@ -28,7 +28,7 @@ enum SuhoorTimeMode: String, Codable, CaseIterable, Identifiable {
     }
 }
 
-enum ReminderTimeMode: String, Codable, CaseIterable, Identifiable {
+enum ReminderTimeMode: String, Codable, CaseIterable, Identifiable, Sendable {
     case beforeFajr
     case fixedTime
 
@@ -57,7 +57,7 @@ enum ReminderTimeMode: String, Codable, CaseIterable, Identifiable {
     }
 }
 
-struct DefaultAlarmConfig: Codable, Equatable {
+struct DefaultAlarmConfig: Codable, Equatable, Sendable {
     var suhoorEnabledDefault: Bool
     var reminderEnabledDefault: Bool
     var fajrEnabledDefault: Bool
@@ -188,7 +188,7 @@ struct DefaultAlarmConfig: Codable, Equatable {
     }
 }
 
-struct DailyAlarmOverride: Codable, Equatable, Identifiable {
+struct DailyAlarmOverride: Codable, Equatable, Identifiable, Sendable {
     let dateKey: String
     let date: Date
     var skipDay: Bool
@@ -237,7 +237,7 @@ struct DailyAlarmOverride: Codable, Equatable, Identifiable {
     }
 }
 
-struct EffectiveDailyConfig: Equatable {
+struct EffectiveDailyConfig: Codable, Equatable, Sendable {
     let date: Date
     let defaultsActive: Bool
     let skipDay: Bool
@@ -259,13 +259,13 @@ struct EffectiveDailyConfig: Equatable {
     }
 }
 
-enum PrimaryDisplayKind {
+enum PrimaryDisplayKind: Codable, Equatable, Sendable {
     case suhoor
     case reminder
     case fajr
 }
 
-struct PrimaryDisplay {
+struct PrimaryDisplay: Codable, Equatable, Sendable {
     let time: Date
     let kind: PrimaryDisplayKind
 }

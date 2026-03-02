@@ -1,6 +1,6 @@
 import Foundation
 
-enum CalculationMethod: String, Codable, CaseIterable, Identifiable {
+enum CalculationMethod: String, Codable, CaseIterable, Identifiable, Sendable {
     case muslimWorldLeague
     case egyptian
     case karachi

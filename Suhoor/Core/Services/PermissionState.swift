@@ -1,6 +1,6 @@
 import Foundation
 
-enum AppPermissionKind: String, CaseIterable, Identifiable {
+enum AppPermissionKind: String, CaseIterable, Identifiable, Sendable {
     case location
     case alarmKit
     case notifications
@@ -8,7 +8,7 @@ enum AppPermissionKind: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
-enum AppPermissionState: Equatable {
+enum AppPermissionState: Equatable, Sendable {
     case notDetermined
     case authorized
     case denied
@@ -17,7 +17,7 @@ enum AppPermissionState: Equatable {
     case needsFollowUp
 }
 
-struct PermissionPresentation: Identifiable, Equatable {
+struct PermissionPresentation: Identifiable, Equatable, Sendable {
     let kind: AppPermissionKind
     let state: AppPermissionState
     let title: String

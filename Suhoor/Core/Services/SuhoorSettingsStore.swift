@@ -5,12 +5,18 @@ import Combine
 final class SuhoorSettingsStore: ObservableObject {
     @Published var settings: AppSettings {
         didSet {
+            guard !isPersistenceSuspended else { return }
             saveSettings()
         }
     }
 
     private let settingsKey = "Suhoor.AppSettings"
     private let defaults: UserDefaults
+    private let persistence = DebouncedPersistenceController(
+        label: "com.suhoor.app.settings-store",
+        delay: 0.2
+    )
+    private var isPersistenceSuspended = false
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -33,13 +39,18 @@ final class SuhoorSettingsStore: ObservableObject {
     }
 
     private func saveSettings() {
-        if let data = try? JSONEncoder().encode(settings) {
+        let snapshot = settings
+        persistence.schedule { [defaults, settingsKey] in
+            guard let data = try? JSONEncoder().encode(snapshot) else { return }
             defaults.set(data, forKey: settingsKey)
         }
     }
 
     func reset() {
+        isPersistenceSuspended = true
         settings = .default
+        isPersistenceSuspended = false
+        persistence.cancelPending()
         defaults.removeObject(forKey: settingsKey)
     }
 }

@@ -1,10 +1,23 @@
 import Foundation
 
-struct TagComputationResult: Hashable {
+struct ActiveTagComputationSeed: Codable, Hashable, Sendable {
+    let date: Date
+    let dateKey: String
+    let defaultPrimaryIntent: FastPrimaryIntent?
+}
+
+struct TagComputationResult: Codable, Hashable, Sendable {
     let computedPrimaryIntent: FastPrimaryIntent
     let computedSecondaryTags: Set<FastSecondaryVirtueTag>
     let secondaryDetails: [FastSecondaryVirtueTag: TagEvaluationDetail]
     let suppressedSecondaryTags: Set<FastSecondaryVirtueTag>
+
+    static let empty = TagComputationResult(
+        computedPrimaryIntent: .other,
+        computedSecondaryTags: [],
+        secondaryDetails: [:],
+        suppressedSecondaryTags: []
+    )
 }
 
 enum TagComputationEngine {
@@ -14,47 +27,64 @@ enum TagComputationEngine {
         ruleset: FiqhRuleset,
         timeZone: TimeZone
     ) -> [String: TagComputationResult] {
-        guard !schedules.isEmpty else { return [:] }
+        results(
+            seeds: schedules.map {
+                ActiveTagComputationSeed(
+                    date: $0.date,
+                    dateKey: DateHelpers.dayIdentifier(for: $0.date, timeZone: timeZone),
+                    defaultPrimaryIntent: nil
+                )
+            },
+            selections: selections,
+            ruleset: ruleset,
+            timeZone: timeZone
+        )
+    }
 
-        var normalizedSelections: [String: FastIntentSelection] = [:]
+    static func results(
+        seeds: [ActiveTagComputationSeed],
+        selections: [String: FastIntentSelection],
+        ruleset: FiqhRuleset,
+        timeZone: TimeZone
+    ) -> [String: TagComputationResult] {
+        guard !seeds.isEmpty else { return [:] }
+
         var basePrimaryByKey: [String: FastPrimaryIntent] = [:]
         var suppressedByKey: [String: Set<FastSecondaryVirtueTag>] = [:]
         var compatibleByKey: [String: Set<FastSecondaryVirtueTag>] = [:]
         var shawwalCandidates: [(key: String, date: Date)] = []
 
-        for schedule in schedules {
-            let key = DateHelpers.dayIdentifier(for: schedule.date, timeZone: timeZone)
-            let rawSelection = selections[key] ?? .default
+        for seed in seeds.sorted(by: { $0.date < $1.date }) {
+            let rawSelection = selections[seed.dateKey]
+                ?? seed.defaultPrimaryIntent.map { FastIntentSelection(primaryIntent: $0, secondaryTags: []) }
+                ?? .default
             let normalizedSelection = FastIntentEngine.normalizedSelection(
                 rawSelection,
-                for: schedule.date,
+                for: seed.date,
                 ruleset: ruleset,
                 timeZone: timeZone
             )
-            if normalizedSelection.hasMeaningfulTags {
-                normalizedSelections[key] = normalizedSelection
-            }
 
-            let basePrimary = resolvePrimaryIntent(date: schedule.date, selection: normalizedSelection, timeZone: timeZone)
-            basePrimaryByKey[key] = basePrimary
+            let basePrimary = resolvePrimaryIntent(date: seed.date, selection: normalizedSelection, timeZone: timeZone)
+            basePrimaryByKey[seed.dateKey] = basePrimary
 
             let dateDerived = FastIntentEngine.dateDerivedObservanceTags(
-                for: schedule.date,
+                for: seed.date,
                 timeZone: timeZone,
                 includeShawwalPotential: false
             )
 
             if ruleset == .strict, basePrimary != .voluntarySunnah {
-                suppressedByKey[key] = dateDerived
-                compatibleByKey[key] = []
+                suppressedByKey[seed.dateKey] = dateDerived
+                compatibleByKey[seed.dateKey] = []
             } else {
                 let compatible = FastIntentEngine.compatibleObservanceTags(from: dateDerived)
-                compatibleByKey[key] = compatible
-                suppressedByKey[key] = dateDerived.subtracting(compatible)
+                compatibleByKey[seed.dateKey] = compatible
+                suppressedByKey[seed.dateKey] = dateDerived.subtracting(compatible)
             }
 
-            if isEligibleForShawwalTracking(date: schedule.date, primary: basePrimary, timeZone: timeZone) {
-                shawwalCandidates.append((key: key, date: schedule.date))
+            if isEligibleForShawwalTracking(date: seed.date, primary: basePrimary, timeZone: timeZone) {
+                shawwalCandidates.append((key: seed.dateKey, date: seed.date))
             }
         }
 
@@ -66,18 +96,17 @@ enum TagComputationEngine {
         )
 
         var results: [String: TagComputationResult] = [:]
-        for schedule in schedules {
-            let key = DateHelpers.dayIdentifier(for: schedule.date, timeZone: timeZone)
-            let primary = basePrimaryByKey[key] ?? .other
-            var computedSecondary = compatibleByKey[key] ?? []
-            var suppressedSecondary = suppressedByKey[key] ?? []
-            let potentialShawwal = FastIntentEngine.isCalendarApplicable(tag: .shawwalSix, on: schedule.date, timeZone: timeZone)
+        for seed in seeds {
+            let primary = basePrimaryByKey[seed.dateKey] ?? .other
+            var computedSecondary = compatibleByKey[seed.dateKey] ?? []
+            var suppressedSecondary = suppressedByKey[seed.dateKey] ?? []
+            let potentialShawwal = FastIntentEngine.isCalendarApplicable(tag: .shawwalSix, on: seed.date, timeZone: timeZone)
             var secondaryDetails: [FastSecondaryVirtueTag: TagEvaluationDetail] = [:]
 
             if potentialShawwal {
                 if ruleset == .strict, primary != .voluntarySunnah {
                     suppressedSecondary.insert(.shawwalSix)
-                } else if shawwalFirstSix.contains(key) {
+                } else if shawwalFirstSix.contains(seed.dateKey) {
                     computedSecondary.insert(.shawwalSix)
                 }
             }
@@ -87,7 +116,7 @@ enum TagComputationEngine {
                 if tag == .shawwalSix {
                     reason = "Counts toward your six Shawwal fasts."
                 } else {
-                    reason = FastIntentEngine.observanceReason(for: tag, on: schedule.date, timeZone: timeZone)
+                    reason = FastIntentEngine.observanceReason(for: tag, on: seed.date, timeZone: timeZone)
                 }
                 secondaryDetails[tag] = TagEvaluationDetail(tag: tag, source: .autoDerived, reason: reason)
             }
@@ -100,7 +129,7 @@ enum TagComputationEngine {
                 )
             }
 
-            results[key] = TagComputationResult(
+            results[seed.dateKey] = TagComputationResult(
                 computedPrimaryIntent: primary,
                 computedSecondaryTags: computedSecondary,
                 secondaryDetails: secondaryDetails,
@@ -119,6 +148,30 @@ enum TagComputationEngine {
         timeZone: TimeZone,
         overrideSelection: FastIntentSelection?
     ) -> TagComputationResult {
+        result(
+            for: date,
+            seeds: schedules.map {
+                ActiveTagComputationSeed(
+                    date: $0.date,
+                    dateKey: DateHelpers.dayIdentifier(for: $0.date, timeZone: timeZone),
+                    defaultPrimaryIntent: nil
+                )
+            },
+            selections: selections,
+            ruleset: ruleset,
+            timeZone: timeZone,
+            overrideSelection: overrideSelection
+        )
+    }
+
+    static func result(
+        for date: Date,
+        seeds: [ActiveTagComputationSeed],
+        selections: [String: FastIntentSelection],
+        ruleset: FiqhRuleset,
+        timeZone: TimeZone,
+        overrideSelection: FastIntentSelection?
+    ) -> TagComputationResult {
         let key = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
         var mergedSelections = selections
         if let overrideSelection {
@@ -128,7 +181,7 @@ enum TagComputationEngine {
         }
 
         let computed = results(
-            schedules: schedulesIncluding(date: date, in: schedules, timeZone: timeZone),
+            seeds: seedsIncluding(date: date, in: seeds, timeZone: timeZone),
             selections: mergedSelections,
             ruleset: ruleset,
             timeZone: timeZone
@@ -209,27 +262,16 @@ enum TagComputationEngine {
         FastIntentEngine.isRamadan(date, timeZone: timeZone)
     }
 
-    private static func schedulesIncluding(
+    private static func seedsIncluding(
         date: Date,
-        in schedules: [DaySchedule],
+        in seeds: [ActiveTagComputationSeed],
         timeZone: TimeZone
-    ) -> [DaySchedule] {
-        if schedules.contains(where: { DateHelpers.isSameDay($0.date, date, in: timeZone) }) {
-            return schedules
+    ) -> [ActiveTagComputationSeed] {
+        let key = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
+        if seeds.contains(where: { $0.dateKey == key }) {
+            return seeds
         }
 
-        let synthetic = DaySchedule(
-            date: date,
-            fajrDate: date,
-            wakeDate: date,
-            reminderDate: nil,
-            boundaryDate: nil,
-            locationDescription: "Derived",
-            offsetMinutes: 0,
-            calculationMethodName: "Derived",
-            timeZone: timeZone
-        )
-
-        return (schedules + [synthetic]).sorted { $0.date < $1.date }
+        return (seeds + [ActiveTagComputationSeed(date: date, dateKey: key, defaultPrimaryIntent: nil)]).sorted { $0.date < $1.date }
     }
 }

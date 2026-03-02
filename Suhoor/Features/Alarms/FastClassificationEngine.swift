@@ -1,7 +1,7 @@
 import Foundation
 import SwiftUI
 
-enum FiqhRuleset: String, CaseIterable, Identifiable, Codable {
+enum FiqhRuleset: String, CaseIterable, Identifiable, Codable, Sendable {
     case strict
     // Legacy-only compatibility case. The app remains strict-only.
     case permissive
@@ -18,7 +18,7 @@ enum FiqhRuleset: String, CaseIterable, Identifiable, Codable {
     }
 }
 
-enum FastPrimaryIntent: String, CaseIterable, Codable, Identifiable, Hashable {
+enum FastPrimaryIntent: String, CaseIterable, Codable, Identifiable, Hashable, Sendable {
     case ramadanObligatory
     case qadaMakeup
     case kaffarahExpiation
@@ -89,7 +89,7 @@ enum FastPrimaryIntent: String, CaseIterable, Codable, Identifiable, Hashable {
     }
 }
 
-enum FastSecondaryVirtueTag: String, CaseIterable, Codable, Identifiable, Hashable {
+enum FastSecondaryVirtueTag: String, CaseIterable, Codable, Identifiable, Hashable, Sendable {
     case shawwalSix
     case arafah
     case ashura
@@ -174,7 +174,7 @@ enum FastSecondaryVirtueTag: String, CaseIterable, Codable, Identifiable, Hashab
     }
 }
 
-enum FastWarning: String, CaseIterable, Codable, Hashable, Identifiable {
+enum FastWarning: String, CaseIterable, Codable, Hashable, Identifiable, Sendable {
     case eidAlFitr
     case eidAlAdha
     case tashreeq
@@ -202,7 +202,7 @@ struct FastTagStyle {
     let color: Color
 }
 
-enum FastObservanceCategory: String, Codable, Hashable {
+enum FastObservanceCategory: String, Codable, Hashable, Sendable {
     case recurringWeekly
     case recurringMonthly
     case singleDay
@@ -210,19 +210,19 @@ enum FastObservanceCategory: String, Codable, Hashable {
     case seasonalWindow
 }
 
-enum FastTagSource: String, Codable, Hashable {
+enum FastTagSource: String, Codable, Hashable, Sendable {
     case autoDerived
     case userSelected
     case suppressedByPolicy
 }
 
-struct TagEvaluationDetail: Hashable {
+struct TagEvaluationDetail: Codable, Hashable, Sendable {
     let tag: FastSecondaryVirtueTag
     let source: FastTagSource
     let reason: String
 }
 
-struct FastIntentSelection: Codable, Hashable {
+struct FastIntentSelection: Codable, Hashable, Sendable {
     var primaryIntent: FastPrimaryIntent
     var secondaryTags: Set<FastSecondaryVirtueTag>
 
@@ -233,7 +233,7 @@ struct FastIntentSelection: Codable, Hashable {
     }
 }
 
-struct FastIntentSuggestions: Hashable {
+struct FastIntentSuggestions: Hashable, Sendable {
     let suggestedPrimary: FastPrimaryIntent?
     let suggestedSecondary: [FastSecondaryVirtueTag]
     let note: String?
@@ -286,6 +286,23 @@ enum FastIntentEngine {
             suggestedSecondary: suggestedSecondary,
             note: note
         )
+    }
+
+    static func defaultAddFlowSelection(for date: Date, timeZone: TimeZone) -> FastIntentSelection {
+        if isRamadan(date, timeZone: timeZone) {
+            return FastIntentSelection(primaryIntent: .ramadanObligatory, secondaryTags: [])
+        }
+
+        let derived = dateDerivedObservanceTags(
+            for: date,
+            timeZone: timeZone,
+            includeShawwalPotential: true
+        )
+        if derived.isEmpty {
+            return .default
+        }
+
+        return FastIntentSelection(primaryIntent: .voluntarySunnah, secondaryTags: [])
     }
 
     static func allowsSecondaryTags(primary: FastPrimaryIntent, ruleset: FiqhRuleset) -> Bool {
@@ -501,6 +518,26 @@ enum FastIntentEngine {
             return 4
         case .mondayThursday:
             return 5
+        }
+    }
+}
+
+extension RangePurposeSelection {
+    func selection(for date: Date, timeZone: TimeZone) -> FastIntentSelection? {
+        switch self {
+        case .auto:
+            let selection = FastIntentEngine.defaultAddFlowSelection(for: date, timeZone: timeZone)
+            return selection.hasMeaningfulTags ? selection : nil
+        case .voluntary:
+            return FastIntentSelection(primaryIntent: .voluntarySunnah, secondaryTags: [])
+        case .qada:
+            return FastIntentSelection(primaryIntent: .qadaMakeup, secondaryTags: [])
+        case .kaffarah:
+            return FastIntentSelection(primaryIntent: .kaffarahExpiation, secondaryTags: [])
+        case .vow:
+            return FastIntentSelection(primaryIntent: .vowNadhr, secondaryTags: [])
+        case .other:
+            return nil
         }
     }
 }

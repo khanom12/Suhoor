@@ -3,7 +3,7 @@ import SwiftUI
 struct FastTagPickerSheet: View {
     let date: Date
     let initialSelection: FastIntentSelection
-    let schedules: [DaySchedule]
+    let seeds: [ActiveTagComputationSeed]
     let selections: [String: FastIntentSelection]
     let onSave: (FastIntentSelection) -> Void
 
@@ -15,13 +15,13 @@ struct FastTagPickerSheet: View {
     init(
         date: Date,
         initialSelection: FastIntentSelection,
-        schedules: [DaySchedule],
+        seeds: [ActiveTagComputationSeed],
         selections: [String: FastIntentSelection],
         onSave: @escaping (FastIntentSelection) -> Void
     ) {
         self.date = date
         self.initialSelection = initialSelection
-        self.schedules = schedules
+        self.seeds = seeds
         self.selections = selections
         self.onSave = onSave
         _selection = State(initialValue: initialSelection)
@@ -31,14 +31,7 @@ struct FastTagPickerSheet: View {
         let timeZone = TimeZone.current
         let suggestions = FastIntentEngine.suggestions(for: date, timeZone: timeZone)
         let warnings = FastIntentEngine.warnings(for: date, timeZone: timeZone)
-        let computedResult = TagComputationEngine.result(
-            for: date,
-            schedules: schedules,
-            selections: selections,
-            ruleset: .strict,
-            timeZone: timeZone,
-            overrideSelection: selection.hasMeaningfulTags ? selection : nil
-        )
+        let computedResult = computedResult(for: selection, timeZone: timeZone)
         let policy = TagEditPolicy(
             date: date,
             effectivePrimary: computedResult.computedPrimaryIntent,
@@ -170,13 +163,9 @@ struct FastTagPickerSheet: View {
         }
         let policy = TagEditPolicy(
             date: date,
-            effectivePrimary: TagComputationEngine.result(
-                for: date,
-                schedules: schedules,
-                selections: selections,
-                ruleset: .strict,
-                timeZone: TimeZone.current,
-                overrideSelection: selection.hasMeaningfulTags ? selection : nil
+            effectivePrimary: computedResult(
+                for: selection,
+                timeZone: .current
             ).computedPrimaryIntent,
             timeZone: TimeZone.current
         )
@@ -230,6 +219,20 @@ struct FastTagPickerSheet: View {
                 noteText = nil
             }
         }
+    }
+
+    private func computedResult(
+        for selection: FastIntentSelection,
+        timeZone: TimeZone
+    ) -> TagComputationResult {
+        TagComputationEngine.result(
+            for: date,
+            seeds: seeds,
+            selections: selections,
+            ruleset: .strict,
+            timeZone: timeZone,
+            overrideSelection: selection.hasMeaningfulTags ? selection : nil
+        )
     }
 
 }

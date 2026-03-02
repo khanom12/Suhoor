@@ -4,11 +4,17 @@ import Combine
 @MainActor
 final class AlarmConfigStore: ObservableObject {
     @Published var defaults: DefaultAlarmConfig {
-        didSet { persistDefaults() }
+        didSet {
+            guard !isPersistenceSuspended else { return }
+            persistDefaults()
+        }
     }
 
     @Published var overridesByDay: [String: DailyAlarmOverride] {
-        didSet { persistOverrides() }
+        didSet {
+            guard !isPersistenceSuspended else { return }
+            persistOverrides()
+        }
     }
 
     private let defaultsKey = "Suhoor.DefaultAlarmConfig"
@@ -19,6 +25,15 @@ final class AlarmConfigStore: ObservableObject {
     private let suppressedScheduledDateStore: SuppressedScheduledDateStore
     private let scheduledDateSourceResolver: ScheduledDateSourceResolver
     private let islamicQuickAddGenerator: IslamicQuickAddGenerator
+    private let defaultsPersistence = DebouncedPersistenceController(
+        label: "com.suhoor.app.alarm-config-defaults",
+        delay: 0.2
+    )
+    private let overridesPersistence = DebouncedPersistenceController(
+        label: "com.suhoor.app.alarm-config-overrides",
+        delay: 0.2
+    )
+    private var isPersistenceSuspended = false
 
     init(defaultsStore: UserDefaults = .standard, legacySettings: AppSettings? = nil) {
         self.defaultsStore = defaultsStore
@@ -78,7 +93,11 @@ final class AlarmConfigStore: ObservableObject {
         let key = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
         var current = overridesByDay[key] ?? DailyAlarmOverride(date: date, timeZone: timeZone)
         update(&current)
-        overridesByDay[key] = current
+        if current.hasOverrides {
+            overridesByDay[key] = current
+        } else {
+            overridesByDay.removeValue(forKey: key)
+        }
     }
 
     func removeOverride(for date: Date, timeZone: TimeZone = .current) {
@@ -137,6 +156,13 @@ final class AlarmConfigStore: ObservableObject {
         scheduledDateSourceResolver.provenance(for: date, timeZone: timeZone)
     }
 
+    func provenanceByDate(
+        for dates: [Date],
+        timeZone: TimeZone = .current
+    ) -> [String: [ResolvedScheduledDateProvenance]] {
+        scheduledDateSourceResolver.provenanceByDate(for: dates, timeZone: timeZone)
+    }
+
     func isExplicitSingleDaySource(on date: Date, timeZone: TimeZone = .current) -> Bool {
         let key = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
         return scheduledDateSourceStore.sources.contains { source in
@@ -177,29 +203,79 @@ final class AlarmConfigStore: ObservableObject {
         suppressedScheduledDateStore.remove(key)
     }
 
-    func addGregorianRangeSource(startDate: Date, endDate: Date, timeZone: TimeZone = .current) {
-        objectWillChange.send()
+    func previewGregorianRangeAdd(
+        startDate: Date,
+        endDate: Date,
+        timeZone: TimeZone = .current
+    ) -> AddScheduledDatesResult {
         let range = GregorianRangeSource(startDate: startDate, endDate: endDate, timeZone: timeZone)
-        scheduledDateSourceStore.add(
-            ScheduledDateSource(
-                id: UUID(),
-                kind: .gregorianRange(range),
-                createdAt: Date(),
-                isEnabled: true,
-                origin: .manualGregorianRange,
-                groupID: nil
-            )
-        )
-
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = timeZone
-        for date in DateHelpers.dates(from: range.startDate, to: range.endDate, calendar: calendar) {
+        let dates = DateHelpers.dates(from: range.startDate, to: range.endDate, calendar: calendar)
+        let provenanceByKey = scheduledDateSourceResolver.provenanceByDate(for: dates, timeZone: timeZone)
+
+        var addedDates: [Date] = []
+        var skippedDates: [Date] = []
+        for date in dates {
+            let key = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
+            if (provenanceByKey[key] ?? []).isEmpty {
+                addedDates.append(date)
+            } else {
+                skippedDates.append(date)
+            }
+        }
+
+        return AddScheduledDatesResult(addedDates: addedDates, skippedActiveDates: skippedDates)
+    }
+
+    @discardableResult
+    func addGregorianRangeSource(
+        startDate: Date,
+        endDate: Date,
+        timeZone: TimeZone = .current
+    ) -> AddScheduledDatesResult {
+        let preview = previewGregorianRangeAdd(startDate: startDate, endDate: endDate, timeZone: timeZone)
+        guard !preview.addedDates.isEmpty else { return preview }
+
+        objectWillChange.send()
+        let ranges = contiguousRanges(from: preview.addedDates, timeZone: timeZone)
+        let groupID = ranges.count > 1 ? UUID() : nil
+
+        for range in ranges {
+            scheduledDateSourceStore.add(
+                ScheduledDateSource(
+                    id: UUID(),
+                    kind: .gregorianRange(range),
+                    createdAt: Date(),
+                    isEnabled: true,
+                    origin: .manualGregorianRange,
+                    groupID: groupID
+                )
+            )
+        }
+
+        for date in preview.addedDates {
             let key = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
             suppressedScheduledDateStore.remove(key)
         }
+        return preview
     }
 
-    func addRecurringIslamicSource(_ rule: RecurringIslamicRule, startDate: Date = Date(), timeZone: TimeZone = .current) {
+    func hasRecurringIslamicSource(_ rule: RecurringIslamicRule) -> Bool {
+        scheduledDateSourceStore.sources.contains { source in
+            guard source.isEnabled else { return false }
+            guard case .recurringIslamic(let recurring) = source.kind else { return false }
+            return recurring.rule == rule
+        }
+    }
+
+    @discardableResult
+    func addRecurringIslamicSource(
+        _ rule: RecurringIslamicRule,
+        startDate: Date = Date(),
+        timeZone: TimeZone = .current
+    ) -> Bool {
+        guard !hasRecurringIslamicSource(rule) else { return false }
         objectWillChange.send()
         let normalized = DateHelpers.startOfDay(startDate, in: timeZone)
         scheduledDateSourceStore.add(
@@ -212,6 +288,7 @@ final class AlarmConfigStore: ObservableObject {
                 groupID: nil
             )
         )
+        return true
     }
 
     @discardableResult
@@ -219,16 +296,17 @@ final class AlarmConfigStore: ObservableObject {
         _ kind: IslamicQuickAddKind,
         startDate: Date = Date(),
         timeZone: TimeZone = .current
-    ) -> [Date] {
-        objectWillChange.send()
-        let dates = islamicQuickAddGenerator.dates(for: kind, startDate: startDate, timeZone: timeZone)
-        guard !dates.isEmpty else { return [] }
+    ) -> AddScheduledDatesResult {
+        let availability = islamicQuickAddAvailability(kind, startDate: startDate, timeZone: timeZone)
+        guard !availability.addResult.addedDates.isEmpty else { return availability.addResult }
 
+        objectWillChange.send()
+        let dates = availability.addResult.addedDates
         let groupID = dates.count > 1 ? UUID() : nil
         for date in dates {
             addSingleDaySource(date, origin: .islamicQuickAdd(kind), groupID: groupID, timeZone: timeZone)
         }
-        return dates
+        return availability.addResult
     }
 
     func previewIslamicQuickAdd(
@@ -237,6 +315,46 @@ final class AlarmConfigStore: ObservableObject {
         timeZone: TimeZone = .current
     ) -> IslamicQuickAddPreview? {
         islamicQuickAddGenerator.preview(for: kind, startDate: startDate, timeZone: timeZone)
+    }
+
+    func islamicQuickAddAvailability(
+        _ kind: IslamicQuickAddKind,
+        startDate: Date = Date(),
+        timeZone: TimeZone = .current
+    ) -> IslamicQuickAddAvailability {
+        let dates = islamicQuickAddGenerator.dates(for: kind, startDate: startDate, timeZone: timeZone)
+        let preview = dates.isEmpty ? nil : islamicQuickAddGenerator.preview(for: kind, startDate: startDate, timeZone: timeZone)
+        let provenanceByKey = scheduledDateSourceResolver.provenanceByDate(for: dates, timeZone: timeZone)
+
+        var addedDates: [Date] = []
+        var skippedDates: [Date] = []
+        for date in dates {
+            let key = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
+            if (provenanceByKey[key] ?? []).isEmpty {
+                addedDates.append(date)
+            } else {
+                skippedDates.append(date)
+            }
+        }
+
+        let addResult = AddScheduledDatesResult(addedDates: addedDates, skippedActiveDates: skippedDates)
+        let reasonText: String?
+        if preview == nil {
+            reasonText = "Needs calendar data for a preview right now."
+        } else if addResult.addedDates.isEmpty {
+            reasonText = "All matching dates are already active."
+        } else if !addResult.skippedActiveDates.isEmpty {
+            reasonText = "\(addResult.skippedActiveDates.count) date\(addResult.skippedActiveDates.count == 1 ? "" : "s") already active."
+        } else {
+            reasonText = nil
+        }
+
+        return IslamicQuickAddAvailability(
+            kind: kind,
+            preview: preview,
+            addResult: addResult,
+            reasonText: reasonText
+        )
     }
 
     func deleteExplicitSources(on date: Date, timeZone: TimeZone = .current) {
@@ -268,6 +386,34 @@ final class AlarmConfigStore: ObservableObject {
         objectWillChange.send()
         scheduledDateSourceStore.reset()
         suppressedScheduledDateStore.reset()
+    }
+
+    private func contiguousRanges(
+        from dates: [Date],
+        timeZone: TimeZone
+    ) -> [GregorianRangeSource] {
+        guard !dates.isEmpty else { return [] }
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let sortedDates = dates.sorted()
+        var ranges: [GregorianRangeSource] = []
+        var currentStart = sortedDates[0]
+        var currentEnd = sortedDates[0]
+
+        for date in sortedDates.dropFirst() {
+            let expectedNext = calendar.date(byAdding: .day, value: 1, to: currentEnd) ?? currentEnd
+            if calendar.isDate(date, inSameDayAs: expectedNext) {
+                currentEnd = date
+                continue
+            }
+
+            ranges.append(GregorianRangeSource(startDate: currentStart, endDate: currentEnd, timeZone: timeZone))
+            currentStart = date
+            currentEnd = date
+        }
+
+        ranges.append(GregorianRangeSource(startDate: currentStart, endDate: currentEnd, timeZone: timeZone))
+        return ranges
     }
 
     func effectiveConfig(
@@ -402,13 +548,17 @@ final class AlarmConfigStore: ObservableObject {
     }
 
     private func persistDefaults() {
-        if let data = try? JSONEncoder().encode(defaults) {
+        let snapshot = defaults
+        defaultsPersistence.schedule { [defaultsStore, defaultsKey] in
+            guard let data = try? JSONEncoder().encode(snapshot) else { return }
             defaultsStore.set(data, forKey: defaultsKey)
         }
     }
 
     private func persistOverrides() {
-        if let data = try? JSONEncoder().encode(overridesByDay) {
+        let snapshot = overridesByDay
+        overridesPersistence.schedule { [defaultsStore, overridesKey] in
+            guard let data = try? JSONEncoder().encode(snapshot) else { return }
             defaultsStore.set(data, forKey: overridesKey)
         }
     }

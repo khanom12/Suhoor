@@ -64,6 +64,31 @@ struct TagComputationEngineTests {
     }
 
     @Test
+    func implicitVoluntarySeedComputesObservancesWithoutStoredSelection() {
+        let timeZone = TimeZone(secondsFromGMT: 0) ?? .current
+        let date = findDate(hijriDay: 13, weekday: 2, timeZone: timeZone)
+
+        let results = TagComputationEngine.results(
+            seeds: [
+                ActiveTagComputationSeed(
+                    date: date,
+                    dateKey: DateHelpers.dayIdentifier(for: date, timeZone: timeZone),
+                    defaultPrimaryIntent: .voluntarySunnah
+                )
+            ],
+            selections: [:],
+            ruleset: .strict,
+            timeZone: timeZone
+        )
+
+        let key = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
+        let result = results[key]
+        #expect(result?.computedPrimaryIntent == .voluntarySunnah)
+        #expect(result?.computedSecondaryTags.contains(.mondayThursday) == true)
+        #expect(result?.computedSecondaryTags.contains(.whiteDays) == true)
+    }
+
+    @Test
     func arafahCoexistsWithDhulHijjahFirstNine() {
         let timeZone = TimeZone(secondsFromGMT: 0) ?? .current
         let date = makeAdjustedHijriDate(year: 1447, month: .dhulHijjah, day: 9, timeZone: timeZone)

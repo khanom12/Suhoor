@@ -4,7 +4,11 @@ final class ScheduledDateSourceStore {
     private let defaults: UserDefaults
     private let storageKey = "Suhoor.ScheduledDateSources"
     private let migrationKey = "Suhoor.ScheduledDateSourcesMigrationVersion"
-    private let currentMigrationVersion = 2
+    private let currentMigrationVersion = 3
+    private let persistence = DebouncedPersistenceController(
+        label: "com.suhoor.app.scheduled-date-sources",
+        delay: 0.2
+    )
 
     private(set) var sources: [ScheduledDateSource]
 
@@ -55,6 +59,7 @@ final class ScheduledDateSourceStore {
     }
 
     func reset() {
+        persistence.cancelPending()
         sources = []
         defaults.removeObject(forKey: storageKey)
         defaults.removeObject(forKey: migrationKey)
@@ -98,6 +103,12 @@ final class ScheduledDateSourceStore {
             switch source.origin {
             case .migratedLegacyAlways, .migratedLegacyDateRange:
                 return true
+            case .islamicQuickAdd(let kind):
+                return kind == .nextEidAlFitr
+                    || kind == .nextEidAlAdha
+                    || kind == .nextRamadanMonth
+            case .recurringIslamic(let rule):
+                return rule == .ramadan
             default:
                 return false
             }
@@ -120,8 +131,11 @@ final class ScheduledDateSourceStore {
     }
 
     private func persist() {
-        guard let data = try? JSONEncoder().encode(sources) else { return }
-        defaults.set(data, forKey: storageKey)
+        let snapshot = sources
+        persistence.schedule { [defaults, storageKey] in
+            guard let data = try? JSONEncoder().encode(snapshot) else { return }
+            defaults.set(data, forKey: storageKey)
+        }
     }
 
     private func dateFromKey(_ key: String, timeZone: TimeZone) -> Date? {
@@ -137,6 +151,10 @@ final class SuppressedScheduledDateStore {
     private let defaults: UserDefaults
     private let storageKey = "Suhoor.SuppressedScheduledDateKeys"
     private let migrationKey = "Suhoor.SuppressedScheduledDateMigrationVersion"
+    private let persistence = DebouncedPersistenceController(
+        label: "com.suhoor.app.suppressed-scheduled-date-keys",
+        delay: 0.2
+    )
 
     private(set) var suppressedDateKeys: Set<String>
 
@@ -173,6 +191,7 @@ final class SuppressedScheduledDateStore {
     }
 
     func reset() {
+        persistence.cancelPending()
         suppressedDateKeys = []
         defaults.removeObject(forKey: storageKey)
         defaults.removeObject(forKey: migrationKey)
@@ -187,7 +206,10 @@ final class SuppressedScheduledDateStore {
     }
 
     private func persist() {
-        guard let data = try? JSONEncoder().encode(suppressedDateKeys) else { return }
-        defaults.set(data, forKey: storageKey)
+        let snapshot = suppressedDateKeys
+        persistence.schedule { [defaults, storageKey] in
+            guard let data = try? JSONEncoder().encode(snapshot) else { return }
+            defaults.set(data, forKey: storageKey)
+        }
     }
 }

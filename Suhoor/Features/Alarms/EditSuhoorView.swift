@@ -63,7 +63,7 @@ struct EditSuhoorView: View {
         Section(Strings.AlarmDetail.wakeSection) {
             NavigationLink {
                 OffsetPickerScreen(title: Strings.AlarmDetail.wakeMe, baseMinutes: $settingsStore.settings.baseWakeOffsetMinutes, range: 1...240, step: 1)
-                    .onDisappear { Task { await scheduleManager.ensureScheduleWindow(reason: .settingsChanged) } }
+                    .onDisappear { scheduleManager.requestRefresh(reason: .settingsChanged) }
             } label: {
                 HStack {
                     Text(Strings.AlarmDetail.wakeMe)

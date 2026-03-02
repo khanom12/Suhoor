@@ -5,6 +5,7 @@ import os
 import AlarmKit
 #endif
 
+@MainActor
 final class RoutineScheduler {
     private let notificationScheduler: NotificationScheduler
     private let alarmKitScheduler: AlarmKitScheduling?

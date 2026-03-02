@@ -86,7 +86,7 @@ struct ScheduleRootView: View {
                 }
                 .pickerStyle(.segmented)
                 .onChange(of: settingsStore.settings.schedulePreviewDays) { _, _ in
-                    Task { await scheduleManager.ensureScheduleWindow(reason: .settingsChanged) }
+                    scheduleManager.requestRefresh(reason: .settingsChanged)
                 }
             }
         }

@@ -1,5 +1,4 @@
 import SwiftUI
-import CoreLocation
 
 struct MainView: View {
     @EnvironmentObject private var settingsStore: SuhoorSettingsStore
@@ -66,10 +65,6 @@ struct MainView: View {
         }
         .sheet(isPresented: $showAdjustSheet) {
             AlarmDetailView()
-        }
-        .onChange(of: settingsStore.settings) { oldValue, newValue in
-            guard newValue.requiresReschedule(comparedTo: oldValue) else { return }
-            Task { await scheduleManager.ensureScheduleWindow(reason: .settingsChanged) }
         }
     }
 

@@ -104,27 +104,27 @@ enum Strings {
         static let allowLocation = "Allow Location"
         static let openSettings = "Open Settings"
         static let tryAgain = "Try Again"
-        static let autoExplanation = "Location access is needed to calculate Fajr automatically."
-        static let deniedExplanation = "Location was denied. Enable it for Suhoor in Settings."
+        static let autoExplanation = "Allow location to keep Fajr times accurate when you travel."
+        static let deniedExplanation = "Location is off, so Suhoor can’t calculate local Fajr times automatically."
         static let waitingForLocation = "Waiting for your current location..."
         static let simulatorHint = "In Simulator, also set a location from Xcode's Debug > Location menu."
-        static let manualOverride = "Manual override: use a fixed city instead of auto."
+        static let manualOverride = "Choose a city instead of automatic location."
         static func currentLocation(_ name: String) -> String { "Current location: \(name)" }
     }
 
     enum AlarmAccess {
         static let title = "Alarms"
         static let allowAlarms = "Allow Alarms"
-        static let explanation = "Alarm access gives Suhoor the most reliable wake-up scheduling."
-        static let deniedExplanation = "Alarm access was denied. Enable it in Settings or continue with notifications."
-        static let unavailableExplanation = "AlarmKit is unavailable on this device. Suhoor will use notifications instead."
+        static let explanation = "Allow alarms for the most reliable wake-ups."
+        static let deniedExplanation = "Alarm access is off, so wake-ups will fall back to notifications."
+        static let unavailableExplanation = "AlarmKit isn’t available on this device, so wake-ups use notifications."
     }
 
     enum NotificationAccess {
         static let title = "Notifications"
         static let allowNotifications = "Allow Notifications"
-        static let explanation = "Notifications are used when alarms are unavailable and for fallback reminders."
-        static let deniedExplanation = "Notifications were denied. Enable them for fallback alerts."
+        static let explanation = "Notifications deliver reminders and act as fallback alerts."
+        static let deniedExplanation = "Notifications are off, so reminders and fallback alerts cannot be delivered."
     }
 
     enum NotificationRationale {
@@ -190,6 +190,17 @@ enum Strings {
 
     enum Settings {
         static let title = "Settings"
+        static let needsAttentionSection = "Needs Attention"
+        static let defaultAlarmsScreenTitle = "Default alarms"
+        static let prayerTimesTitle = "Prayer times"
+        static let permissionsReliabilityTitle = "Permissions & reliability"
+        static let alarmReliabilityTitle = "Alarm reliability"
+        static let alarmReliabilitySummary = "How wake-ups work, when notifications are used, and what to check if alarms are quiet."
+        static let aboutDescription = "Suhoor keeps your routine in sync with local Fajr times so your wake-up, reminder, and Fajr adhan stay easy to review."
+        static let badgeLocating = "Locating"
+        static let badgeNeedsAttention = "Needs attention"
+        static let badgeUsingFallback = "Using fallback"
+        static let badgeReady = "Ready"
         static let defaultsEnabledSection = "Default enabled alarms"
         static let defaultsEnabledHelper = "These defaults apply when a day has no custom overrides."
         static let defaultSuhoorToggle = "Suhoor alarm enabled by default"
@@ -213,6 +224,24 @@ enum Strings {
         static let alarmsListRangeSection = "Alarms list range"
         static let alarmsListRangeHelper = "Controls how many days are shown in the Alarms tab list."
         static let alarmsListRangeLabel = "Show next"
+        static let alertsSection = "Alerts"
+        static let wakeAlarmLabel = "Wake alarm"
+        static let reminderLabel = "Reminder"
+        static let fajrAdhanLabel = "Fajr adhan"
+        static let defaultAlarmsHelper = "These defaults apply to days that don’t have custom overrides."
+        static let wakeAlarmSection = "Wake alarm"
+        static let wakeAlarmHelper = "Your main wake-up time for Suhoor."
+        static let reminderSection = "Reminder"
+        static let reminderScreenHelper = "Use a reminder when you want a heads-up before Fajr."
+        static let timeStyleLabel = "Time style"
+        static let wakeTimeLabel = "Wake time"
+        static let wakeOffsetTitle = "Wake time"
+        static let reminderOffsetTitle = "Reminder time"
+        static let minutesBeforeFajr = "Minutes before Fajr"
+        static func offsetValue(_ minutes: Int) -> String { "\(minutes) min" }
+        static let previewSection = "Tomorrow preview"
+        static let previewUnavailable = "Preview will appear once Suhoor has generated tomorrow’s schedule."
+        static let previewHelper = "Preview uses your current defaults and location."
         static let routineDefaultsSection = "Routine Defaults"
         static let reminderToggle = "Reminder before Fajr"
         static let reminderHelper = "Applies to all days."
@@ -240,6 +269,16 @@ enum Strings {
         static let testsCancelled = "Test schedules canceled."
         static let locationSection = "Location"
         static let locationMode = "Location mode"
+        static let locationAutomatic = "Automatic"
+        static let locationChooseCity = "Choose city"
+        static let currentCityTitle = "Current city"
+        static let cityLabel = "City"
+        static let locationWaiting = "Waiting for location"
+        static let locationAutomaticReady = "Suhoor is using your current location to keep Fajr times up to date."
+        static let locationAutomaticWaiting = "Location is allowed, but Suhoor is still waiting for a usable city fix."
+        static let locationAutomaticNeedsPermission = "Allow location if you want Suhoor to update Fajr times automatically."
+        static let locationAutomaticDenied = "Turn location back on to keep Fajr times accurate automatically."
+        static let fixedLocationHelper = "Pick a city when you want Suhoor to stay fixed instead of updating automatically."
         static let locationHelper = "Auto updates when you travel."
         static let useCurrentLocation = "Use current location"
         static let locationSettings = "Location settings"
@@ -249,6 +288,9 @@ enum Strings {
         static let locationSearchOnline = "Search online"
         static let locationSearchTitle = "Search City"
         static let locationSearchPlaceholder = "City name"
+        static let locationSearchLocalSection = "Saved cities"
+        static let locationSearchOnlineSection = "Search more cities"
+        static let locationSearchPrompt = "Type a city name, then tap Search to look beyond the saved list."
         static let locationSearchRequiresInternet = "Requires internet."
         static let locationSearchNoResults = "No results found."
         static let locationSearchFailed = "Search failed. Try again."
@@ -257,9 +299,22 @@ enum Strings {
         static func locationSelected(_ city: String) -> String { "Selected: \(city)" }
         static let openAppSettings = "Open App Settings"
         static let calculationSection = "Calculation"
+        static let prayerTimeCalculationSection = "Prayer time calculation"
+        static let calculationMethodTitle = "Calculation method"
         static let method = "Method"
         static let fajrAdjustment = "Fajr adjustment"
         static let fajrAdjustmentHelper = "Adjust Fajr earlier or later."
+        static let hijriCalendarTitle = "Hijri calendar corrections"
+        static let hijriMonthCorrectionsTitle = "Month corrections"
+        static let hijriCalendarHelper = "Adjust month starts if your local mosque begins a Hijri month one day earlier or later."
+        static let hijriNoChanges = "No changes"
+        static func hijriAdjustedMonths(_ count: Int) -> String { "\(count) adjusted" }
+        static let hijriMinusOneDay = "-1 day"
+        static let hijriNoChange = "No change"
+        static let hijriPlusOneDay = "+1 day"
+        static let hijriPreviewUnavailable = "Preview will appear when calendar data for this month is available."
+        static let hijriBuiltInStart = "Built-in start"
+        static let hijriCorrectedStart = "Corrected start"
         static let schedulingSection = "Scheduling"
         static let schedulePreview = "Schedule preview"
         static let schedulePreviewHelper = "Changes Schedule only."
@@ -267,15 +322,76 @@ enum Strings {
         static let locationStatus = "Location"
         static let notificationsStatus = "Notifications"
         static let aboutSection = "About"
-        static let aboutAlarms = "About alarms"
+        static let aboutAlarms = "Alarm reliability"
         static let version = "Version"
+        static let presetsSection = "Presets"
+        static let customSection = "Custom"
+        static func offsetOptionMinutes(_ minutes: Int) -> String { "\(minutes) min" }
     }
 
     enum AboutAlarms {
-        static let title = "Alarms & reliability"
-        static let bullet1 = "AlarmKit alarms are the most reliable for wake-ups."
-        static let bullet2 = "If AlarmKit isn’t available, Suhoor uses notifications."
-        static let bullet3 = "Check Ringtone & Alerts volume if alarms are quiet."
+        static let title = "Alarm reliability"
+        static let bullet1 = "AlarmKit provides the most reliable wake-ups when your device supports it."
+        static let bullet2 = "If alarms aren’t available, Suhoor falls back to notifications for reminders and wake-ups."
+        static let bullet3 = "If alarms are too quiet, check your device’s Ringtone & Alerts volume."
         static let openSettings = "Open Settings"
+    }
+
+    enum SettingsSummary {
+        static let wakeOff = "Wake off"
+        static func wakeBeforeFajr(_ minutes: Int) -> String { "Wake \(minutes) min before Fajr" }
+        static func wakeFixed(_ time: String) -> String { "Wake at \(time)" }
+        static let reminderOff = "Reminder off"
+        static func reminderBeforeFajr(_ minutes: Int) -> String { "Reminder \(minutes) min before Fajr" }
+        static func reminderFixed(_ time: String) -> String { "Reminder at \(time)" }
+        static let fajrOn = "Fajr adhan on"
+        static let fajrOff = "Fajr adhan off"
+        static let locationAutomatic = "Automatic"
+        static let locationWaiting = "Waiting for city"
+        static let locationCity = "City"
+        static let locationChooseCity = "Choose city"
+        static func fajrAdjustment(_ value: String) -> String { "Fajr \(value)" }
+        static let permissionsNeedsAttention = "Needs attention"
+        static let permissionsChecking = "Checking status"
+        static let permissionsUsingNotifications = "Using notifications"
+        static let permissionsAllReady = "All permissions ready"
+        static func about(_ version: String) -> String { "Version \(version)" }
+    }
+
+    enum SettingsIssues {
+        static let locationWaitingTitle = "Location is still updating"
+        static let locationWaitingMessage = "Suhoor is waiting for a usable city so it can calculate local Fajr times automatically."
+        static let locationBlockedTitle = "Location needs attention"
+        static let locationBlockedMessage = "Allow location to keep Fajr times accurate automatically."
+        static let notificationsBlockedTitle = "Notifications are required"
+        static let notificationsBlockedMessage = "Without notifications, reminders and fallback alerts can’t be delivered."
+        static let fallbackTitle = "Wake-ups are using notifications"
+        static let fallbackMessage = "This device is using notification fallback instead of AlarmKit for wake-ups."
+        static let alarmPermissionTitle = "Alarm access would improve reliability"
+        static let alarmPermissionMessage = "Allow alarms for the most reliable wake-ups when your device supports them."
+    }
+
+    enum SettingsCalculation {
+        static let muslimWorldLeague = "Commonly used in many regions and a good general default."
+        static let egyptian = "Uses the Egyptian General Authority of Survey calculation."
+        static let karachi = "Uses the University of Islamic Sciences, Karachi calculation."
+        static let northAmerica = "Often used for schedules in the United States and Canada."
+        static let makkah = "Uses the Umm al-Qura calculation associated with Makkah."
+    }
+
+    enum SettingsHijri {
+        static let muharram = "Affects Muharram dates and Ashura."
+        static let ramadan = "Affects Ramadan dates and related schedules."
+        static let shawwal = "Affects Eid al-Fitr and Shawwal dates."
+        static let dhulHijjah = "Affects Arafah, Eid al-Adha, and Dhul Hijjah dates."
+    }
+
+    enum SettingsReliability {
+        static let alarmKitModeTitle = "Wake-ups use AlarmKit"
+        static let alarmKitModeMessage = "Your device can schedule Suhoor wake-ups with the most reliable alarm channel available."
+        static let notificationsModeTitle = "Wake-ups are using notifications"
+        static let notificationsModeMessage = "Suhoor is using notifications for wake-ups or reminders because AlarmKit is unavailable or not allowed."
+        static let blockedModeTitle = "Wake-ups are blocked"
+        static let blockedModeMessage = "Suhoor still needs permission before it can deliver reminders or wake you up reliably."
     }
 }

@@ -202,7 +202,7 @@ struct SuhoorTests {
         )
 
         await scheduleManager.refreshSchedules(force: true)
-        #expect(!scheduleManager.schedules.isEmpty)
+        #expect(!scheduleManager.activeWindowSnapshot.visibleDays.isEmpty)
     }
 
     @Test
@@ -247,6 +247,179 @@ struct SuhoorTests {
         let presentation = await scheduleManager.permissionPresentation(for: .location)
         #expect(presentation.state == .needsFollowUp)
         #expect(presentation.actionTitle == Strings.LocationAccess.tryAgain)
+    }
+
+    @Test
+    func settingsStoreDebouncesPersistenceAndSavesLatestSnapshot() async throws {
+        let suiteName = "SuhoorTests.SettingsDebounce"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+
+        let store = SuhoorSettingsStore(defaults: defaults)
+        store.update { draft in
+            draft.label = "First"
+        }
+        store.update { draft in
+            draft.label = "Final"
+        }
+
+        #expect(defaults.data(forKey: "Suhoor.AppSettings") == nil)
+
+        try await Task.sleep(nanoseconds: 450_000_000)
+
+        let data = try #require(defaults.data(forKey: "Suhoor.AppSettings"))
+        let decoded = try JSONDecoder().decode(AppSettings.self, from: data)
+        #expect(decoded.label == "Final")
+    }
+
+    @Test
+    @MainActor
+    func refreshSchedulesPublishesPermissionSnapshot() async {
+        let suiteName = "SuhoorTests.PermissionSnapshot"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+
+        let settingsStore = SuhoorSettingsStore(defaults: defaults)
+        let alarmConfigStore = AlarmConfigStore(defaultsStore: defaults)
+        let locationService = LocationService()
+
+        settingsStore.update { draft in
+            draft.locationMode = .fixed
+            draft.fixedLocation = FixedLocation(latitude: 43.6532, longitude: -79.3832)
+        }
+
+        let scheduleManager = ScheduleManager(
+            settingsStore: settingsStore,
+            locationService: locationService,
+            alarmConfigStore: alarmConfigStore
+        )
+
+        await scheduleManager.refreshSchedules(force: true)
+
+        #expect(!scheduleManager.permissionSnapshot.summaryText.isEmpty)
+        #expect(scheduleManager.permissionSnapshot.presentations[.location] != nil)
+        #expect(scheduleManager.permissionSnapshot.presentations[.alarmKit] != nil)
+        #expect(scheduleManager.permissionSnapshot.presentations[.notifications] != nil)
+    }
+
+    @Test
+    @MainActor
+    func requestRescheduleDayAppliesLatestOverrideAfterBurstEdits() async throws {
+        let suiteName = "SuhoorTests.DayRescheduleBurst"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+
+        let settingsStore = SuhoorSettingsStore(defaults: defaults)
+        let alarmConfigStore = AlarmConfigStore(defaultsStore: defaults)
+        let locationService = LocationService()
+
+        settingsStore.update { draft in
+            draft.locationMode = .fixed
+            draft.fixedLocation = FixedLocation(latitude: 43.6532, longitude: -79.3832)
+        }
+
+        let targetDate = DateHelpers.startOfTomorrow(in: .current)
+        alarmConfigStore.addSingleDaySource(targetDate)
+
+        let scheduleManager = ScheduleManager(
+            settingsStore: settingsStore,
+            locationService: locationService,
+            alarmConfigStore: alarmConfigStore
+        )
+
+        await scheduleManager.refreshSchedules(force: true)
+
+        alarmConfigStore.updateOverride(for: targetDate) { draft in
+            draft.suhoorOffsetOverrideMinutes = 25
+        }
+        scheduleManager.requestRescheduleDay(targetDate)
+
+        alarmConfigStore.updateOverride(for: targetDate) { draft in
+            draft.suhoorOffsetOverrideMinutes = 55
+        }
+        scheduleManager.requestRescheduleDay(targetDate)
+
+        try await Task.sleep(nanoseconds: 500_000_000)
+
+        let refreshed = scheduleManager.activeWindowSnapshot.visibleDays.first {
+            DateHelpers.isSameDay($0.date, targetDate, in: .current)
+        }
+        #expect(refreshed?.schedule.offsetMinutes == 55)
+    }
+
+    @Test
+    @MainActor
+    func duplicateStatusReturnsExistingActiveDayFromSnapshot() async {
+        let suiteName = "SuhoorTests.DuplicateStatus"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+
+        let settingsStore = SuhoorSettingsStore(defaults: defaults)
+        let alarmConfigStore = AlarmConfigStore(defaultsStore: defaults)
+        let locationService = LocationService()
+
+        settingsStore.update { draft in
+            draft.locationMode = .fixed
+            draft.fixedLocation = FixedLocation(latitude: 43.6532, longitude: -79.3832)
+        }
+
+        let targetDate = DateHelpers.startOfTomorrow(in: .current)
+        alarmConfigStore.addSingleDaySource(targetDate)
+
+        let scheduleManager = ScheduleManager(
+            settingsStore: settingsStore,
+            locationService: locationService,
+            alarmConfigStore: alarmConfigStore
+        )
+
+        await scheduleManager.refreshSchedules(force: true)
+
+        switch scheduleManager.duplicateStatus(for: targetDate) {
+        case .available:
+            #expect(false)
+        case .active(let provenances, let existingDay):
+            #expect(!provenances.isEmpty)
+            #expect(DateHelpers.isSameDay(existingDay.date, targetDate, in: .current))
+        }
+    }
+
+    @Test
+    @MainActor
+    func activeWindowSchedulesOnlyVisiblePrefix() async {
+        let suiteName = "SuhoorTests.ActiveWindowPrefix"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+
+        let settingsStore = SuhoorSettingsStore(defaults: defaults)
+        let alarmConfigStore = AlarmConfigStore(defaultsStore: defaults)
+        let locationService = LocationService()
+
+        settingsStore.update { draft in
+            draft.locationMode = .fixed
+            draft.fixedLocation = FixedLocation(latitude: 43.6532, longitude: -79.3832)
+        }
+
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .current
+        let startDate = DateHelpers.startOfTomorrow(in: .current)
+        for offset in 0..<40 {
+            let date = calendar.date(byAdding: .day, value: offset, to: startDate) ?? startDate
+            alarmConfigStore.addSingleDaySource(date)
+        }
+
+        let scheduleManager = ScheduleManager(
+            settingsStore: settingsStore,
+            locationService: locationService,
+            alarmConfigStore: alarmConfigStore
+        )
+
+        await scheduleManager.refreshSchedules(force: true)
+
+        let snapshot = scheduleManager.activeWindowSnapshot
+        let visibleKeys = snapshot.visibleDays.map(\.dateKey)
+        let scheduledKeys = snapshot.scheduledDays.map(\.dateKey)
+        #expect(!visibleKeys.isEmpty)
+        #expect(scheduledKeys == Array(visibleKeys.prefix(snapshot.scheduledHorizonDays)))
     }
 
     @Test
@@ -849,6 +1022,91 @@ struct SuhoorTests {
         #expect(Set(firstRunIds) == expected)
         #expect(Set(secondRunIds) == expected)
         #expect(firstRunIds.count == firstRunIds.uniqueCount)
+    }
+
+    @Test
+    func settingsDefaultAlarmSummaryUsesCanonicalLabels() {
+        let config = DefaultAlarmConfig(
+            suhoorEnabledDefault: true,
+            reminderEnabledDefault: false,
+            fajrEnabledDefault: false,
+            defaultSuhoorTimeMode: .relativeToFajrMinusMinutes,
+            defaultSuhoorOffsetMinutes: 30,
+            defaultReminderTimeMode: .beforeFajr,
+            defaultReminderMinutesBeforeFajr: 10,
+            defaultReminderFixedTimeMinutes: 0,
+            activationMode: .alwaysOn,
+            activeStartDate: nil,
+            activeEndDate: nil,
+            scheduleWindowDays: 14
+        )
+
+        let summary = SettingsSummaryFormatter.defaultAlarmsSummary(config: config)
+
+        #expect(summary == "Wake 30 min before Fajr · Reminder off · Fajr adhan off")
+    }
+
+    @Test
+    func settingsIssuesStayEmptyUntilPermissionsLoad() {
+        let issues = SettingsSummaryFormatter.issues(
+            settings: .default,
+            schedulingMode: .none,
+            presentations: [:]
+        )
+
+        #expect(issues.isEmpty)
+        #expect(
+            SettingsSummaryFormatter.permissionsSummary(
+                settings: .default,
+                schedulingMode: .none,
+                presentations: [:]
+            ) == "Checking status"
+        )
+    }
+
+    @Test
+    func settingsIssuesIncludeLocationWhenAutomaticModeIsDenied() {
+        let issues = SettingsSummaryFormatter.issues(
+            settings: .default,
+            schedulingMode: .none,
+            presentations: [
+                .location: makePermissionPresentation(kind: .location, state: .denied),
+                .alarmKit: makePermissionPresentation(kind: .alarmKit, state: .authorized),
+                .notifications: makePermissionPresentation(kind: .notifications, state: .authorized)
+            ]
+        )
+
+        #expect(issues.contains(where: { $0.destination == .location }))
+    }
+
+    @Test
+    func permissionsSummaryShowsNotificationFallback() {
+        let summary = SettingsSummaryFormatter.permissionsSummary(
+            settings: .default,
+            schedulingMode: .notifications,
+            presentations: [
+                .location: makePermissionPresentation(kind: .location, state: .authorized),
+                .alarmKit: makePermissionPresentation(kind: .alarmKit, state: .unavailable),
+                .notifications: makePermissionPresentation(kind: .notifications, state: .authorized)
+            ]
+        )
+
+        #expect(summary == "Using notifications")
+    }
+
+    private func makePermissionPresentation(kind: AppPermissionKind, state: AppPermissionState) -> PermissionPresentation {
+        PermissionPresentation(
+            kind: kind,
+            state: state,
+            title: kind.rawValue,
+            statusText: "",
+            message: "",
+            actionTitle: nil,
+            secondaryActionTitle: nil,
+            showsProgress: false,
+            showsSimulatorHint: false,
+            isBlocking: false
+        )
     }
 }
 

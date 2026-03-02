@@ -8,8 +8,6 @@ struct PermissionStackView: View {
     let showOnlyBlocking: Bool
     let onOpenSettings: () -> Void
 
-    @State private var presentations: [PermissionPresentation] = []
-
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             ForEach(filteredPresentations) { presentation in
@@ -21,12 +19,7 @@ struct PermissionStackView: View {
                 )
             }
         }
-        .task {
-            await refresh()
-        }
-        .task(id: refreshKey) {
-            await refresh()
-        }
+        .id(refreshKey)
     }
 
     private var filteredPresentations: [PermissionPresentation] {
@@ -45,15 +38,9 @@ struct PermissionStackView: View {
         case .authorized, .unavailable:
             break
         }
-        await refresh()
     }
 
-    private func refresh() async {
-        var updated: [PermissionPresentation] = []
-        for kind in kinds {
-            updated.append(await scheduleManager.permissionPresentation(for: kind))
-        }
-        presentations = updated
-        await scheduleManager.refreshPermissionSummary()
+    private var presentations: [PermissionPresentation] {
+        kinds.compactMap { scheduleManager.permissionSnapshot.presentations[$0] }
     }
 }

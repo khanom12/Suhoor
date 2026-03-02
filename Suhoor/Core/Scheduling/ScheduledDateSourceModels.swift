@@ -1,6 +1,6 @@
 import Foundation
 
-enum RecurringIslamicRule: String, Codable, CaseIterable, Identifiable, Hashable {
+enum RecurringIslamicRule: String, Codable, CaseIterable, Identifiable, Hashable, Sendable {
     case whiteDays
     case mondayThursday
     case ramadan
@@ -28,9 +28,14 @@ enum RecurringIslamicRule: String, Codable, CaseIterable, Identifiable, Hashable
             return "Adds every day of Ramadan."
         }
     }
+
+    static let addFlowVisibleCases: [RecurringIslamicRule] = [
+        .whiteDays,
+        .mondayThursday
+    ]
 }
 
-enum IslamicQuickAddKind: String, Codable, CaseIterable, Identifiable, Hashable {
+enum IslamicQuickAddKind: String, Codable, CaseIterable, Identifiable, Hashable, Sendable {
     case nextAshura
     case nextArafah
     case nextEidAlFitr
@@ -78,14 +83,21 @@ enum IslamicQuickAddKind: String, Codable, CaseIterable, Identifiable, Hashable 
             return "Adds the next upcoming Monday and Thursday."
         }
     }
+
+    static let addFlowVisibleCases: [IslamicQuickAddKind] = [
+        .nextAshura,
+        .nextArafah,
+        .nextWhiteDays,
+        .nextMondayThursdayPair
+    ]
 }
 
-struct SingleDaySource: Codable, Equatable, Hashable {
+struct SingleDaySource: Codable, Equatable, Hashable, Sendable {
     let dateKey: String
     let date: Date
 }
 
-struct GregorianRangeSource: Codable, Equatable, Hashable {
+struct GregorianRangeSource: Codable, Equatable, Hashable, Sendable {
     static let maxLengthDays = 60
 
     let startDate: Date
@@ -103,12 +115,12 @@ struct GregorianRangeSource: Codable, Equatable, Hashable {
     }
 }
 
-struct RecurringIslamicSource: Codable, Equatable, Hashable {
+struct RecurringIslamicSource: Codable, Equatable, Hashable, Sendable {
     let rule: RecurringIslamicRule
     let startDate: Date
 }
 
-enum ScheduledDateSourceKind: Codable, Equatable, Hashable {
+enum ScheduledDateSourceKind: Codable, Equatable, Hashable, Sendable {
     case singleDay(SingleDaySource)
     case gregorianRange(GregorianRangeSource)
     case recurringIslamic(RecurringIslamicSource)
@@ -154,7 +166,7 @@ enum ScheduledDateSourceKind: Codable, Equatable, Hashable {
     }
 }
 
-enum ScheduledDateSourceOrigin: Codable, Equatable, Hashable {
+enum ScheduledDateSourceOrigin: Codable, Equatable, Hashable, Sendable {
     case defaultRamadan
     case manualSingleDay
     case manualGregorianRange
@@ -269,7 +281,7 @@ enum ScheduledDateSourceOrigin: Codable, Equatable, Hashable {
     }
 }
 
-struct ScheduledDateSource: Codable, Equatable, Hashable, Identifiable {
+struct ScheduledDateSource: Codable, Equatable, Hashable, Identifiable, Sendable {
     let id: UUID
     let kind: ScheduledDateSourceKind
     let createdAt: Date
@@ -278,7 +290,7 @@ struct ScheduledDateSource: Codable, Equatable, Hashable, Identifiable {
     let groupID: UUID?
 }
 
-struct ResolvedScheduledDateProvenance: Hashable, Identifiable {
+struct ResolvedScheduledDateProvenance: Codable, Hashable, Identifiable, Sendable {
     let sourceID: UUID
     let groupID: UUID?
     let label: String
@@ -295,7 +307,7 @@ struct ResolvedScheduledDateProvenance: Hashable, Identifiable {
     }
 }
 
-struct ResolvedScheduledDateEntry: Hashable {
+struct ResolvedScheduledDateEntry: Codable, Hashable, Sendable {
     let date: Date
     let dateKey: String
     let provenances: [ResolvedScheduledDateProvenance]
@@ -305,7 +317,7 @@ struct ResolvedScheduledDateEntry: Hashable {
     }
 }
 
-struct IslamicQuickAddPreview: Identifiable, Hashable {
+struct IslamicQuickAddPreview: Identifiable, Hashable, Sendable {
     let kind: IslamicQuickAddKind
     let dates: [Date]
     let previewText: String

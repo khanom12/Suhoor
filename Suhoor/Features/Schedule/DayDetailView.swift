@@ -35,7 +35,7 @@ struct DayDetailView: View {
         .toolbarBackground(.visible, for: .navigationBar)
         .toolbarColorScheme(.light, for: .navigationBar)
         .onDisappear {
-            Task { await scheduleManager.ensureScheduleWindow(reason: .settingsChanged) }
+            scheduleManager.requestRefresh(reason: .settingsChanged)
         }
     }
 
@@ -125,7 +125,7 @@ struct DayDetailView: View {
                 if exceptionExists {
                     Button {
                         settings.perDayExceptions.removeValue(forKey: dayKey)
-                        Task { await scheduleManager.ensureScheduleWindow(reason: .settingsChanged) }
+                        scheduleManager.requestRefresh(reason: .settingsChanged)
                     } label: {
                         ActionRowView(
                             title: Strings.DayDetail.resetDefault,
@@ -177,7 +177,7 @@ struct DayDetailView: View {
             )
             current.disabledForDay = newValue
             settings.perDayExceptions[dayKey] = current
-            Task { await scheduleManager.ensureScheduleWindow(reason: .settingsChanged) }
+            scheduleManager.requestRefresh(reason: .settingsChanged)
         }
     }
 

@@ -7,106 +7,164 @@ struct LocationSettingsView: View {
     @EnvironmentObject private var scheduleManager: ScheduleManager
     @EnvironmentObject private var locationService: LocationService
 
-    @State private var selectedCityId: String = City.defaultCity.id
-    @State private var showOnlineSearch = false
-
     var body: some View {
         Form {
-            Section(Strings.Settings.locationSection) {
-                Picker("", selection: $settingsStore.settings.locationMode) {
-                    Text("Auto").tag(LocationMode.auto)
-                    Text("City").tag(LocationMode.fixed)
+            Section {
+                Picker(Strings.Settings.locationMode, selection: $settingsStore.settings.locationMode) {
+                    Text(Strings.Settings.locationAutomatic).tag(LocationMode.auto)
+                    Text(Strings.Settings.locationChooseCity).tag(LocationMode.fixed)
                 }
                 .pickerStyle(.segmented)
-                .onChange(of: settingsStore.settings.locationMode) { _, _ in
-                    if settingsStore.settings.locationMode == .fixed,
-                       settingsStore.settings.fixedLocation == nil {
-                        applySelectedCity()
+                .onChange(of: settingsStore.settings.locationMode) { _, newValue in
+                    if newValue == .fixed, settingsStore.settings.fixedLocation == nil {
+                        applySelectedCity(City.defaultCity)
                     }
-                    Task { await scheduleManager.ensureScheduleWindow(reason: .settingsChanged) }
+                    scheduleManager.requestRefresh(reason: .settingsChanged)
                 }
+            }
 
-                if settingsStore.settings.locationMode == .auto {
-                    PermissionStackView(
-                        kinds: [.location],
-                        refreshKey: permissionRefreshKey,
-                        showOnlyBlocking: false,
-                        onOpenSettings: openAppSettings
+            if settingsStore.settings.locationMode == .auto {
+                Section {
+                    valueRow(
+                        title: Strings.Settings.currentCityTitle,
+                        value: locationService.locationName.isEmpty
+                            ? Strings.Settings.locationWaiting
+                            : locationService.locationName
                     )
-                    .environmentObject(scheduleManager)
-                } else {
-                    Text(Strings.LocationAccess.manualOverride)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
 
-                    Text(Strings.Settings.locationSelected(cityName(for: selectedCityId)))
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-
-                    NavigationLink {
-                        CityPickerView(selectedCityId: $selectedCityId)
-                    } label: {
-                        Text(cityName(for: selectedCityId))
+                    HStack {
+                        Text(Strings.Settings.locationStatus)
+                        Spacer()
+                        SettingsStatusBadge(text: permissionStatusText, tone: permissionBadgeTone)
                     }
 
-                    Button(Strings.Settings.locationSearchOnline) {
-                        showOnlineSearch = true
-                    }
-
-                    Text(Strings.Settings.locationSearchRequiresInternet)
+                    Text(permissionMessage)
                         .font(.footnote)
                         .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    if let actionTitle = permissionActionTitle {
+                        Button(actionTitle) {
+                            handleLocationAction()
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
+                } header: {
+                    Text(Strings.Settings.locationAutomatic)
                 }
-
+            } else {
+                Section {
+                    NavigationLink {
+                        LocationSearchView(
+                            selectedName: fixedLocationName,
+                            onSelectCity: applySelectedCity,
+                            onSelectMapItem: applyMapItem
+                        )
+                    } label: {
+                        valueRow(
+                            title: Strings.Settings.cityLabel,
+                            value: fixedLocationName ?? City.defaultCity.name
+                        )
+                    }
+                } header: {
+                    Text(Strings.Settings.locationChooseCity)
+                } footer: {
+                    Text(Strings.Settings.fixedLocationHelper)
+                }
             }
         }
         .formStyle(.grouped)
         .navigationTitle(Strings.Settings.locationSection)
         .navigationBarTitleDisplayMode(.inline)
-        .onAppear {
-            selectedCityId = currentCityId()
-        }
-        .onChange(of: selectedCityId) { _, _ in
-            if settingsStore.settings.locationMode == .fixed {
-                applySelectedCity()
-                Task { await scheduleManager.ensureScheduleWindow(reason: .settingsChanged) }
-            }
-        }
-        .sheet(isPresented: $showOnlineSearch) {
-            OnlineCitySearchView { mapItem in
-                applyMapItem(mapItem)
-                Task { await scheduleManager.ensureScheduleWindow(reason: .settingsChanged) }
+        .task {
+            if settingsStore.settings.locationMode == .fixed, settingsStore.settings.fixedLocation == nil {
+                applySelectedCity(City.defaultCity)
             }
         }
     }
 
-    private func currentCityId() -> String {
-        guard let fixed = settingsStore.settings.fixedLocation else {
-            return City.defaultCity.id
-        }
-        if let city = cityForFixedLocation(fixed) {
-            return city.id
-        }
-        return City.defaultCity.id
-    }
-
-    private func cityName(for id: String) -> String {
-        City.all.first(where: { $0.id == id })?.name ?? City.defaultCity.name
-    }
-
-    private func cityForFixedLocation(_ fixed: FixedLocation) -> City? {
-        City.all.first {
-            abs($0.latitude - fixed.latitude) < 0.001 && abs($0.longitude - fixed.longitude) < 0.001
+    private func valueRow(title: String, value: String) -> some View {
+        HStack {
+            Text(title)
+            Spacer()
+            Text(value)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.trailing)
         }
     }
 
-    private func applySelectedCity() {
-        guard let city = City.all.first(where: { $0.id == selectedCityId }) else { return }
+    private var fixedLocationName: String? {
+        SettingsSummaryFormatter.effectiveLocationName(settings: settingsStore.settings, locationService: locationService)
+    }
+
+    private var permissionStatusText: String {
+        switch locationService.permissionState {
+        case .authorizedWithFix:
+            return Strings.Settings.badgeReady
+        case .authorizedNoFixYet:
+            return Strings.Settings.badgeLocating
+        case .notDetermined, .denied, .restricted:
+            return Strings.Settings.badgeNeedsAttention
+        }
+    }
+
+    private var permissionBadgeTone: SettingsBadgeTone {
+        switch locationService.permissionState {
+        case .authorizedWithFix:
+            return .success
+        case .authorizedNoFixYet:
+            return .warning
+        case .notDetermined, .denied, .restricted:
+            return .critical
+        }
+    }
+
+    private var permissionMessage: String {
+        switch locationService.permissionState {
+        case .authorizedWithFix:
+            return Strings.Settings.locationAutomaticReady
+        case .authorizedNoFixYet:
+            return Strings.Settings.locationAutomaticWaiting
+        case .notDetermined:
+            return Strings.Settings.locationAutomaticNeedsPermission
+        case .denied, .restricted:
+            return Strings.Settings.locationAutomaticDenied
+        }
+    }
+
+    private var permissionActionTitle: String? {
+        switch locationService.permissionState {
+        case .authorizedWithFix:
+            return nil
+        case .authorizedNoFixYet:
+            return Strings.LocationAccess.tryAgain
+        case .notDetermined:
+            return Strings.LocationAccess.allowLocation
+        case .denied, .restricted:
+            return Strings.LocationAccess.openSettings
+        }
+    }
+
+    private func handleLocationAction() {
+        switch locationService.permissionState {
+        case .notDetermined:
+            locationService.requestAuthorization()
+        case .authorizedNoFixYet:
+            locationService.requestLocation()
+        case .denied, .restricted:
+            openAppSettings()
+        case .authorizedWithFix:
+            break
+        }
+    }
+
+    private func applySelectedCity(_ city: City) {
         locationService.locationName = city.name
         settingsStore.update { draft in
             draft.locationMode = .fixed
             draft.fixedLocation = FixedLocation(latitude: city.latitude, longitude: city.longitude)
         }
+        scheduleManager.requestRefresh(reason: .settingsChanged)
     }
 
     private func applyMapItem(_ mapItem: MKMapItem) {
@@ -118,15 +176,12 @@ struct LocationSettingsView: View {
             draft.locationMode = .fixed
             draft.fixedLocation = FixedLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
         }
+        scheduleManager.requestRefresh(reason: .settingsChanged)
     }
 
     private func openAppSettings() {
         if let url = URL(string: UIApplication.openSettingsURLString) {
             UIApplication.shared.open(url)
         }
-    }
-
-    private var permissionRefreshKey: String {
-        "\(locationService.authorizationStatus.rawValue)-\(locationService.lastLocation != nil)"
     }
 }

@@ -1,6 +1,6 @@
 import Foundation
 
-struct DaySchedule: Identifiable, Codable, Equatable {
+struct DaySchedule: Identifiable, Codable, Equatable, Sendable {
     let id: String
     let date: Date
     let fajrDate: Date
