@@ -7,40 +7,60 @@ struct AlarmsHomeView: View {
     @EnvironmentObject private var alarmConfigStore: AlarmConfigStore
     @EnvironmentObject private var scheduleManager: ScheduleManager
     @EnvironmentObject private var locationService: LocationService
+    @EnvironmentObject private var fastTagStore: FastTagStore
 
     @State private var selectedSchedule: DaySchedule?
     @State private var showSettingsSheet = false
     @State private var showAddDaySheet = false
     @State private var editMode: EditMode = .inactive
+    @State private var sectionCollapseOverrides: [String: Bool] = [:]
 
     var body: some View {
         NavigationStack {
             List {
-                if displayEntries.isEmpty {
+                if hijriMonthSections.isEmpty {
                     Section {
                         emptyStateView
                     }
                 } else {
                     ForEach(hijriMonthSections, id: \.key) { section in
                         Section {
-                            ForEach(section.entries.indices, id: \.self) { index in
-                                let entry = section.entries[index]
-                                AlarmRowView(
-                                    schedule: entry.schedule,
-                                    config: entry.config,
-                                    primaryDisplay: entry.primary,
-                                    onSelect: {
-                                        selectedSchedule = entry.schedule
-                                    }
-                                )
-                                .deleteDisabled(!entry.isOneOff)
-                            }
-                            .onDelete { offsets in
-                                deleteEntries(in: section.entries, at: offsets)
+                            if !isSectionCollapsed(section) {
+                                ForEach(section.entries.indices, id: \.self) { index in
+                                    let entry = section.entries[index]
+                                    AlarmRowView(
+                                        schedule: entry.schedule,
+                                        config: entry.config,
+                                        primaryDisplay: entry.primary,
+                                        primaryIntent: entry.primaryIntent,
+                                        secondaryTags: entry.secondaryTags,
+                                        showsTags: entry.showsTags,
+                                        onSelect: {
+                                            selectedSchedule = entry.schedule
+                                        }
+                                    )
+                                    .deleteDisabled(!entry.isOneOff)
+                                }
+                                .onDelete { offsets in
+                                    deleteEntries(in: section.entries, at: offsets)
+                                }
                             }
                         } header: {
-                            Text(section.key.title)
-                                .textCase(nil)
+                            Button {
+                                toggleSectionCollapse(section)
+                            } label: {
+                                HStack {
+                                    Text(section.key.title)
+                                        .foregroundStyle(.primary)
+                                    Spacer()
+                                    Image(systemName: "chevron.right")
+                                        .font(.footnote.weight(.semibold))
+                                        .foregroundStyle(.secondary)
+                                        .rotationEffect(.degrees(isSectionCollapsed(section) ? 0 : 90))
+                                }
+                            }
+                            .buttonStyle(.plain)
+                            .textCase(nil)
                         }
                     }
                 }
@@ -149,10 +169,12 @@ struct AlarmsHomeView: View {
         let now = Date()
         let timeZone = TimeZone.current
         let startOfToday = DateHelpers.startOfToday(in: timeZone)
-        return scheduleManager.upcomingResolvedEntries(limit: 60, timeZone: timeZone).compactMap { resolved in
+        let tagResults = tagResultsByKey
+        return alarmConfigStore.resolvedScheduledEntries(from: startOfToday, limit: 366, timeZone: timeZone).compactMap { resolved in
             guard let schedule = scheduleForDisplay(on: resolved.date, timeZone: timeZone) else { return nil }
             let config = effectiveConfig(for: schedule)
             let primary = config.primaryDisplay(schedule: schedule)
+            let tagDisplay = tagDisplay(for: schedule.date, resultsByKey: tagResults)
             if schedule.date == startOfToday,
                config.hasAnyEnabled,
                shouldHideToday(schedule: schedule, config: config, now: now) {
@@ -162,7 +184,10 @@ struct AlarmsHomeView: View {
                 schedule: schedule,
                 config: config,
                 primary: primary,
-                isOneOff: resolved.isExplicitOneOff
+                isOneOff: resolved.isExplicitOneOff,
+                primaryIntent: tagDisplay.primary,
+                secondaryTags: tagDisplay.secondary,
+                showsTags: tagDisplay.showsTags
             )
         }
     }
@@ -174,11 +199,18 @@ struct AlarmsHomeView: View {
             guard let key = FastIntentEngine.hijriMonthKey(for: entry.schedule.date, timeZone: timeZone) else { continue }
             grouped[key, default: []].append(entry)
         }
-        let sorted = grouped.map { key, entries in
+
+        let scaffoldKeys = scaffoldHijriMonthKeys(timeZone: timeZone)
+        var sections: [HijriMonthSection] = scaffoldKeys.map { key in
+            HijriMonthSection(key: key, entries: grouped.removeValue(forKey: key) ?? [])
+        }
+
+        let remaining = grouped.map { key, entries in
             let firstDate = entries.first?.schedule.date ?? Date.distantPast
             return (key: key, entries: entries, firstDate: firstDate)
         }.sorted { $0.firstDate < $1.firstDate }
-        return sorted.map { HijriMonthSection(key: $0.key, entries: $0.entries) }
+        sections.append(contentsOf: remaining.map { HijriMonthSection(key: $0.key, entries: $0.entries) })
+        return sections
     }
 
     private func effectiveConfig(for schedule: DaySchedule) -> EffectiveDailyConfig {
@@ -224,6 +256,90 @@ struct AlarmsHomeView: View {
         let primary = config.primaryDisplay(schedule: schedule)
         guard let primary else { return false }
         return primary.time <= now
+    }
+
+    private func scaffoldHijriMonthKeys(timeZone: TimeZone) -> [HijriMonthKey] {
+        guard let current = AdjustedHijriCalendar.shared.adjustedComponents(for: Date(), timeZone: timeZone) else {
+            return []
+        }
+
+        var keys: [HijriMonthKey] = []
+        var month = current.month
+        var year = current.hijriYear
+        let targetYear = month.rawValue <= HijriMonth.ramadan.rawValue ? year : year + 1
+
+        while true {
+            keys.append(
+                HijriMonthKey(
+                    year: year,
+                    month: month.rawValue,
+                    title: "\(month.displayName) \(year)"
+                )
+            )
+            if month == .ramadan, year == targetYear {
+                break
+            }
+            if month == .dhulHijjah {
+                month = .muharram
+                year += 1
+            } else if let nextMonth = HijriMonth(rawValue: month.rawValue + 1) {
+                month = nextMonth
+            } else {
+                break
+            }
+        }
+
+        return keys
+    }
+
+    private func isSectionCollapsed(_ section: HijriMonthSection) -> Bool {
+        let identifier = sectionIdentifier(section.key)
+        return sectionCollapseOverrides[identifier] ?? section.entries.isEmpty
+    }
+
+    private func toggleSectionCollapse(_ section: HijriMonthSection) {
+        let identifier = sectionIdentifier(section.key)
+        let currentState = isSectionCollapsed(section)
+        sectionCollapseOverrides[identifier] = !currentState
+    }
+
+    private func sectionIdentifier(_ key: HijriMonthKey) -> String {
+        "\(key.year)-\(key.month)"
+    }
+
+    private var tagResultsByKey: [String: TagComputationResult] {
+        TagComputationEngine.results(
+            schedules: scheduleManager.schedules,
+            selections: fastTagStore.selections,
+            ruleset: .strict,
+            timeZone: .current
+        )
+    }
+
+    private func tagDisplay(for date: Date, resultsByKey: [String: TagComputationResult]) -> TagDisplay {
+        let key = DateHelpers.dayIdentifier(for: date, timeZone: .current)
+        let result: TagComputationResult
+        if let stored = resultsByKey[key] {
+            result = stored
+        } else {
+            let selection = fastTagStore.selection(for: date, timeZone: .current) ?? .default
+            result = TagComputationEngine.result(
+                for: date,
+                schedules: scheduleManager.schedules,
+                selections: fastTagStore.selections,
+                ruleset: .strict,
+                timeZone: .current,
+                overrideSelection: selection.hasMeaningfulTags ? selection : nil
+            )
+        }
+
+        let secondary = Array(FastIntentEngine.displaySecondaryTags(result.computedSecondaryTags).prefix(2))
+        let showsTags = !(result.computedPrimaryIntent == .other && secondary.isEmpty)
+        return TagDisplay(
+            primary: result.computedPrimaryIntent,
+            secondary: secondary,
+            showsTags: showsTags
+        )
     }
 }
 
@@ -602,6 +718,9 @@ private struct AlarmRowEntry {
     let config: EffectiveDailyConfig
     let primary: PrimaryDisplay?
     let isOneOff: Bool
+    let primaryIntent: FastPrimaryIntent
+    let secondaryTags: [FastSecondaryVirtueTag]
+    let showsTags: Bool
 }
 
 private struct HijriMonthSection {
@@ -617,6 +736,9 @@ private struct AlarmRowView: View {
     let schedule: DaySchedule
     let config: EffectiveDailyConfig
     let primaryDisplay: PrimaryDisplay?
+    let primaryIntent: FastPrimaryIntent
+    let secondaryTags: [FastSecondaryVirtueTag]
+    let showsTags: Bool
     let onSelect: () -> Void
     @ScaledMetric(relativeTo: .largeTitle) private var timeFontSize: CGFloat = 46
 
@@ -668,6 +790,14 @@ private struct AlarmRowView: View {
             .accessibilityLabel(accessibilitySummary)
 
             Spacer()
+
+            if showsTags {
+                TagIconStack(
+                    primaryIntent: primaryIntent,
+                    secondaryTags: secondaryTags,
+                    isDisabled: isDisabled
+                )
+            }
 
             Toggle("", isOn: dayActiveBinding)
                 .labelsHidden()
@@ -753,7 +883,11 @@ private struct AlarmRowView: View {
     }
 
     private var accessibilitySummary: String {
-        "\(dateLabelWithPrefix). \(primaryLabelText) alarm. \(primaryTimeText). Fajr \(fajrTimeText)."
+        var summary = "\(dateLabelWithPrefix). \(primaryLabelText) alarm. \(primaryTimeText). Fajr \(fajrTimeText)."
+        if let tagAccessibilityText {
+            summary += " \(tagAccessibilityText)"
+        }
+        return summary
     }
 
     private var primaryLabelText: String {
@@ -786,6 +920,13 @@ private struct AlarmRowView: View {
         return parts.joined(separator: ", ")
     }
 
+    private var tagAccessibilityText: String? {
+        guard showsTags else { return nil }
+        var titles: [String] = [primaryIntent.style.title]
+        titles.append(contentsOf: secondaryTags.map { $0.title })
+        return "Tags: \(titles.joined(separator: ", "))."
+    }
+
     private var fastDayText: String? {
         guard let components = FastIntentEngine.adjustedComponents(for: schedule.date, timeZone: .current),
               components.month == .ramadan else {
@@ -812,5 +953,49 @@ private extension AlarmsHomeView {
                 selectedSchedule = nil
             }
         })
+    }
+}
+
+private struct TagDisplay {
+    let primary: FastPrimaryIntent
+    let secondary: [FastSecondaryVirtueTag]
+    let showsTags: Bool
+}
+
+private struct TagIconStack: View {
+    let primaryIntent: FastPrimaryIntent
+    let secondaryTags: [FastSecondaryVirtueTag]
+    let isDisabled: Bool
+
+    var body: some View {
+        VStack(spacing: 6) {
+            TagIconBadge(style: primaryIntent.style, isDisabled: isDisabled)
+            ForEach(secondaryTags, id: \.self) { tag in
+                TagIconBadge(style: tag.style, isDisabled: isDisabled)
+            }
+        }
+        .accessibilityHidden(true)
+    }
+}
+
+private struct TagIconBadge: View {
+    let style: FastTagStyle
+    let isDisabled: Bool
+    @ScaledMetric(relativeTo: .footnote) private var badgeSize: CGFloat = 22
+
+    var body: some View {
+        let base = style.color
+        Image(systemName: style.systemImage ?? "tag")
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(base)
+            .frame(width: badgeSize, height: badgeSize)
+            .background(base.opacity(0.16))
+            .clipShape(Circle())
+            .overlay(
+                Circle()
+                    .stroke(base.opacity(0.4), lineWidth: 0.8)
+            )
+            .opacity(isDisabled ? 0.5 : 1.0)
+            .accessibilityHidden(true)
     }
 }

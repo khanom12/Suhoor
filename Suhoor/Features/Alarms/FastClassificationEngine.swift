@@ -433,6 +433,10 @@ enum FastIntentEngine {
         return Set(accepted)
     }
 
+    static func displaySecondaryTags(_ tags: Set<FastSecondaryVirtueTag>) -> [FastSecondaryVirtueTag] {
+        tags.sorted { observancePriority(for: $0) < observancePriority(for: $1) }
+    }
+
     static func observanceReason(for tag: FastSecondaryVirtueTag, on date: Date, timeZone: TimeZone) -> String {
         let day = adjustedComponents(for: date, timeZone: timeZone)?.day ?? 0
 
