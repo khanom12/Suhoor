@@ -39,6 +39,14 @@ struct AlarmsListView: View {
                         )
 
                     VStack(spacing: DesignTokens.spacingL) {
+                        PermissionStackView(
+                            kinds: [.location, .alarmKit, .notifications],
+                            refreshKey: permissionRefreshKey,
+                            showOnlyBlocking: true,
+                            onOpenSettings: openSettings
+                        )
+                        .environmentObject(scheduleManager)
+
                         if let banner = banner {
                             GlassCard(style: .header, padding: DesignTokens.spacingM) {
                                 MaterialBannerView(
@@ -342,6 +350,10 @@ struct AlarmsListView: View {
             || settingsStore.settings.hasAnyAtFajrNonDefaultSound
     }
 
+    private var permissionRefreshKey: String {
+        "\(locationService.authorizationStatus.rawValue)-\(locationService.lastLocation != nil)-\(scheduleManager.alarmAuthorizationText)-\(scheduleManager.notificationAuthorizationText)"
+    }
+
     private func openSettings() {
         if let url = URL(string: UIApplication.openSettingsURLString) {
             UIApplication.shared.open(url)
@@ -352,6 +364,12 @@ struct AlarmsListView: View {
         switch banner.action {
         case .showAlarmInfo:
             showAlarmInfo = true
+        case .requestLocation:
+            locationService.requestAuthorization()
+        case .openSettings:
+            openSettings()
+        case .retryLocation:
+            locationService.requestLocation()
         }
     }
 
@@ -523,6 +541,9 @@ private struct RoutineRowLayout<Trailing: View, Footer: View>: View {
 private struct AlarmBanner {
     enum Action {
         case showAlarmInfo
+        case requestLocation
+        case openSettings
+        case retryLocation
     }
 
     let title: String

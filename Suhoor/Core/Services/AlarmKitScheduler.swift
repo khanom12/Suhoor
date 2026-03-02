@@ -31,6 +31,28 @@ final class AlarmKitScheduler {
         }
     }
 
+    var isAvailableOnCurrentDevice: Bool {
+        !isRunningOnSimulator
+    }
+
+    var isRequestable: Bool {
+        isAvailableOnCurrentDevice && authorizationState == .notDetermined
+    }
+
+    var appPermissionState: AppPermissionState {
+        guard isAvailableOnCurrentDevice else { return .unavailable }
+        switch authorizationState {
+        case .authorized:
+            return .authorized
+        case .denied:
+            return .denied
+        case .notDetermined:
+            return .notDetermined
+        @unknown default:
+            return .restricted
+        }
+    }
+
     func requestAuthorization() async -> Bool {
         if isRunningOnSimulator {
             return false

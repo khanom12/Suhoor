@@ -13,16 +13,13 @@ struct AdvancedSettingsView: View {
     var body: some View {
         Form {
             Section("Location") {
-                Text(locationStatusText)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                Button("Manage in Settings") {
-                    if let url = URL(string: UIApplication.openSettingsURLString) {
-                        UIApplication.shared.open(url)
-                    }
-                }
+                PermissionStackView(
+                    kinds: [.location, .alarmKit, .notifications],
+                    refreshKey: permissionRefreshKey,
+                    showOnlyBlocking: false,
+                    onOpenSettings: openAppSettings
+                )
+                .environmentObject(scheduleManager)
             }
 
             Section("Calculation") {
@@ -83,18 +80,13 @@ struct AdvancedSettingsView: View {
         }
     }
 
-    private var locationStatusText: String {
-        switch locationService.authorizationStatus {
-        case .authorizedAlways, .authorizedWhenInUse:
-            return "Location access is allowed."
-        case .denied:
-            return "Location access is denied."
-        case .restricted:
-            return "Location access is restricted."
-        case .notDetermined:
-            return "Location access not determined yet."
-        @unknown default:
-            return "Location access status unknown."
+    private var permissionRefreshKey: String {
+        "\(locationService.authorizationStatus.rawValue)-\(locationService.lastLocation != nil)-\(scheduleManager.alarmAuthorizationText)-\(scheduleManager.notificationAuthorizationText)"
+    }
+
+    private func openAppSettings() {
+        if let url = URL(string: UIApplication.openSettingsURLString) {
+            UIApplication.shared.open(url)
         }
     }
 }

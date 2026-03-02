@@ -1,7 +1,10 @@
 import SwiftUI
 import UIKit
+import CoreLocation
 
 struct AlarmInfoView: View {
+    @EnvironmentObject private var scheduleManager: ScheduleManager
+    @EnvironmentObject private var locationService: LocationService
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -17,11 +20,13 @@ struct AlarmInfoView: View {
             }
 
             Section {
-                Button(Strings.AboutAlarms.openSettings) {
-                    if let url = URL(string: UIApplication.openSettingsURLString) {
-                        UIApplication.shared.open(url)
-                    }
-                }
+                PermissionStackView(
+                    kinds: [.alarmKit, .notifications],
+                    refreshKey: permissionRefreshKey,
+                    showOnlyBlocking: false,
+                    onOpenSettings: openAppSettings
+                )
+                .environmentObject(scheduleManager)
             }
         }
         .navigationTitle(Strings.AboutAlarms.title)
@@ -30,6 +35,16 @@ struct AlarmInfoView: View {
             ToolbarItem(placement: .confirmationAction) {
                 Button("Done") { dismiss() }
             }
+        }
+    }
+
+    private var permissionRefreshKey: String {
+        "\(locationService.authorizationStatus.rawValue)-\(locationService.lastLocation != nil)-\(scheduleManager.alarmAuthorizationText)-\(scheduleManager.notificationAuthorizationText)"
+    }
+
+    private func openAppSettings() {
+        if let url = URL(string: UIApplication.openSettingsURLString) {
+            UIApplication.shared.open(url)
         }
     }
 }

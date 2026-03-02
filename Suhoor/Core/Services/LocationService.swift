@@ -5,6 +5,14 @@ import SwiftUI
 import Combine
 import os
 
+enum LocationPermissionState: Equatable {
+    case notDetermined
+    case authorizedNoFixYet
+    case authorizedWithFix
+    case denied
+    case restricted
+}
+
 final class LocationService: NSObject, ObservableObject, CLLocationManagerDelegate {
     @Published var authorizationStatus: CLAuthorizationStatus
     @Published var lastLocation: CLLocation?
@@ -23,6 +31,60 @@ final class LocationService: NSObject, ObservableObject, CLLocationManagerDelega
         manager.delegate = self
         manager.desiredAccuracy = kCLLocationAccuracyKilometer
     }
+
+    var permissionState: LocationPermissionState {
+        switch authorizationStatus {
+        case .authorizedAlways, .authorizedWhenInUse:
+            return lastLocation == nil ? .authorizedNoFixYet : .authorizedWithFix
+        case .denied:
+            return .denied
+        case .restricted:
+            return .restricted
+        case .notDetermined:
+            return .notDetermined
+        @unknown default:
+            return .notDetermined
+        }
+    }
+
+    var canRequestAuthorization: Bool {
+        authorizationStatus == .notDetermined
+    }
+
+    var shouldOfferSettingsRedirect: Bool {
+        authorizationStatus == .denied || authorizationStatus == .restricted
+    }
+
+    var hasUsableAutoLocation: Bool {
+        permissionState == .authorizedWithFix
+    }
+
+    var shouldShowLocatingState: Bool {
+        permissionState == .authorizedNoFixYet
+    }
+
+    var appPermissionState: AppPermissionState {
+        switch permissionState {
+        case .notDetermined:
+            return .notDetermined
+        case .authorizedNoFixYet:
+            return .needsFollowUp
+        case .authorizedWithFix:
+            return .authorized
+        case .denied:
+            return .denied
+        case .restricted:
+            return .restricted
+        }
+    }
+
+#if targetEnvironment(simulator)
+    var shouldShowSimulatorHint: Bool {
+        permissionState == .authorizedNoFixYet
+    }
+#else
+    var shouldShowSimulatorHint: Bool { false }
+#endif
 
     func requestAuthorization() {
         manager.requestWhenInUseAuthorization()

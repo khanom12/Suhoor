@@ -169,26 +169,13 @@ struct SettingsRootView: View {
             }
 
             Section(Strings.Settings.permissionsSection) {
-                HStack {
-                    Text("\(Strings.Settings.locationStatus): \(locationStatusText)")
-                    Spacer()
-                    Button(Strings.AlarmList.openSettings) { openAppSettings() }
-                        .font(.footnote)
-                }
-
-                HStack {
-                    Text("\(Strings.Settings.notificationsStatus): \(notificationsStatusText)")
-                    Spacer()
-                    Button(Strings.AlarmList.openSettings) { openAppSettings() }
-                        .font(.footnote)
-                }
-
-                HStack {
-                    Text("AlarmKit")
-                    Spacer()
-                    Text(scheduleManager.alarmAuthorizationText)
-                        .foregroundStyle(.secondary)
-                }
+                PermissionStackView(
+                    kinds: [.location, .alarmKit, .notifications],
+                    refreshKey: permissionRefreshKey,
+                    showOnlyBlocking: false,
+                    onOpenSettings: openAppSettings
+                )
+                .environmentObject(scheduleManager)
 
                 Button(Strings.Settings.aboutAlarms) { showAlarmInfo = true }
                     .font(.footnote.weight(.semibold))
@@ -438,9 +425,19 @@ struct SettingsRootView: View {
                 HStack {
                     Text("\(Strings.Settings.locationStatus): \(locationStatusText)")
                     Spacer()
-                    Button(Strings.AlarmList.openSettings) { openAppSettings() }
-                        .font(.footnote)
+                    if let actionTitle = locationPermissionActionTitle {
+                        Button(actionTitle) { handleLocationPermissionAction() }
+                            .font(.footnote)
+                    }
                 }
+
+#if targetEnvironment(simulator)
+                if locationService.shouldShowSimulatorHint {
+                    Text(Strings.LocationAccess.simulatorHint)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+#endif
 
                 HStack {
                     Text("\(Strings.Settings.notificationsStatus): \(notificationsStatusText)")
@@ -541,6 +538,36 @@ struct SettingsRootView: View {
     private func openAppSettings() {
         if let url = URL(string: UIApplication.openSettingsURLString) {
             UIApplication.shared.open(url)
+        }
+    }
+
+    private var permissionRefreshKey: String {
+        "\(locationService.authorizationStatus.rawValue)-\(locationService.lastLocation != nil)-\(scheduleManager.alarmAuthorizationText)-\(scheduleManager.notificationAuthorizationText)"
+    }
+
+    private var locationPermissionActionTitle: String? {
+        switch locationService.permissionState {
+        case .notDetermined:
+            return Strings.LocationAccess.allowLocation
+        case .denied, .restricted:
+            return Strings.LocationAccess.openSettings
+        case .authorizedNoFixYet:
+            return Strings.LocationAccess.tryAgain
+        case .authorizedWithFix:
+            return nil
+        }
+    }
+
+    private func handleLocationPermissionAction() {
+        switch locationService.permissionState {
+        case .notDetermined:
+            locationService.requestAuthorization()
+        case .denied, .restricted:
+            openAppSettings()
+        case .authorizedNoFixYet:
+            locationService.requestLocation()
+        case .authorizedWithFix:
+            break
         }
     }
 

@@ -22,6 +22,20 @@ final class NotificationScheduler {
         return settings.authorizationStatus
     }
 
+    func appPermissionState() async -> AppPermissionState {
+        let settings = await center.notificationSettings()
+        switch settings.authorizationStatus {
+        case .authorized, .provisional, .ephemeral:
+            return .authorized
+        case .denied:
+            return .denied
+        case .notDetermined:
+            return .notDetermined
+        @unknown default:
+            return .restricted
+        }
+    }
+
     func requestAuthorization() async -> Bool {
         do {
             let granted = try await center.requestAuthorization(options: [.alert, .sound])

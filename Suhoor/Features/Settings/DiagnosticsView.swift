@@ -40,6 +40,9 @@ struct DiagnosticsView: View {
                 Text(scheduleManager.permissionSummary)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
+                Text("Effective mode: \(effectiveModeText)")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
             }
 
             Section("Scheduling Audit") {
@@ -151,8 +154,20 @@ struct DiagnosticsView: View {
         .navigationBarTitleDisplayMode(.inline)
         .formStyle(.grouped)
         .task {
+            await scheduleManager.refreshPermissionSummary()
             await refreshAudit()
             timelineEntries = EventTimelineLog.shared.entries()
+        }
+    }
+
+    private var effectiveModeText: String {
+        switch scheduleManager.schedulingMode {
+        case .alarmKit:
+            return "AlarmKit"
+        case .notifications:
+            return "Notifications"
+        case .none:
+            return "Blocked"
         }
     }
 

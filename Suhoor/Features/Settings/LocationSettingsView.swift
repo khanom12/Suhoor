@@ -1,5 +1,6 @@
 import SwiftUI
 import MapKit
+import UIKit
 
 struct LocationSettingsView: View {
     @EnvironmentObject private var settingsStore: SuhoorSettingsStore
@@ -26,10 +27,18 @@ struct LocationSettingsView: View {
                 }
 
                 if settingsStore.settings.locationMode == .auto {
-                    Text(Strings.Settings.locationHelper)
+                    PermissionStackView(
+                        kinds: [.location],
+                        refreshKey: permissionRefreshKey,
+                        showOnlyBlocking: false,
+                        onOpenSettings: openAppSettings
+                    )
+                    .environmentObject(scheduleManager)
+                } else {
+                    Text(Strings.LocationAccess.manualOverride)
                         .font(.footnote)
                         .foregroundStyle(.secondary)
-                } else {
+
                     Text(Strings.Settings.locationSelected(cityName(for: selectedCityId)))
                         .font(.footnote)
                         .foregroundStyle(.secondary)
@@ -49,8 +58,6 @@ struct LocationSettingsView: View {
                         .foregroundStyle(.secondary)
                 }
 
-                Button(Strings.Settings.openAppSettings) { openAppSettings() }
-                    .font(.footnote.weight(.semibold))
             }
         }
         .formStyle(.grouped)
@@ -117,5 +124,9 @@ struct LocationSettingsView: View {
         if let url = URL(string: UIApplication.openSettingsURLString) {
             UIApplication.shared.open(url)
         }
+    }
+
+    private var permissionRefreshKey: String {
+        "\(locationService.authorizationStatus.rawValue)-\(locationService.lastLocation != nil)"
     }
 }

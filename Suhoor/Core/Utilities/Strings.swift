@@ -98,6 +98,34 @@ enum Strings {
         static let notNowButton = "Not now"
     }
 
+    enum LocationAccess {
+        static let title = "Location"
+        static let allowLocation = "Allow Location"
+        static let openSettings = "Open Settings"
+        static let tryAgain = "Try Again"
+        static let autoExplanation = "Location access is needed to calculate Fajr automatically."
+        static let deniedExplanation = "Location was denied. Enable it for Suhoor in Settings."
+        static let waitingForLocation = "Waiting for your current location..."
+        static let simulatorHint = "In Simulator, also set a location from Xcode's Debug > Location menu."
+        static let manualOverride = "Manual override: use a fixed city instead of auto."
+        static func currentLocation(_ name: String) -> String { "Current location: \(name)" }
+    }
+
+    enum AlarmAccess {
+        static let title = "Alarms"
+        static let allowAlarms = "Allow Alarms"
+        static let explanation = "Alarm access gives Suhoor the most reliable wake-up scheduling."
+        static let deniedExplanation = "Alarm access was denied. Enable it in Settings or continue with notifications."
+        static let unavailableExplanation = "AlarmKit is unavailable on this device. Suhoor will use notifications instead."
+    }
+
+    enum NotificationAccess {
+        static let title = "Notifications"
+        static let allowNotifications = "Allow Notifications"
+        static let explanation = "Notifications are used when alarms are unavailable and for fallback reminders."
+        static let deniedExplanation = "Notifications were denied. Enable them for fallback alerts."
+    }
+
     enum NotificationRationale {
         static let title = "Allow notifications"
         static let body = "Used for your reminder before Fajr and your At Fajr alert."

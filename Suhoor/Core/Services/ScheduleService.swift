@@ -152,31 +152,31 @@ final class ScheduleManager: ObservableObject {
     func enableFromUserAction() async -> Bool {
         lastEnableFailureMessage = nil
 
-        if !isLocationAuthorized {
-            locationService.requestAuthorization()
-            lastEnableFailureMessage = "Location required to calculate Fajr."
+        let locationState = await permissionState(for: .location)
+        if requiresLocationAuthorization && locationState != .authorized {
+            if locationState == .notDetermined {
+                _ = await requestPermission(.location)
+            }
+            lastEnableFailureMessage = Strings.LocationAccess.autoExplanation
             return false
         }
 
-        if canRequestAlarmKitAuthorization {
-            _ = await requestAlarmAuthorization()
+        let alarmState = await permissionState(for: .alarmKit)
+        if alarmState == .notDetermined {
+            _ = await requestPermission(.alarmKit)
         }
 
-        let canUseAlarmKit = await alarmKitAvailableAndAuthorized()
-        let requiresNotifications = !canUseAlarmKit
+        let mode = await effectiveSchedulingChannel()
+        let requiresNotifications = mode != .alarmKit
 
         if requiresNotifications {
-            let status = await notificationAuthorizationStatus()
-            if status == .denied {
-                lastEnableFailureMessage = "Notifications are used for your reminder before Fajr and Fajr alert."
-                return false
+            let notificationState = await permissionState(for: .notifications)
+            if notificationState == .notDetermined {
+                _ = await requestPermission(.notifications)
             }
-            if status == .notDetermined {
-                let granted = await requestNotificationAuthorization()
-                if !granted {
-                    lastEnableFailureMessage = "Notifications are used for your reminder before Fajr and Fajr alert."
-                    return false
-                }
+            if await permissionState(for: .notifications) != .authorized {
+                lastEnableFailureMessage = Strings.NotificationAccess.deniedExplanation
+                return false
             }
         }
 
@@ -201,16 +201,15 @@ final class ScheduleManager: ObservableObject {
         let settings = settingsStore.settings
         EventTimelineLog.shared.record(category: "schedule", message: "refreshSchedules(force=\(force))")
 
-        guard isLocationAuthorized else {
-            statusText = "Location permission required."
-            schedules = []
-            schedulingMode = .none
-            return
-        }
-
         let coordinate: CLLocationCoordinate2D
         switch settings.locationMode {
         case .auto:
+            guard isLocationAuthorized else {
+                statusText = "Location permission required."
+                schedules = []
+                schedulingMode = .none
+                return
+            }
             guard let autoCoord = locationService.lastLocation?.coordinate else {
                 locationService.requestLocation()
                 statusText = "Locating…"
@@ -232,8 +231,13 @@ final class ScheduleManager: ObservableObject {
         let timeZone = TimeZone.current
         let method = settings.calculationMethod
         let startDate = DateHelpers.startOfToday(in: timeZone)
-        let canUseAlarmKit = await alarmKitAvailableAndAuthorized()
-        let mode: SchedulingMode = canUseAlarmKit ? .alarmKit : .notifications
+        let mode = await effectiveSchedulingChannel()
+        guard mode != .none else {
+            statusText = await schedulingBlockedMessage()
+            schedules = []
+            schedulingMode = .none
+            return
+        }
         let windowDays = max(1, alarmConfigStore.defaults.scheduleWindowDays)
         let maxScheduleDays = 60
         let scheduleDays = max(windowDays, maxScheduleDays)
@@ -275,7 +279,7 @@ final class ScheduleManager: ObservableObject {
             let scheduled = await alarmScheduler.scheduleAll(
                 entries: entries,
                 settings: settings,
-                canUseAlarmKit: canUseAlarmKit,
+                canUseAlarmKit: mode == .alarmKit,
                 cancelWindowDays: maxScheduleDays
             )
             statusText = scheduled ? "Scheduled" : "Unable to schedule"
@@ -305,7 +309,6 @@ final class ScheduleManager: ObservableObject {
     }
 
     func rescheduleDay(_ date: Date) async {
-        guard isLocationAuthorized else { return }
         guard let coordinate = currentCoordinate() else { return }
 
         let settings = settingsStore.settings
@@ -367,7 +370,6 @@ final class ScheduleManager: ObservableObject {
     }
 
     func schedule(for date: Date) -> DaySchedule? {
-        guard isLocationAuthorized else { return nil }
         guard let coordinate = currentCoordinate() else { return nil }
 
         let settings = settingsStore.settings
@@ -461,6 +463,109 @@ final class ScheduleManager: ObservableObject {
         locationService.requestAuthorization()
     }
 
+    func permissionState(for kind: AppPermissionKind) async -> AppPermissionState {
+        switch kind {
+        case .location:
+            return requiresLocationAuthorization ? locationService.appPermissionState : .authorized
+        case .alarmKit:
+            #if targetEnvironment(simulator)
+            return .unavailable
+            #else
+            if #available(iOS 26.0, *), let alarmKitScheduler {
+                return alarmKitScheduler.appPermissionState
+            }
+            return .unavailable
+            #endif
+        case .notifications:
+            return await notificationScheduler.appPermissionState()
+        }
+    }
+
+    func permissionPresentation(for kind: AppPermissionKind) async -> PermissionPresentation {
+        let state = await permissionState(for: kind)
+        let isBlocking = await shouldBlockOnboarding(on: kind)
+
+        switch kind {
+        case .location:
+            return PermissionPresentation(
+                kind: kind,
+                state: state,
+                title: Strings.LocationAccess.title,
+                statusText: statusLabel(for: state),
+                message: locationMessage(for: state),
+                actionTitle: actionTitle(for: kind, state: state),
+                secondaryActionTitle: nil,
+                showsProgress: state == .needsFollowUp,
+                showsSimulatorHint: state == .needsFollowUp && locationService.shouldShowSimulatorHint,
+                isBlocking: isBlocking
+            )
+        case .alarmKit:
+            return PermissionPresentation(
+                kind: kind,
+                state: state,
+                title: Strings.AlarmAccess.title,
+                statusText: statusLabel(for: state),
+                message: alarmMessage(for: state),
+                actionTitle: actionTitle(for: kind, state: state),
+                secondaryActionTitle: nil,
+                showsProgress: false,
+                showsSimulatorHint: false,
+                isBlocking: isBlocking
+            )
+        case .notifications:
+            return PermissionPresentation(
+                kind: kind,
+                state: state,
+                title: Strings.NotificationAccess.title,
+                statusText: statusLabel(for: state),
+                message: notificationMessage(for: state),
+                actionTitle: actionTitle(for: kind, state: state),
+                secondaryActionTitle: nil,
+                showsProgress: false,
+                showsSimulatorHint: false,
+                isBlocking: isBlocking
+            )
+        }
+    }
+
+    func requestPermission(_ kind: AppPermissionKind) async -> Bool {
+        switch kind {
+        case .location:
+            locationService.requestAuthorization()
+            return true
+        case .alarmKit:
+            return await requestAlarmAuthorization()
+        case .notifications:
+            return await requestNotificationAuthorization()
+        }
+    }
+
+    func shouldBlockOnboarding(on kind: AppPermissionKind) async -> Bool {
+        let state = await permissionState(for: kind)
+        switch kind {
+        case .location:
+            return requiresLocationAuthorization && state != .authorized
+        case .alarmKit:
+            return state == .notDetermined || state == .restricted
+        case .notifications:
+            return state != .authorized
+        }
+    }
+
+    func requiredOnboardingPermissions() async -> [AppPermissionKind] {
+        [.location, .alarmKit, .notifications]
+    }
+
+    func effectiveSchedulingChannel() async -> SchedulingMode {
+        if await permissionState(for: .alarmKit) == .authorized {
+            return .alarmKit
+        }
+        if await permissionState(for: .notifications) == .authorized {
+            return .notifications
+        }
+        return .none
+    }
+
     func refreshPermissionSummary() async {
         permissionSummary = await permissionSummaryText()
         alarmAuthorizationText = await alarmAuthorizationStateText()
@@ -473,7 +578,7 @@ final class ScheduleManager: ObservableObject {
         return false
         #else
         if #available(iOS 26.0, *), let alarmKitScheduler {
-            return !alarmKitScheduler.isAuthorized
+            return alarmKitScheduler.isRequestable
         }
         return false
         #endif
@@ -778,6 +883,10 @@ final class ScheduleManager: ObservableObject {
         locationService.authorizationStatus == .authorizedAlways || locationService.authorizationStatus == .authorizedWhenInUse
     }
 
+    private var requiresLocationAuthorization: Bool {
+        settingsStore.settings.locationMode == .auto
+    }
+
     private var hasAnyEnabledAlarms: Bool {
         alarmConfigStore.hasAnyEnabledDefaults || alarmConfigStore.hasAnyEnabledOverride()
     }
@@ -785,10 +894,85 @@ final class ScheduleManager: ObservableObject {
     private func currentCoordinate() -> CLLocationCoordinate2D? {
         switch settingsStore.settings.locationMode {
         case .auto:
+            guard isLocationAuthorized else { return nil }
             return locationService.lastLocation?.coordinate
         case .fixed:
             guard let fixed = settingsStore.settings.fixedLocation else { return nil }
             return CLLocationCoordinate2D(latitude: fixed.latitude, longitude: fixed.longitude)
+        }
+    }
+
+    private func statusLabel(for state: AppPermissionState) -> String {
+        switch state {
+        case .notDetermined:
+            return "Not Set"
+        case .authorized:
+            return "Ready"
+        case .denied:
+            return "Denied"
+        case .restricted:
+            return "Restricted"
+        case .unavailable:
+            return "Unavailable"
+        case .needsFollowUp:
+            return "Waiting"
+        }
+    }
+
+    private func actionTitle(for kind: AppPermissionKind, state: AppPermissionState) -> String? {
+        switch (kind, state) {
+        case (.location, .notDetermined):
+            return Strings.LocationAccess.allowLocation
+        case (.location, .denied), (.location, .restricted):
+            return Strings.LocationAccess.openSettings
+        case (.location, .needsFollowUp):
+            return Strings.LocationAccess.tryAgain
+        case (.alarmKit, .notDetermined):
+            return Strings.AlarmAccess.allowAlarms
+        case (.alarmKit, .denied), (.alarmKit, .restricted):
+            return Strings.LocationAccess.openSettings
+        case (.notifications, .notDetermined):
+            return Strings.NotificationAccess.allowNotifications
+        case (.notifications, .denied), (.notifications, .restricted):
+            return Strings.LocationAccess.openSettings
+        default:
+            return nil
+        }
+    }
+
+    private func locationMessage(for state: AppPermissionState) -> String {
+        switch state {
+        case .authorized:
+            if !locationService.locationName.isEmpty {
+                return Strings.LocationAccess.currentLocation(locationService.locationName)
+            }
+            return Strings.LocationAccess.autoExplanation
+        case .denied, .restricted:
+            return Strings.LocationAccess.deniedExplanation
+        case .needsFollowUp:
+            return Strings.LocationAccess.waitingForLocation
+        case .notDetermined, .unavailable:
+            return Strings.LocationAccess.autoExplanation
+        }
+    }
+
+    private func alarmMessage(for state: AppPermissionState) -> String {
+        switch state {
+        case .authorized, .notDetermined, .needsFollowUp:
+            return Strings.AlarmAccess.explanation
+        case .denied, .restricted:
+            return Strings.AlarmAccess.deniedExplanation
+        case .unavailable:
+            return Strings.AlarmAccess.unavailableExplanation
+        }
+    }
+
+    private func notificationMessage(for state: AppPermissionState) -> String {
+        switch state {
+        case .authorized, .notDetermined, .needsFollowUp, .unavailable:
+            return Strings.NotificationAccess.explanation
+        case .denied, .restricted:
+            return Strings.NotificationAccess.deniedExplanation
         }
     }
 
@@ -859,29 +1043,24 @@ final class ScheduleManager: ObservableObject {
     }
 
     private func alarmKitAvailableAndAuthorized() async -> Bool {
-        #if targetEnvironment(simulator)
-        return false
-        #else
-        if #available(iOS 26.0, *), let alarmKitScheduler {
-            return alarmKitScheduler.isAuthorized
-        }
-        return false
-        #endif
+        await effectiveSchedulingChannel() == .alarmKit
     }
 
     private func permissionSummaryText() async -> String {
-        #if targetEnvironment(simulator)
-        let notificationState = await notificationScheduler.authorizationStateText
-        return "AlarmKit: Unavailable on Simulator · Notifications: \(notificationState)"
-        #else
-        if #available(iOS 26.0, *), let alarmKitScheduler {
-            let alarmState = alarmKitScheduler.authorizationStateText
-            let notificationState = await notificationScheduler.authorizationStateText
-            return "AlarmKit: \(alarmState) · Notifications: \(notificationState)"
+        let location = await permissionPresentation(for: .location)
+        let alarms = await permissionPresentation(for: .alarmKit)
+        let notifications = await permissionPresentation(for: .notifications)
+        let mode = await effectiveSchedulingChannel()
+        let modeText: String
+        switch mode {
+        case .alarmKit:
+            modeText = "AlarmKit"
+        case .notifications:
+            modeText = "Notifications"
+        case .none:
+            modeText = "Blocked"
         }
-        let notificationState = await notificationScheduler.authorizationStateText
-        return "Notifications: \(notificationState)"
-        #endif
+        return "\(location.title): \(location.statusText) · \(alarms.title): \(alarms.statusText) · \(notifications.title): \(notifications.statusText) · Mode: \(modeText)"
     }
 
     private func alarmAuthorizationStateText() async -> String {
@@ -897,6 +1076,13 @@ final class ScheduleManager: ObservableObject {
 
     private func notificationAuthorizationStateText() async -> String {
         await notificationScheduler.authorizationStateText
+    }
+
+    private func schedulingBlockedMessage() async -> String {
+        if await permissionState(for: .notifications) != .authorized {
+            return Strings.NotificationAccess.deniedExplanation
+        }
+        return Strings.AlarmAccess.unavailableExplanation
     }
 
     private func alarmSoundName(for soundChoice: SoundChoice) -> String? {

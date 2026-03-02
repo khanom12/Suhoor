@@ -1,4 +1,6 @@
 import SwiftUI
+import UIKit
+import CoreLocation
 
 struct AlarmsHomeView: View {
     @EnvironmentObject private var settingsStore: SuhoorSettingsStore
@@ -114,6 +116,13 @@ struct AlarmsHomeView: View {
             Text(emptyStateDetail)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
+            PermissionStackView(
+                kinds: [.location, .alarmKit, .notifications],
+                refreshKey: permissionRefreshKey,
+                showOnlyBlocking: true,
+                onOpenSettings: openAppSettings
+            )
+            .environmentObject(scheduleManager)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, DesignTokens.spacingL)
@@ -124,6 +133,16 @@ struct AlarmsHomeView: View {
             return scheduleManager.statusText
         }
         return Strings.AlarmsTab.emptySubtitle
+    }
+
+    private func openAppSettings() {
+        if let url = URL(string: UIApplication.openSettingsURLString) {
+            UIApplication.shared.open(url)
+        }
+    }
+
+    private var permissionRefreshKey: String {
+        "\(locationService.authorizationStatus.rawValue)-\(locationService.lastLocation != nil)-\(scheduleManager.alarmAuthorizationText)-\(scheduleManager.notificationAuthorizationText)"
     }
 
     private var displayEntries: [AlarmRowEntry] {

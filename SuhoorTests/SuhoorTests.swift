@@ -1,4 +1,5 @@
 import Foundation
+import CoreLocation
 import Testing
 @testable import Suhoor
 
@@ -161,6 +162,91 @@ struct SuhoorTests {
         let ruleEngine = RuleEngine(settings: settings, timeZone: .current)
         let badges = ruleEngine.applicableBadges(for: date)
         #expect(badges.contains(.custom))
+    }
+
+    @Test
+    func locationPermissionStateTracksAuthorizationAndFix() {
+        let service = LocationService()
+        service.authorizationStatus = .authorizedWhenInUse
+        service.lastLocation = nil
+        #expect(service.permissionState == .authorizedNoFixYet)
+
+        service.lastLocation = CLLocation(latitude: 43.6532, longitude: -79.3832)
+        #expect(service.permissionState == .authorizedWithFix)
+
+        service.authorizationStatus = .denied
+        #expect(service.permissionState == .denied)
+    }
+
+    @Test
+    @MainActor
+    func fixedLocationSchedulesEvenWhenDenied() async {
+        let suiteName = "SuhoorTests.FixedLocation"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+
+        let settingsStore = SuhoorSettingsStore(defaults: defaults)
+        let alarmConfigStore = AlarmConfigStore(defaultsStore: defaults)
+        let locationService = LocationService()
+        locationService.authorizationStatus = .denied
+
+        settingsStore.update { draft in
+            draft.locationMode = .fixed
+            draft.fixedLocation = FixedLocation(latitude: 43.6532, longitude: -79.3832)
+        }
+
+        let scheduleManager = ScheduleManager(
+            settingsStore: settingsStore,
+            locationService: locationService,
+            alarmConfigStore: alarmConfigStore
+        )
+
+        await scheduleManager.refreshSchedules(force: true)
+        #expect(!scheduleManager.schedules.isEmpty)
+    }
+
+    @Test
+    @MainActor
+    func onboardingPermissionsStayInExpectedOrder() async {
+        let suiteName = "SuhoorTests.PermissionOrder"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+
+        let settingsStore = SuhoorSettingsStore(defaults: defaults)
+        let alarmConfigStore = AlarmConfigStore(defaultsStore: defaults)
+        let locationService = LocationService()
+        let scheduleManager = ScheduleManager(
+            settingsStore: settingsStore,
+            locationService: locationService,
+            alarmConfigStore: alarmConfigStore
+        )
+
+        let permissions = await scheduleManager.requiredOnboardingPermissions()
+        #expect(permissions == [.location, .alarmKit, .notifications])
+    }
+
+    @Test
+    @MainActor
+    func locationPermissionPresentationShowsWaitingWhenAuthorizedWithoutFix() async {
+        let suiteName = "SuhoorTests.LocationPresentation"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+
+        let settingsStore = SuhoorSettingsStore(defaults: defaults)
+        let alarmConfigStore = AlarmConfigStore(defaultsStore: defaults)
+        let locationService = LocationService()
+        locationService.authorizationStatus = .authorizedWhenInUse
+        locationService.lastLocation = nil
+
+        let scheduleManager = ScheduleManager(
+            settingsStore: settingsStore,
+            locationService: locationService,
+            alarmConfigStore: alarmConfigStore
+        )
+
+        let presentation = await scheduleManager.permissionPresentation(for: .location)
+        #expect(presentation.state == .needsFollowUp)
+        #expect(presentation.actionTitle == Strings.LocationAccess.tryAgain)
     }
 
     @Test

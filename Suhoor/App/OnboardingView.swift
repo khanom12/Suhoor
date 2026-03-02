@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import CoreLocation
 
 struct OnboardingView: View {
@@ -8,7 +9,6 @@ struct OnboardingView: View {
 
     @State private var step: Step = .welcome
     @State private var showHowItWorks = false
-    @State private var showLocationRequired = false
 
     var body: some View {
         NavigationStack {
@@ -24,15 +24,6 @@ struct OnboardingView: View {
                 HowItWorksView()
             }
         }
-        .onChange(of: locationService.authorizationStatus) { _, newValue in
-            if newValue == .authorizedAlways || newValue == .authorizedWhenInUse {
-                if step == .location {
-                    withAnimation(.easeInOut) {
-                        step = .offset
-                    }
-                }
-            }
-        }
     }
 
     @ViewBuilder
@@ -40,18 +31,16 @@ struct OnboardingView: View {
         switch step {
         case .welcome:
             WelcomeStep(
-                onGetStarted: { step = .location },
+                onGetStarted: { step = .permissions },
                 onHowItWorks: { showHowItWorks = true }
             )
-        case .location:
-            LocationStep(
-                showLocationRequired: showLocationRequired,
-                onAllow: {
-                    showLocationRequired = false
-                    scheduleManager.requestLocationAuthorization()
-                },
-                onNotNow: { showLocationRequired = true }
+        case .permissions:
+            PermissionsChecklistStep(
+                refreshKey: permissionsRefreshKey,
+                onOpenSettings: openAppSettings,
+                onContinue: { step = .offset }
             )
+            .environmentObject(scheduleManager)
         case .offset:
             OffsetStep(
                 baseMinutes: $settingsStore.settings.baseWakeOffsetMinutes,
@@ -82,11 +71,21 @@ struct OnboardingView: View {
         let time = TimeFormatters.timeFormatter.string(from: schedule.wakeDate)
         return "Next alarm: \(weekday) \(time)"
     }
+
+    private var permissionsRefreshKey: String {
+        "\(locationService.authorizationStatus.rawValue)-\(locationService.lastLocation != nil)-\(scheduleManager.alarmAuthorizationText)-\(scheduleManager.notificationAuthorizationText)"
+    }
+
+    private func openAppSettings() {
+        if let url = URL(string: UIApplication.openSettingsURLString) {
+            UIApplication.shared.open(url)
+        }
+    }
 }
 
 private enum Step {
     case welcome
-    case location
+    case permissions
     case offset
     case confirmation
 }
@@ -114,32 +113,77 @@ private struct WelcomeStep: View {
     }
 }
 
-private struct LocationStep: View {
-    let showLocationRequired: Bool
-    let onAllow: () -> Void
-    let onNotNow: () -> Void
+private struct PermissionsChecklistStep: View {
+    @EnvironmentObject private var scheduleManager: ScheduleManager
+
+    let refreshKey: String
+    let onOpenSettings: () -> Void
+    let onContinue: () -> Void
+
+    @State private var presentations: [PermissionPresentation] = []
+    @State private var isLoading = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Use your location")
+            Text("Set up permissions")
                 .font(.title2.weight(.bold))
-            Text("We use it to calculate tomorrow’s Fajr time for your area.")
+
+            Text("Suhoor will guide you through location, alarms, and notification access so setup doesn’t dead-end later.")
                 .font(.body)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
-            Button("Allow location", action: onAllow)
-                .buttonStyle(.borderedProminent)
-
-            Button("Not now", action: onNotNow)
-                .foregroundStyle(.secondary)
-
-            if showLocationRequired {
-                Text("Location is required to calculate Fajr.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+            if isLoading && presentations.isEmpty {
+                ProgressView()
+            } else {
+                ForEach(presentations) { presentation in
+                    PermissionCardView(
+                        presentation: presentation,
+                        action: presentation.actionTitle == nil ? nil : {
+                            Task { await handleAction(for: presentation) }
+                        }
+                    )
+                }
             }
+
+            Button("Continue", action: onContinue)
+                .buttonStyle(.borderedProminent)
+                .disabled(hasBlockingPermissions)
         }
+        .task {
+            await refresh()
+        }
+        .task(id: refreshKey) {
+            await refresh()
+        }
+    }
+
+    private var hasBlockingPermissions: Bool {
+        presentations.contains(where: \.isBlocking)
+    }
+
+    private func handleAction(for presentation: PermissionPresentation) async {
+        switch presentation.state {
+        case .notDetermined, .needsFollowUp:
+            _ = await scheduleManager.requestPermission(presentation.kind)
+        case .denied, .restricted:
+            onOpenSettings()
+        case .authorized, .unavailable:
+            break
+        }
+        await refresh()
+    }
+
+    private func refresh() async {
+        isLoading = true
+        let kinds = await scheduleManager.requiredOnboardingPermissions()
+        var updated: [PermissionPresentation] = []
+        for kind in kinds {
+            updated.append(await scheduleManager.permissionPresentation(for: kind))
+        }
+        presentations = updated
+        await scheduleManager.refreshPermissionSummary()
+        isLoading = false
     }
 }
 
