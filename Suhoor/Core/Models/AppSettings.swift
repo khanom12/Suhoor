@@ -18,6 +18,7 @@ struct AppSettings: Codable, Equatable {
     var fixedLocation: FixedLocation?
     var lastScheduledDate: Date?
     var lastSchedulingMode: SchedulingMode
+    var hijriSpecialDaySettings: HijriSpecialDaySettings
 
     var perDayExceptions: [String: DayException]
     var perDayOverrideOffsets: [String: Int]
@@ -40,8 +41,29 @@ struct AppSettings: Codable, Equatable {
         fixedLocation: nil,
         lastScheduledDate: nil,
         lastSchedulingMode: .none,
+        hijriSpecialDaySettings: .default,
         perDayExceptions: [:],
         perDayOverrideOffsets: [:]
+    )
+}
+
+struct HijriSpecialDaySettings: Codable, Equatable {
+    var isEnabled: Bool
+    var ramadanDailyEnabled: Bool
+    var whiteDaysEnabled: Bool
+    var ashuraEnabled: Bool
+    var arafahEnabled: Bool
+    var eidAlFitrEnabled: Bool
+    var eidAlAdhaEnabled: Bool
+
+    static let `default` = HijriSpecialDaySettings(
+        isEnabled: false,
+        ramadanDailyEnabled: false,
+        whiteDaysEnabled: false,
+        ashuraEnabled: false,
+        arafahEnabled: false,
+        eidAlFitrEnabled: false,
+        eidAlAdhaEnabled: false
     )
 }
 
@@ -66,6 +88,7 @@ extension AppSettings {
         case fixedLocation
         case lastScheduledDate
         case lastSchedulingMode
+        case hijriSpecialDaySettings
         case snoozeEnabled
         case snoozeMinutes
         case perDayExceptions
@@ -126,6 +149,7 @@ extension AppSettings {
         fixedLocation = try container.decodeIfPresent(FixedLocation.self, forKey: .fixedLocation)
         lastScheduledDate = try container.decodeIfPresent(Date.self, forKey: .lastScheduledDate)
         lastSchedulingMode = try container.decodeIfPresent(SchedulingMode.self, forKey: .lastSchedulingMode) ?? .none
+        hijriSpecialDaySettings = try container.decodeIfPresent(HijriSpecialDaySettings.self, forKey: .hijriSpecialDaySettings) ?? .default
 
         perDayExceptions = try container.decodeIfPresent([String: DayException].self, forKey: .perDayExceptions) ?? [:]
         perDayOverrideOffsets = try container.decodeIfPresent([String: Int].self, forKey: .perDayOverrideOffsets) ?? [:]
@@ -162,6 +186,7 @@ extension AppSettings {
         try container.encodeIfPresent(fixedLocation, forKey: .fixedLocation)
         try container.encodeIfPresent(lastScheduledDate, forKey: .lastScheduledDate)
         try container.encode(lastSchedulingMode, forKey: .lastSchedulingMode)
+        try container.encode(hijriSpecialDaySettings, forKey: .hijriSpecialDaySettings)
         try container.encode(perDayExceptions, forKey: .perDayExceptions)
         try container.encode(perDayOverrideOffsets, forKey: .perDayOverrideOffsets)
     }

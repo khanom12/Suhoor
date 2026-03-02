@@ -126,8 +126,14 @@ final class AlarmConfigStore: ObservableObject {
         defaults.deletedDates.remove(key)
     }
 
-    func effectiveConfig(for date: Date, ruleSummary: RuleSummary, settings: AppSettings, timeZone: TimeZone = .current) -> EffectiveDailyConfig {
-        let defaultsActive = isDefaultsActive(on: date, timeZone: timeZone)
+    func effectiveConfig(
+        for date: Date,
+        ruleSummary: RuleSummary,
+        settings: AppSettings,
+        timeZone: TimeZone = .current,
+        additionalDefaultsActive: Bool = false
+    ) -> EffectiveDailyConfig {
+        let defaultsActive = isDefaultsActive(on: date, timeZone: timeZone) || additionalDefaultsActive
         let key = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
         let override = overridesByDay[key]
         let skipDay = override?.skipDay ?? false

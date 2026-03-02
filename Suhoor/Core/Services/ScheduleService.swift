@@ -26,6 +26,9 @@ final class ScheduleManager: ObservableObject {
     private let locationService: LocationService
     private let cacheStore = ScheduleCacheStore()
     private let calculator = PrayerTimeCalculator()
+    private let hijriAdjustmentStore: HijriMonthAdjustmentStore
+    private let hijriCalendarService: HijriCalendarService
+    private let hijriSpecialDayPlanner: HijriSpecialDayPlanner
     private let alarmRecordStore = AlarmRecordStore()
     private let alarmStateStore = AlarmStateStore()
     private let countdownStore = CountdownSessionStore()
@@ -40,10 +43,19 @@ final class ScheduleManager: ObservableObject {
     private let countdownManager: CountdownManager
     private let alarmEventRouter: AlarmEventRouter?
 
-    init(settingsStore: SuhoorSettingsStore, locationService: LocationService, alarmConfigStore: AlarmConfigStore) {
+    init(
+        settingsStore: SuhoorSettingsStore,
+        locationService: LocationService,
+        alarmConfigStore: AlarmConfigStore,
+        hijriAdjustmentStore: HijriMonthAdjustmentStore = HijriMonthAdjustmentStore()
+    ) {
         self.settingsStore = settingsStore
         self.alarmConfigStore = alarmConfigStore
         self.locationService = locationService
+        self.hijriAdjustmentStore = hijriAdjustmentStore
+        let hijriCalendarService = HijriCalendarService(adjustmentStore: hijriAdjustmentStore)
+        self.hijriCalendarService = hijriCalendarService
+        self.hijriSpecialDayPlanner = HijriSpecialDayPlanner(calendarService: hijriCalendarService)
         var resolvedAlarmKit: AlarmKitScheduler?
         #if !targetEnvironment(simulator)
         if #available(iOS 26.0, *) {
@@ -97,6 +109,10 @@ final class ScheduleManager: ObservableObject {
         schedules.first
     }
 
+    var currentHijriAdjustmentYear: Int {
+        resolvedCurrentHijriYear()
+    }
+
     var lastUpdatedText: String {
         guard let date = lastUpdated else { return "--" }
         return TimeFormatters.shortDateTime.string(from: date)
@@ -134,6 +150,56 @@ final class ScheduleManager: ObservableObject {
         if calendar.isDateInToday(date) { return "Today" }
         if calendar.isDateInTomorrow(date) { return "Tomorrow" }
         return TimeFormatters.dayFormatter.string(from: date)
+    }
+
+    func hijriAdjustment(for month: HijriMonth, hijriYear: Int? = nil) -> Int {
+        let year = hijriYear ?? currentHijriAdjustmentYear
+        return hijriAdjustmentStore.readAdjustment(for: HijriYearMonth(hijriYear: year, month: month))
+    }
+
+    func hasHijriBaseline(for month: HijriMonth, hijriYear: Int? = nil) -> Bool {
+        let year = hijriYear ?? currentHijriAdjustmentYear
+        return HijriBaselineMonthStarts.contains(HijriYearMonth(hijriYear: year, month: month))
+    }
+
+    func updateHijriSpecialDaySettings(_ update: (inout HijriSpecialDaySettings) -> Void) async {
+        let previousSettings = settingsStore.settings.hijriSpecialDaySettings
+        let previousPlan = currentHijriSpecialDayPlan(settings: previousSettings)
+        settingsStore.update { draft in
+            update(&draft.hijriSpecialDaySettings)
+        }
+        let newSettings = settingsStore.settings.hijriSpecialDaySettings
+        let newPlan = currentHijriSpecialDayPlan(settings: newSettings)
+        let impactedScopes = impactedScopesForSettingsChange(old: previousSettings, new: newSettings)
+        await rescheduleHijriScopes(impactedScopes, oldPlan: previousPlan, newPlan: newPlan)
+    }
+
+    func setHijriMonthAdjustment(for month: HijriMonth, offsetDays: Int) async {
+        let hijriYear = currentHijriAdjustmentYear
+        let previousPlan = currentHijriSpecialDayPlan()
+        hijriAdjustmentStore.setAdjustment(for: HijriYearMonth(hijriYear: hijriYear, month: month), offsetDays: offsetDays)
+        let newPlan = currentHijriSpecialDayPlan()
+        await rescheduleHijriScopes(impactedScopesForMonth(month), oldPlan: previousPlan, newPlan: newPlan)
+    }
+
+    func previewAffectedHijriDateIdentifiersForMonthAdjustment(
+        _ month: HijriMonth,
+        offsetDays: Int,
+        startDate: Date? = nil,
+        days: Int? = nil,
+        timeZone: TimeZone = .current
+    ) -> Set<String> {
+        let hijriYear = resolvedCurrentHijriYear(timeZone: timeZone)
+        let key = HijriYearMonth(hijriYear: hijriYear, month: month)
+        let originalOffset = hijriAdjustmentStore.readAdjustment(for: key)
+        let oldPlan = currentHijriSpecialDayPlan(startDate: startDate, days: days, timeZone: timeZone)
+        hijriAdjustmentStore.setAdjustment(for: key, offsetDays: offsetDays)
+        let newPlan = currentHijriSpecialDayPlan(startDate: startDate, days: days, timeZone: timeZone)
+        hijriAdjustmentStore.setAdjustment(for: key, offsetDays: originalOffset)
+        return Set(
+            affectedDatesForHijriScopes(impactedScopesForMonth(month), oldPlan: oldPlan, newPlan: newPlan)
+                .map { DateHelpers.dayIdentifier(for: $0, timeZone: timeZone) }
+        )
     }
 
     func ensureScheduleWindow(reason: ScheduleRefreshReason) async {
@@ -242,6 +308,7 @@ final class ScheduleManager: ObservableObject {
         let maxScheduleDays = 60
         let scheduleDays = max(windowDays, maxScheduleDays)
         let ruleEngine = RuleEngine(settings: settings, configStore: alarmConfigStore, timeZone: timeZone)
+        let hijriPlan = currentHijriSpecialDayPlan(settings: settings.hijriSpecialDaySettings, startDate: startDate, days: scheduleDays, timeZone: timeZone)
         let scheduleDates = scheduledDates(
             startingFrom: startDate,
             days: scheduleDays,
@@ -259,7 +326,8 @@ final class ScheduleManager: ObservableObject {
                     for: date,
                     ruleSummary: ruleEngine.ruleSummary(for: date),
                     settings: settings,
-                    timeZone: timeZone
+                    timeZone: timeZone,
+                    additionalDefaultsActive: hijriPlan.isActive(on: date, timeZone: timeZone)
                 )
             },
             locationDescription: "Based on your location"
@@ -315,11 +383,13 @@ final class ScheduleManager: ObservableObject {
         let timeZone = TimeZone.current
         let method = settings.calculationMethod
         let ruleEngine = RuleEngine(settings: settings, configStore: alarmConfigStore, timeZone: timeZone)
+        let hijriPlan = currentHijriSpecialDayPlan(settings: settings.hijriSpecialDaySettings, startDate: date, days: 1, timeZone: timeZone)
         let effectiveConfig = alarmConfigStore.effectiveConfig(
             for: date,
             ruleSummary: ruleEngine.ruleSummary(for: date),
             settings: settings,
-            timeZone: timeZone
+            timeZone: timeZone,
+            additionalDefaultsActive: hijriPlan.isActive(on: date, timeZone: timeZone)
         )
 
         guard let schedule = buildSchedule(
@@ -376,11 +446,13 @@ final class ScheduleManager: ObservableObject {
         let timeZone = TimeZone.current
         let method = settings.calculationMethod
         let ruleEngine = RuleEngine(settings: settings, configStore: alarmConfigStore, timeZone: timeZone)
+        let hijriPlan = currentHijriSpecialDayPlan(settings: settings.hijriSpecialDaySettings, startDate: date, days: 1, timeZone: timeZone)
         let effectiveConfig = alarmConfigStore.effectiveConfig(
             for: date,
             ruleSummary: ruleEngine.ruleSummary(for: date),
             settings: settings,
-            timeZone: timeZone
+            timeZone: timeZone,
+            additionalDefaultsActive: hijriPlan.isActive(on: date, timeZone: timeZone)
         )
 
         return buildSchedule(
@@ -783,7 +855,9 @@ final class ScheduleManager: ObservableObject {
                 for: date,
                 ruleSummary: ruleEngine.ruleSummary(for: date),
                 settings: settings,
-                timeZone: timeZone
+                timeZone: timeZone,
+                additionalDefaultsActive: currentHijriSpecialDayPlan(settings: settings.hijriSpecialDaySettings, startDate: date, days: 1, timeZone: timeZone)
+                    .isActive(on: date, timeZone: timeZone)
             )
             guard let schedule = buildSchedule(
                 for: date,
@@ -889,6 +963,102 @@ final class ScheduleManager: ObservableObject {
 
     private var hasAnyEnabledAlarms: Bool {
         alarmConfigStore.hasAnyEnabledDefaults || alarmConfigStore.hasAnyEnabledOverride()
+    }
+
+    private func resolvedCurrentHijriYear(timeZone: TimeZone = .current) -> Int {
+        var calendar = Calendar(identifier: .islamicUmmAlQura)
+        calendar.timeZone = timeZone
+        let year = calendar.component(.year, from: Date())
+        if HijriBaselineMonthStarts.supportedHijriYears.contains(year) {
+            return year
+        }
+        return HijriBaselineMonthStarts.supportedHijriYears.first ?? year
+    }
+
+    private func currentHijriSpecialDayPlan(
+        settings: HijriSpecialDaySettings? = nil,
+        startDate: Date? = nil,
+        days: Int? = nil,
+        timeZone: TimeZone = .current
+    ) -> HijriSpecialDayPlan {
+        let resolvedSettings = settings ?? settingsStore.settings.hijriSpecialDaySettings
+        let start = startDate ?? DateHelpers.startOfToday(in: timeZone)
+        let requestedDays = days ?? max(alarmConfigStore.defaults.scheduleWindowDays, 60)
+        return hijriSpecialDayPlanner.plan(
+            settings: resolvedSettings,
+            startDate: start,
+            days: requestedDays,
+            timeZone: timeZone
+        )
+    }
+
+    private func impactedScopesForMonth(_ month: HijriMonth) -> Set<HijriSpecialDayFeatureScope> {
+        switch month {
+        case .muharram:
+            return [.ashura, .whiteDays]
+        case .ramadan:
+            return [.ramadanDaily, .whiteDays]
+        case .shawwal:
+            return [.eidAlFitr, .whiteDays]
+        case .dhulHijjah:
+            return [.arafah, .eidAlAdha, .whiteDays]
+        default:
+            return []
+        }
+    }
+
+    private func impactedScopesForSettingsChange(
+        old: HijriSpecialDaySettings,
+        new: HijriSpecialDaySettings
+    ) -> Set<HijriSpecialDayFeatureScope> {
+        if old.isEnabled != new.isEnabled {
+            return Set(HijriSpecialDayFeatureScope.allCases)
+        }
+
+        var scopes: Set<HijriSpecialDayFeatureScope> = []
+        if old.ramadanDailyEnabled != new.ramadanDailyEnabled {
+            scopes.insert(.ramadanDaily)
+        }
+        if old.whiteDaysEnabled != new.whiteDaysEnabled {
+            scopes.insert(.whiteDays)
+        }
+        if old.ashuraEnabled != new.ashuraEnabled {
+            scopes.insert(.ashura)
+        }
+        if old.arafahEnabled != new.arafahEnabled {
+            scopes.insert(.arafah)
+        }
+        if old.eidAlFitrEnabled != new.eidAlFitrEnabled {
+            scopes.insert(.eidAlFitr)
+        }
+        if old.eidAlAdhaEnabled != new.eidAlAdhaEnabled {
+            scopes.insert(.eidAlAdha)
+        }
+        return scopes
+    }
+
+    private func rescheduleHijriScopes(
+        _ scopes: Set<HijriSpecialDayFeatureScope>,
+        oldPlan: HijriSpecialDayPlan,
+        newPlan: HijriSpecialDayPlan
+    ) async {
+        guard !scopes.isEmpty else { return }
+
+        for date in affectedDatesForHijriScopes(scopes, oldPlan: oldPlan, newPlan: newPlan) {
+            await rescheduleDay(date)
+        }
+    }
+
+    private func affectedDatesForHijriScopes(
+        _ scopes: Set<HijriSpecialDayFeatureScope>,
+        oldPlan: HijriSpecialDayPlan,
+        newPlan: HijriSpecialDayPlan
+    ) -> [Date] {
+        scopes.reduce(into: Set<Date>()) { partial, scope in
+            partial.formUnion(oldPlan.dates(for: scope))
+            partial.formUnion(newPlan.dates(for: scope))
+        }
+        .sorted()
     }
 
     private func currentCoordinate() -> CLLocationCoordinate2D? {

@@ -8,7 +8,23 @@
 
 /* Begin PBXBuildFile section */
 		07EF93442F49055C00BD8692 /* TEST_PLAN.md in Resources */ = {isa = PBXBuildFile; fileRef = 07EF93432F49055C00BD8692 /* TEST_PLAN.md */; };
+		A1B000001234567890000001 /* FastClassificationEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 076EFDFD2F54B8BE00F577DC /* FastClassificationEngineTests.swift */; };
+		A1B000001234567890000002 /* TagComputationEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0731CC082F54CA1200C6864E /* TagComputationEngineTests.swift */; };
+		A1B000001234567890000003 /* HijriCalendarServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B000001234567890000101 /* HijriCalendarServiceTests.swift */; };
+		A1B000001234567890000004 /* HijriMonthAdjustmentStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B000001234567890000102 /* HijriMonthAdjustmentStoreTests.swift */; };
+		A1B000001234567890000005 /* HijriSpecialDayPlannerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B000001234567890000103 /* HijriSpecialDayPlannerTests.swift */; };
+		A1B000001234567890000006 /* ScheduleManagerHijriTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B000001234567890000104 /* ScheduleManagerHijriTests.swift */; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		A1B000001234567890000204 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 07135B6A2F439A5A007CEEF7 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 07135B712F439A5A007CEEF7;
+			remoteInfo = Suhoor;
+		};
+/* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
 		07135B722F439A5A007CEEF7 /* Suhoor.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Suhoor.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -17,6 +33,11 @@
 		07EF91CF2F43B5E600BD8692 /* SuhoorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SuhoorTests.swift; sourceTree = "<group>"; };
 		07EF91D22F43B70800BD8692 /* Suhoor.xctestplan */ = {isa = PBXFileReference; lastKnownFileType = text; path = Suhoor.xctestplan; sourceTree = "<group>"; };
 		07EF93432F49055C00BD8692 /* TEST_PLAN.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = TEST_PLAN.md; sourceTree = "<group>"; };
+		A1B000001234567890000101 /* HijriCalendarServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HijriCalendarServiceTests.swift; sourceTree = "<group>"; };
+		A1B000001234567890000102 /* HijriMonthAdjustmentStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HijriMonthAdjustmentStoreTests.swift; sourceTree = "<group>"; };
+		A1B000001234567890000103 /* HijriSpecialDayPlannerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HijriSpecialDayPlannerTests.swift; sourceTree = "<group>"; };
+		A1B000001234567890000104 /* ScheduleManagerHijriTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScheduleManagerHijriTests.swift; sourceTree = "<group>"; };
+		A1B000001234567890000107 /* SuhoorTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SuhoorTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -29,6 +50,13 @@
 
 /* Begin PBXFrameworksBuildPhase section */
 		07135B6F2F439A5A007CEEF7 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A1B000001234567890000201 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -52,6 +80,7 @@
 			isa = PBXGroup;
 			children = (
 				07135B722F439A5A007CEEF7 /* Suhoor.app */,
+				A1B000001234567890000107 /* SuhoorTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -63,6 +92,10 @@
 				07EF91D22F43B70800BD8692 /* Suhoor.xctestplan */,
 				076EFDFD2F54B8BE00F577DC /* FastClassificationEngineTests.swift */,
 				0731CC082F54CA1200C6864E /* TagComputationEngineTests.swift */,
+				A1B000001234567890000101 /* HijriCalendarServiceTests.swift */,
+				A1B000001234567890000102 /* HijriMonthAdjustmentStoreTests.swift */,
+				A1B000001234567890000103 /* HijriSpecialDayPlannerTests.swift */,
+				A1B000001234567890000104 /* ScheduleManagerHijriTests.swift */,
 			);
 			path = SuhoorTests;
 			sourceTree = "<group>";
@@ -92,6 +125,26 @@
 			productReference = 07135B722F439A5A007CEEF7 /* Suhoor.app */;
 			productType = "com.apple.product-type.application";
 		};
+		A1B000001234567890000206 /* SuhoorTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A1B000001234567890000207 /* Build configuration list for PBXNativeTarget "SuhoorTests" */;
+			buildPhases = (
+				A1B000001234567890000202 /* Sources */,
+				A1B000001234567890000201 /* Frameworks */,
+				A1B000001234567890000203 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				A1B000001234567890000205 /* PBXTargetDependency */,
+			);
+			name = SuhoorTests;
+			packageProductDependencies = (
+			);
+			productName = SuhoorTests;
+			productReference = A1B000001234567890000107 /* SuhoorTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -104,6 +157,10 @@
 				TargetAttributes = {
 					07135B712F439A5A007CEEF7 = {
 						CreatedOnToolsVersion = 26.2;
+					};
+					A1B000001234567890000206 = {
+						CreatedOnToolsVersion = 26.2;
+						TestTargetID = 07135B712F439A5A007CEEF7;
 					};
 				};
 			};
@@ -122,6 +179,7 @@
 			projectRoot = "";
 			targets = (
 				07135B712F439A5A007CEEF7 /* Suhoor */,
+				A1B000001234567890000206 /* SuhoorTests */,
 			);
 		};
 /* End PBXProject section */
@@ -135,6 +193,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A1B000001234567890000203 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -145,7 +210,28 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A1B000001234567890000202 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A1B000001234567890000001 /* FastClassificationEngineTests.swift in Sources */,
+				A1B000001234567890000002 /* TagComputationEngineTests.swift in Sources */,
+				A1B000001234567890000003 /* HijriCalendarServiceTests.swift in Sources */,
+				A1B000001234567890000004 /* HijriMonthAdjustmentStoreTests.swift in Sources */,
+				A1B000001234567890000005 /* HijriSpecialDayPlannerTests.swift in Sources */,
+				A1B000001234567890000006 /* ScheduleManagerHijriTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		A1B000001234567890000205 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 07135B712F439A5A007CEEF7 /* Suhoor */;
+			targetProxy = A1B000001234567890000204 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		07135B7B2F439A5A007CEEF7 /* Debug */ = {
@@ -343,6 +429,55 @@
 			};
 			name = Release;
 		};
+		A1B000001234567890000208 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = J6QD2TR878;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = khanomar.SuhoorTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Suhoor.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Suhoor";
+				TEST_TARGET_NAME = Suhoor;
+			};
+			name = Debug;
+		};
+		A1B000001234567890000209 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = J6QD2TR878;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = khanomar.SuhoorTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Suhoor.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Suhoor";
+				TEST_TARGET_NAME = Suhoor;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -360,6 +495,15 @@
 			buildConfigurations = (
 				07135B7E2F439A5A007CEEF7 /* Debug */,
 				07135B7F2F439A5A007CEEF7 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A1B000001234567890000207 /* Build configuration list for PBXNativeTarget "SuhoorTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A1B000001234567890000208 /* Debug */,
+				A1B000001234567890000209 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

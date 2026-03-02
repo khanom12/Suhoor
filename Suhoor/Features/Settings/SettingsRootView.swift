@@ -166,6 +166,18 @@ struct SettingsRootView: View {
                 Text(Strings.Settings.fajrAdjustmentHelper)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
+
+                NavigationLink {
+                    HijriCalendarSettingsView()
+                        .environmentObject(settingsStore)
+                        .environmentObject(scheduleManager)
+                } label: {
+                    ActionRowView(title: "Hijri calendar adjustments", systemImage: "calendar.badge.clock")
+                }
+
+                Text("Adjust Hijri month starts if your local mosque begins a month one day earlier or later.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
             }
 
             Section(Strings.Settings.permissionsSection) {
