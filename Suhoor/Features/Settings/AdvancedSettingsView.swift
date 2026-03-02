@@ -38,25 +38,8 @@ struct AdvancedSettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
-            Section("Hijri Special-Day Alarms") {
-                Toggle("Hijri special-day alarms", isOn: hijriSpecialDaysEnabledBinding)
-
-                if settingsStore.settings.hijriSpecialDaySettings.isEnabled {
-                    Toggle("Ramadan daily alarms", isOn: ramadanDailyEnabledBinding)
-                    Toggle("White days", isOn: whiteDaysEnabledBinding)
-                    Toggle("Ashura", isOn: ashuraEnabledBinding)
-                    Toggle("Arafah", isOn: arafahEnabledBinding)
-                    Toggle("Eid al-Fitr", isOn: eidAlFitrEnabledBinding)
-                    Toggle("Eid al-Adha", isOn: eidAlAdhaEnabledBinding)
-                }
-
-                Text("These dates are opt-in and use your existing alarm timing rules.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-
             Section("Hijri Month Adjustments") {
-                Text("If your local mosque starts this Hijri month one day earlier or later than shown, adjust here. This updates related dates (white days, Ashura, Eid, etc.).")
+                Text("Use this if your community starts a Hijri month one day earlier or later than the app’s built-in calendar. This changes Hijri dates shown in the app and any related schedules.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
 
@@ -132,54 +115,15 @@ struct AdvancedSettingsView: View {
                 Text("Needs calendar data for this month")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
+            } else if let preview = scheduleManager.hijriMonthStartPreview(for: month) {
+                Text("Built-in start: \(DateFormatter.localizedString(from: preview.baselineStart, dateStyle: .medium, timeStyle: .none))")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                Text("Your corrected start: \(DateFormatter.localizedString(from: preview.adjustedStart, dateStyle: .medium, timeStyle: .none))")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
             }
         }
-    }
-
-    private var hijriSpecialDaysEnabledBinding: Binding<Bool> {
-        Binding(
-            get: { settingsStore.settings.hijriSpecialDaySettings.isEnabled },
-            set: { newValue in
-                Task {
-                    await scheduleManager.updateHijriSpecialDaySettings { $0.isEnabled = newValue }
-                }
-            }
-        )
-    }
-
-    private var ramadanDailyEnabledBinding: Binding<Bool> {
-        hijriSpecialDayBinding(\.ramadanDailyEnabled)
-    }
-
-    private var whiteDaysEnabledBinding: Binding<Bool> {
-        hijriSpecialDayBinding(\.whiteDaysEnabled)
-    }
-
-    private var ashuraEnabledBinding: Binding<Bool> {
-        hijriSpecialDayBinding(\.ashuraEnabled)
-    }
-
-    private var arafahEnabledBinding: Binding<Bool> {
-        hijriSpecialDayBinding(\.arafahEnabled)
-    }
-
-    private var eidAlFitrEnabledBinding: Binding<Bool> {
-        hijriSpecialDayBinding(\.eidAlFitrEnabled)
-    }
-
-    private var eidAlAdhaEnabledBinding: Binding<Bool> {
-        hijriSpecialDayBinding(\.eidAlAdhaEnabled)
-    }
-
-    private func hijriSpecialDayBinding(_ keyPath: WritableKeyPath<HijriSpecialDaySettings, Bool>) -> Binding<Bool> {
-        Binding(
-            get: { settingsStore.settings.hijriSpecialDaySettings[keyPath: keyPath] },
-            set: { newValue in
-                Task {
-                    await scheduleManager.updateHijriSpecialDaySettings { $0[keyPath: keyPath] = newValue }
-                }
-            }
-        )
     }
 
     private func hijriAdjustmentBinding(for month: HijriMonth) -> Binding<Int> {

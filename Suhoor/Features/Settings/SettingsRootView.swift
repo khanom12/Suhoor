@@ -84,56 +84,6 @@ struct SettingsRootView: View {
                 }
             }
 
-            Section(Strings.Settings.activePeriodSection) {
-                Text(Strings.Settings.activePeriodHelper)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-
-                Picker(Strings.Settings.defaultsActive, selection: activationModeBinding) {
-                    Text(Strings.Settings.activeAlways).tag(AlarmActivationMode.alwaysOn)
-                    Text(Strings.Settings.activeDateRange).tag(AlarmActivationMode.dateRange)
-                }
-                .pickerStyle(.segmented)
-
-                if alarmConfigStore.defaults.activationMode == .dateRange {
-                    DatePicker(
-                        Strings.AlarmsTab.activeStartDate,
-                        selection: activeStartDateBinding,
-                        displayedComponents: [.date]
-                    )
-
-                    DatePicker(
-                        Strings.AlarmsTab.activeEndDate,
-                        selection: activeEndDateBinding,
-                        displayedComponents: [.date]
-                    )
-                }
-
-                NavigationLink {
-                    AdditionalActiveDaysView()
-                } label: {
-                    HStack {
-                        Text("Additional active days")
-                        Spacer()
-                        Text("\(extraOneOffDates.count)")
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            }
-
-            Section(Strings.Settings.alarmsListRangeSection) {
-                Text(Strings.Settings.alarmsListRangeHelper)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-
-                Picker(Strings.Settings.alarmsListRangeLabel, selection: scheduleWindowBinding) {
-                    Text("7").tag(7)
-                    Text("14").tag(14)
-                    Text("30").tag(30)
-                }
-                .pickerStyle(.segmented)
-            }
-
             Section(Strings.Settings.locationSection) {
                 NavigationLink {
                     LocationSettingsView()

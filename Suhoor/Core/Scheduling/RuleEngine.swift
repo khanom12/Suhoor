@@ -12,17 +12,20 @@ struct RuleEngine {
     let defaultConfig: DefaultAlarmConfig
     let overridesByDay: [String: DailyAlarmOverride]
     let timeZone: TimeZone
+    private let defaultsActiveProvider: ((Date) -> Bool)?
 
     init(
         settings: AppSettings,
         defaultConfig: DefaultAlarmConfig = .default,
         overridesByDay: [String: DailyAlarmOverride] = [:],
-        timeZone: TimeZone = .current
+        timeZone: TimeZone = .current,
+        defaultsActiveProvider: ((Date) -> Bool)? = nil
     ) {
         self.settings = settings
         self.defaultConfig = defaultConfig
         self.overridesByDay = overridesByDay
         self.timeZone = timeZone
+        self.defaultsActiveProvider = defaultsActiveProvider
     }
 
     init(
@@ -34,7 +37,10 @@ struct RuleEngine {
             settings: settings,
             defaultConfig: configStore.defaults,
             overridesByDay: configStore.overridesByDay,
-            timeZone: timeZone
+            timeZone: timeZone,
+            defaultsActiveProvider: { date in
+                configStore.isDefaultsActive(on: date, timeZone: timeZone)
+            }
         )
     }
 
@@ -105,6 +111,9 @@ struct RuleEngine {
     }
 
     private func defaultsActive(on date: Date) -> Bool {
+        if let defaultsActiveProvider {
+            return defaultsActiveProvider(date)
+        }
         switch defaultConfig.activationMode {
         case .alwaysOn:
             let key = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)

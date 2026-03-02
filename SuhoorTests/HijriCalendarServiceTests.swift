@@ -113,4 +113,70 @@ struct HijriCalendarServiceTests {
         #expect(day3Components.hour == 0)
         #expect(day3Components.minute == 0)
     }
+
+    @Test
+    func adjustedReverseLookupUsesShiftedMonthBoundaries() {
+        let suiteName = "HijriCalendarServiceTests.ReverseLookup"
+        let suite = UserDefaults(suiteName: suiteName)!
+        suite.removePersistentDomain(forName: suiteName)
+        let store = HijriMonthAdjustmentStore(defaults: suite)
+        let service = HijriCalendarService(adjustmentStore: store)
+        let adjustedCalendar = AdjustedHijriCalendar(calendarService: service)
+        let timeZone = TimeZone(secondsFromGMT: 0) ?? .current
+        let key = HijriYearMonth(hijriYear: 1447, month: .ramadan)
+
+        let baselineStart = adjustedCalendar.gregorianDate(for: key, dayOfMonth: 1, timeZone: timeZone)
+        #expect(baselineStart != nil)
+        let baselineComponents = adjustedCalendar.adjustedComponents(for: baselineStart ?? .distantPast, timeZone: timeZone)
+        #expect(baselineComponents?.month == .ramadan)
+        #expect(baselineComponents?.day == 1)
+        #expect(baselineComponents?.isDerivedFromBaseline == true)
+
+        store.setAdjustment(for: key, offsetDays: 1)
+        let shiftedComponents = adjustedCalendar.adjustedComponents(for: baselineStart ?? .distantPast, timeZone: timeZone)
+        #expect(shiftedComponents?.month == .shaban)
+        #expect(shiftedComponents?.isDerivedFromBaseline == false)
+    }
+
+    @Test
+    func adjustedMonthStartPreviewReflectsStoredOffset() {
+        let suiteName = "HijriCalendarServiceTests.Preview"
+        let suite = UserDefaults(suiteName: suiteName)!
+        suite.removePersistentDomain(forName: suiteName)
+        let store = HijriMonthAdjustmentStore(defaults: suite)
+        let service = HijriCalendarService(adjustmentStore: store)
+        let adjustedCalendar = AdjustedHijriCalendar(calendarService: service)
+        let timeZone = TimeZone(secondsFromGMT: 0) ?? .current
+        let key = HijriYearMonth(hijriYear: 1447, month: .shawwal)
+
+        let baselinePreview = adjustedCalendar.monthStartPreview(for: key, timeZone: timeZone)
+        store.setAdjustment(for: key, offsetDays: 1)
+        let shiftedPreview = adjustedCalendar.monthStartPreview(for: key, timeZone: timeZone)
+
+        #expect(baselinePreview != nil)
+        #expect(shiftedPreview != nil)
+        #expect(shiftedPreview?.offsetDays == 1)
+        #expect(shiftedPreview?.adjustedStart.timeIntervalSince(baselinePreview?.adjustedStart ?? .distantPast) == 24 * 60 * 60)
+    }
+
+    @Test
+    func formattedHijriStringChangesWhenSupportedMonthIsAdjusted() {
+        let suiteName = "HijriCalendarServiceTests.Formatter"
+        let suite = UserDefaults(suiteName: suiteName)!
+        suite.removePersistentDomain(forName: suiteName)
+        let store = HijriMonthAdjustmentStore(defaults: suite)
+        let service = HijriCalendarService(adjustmentStore: store)
+        let adjustedCalendar = AdjustedHijriCalendar(calendarService: service)
+        let formatter = HijriDateFormatter(adjustedHijriCalendar: adjustedCalendar)
+        let timeZone = TimeZone(secondsFromGMT: 0) ?? .current
+        let key = HijriYearMonth(hijriYear: 1447, month: .ramadan)
+        let baselineStart = adjustedCalendar.gregorianDate(for: key, dayOfMonth: 1, timeZone: timeZone)
+
+        #expect(baselineStart != nil)
+        let baselineText = formatter.string(from: baselineStart ?? .distantPast)
+        store.setAdjustment(for: key, offsetDays: 1)
+        let shiftedText = formatter.string(from: baselineStart ?? .distantPast)
+
+        #expect(baselineText != shiftedText)
+    }
 }

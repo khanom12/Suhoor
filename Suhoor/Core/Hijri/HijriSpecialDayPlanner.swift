@@ -25,7 +25,7 @@ struct HijriSpecialDayPlan {
 }
 
 struct HijriSpecialDayPlanner {
-    let calendarService: HijriCalendarService
+    let adjustedHijriCalendar: AdjustedHijriCalendar
 
     func plan(
         settings: HijriSpecialDaySettings,
@@ -44,12 +44,10 @@ struct HijriSpecialDayPlanner {
 
         var datesByScope: [HijriSpecialDayFeatureScope: Set<Date>] = [:]
         for hijriYear in HijriBaselineMonthStarts.supportedHijriYears {
-            let map = calendarService.buildMonthMap(hijriYear: hijriYear, timeZone: timeZone)
-
             if settings.ramadanDailyEnabled {
                 let key = HijriYearMonth(hijriYear: hijriYear, month: .ramadan)
                 let ramadanDates = Set((1...30).compactMap {
-                    calendarService.gregorianDate(for: key, dayOfMonth: $0, monthMap: map, timeZone: timeZone)
+                    adjustedHijriCalendar.gregorianDate(for: key, dayOfMonth: $0, timeZone: timeZone)
                 }.filter { isWithinHorizon($0, start: normalizedStart, end: endDate, calendar: calendar) })
                 if !ramadanDates.isEmpty {
                     datesByScope[.ramadanDaily, default: []].formUnion(ramadanDates)
@@ -59,16 +57,15 @@ struct HijriSpecialDayPlanner {
             if settings.whiteDaysEnabled {
                 for month in HijriMonth.adjustmentMonths {
                     let dates = Set([13, 14, 15].compactMap {
-                        calendarService.gregorianDate(
+                        adjustedHijriCalendar.gregorianDate(
                             for: HijriYearMonth(hijriYear: hijriYear, month: month),
                             dayOfMonth: $0,
-                            monthMap: map,
                             timeZone: timeZone
                         )
                     }.filter { isWithinHorizon($0, start: normalizedStart, end: endDate, calendar: calendar) })
                     if !dates.isEmpty {
                         datesByScope[.whiteDays, default: []].formUnion(dates)
-                    } else if map.resolvedStart(for: month) == nil {
+                    } else if adjustedHijriCalendar.monthStartPreview(for: HijriYearMonth(hijriYear: hijriYear, month: month), timeZone: timeZone) == nil {
                         Logging.scheduler.debug("Missing Hijri baseline for white days \(month.displayName, privacy: .public) \(String(hijriYear), privacy: .public)")
                     }
                 }
@@ -77,12 +74,7 @@ struct HijriSpecialDayPlanner {
             addSingleDate(
                 enabled: settings.ashuraEnabled,
                 scope: .ashura,
-                date: calendarService.gregorianDate(
-                    for: HijriYearMonth(hijriYear: hijriYear, month: .muharram),
-                    dayOfMonth: 10,
-                    monthMap: map,
-                    timeZone: timeZone
-                ),
+                date: adjustedHijriCalendar.gregorianDate(for: HijriYearMonth(hijriYear: hijriYear, month: .muharram), dayOfMonth: 10, timeZone: timeZone),
                 start: normalizedStart,
                 end: endDate,
                 calendar: calendar,
@@ -92,12 +84,7 @@ struct HijriSpecialDayPlanner {
             addSingleDate(
                 enabled: settings.arafahEnabled,
                 scope: .arafah,
-                date: calendarService.gregorianDate(
-                    for: HijriYearMonth(hijriYear: hijriYear, month: .dhulHijjah),
-                    dayOfMonth: 9,
-                    monthMap: map,
-                    timeZone: timeZone
-                ),
+                date: adjustedHijriCalendar.gregorianDate(for: HijriYearMonth(hijriYear: hijriYear, month: .dhulHijjah), dayOfMonth: 9, timeZone: timeZone),
                 start: normalizedStart,
                 end: endDate,
                 calendar: calendar,
@@ -107,12 +94,7 @@ struct HijriSpecialDayPlanner {
             addSingleDate(
                 enabled: settings.eidAlFitrEnabled,
                 scope: .eidAlFitr,
-                date: calendarService.gregorianDate(
-                    for: HijriYearMonth(hijriYear: hijriYear, month: .shawwal),
-                    dayOfMonth: 1,
-                    monthMap: map,
-                    timeZone: timeZone
-                ),
+                date: adjustedHijriCalendar.gregorianDate(for: HijriYearMonth(hijriYear: hijriYear, month: .shawwal), dayOfMonth: 1, timeZone: timeZone),
                 start: normalizedStart,
                 end: endDate,
                 calendar: calendar,
@@ -122,12 +104,7 @@ struct HijriSpecialDayPlanner {
             addSingleDate(
                 enabled: settings.eidAlAdhaEnabled,
                 scope: .eidAlAdha,
-                date: calendarService.gregorianDate(
-                    for: HijriYearMonth(hijriYear: hijriYear, month: .dhulHijjah),
-                    dayOfMonth: 10,
-                    monthMap: map,
-                    timeZone: timeZone
-                ),
+                date: adjustedHijriCalendar.gregorianDate(for: HijriYearMonth(hijriYear: hijriYear, month: .dhulHijjah), dayOfMonth: 10, timeZone: timeZone),
                 start: normalizedStart,
                 end: endDate,
                 calendar: calendar,

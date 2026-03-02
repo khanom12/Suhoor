@@ -2,6 +2,12 @@ import Foundation
 import CryptoKit
 
 enum DateHelpers {
+    static func startOfDay(_ date: Date, in timeZone: TimeZone = .current) -> Date {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        return calendar.startOfDay(for: date)
+    }
+
     static func startOfToday(in timeZone: TimeZone = .current) -> Date {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = timeZone

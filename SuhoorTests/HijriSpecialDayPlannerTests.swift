@@ -3,82 +3,146 @@ import Testing
 @testable import Suhoor
 
 @Suite
-struct HijriSpecialDayPlannerTests {
+struct ScheduledDateSourceResolverTests {
     @Test
-    func disabledMasterToggleProducesNoDates() {
-        let suiteName = "HijriSpecialDayPlannerTests.Disabled"
+    func explicitSingleDaySourceResolves() {
+        let suiteName = "ScheduledDateSourceResolverTests.SingleDay"
         let defaults = UserDefaults(suiteName: suiteName)!
         defaults.removePersistentDomain(forName: suiteName)
-        let store = HijriMonthAdjustmentStore(defaults: defaults)
-        let planner = HijriSpecialDayPlanner(calendarService: HijriCalendarService(adjustmentStore: store))
-        let plan = planner.plan(
-            settings: .default,
-            startDate: makeDate(year: 2026, month: 2, day: 1),
-            days: 90,
-            timeZone: TimeZone(secondsFromGMT: 0) ?? .current
-        )
 
-        #expect(plan.datesByScope.isEmpty)
+        let sourceStore = ScheduledDateSourceStore(defaults: defaults)
+        let suppressedStore = SuppressedScheduledDateStore(defaults: defaults)
+        let timeZone = TimeZone(secondsFromGMT: 0) ?? .current
+        let date = makeDate(year: 2026, month: 2, day: 20)
+        sourceStore.add(
+            ScheduledDateSource(
+                id: UUID(),
+                kind: .singleDay(
+                    SingleDaySource(
+                        dateKey: DateHelpers.dayIdentifier(for: date, timeZone: timeZone),
+                        date: date
+                    )
+                ),
+                createdAt: Date(),
+                isEnabled: true,
+                origin: .manualSingleDay,
+                groupID: nil
+            )
+        )
+        let resolver = ScheduledDateSourceResolver(
+            sourceStore: sourceStore,
+            suppressedDateStore: suppressedStore
+        )
+        let entries = resolver.resolvedEntries(from: makeDate(year: 2026, month: 2, day: 1), limit: 60, timeZone: timeZone)
+
+        #expect(entries.count == 1)
+        #expect(entries.first?.date == date)
+        #expect(entries.first?.isExplicitOneOff == true)
     }
 
     @Test
-    func enabledFeaturesYieldExpectedDatesInsideHorizon() {
-        let suiteName = "HijriSpecialDayPlannerTests.Enabled"
+    func overlappingSourcesDeduplicateAndSuppressionSkipsOneDate() {
+        let suiteName = "ScheduledDateSourceResolverTests.Deduped"
         let defaults = UserDefaults(suiteName: suiteName)!
         defaults.removePersistentDomain(forName: suiteName)
-        let store = HijriMonthAdjustmentStore(defaults: defaults)
-        let planner = HijriSpecialDayPlanner(calendarService: HijriCalendarService(adjustmentStore: store))
-        let settings = HijriSpecialDaySettings(
-            isEnabled: true,
-            ramadanDailyEnabled: true,
-            whiteDaysEnabled: true,
-            ashuraEnabled: false,
-            arafahEnabled: true,
-            eidAlFitrEnabled: true,
-            eidAlAdhaEnabled: false
+
+        let timeZone = TimeZone(secondsFromGMT: 0) ?? .current
+        let sourceStore = ScheduledDateSourceStore(defaults: defaults)
+        let suppressedStore = SuppressedScheduledDateStore(defaults: defaults)
+        sourceStore.add(
+            ScheduledDateSource(
+                id: UUID(),
+                kind: .gregorianRange(
+                    GregorianRangeSource(
+                        startDate: makeDate(year: 2026, month: 2, day: 20),
+                        endDate: makeDate(year: 2026, month: 2, day: 22),
+                        timeZone: timeZone
+                    )
+                ),
+                createdAt: Date(),
+                isEnabled: true,
+                origin: .manualGregorianRange,
+                groupID: nil
+            )
+        )
+        sourceStore.add(
+            ScheduledDateSource(
+                id: UUID(),
+                kind: .singleDay(
+                    SingleDaySource(
+                        dateKey: "2026-02-21",
+                        date: makeDate(year: 2026, month: 2, day: 21)
+                    )
+                ),
+                createdAt: Date(),
+                isEnabled: true,
+                origin: .manualSingleDay,
+                groupID: nil
+            )
+        )
+        suppressedStore.insert("2026-02-22")
+        let resolver = ScheduledDateSourceResolver(
+            sourceStore: sourceStore,
+            suppressedDateStore: suppressedStore
+        )
+        let entries = resolver.resolvedEntries(from: makeDate(year: 2026, month: 2, day: 1), limit: 60, timeZone: timeZone)
+
+        #expect(entries.map(\.dateKey) == ["2026-02-20", "2026-02-21"])
+        #expect(entries.last?.provenances.count == 2)
+    }
+
+    @Test
+    func recurringRamadanRespectsAdjustment() {
+        let suiteName = "ScheduledDateSourceResolverTests.Ramadan"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        let adjustmentStore = HijriMonthAdjustmentStore(defaults: defaults)
+        adjustmentStore.setAdjustment(for: HijriYearMonth(hijriYear: 1447, month: .ramadan), offsetDays: 1)
+        let adjustedCalendar = AdjustedHijriCalendar(calendarService: HijriCalendarService(adjustmentStore: adjustmentStore))
+        let sourceStore = ScheduledDateSourceStore(defaults: defaults)
+        let suppressedStore = SuppressedScheduledDateStore(defaults: defaults)
+        sourceStore.add(
+            ScheduledDateSource(
+                id: UUID(),
+                kind: .recurringIslamic(
+                    RecurringIslamicSource(
+                        rule: .ramadan,
+                        startDate: makeDate(year: 2026, month: 2, day: 1)
+                    )
+                ),
+                createdAt: Date(),
+                isEnabled: true,
+                origin: .recurringIslamic(.ramadan),
+                groupID: nil
+            )
+        )
+        let resolver = ScheduledDateSourceResolver(
+            sourceStore: sourceStore,
+            suppressedDateStore: suppressedStore,
+            adjustedHijriCalendar: adjustedCalendar
         )
         let timeZone = TimeZone(secondsFromGMT: 0) ?? .current
-        let plan = planner.plan(
-            settings: settings,
-            startDate: makeDate(year: 2026, month: 2, day: 1),
-            days: 140,
-            timeZone: timeZone
-        )
+        let entries = resolver.resolvedEntries(from: makeDate(year: 2026, month: 2, day: 1), limit: 5, timeZone: timeZone)
 
-        #expect(!(plan.dates(for: .ramadanDaily)).isEmpty)
-        #expect(plan.dates(for: .whiteDays).count >= 3)
-        #expect(plan.dates(for: .eidAlFitr).count == 1)
-        #expect(plan.dates(for: .arafah).count == 1)
+        #expect(entries.first?.dateKey == "2026-02-19")
+        #expect(entries.allSatisfy { adjustedCalendar.isRamadan(date: $0.date, timeZone: timeZone) })
     }
 
     @Test
-    func missingBaselineOmitsDatesWithoutThrowing() {
-        let suiteName = "HijriSpecialDayPlannerTests.Missing"
-        let defaults = UserDefaults(suiteName: suiteName)!
-        defaults.removePersistentDomain(forName: suiteName)
-        let store = HijriMonthAdjustmentStore(defaults: defaults)
-        let service = HijriCalendarService(
-            baselineProvider: { _, _ in [] },
-            adjustmentStore: store
+    func quickAddGeneratorFindsNextMondayThursdayPair() {
+        let generator = IslamicQuickAddGenerator()
+        let timeZone = TimeZone(secondsFromGMT: 0) ?? .current
+        let dates = generator.dates(
+            for: .nextMondayThursdayPair,
+            startDate: makeDate(year: 2026, month: 3, day: 2),
+            timeZone: timeZone
         )
-        let planner = HijriSpecialDayPlanner(calendarService: service)
-        let settings = HijriSpecialDaySettings(
-            isEnabled: true,
-            ramadanDailyEnabled: true,
-            whiteDaysEnabled: true,
-            ashuraEnabled: true,
-            arafahEnabled: true,
-            eidAlFitrEnabled: true,
-            eidAlAdhaEnabled: true
-        )
-        let plan = planner.plan(
-            settings: settings,
-            startDate: makeDate(year: 2026, month: 2, day: 1),
-            days: 120,
-            timeZone: TimeZone(secondsFromGMT: 0) ?? .current
-        )
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
 
-        #expect(plan.datesByScope.isEmpty)
+        #expect(dates.count == 2)
+        #expect(calendar.component(.weekday, from: dates[0]) == 2)
+        #expect(calendar.component(.weekday, from: dates[1]) == 5)
     }
 
     private func makeDate(year: Int, month: Int, day: Int) -> Date {

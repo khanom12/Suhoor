@@ -15,23 +15,56 @@ final class AlarmConfigStore: ObservableObject {
     private let overridesKey = "Suhoor.DailyAlarmOverrides"
     private let migrationKey = "Suhoor.AlarmConfigMigrationVersion"
     private let defaultsStore: UserDefaults
+    private let scheduledDateSourceStore: ScheduledDateSourceStore
+    private let suppressedScheduledDateStore: SuppressedScheduledDateStore
+    private let scheduledDateSourceResolver: ScheduledDateSourceResolver
+    private let islamicQuickAddGenerator: IslamicQuickAddGenerator
 
     init(defaultsStore: UserDefaults = .standard, legacySettings: AppSettings? = nil) {
         self.defaultsStore = defaultsStore
 
-        if let data = defaultsStore.data(forKey: defaultsKey),
+        let storedDefaultsData = defaultsStore.data(forKey: defaultsKey)
+        let defaultsValue: DefaultAlarmConfig
+        if let data = storedDefaultsData,
            let decoded = try? JSONDecoder().decode(DefaultAlarmConfig.self, from: data) {
-            self.defaults = decoded
+            defaultsValue = decoded
         } else {
-            self.defaults = .default
+            defaultsValue = .default
         }
 
+        let overridesValue: [String: DailyAlarmOverride]
         if let data = defaultsStore.data(forKey: overridesKey),
            let decoded = try? JSONDecoder().decode([String: DailyAlarmOverride].self, from: data) {
-            self.overridesByDay = decoded
+            overridesValue = decoded
         } else {
-            self.overridesByDay = [:]
+            overridesValue = [:]
         }
+
+        let shouldMigrateLegacySourceData = storedDefaultsData != nil
+            || defaultsStore.data(forKey: "Suhoor.AppSettings") != nil
+        let adjustedHijriCalendar = AdjustedHijriCalendar(
+            calendarService: HijriCalendarService(
+                adjustmentStore: HijriMonthAdjustmentStore(defaults: defaultsStore)
+            )
+        )
+        self.scheduledDateSourceStore = ScheduledDateSourceStore(
+            defaults: defaultsStore,
+            legacyDefaults: defaultsValue,
+            shouldMigrateLegacyData: shouldMigrateLegacySourceData
+        )
+        self.suppressedScheduledDateStore = SuppressedScheduledDateStore(
+            defaults: defaultsStore,
+            legacyDeletedDateKeys: defaultsValue.deletedDates,
+            shouldMigrateLegacyData: shouldMigrateLegacySourceData
+        )
+        self.scheduledDateSourceResolver = ScheduledDateSourceResolver(
+            sourceStore: scheduledDateSourceStore,
+            suppressedDateStore: suppressedScheduledDateStore,
+            adjustedHijriCalendar: adjustedHijriCalendar
+        )
+        self.islamicQuickAddGenerator = IslamicQuickAddGenerator(adjustedHijriCalendar: adjustedHijriCalendar)
+        self.defaults = defaultsValue
+        self.overridesByDay = overridesValue
 
         performMigrationIfNeeded(legacySettings: legacySettings)
     }
@@ -54,76 +87,187 @@ final class AlarmConfigStore: ObservableObject {
     }
 
     func isDefaultsActive(on date: Date, timeZone: TimeZone = .current) -> Bool {
-        if isDeletedDate(on: date, timeZone: timeZone) { return false }
-        switch defaults.activationMode {
-        case .alwaysOn:
-            return true
-        case .dateRange:
-            return isDateInActiveRange(on: date, timeZone: timeZone)
-                || isExtraOneOffDate(on: date, timeZone: timeZone)
-        }
+        scheduledDateSourceResolver.isActive(on: date, timeZone: timeZone)
     }
 
     func isWithinActiveRange(on date: Date, timeZone: TimeZone = .current) -> Bool {
-        switch defaults.activationMode {
-        case .alwaysOn:
-            return true
-        case .dateRange:
-            guard let start = defaults.activeStartDate, let end = defaults.activeEndDate else {
-                return false
-            }
-            var calendar = Calendar(identifier: .gregorian)
-            calendar.timeZone = timeZone
-            let target = calendar.startOfDay(for: date)
-            let startDay = calendar.startOfDay(for: start)
-            let endDay = calendar.startOfDay(for: end)
-            return target >= startDay && target <= endDay
-        }
+        isDefaultsActive(on: date, timeZone: timeZone)
     }
 
     func isDateInActiveRange(on date: Date, timeZone: TimeZone = .current) -> Bool {
-        guard defaults.activationMode == .dateRange else { return false }
-        guard let start = defaults.activeStartDate, let end = defaults.activeEndDate else {
-            return false
-        }
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = timeZone
-        let target = calendar.startOfDay(for: date)
-        let startDay = calendar.startOfDay(for: start)
-        let endDay = calendar.startOfDay(for: end)
-        return target >= startDay && target <= endDay
+        isDefaultsActive(on: date, timeZone: timeZone)
     }
 
     func isExtraOneOffDate(on date: Date, timeZone: TimeZone = .current) -> Bool {
-        let key = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
-        return defaults.extraOneOffDates.contains(key)
+        isExplicitSingleDaySource(on: date, timeZone: timeZone)
     }
 
     func addExtraOneOffDate(_ date: Date, timeZone: TimeZone = .current) {
-        let key = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
-        defaults.extraOneOffDates.insert(key)
-        defaults.deletedDates.remove(key)
+        addSingleDaySource(date, timeZone: timeZone)
     }
 
     func removeExtraOneOffDate(_ date: Date, timeZone: TimeZone = .current) {
-        let key = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
-        defaults.extraOneOffDates.remove(key)
+        deleteExplicitSources(on: date, timeZone: timeZone)
     }
 
     func isDeletedDate(on date: Date, timeZone: TimeZone = .current) -> Bool {
         let key = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
-        return defaults.deletedDates.contains(key)
+        return suppressedScheduledDateStore.contains(key)
     }
 
     func addDeletedDate(_ date: Date, timeZone: TimeZone = .current) {
         let key = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
-        defaults.deletedDates.insert(key)
-        defaults.extraOneOffDates.remove(key)
+        suppressedScheduledDateStore.insert(key)
     }
 
     func removeDeletedDate(_ date: Date, timeZone: TimeZone = .current) {
         let key = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
-        defaults.deletedDates.remove(key)
+        suppressedScheduledDateStore.remove(key)
+    }
+
+    func resolvedScheduledEntries(
+        from startDate: Date = DateHelpers.startOfToday(),
+        limit: Int = 60,
+        timeZone: TimeZone = .current
+    ) -> [ResolvedScheduledDateEntry] {
+        scheduledDateSourceResolver.resolvedEntries(from: startDate, limit: limit, timeZone: timeZone)
+    }
+
+    func provenance(for date: Date, timeZone: TimeZone = .current) -> [ResolvedScheduledDateProvenance] {
+        scheduledDateSourceResolver.provenance(for: date, timeZone: timeZone)
+    }
+
+    func isExplicitSingleDaySource(on date: Date, timeZone: TimeZone = .current) -> Bool {
+        let key = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
+        return scheduledDateSourceStore.sources.contains { source in
+            guard source.isEnabled else { return false }
+            guard source.origin.isExplicitOneOff else { return false }
+            guard case .singleDay(let singleDay) = source.kind else { return false }
+            return singleDay.dateKey == key
+        }
+    }
+
+    func addSingleDaySource(
+        _ date: Date,
+        origin: ScheduledDateSourceOrigin = .manualSingleDay,
+        groupID: UUID? = nil,
+        timeZone: TimeZone = .current
+    ) {
+        objectWillChange.send()
+        let normalized = DateHelpers.startOfDay(date, in: timeZone)
+        let key = DateHelpers.dayIdentifier(for: normalized, timeZone: timeZone)
+        guard scheduledDateSourceStore.sources.contains(where: { source in
+            guard case .singleDay(let singleDay) = source.kind else { return false }
+            return singleDay.dateKey == key && source.groupID == groupID && source.origin == origin
+        }) == false else {
+            suppressedScheduledDateStore.remove(key)
+            return
+        }
+
+        scheduledDateSourceStore.add(
+            ScheduledDateSource(
+                id: UUID(),
+                kind: .singleDay(SingleDaySource(dateKey: key, date: normalized)),
+                createdAt: Date(),
+                isEnabled: true,
+                origin: origin,
+                groupID: groupID
+            )
+        )
+        suppressedScheduledDateStore.remove(key)
+    }
+
+    func addGregorianRangeSource(startDate: Date, endDate: Date, timeZone: TimeZone = .current) {
+        objectWillChange.send()
+        let range = GregorianRangeSource(startDate: startDate, endDate: endDate, timeZone: timeZone)
+        scheduledDateSourceStore.add(
+            ScheduledDateSource(
+                id: UUID(),
+                kind: .gregorianRange(range),
+                createdAt: Date(),
+                isEnabled: true,
+                origin: .manualGregorianRange,
+                groupID: nil
+            )
+        )
+
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        for date in DateHelpers.dates(from: range.startDate, to: range.endDate, calendar: calendar) {
+            let key = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
+            suppressedScheduledDateStore.remove(key)
+        }
+    }
+
+    func addRecurringIslamicSource(_ rule: RecurringIslamicRule, startDate: Date = Date(), timeZone: TimeZone = .current) {
+        objectWillChange.send()
+        let normalized = DateHelpers.startOfDay(startDate, in: timeZone)
+        scheduledDateSourceStore.add(
+            ScheduledDateSource(
+                id: UUID(),
+                kind: .recurringIslamic(RecurringIslamicSource(rule: rule, startDate: normalized)),
+                createdAt: Date(),
+                isEnabled: true,
+                origin: .recurringIslamic(rule),
+                groupID: nil
+            )
+        )
+    }
+
+    @discardableResult
+    func addIslamicQuickAdd(
+        _ kind: IslamicQuickAddKind,
+        startDate: Date = Date(),
+        timeZone: TimeZone = .current
+    ) -> [Date] {
+        objectWillChange.send()
+        let dates = islamicQuickAddGenerator.dates(for: kind, startDate: startDate, timeZone: timeZone)
+        guard !dates.isEmpty else { return [] }
+
+        let groupID = dates.count > 1 ? UUID() : nil
+        for date in dates {
+            addSingleDaySource(date, origin: .islamicQuickAdd(kind), groupID: groupID, timeZone: timeZone)
+        }
+        return dates
+    }
+
+    func previewIslamicQuickAdd(
+        _ kind: IslamicQuickAddKind,
+        startDate: Date = Date(),
+        timeZone: TimeZone = .current
+    ) -> IslamicQuickAddPreview? {
+        islamicQuickAddGenerator.preview(for: kind, startDate: startDate, timeZone: timeZone)
+    }
+
+    func deleteExplicitSources(on date: Date, timeZone: TimeZone = .current) {
+        objectWillChange.send()
+        let key = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
+        scheduledDateSourceStore.removeAll { source in
+            guard source.origin.isExplicitOneOff else { return false }
+            guard case .singleDay(let singleDay) = source.kind else { return false }
+            return singleDay.dateKey == key
+        }
+    }
+
+    func suppressScheduledDate(_ date: Date, timeZone: TimeZone = .current) {
+        objectWillChange.send()
+        let key = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
+        suppressedScheduledDateStore.insert(key)
+    }
+
+    func stopSeries(for provenance: ResolvedScheduledDateProvenance) {
+        objectWillChange.send()
+        if let groupID = provenance.groupID {
+            scheduledDateSourceStore.remove(groupID: groupID)
+        } else {
+            scheduledDateSourceStore.remove(id: provenance.sourceID)
+        }
+    }
+
+    func resetScheduledDateSources() {
+        objectWillChange.send()
+        scheduledDateSourceStore.reset()
+        suppressedScheduledDateStore.reset()
     }
 
     func effectiveConfig(
