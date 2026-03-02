@@ -16,7 +16,7 @@ enum HijriMonth: Int, CaseIterable, Codable, Hashable, Identifiable {
 
     var id: Int { rawValue }
 
-    static let adjustmentMonths: [HijriMonth] = [.muharram, .ramadan, .shawwal, .dhulHijjah]
+    static let adjustmentMonths: [HijriMonth] = Self.allCases
 
     static func isValid(_ rawValue: Int) -> Bool {
         Self(rawValue: rawValue) != nil

@@ -3,7 +3,7 @@ import SwiftUI
 struct HijriCalendarSettingsView: View {
     @EnvironmentObject private var scheduleManager: ScheduleManager
 
-    private let adjustableMonths: [HijriMonth] = [.muharram, .ramadan, .shawwal, .dhulHijjah]
+    private let adjustableMonths: [HijriMonth] = HijriMonth.allCases
 
     var body: some View {
         Form {
@@ -56,18 +56,7 @@ struct HijriCalendarSettingsView: View {
     }
 
     private func effectText(for month: HijriMonth) -> String {
-        switch month {
-        case .muharram:
-            return Strings.SettingsHijri.muharram
-        case .ramadan:
-            return Strings.SettingsHijri.ramadan
-        case .shawwal:
-            return Strings.SettingsHijri.shawwal
-        case .dhulHijjah:
-            return Strings.SettingsHijri.dhulHijjah
-        default:
-            return ""
-        }
+        Strings.SettingsHijri.genericEffect(month.displayName)
     }
 }
 
@@ -119,18 +108,7 @@ private struct HijriMonthAdjustmentDetailView: View {
     }
 
     private var effectText: String {
-        switch month {
-        case .muharram:
-            return Strings.SettingsHijri.muharram
-        case .ramadan:
-            return Strings.SettingsHijri.ramadan
-        case .shawwal:
-            return Strings.SettingsHijri.shawwal
-        case .dhulHijjah:
-            return Strings.SettingsHijri.dhulHijjah
-        default:
-            return ""
-        }
+        Strings.SettingsHijri.genericEffect(month.displayName)
     }
 
     private func previewRow(title: String, value: String) -> some View {

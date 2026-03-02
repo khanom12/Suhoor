@@ -23,6 +23,73 @@ struct IslamicQuickAddGenerator {
         )
     }
 
+    func previewAshuraQuickAdd(
+        for pattern: AshuraQuickAddPattern,
+        startDate: Date = Date(),
+        timeZone: TimeZone = .current
+    ) -> AshuraQuickAddPreview? {
+        let dates = ashuraDates(for: pattern, startDate: startDate, timeZone: timeZone)
+        guard !dates.isEmpty else { return nil }
+        return AshuraQuickAddPreview(
+            pattern: pattern,
+            dates: dates,
+            previewText: previewText(for: dates, timeZone: timeZone),
+            availabilityText: availabilityText(for: dates, timeZone: timeZone)
+        )
+    }
+
+    func recommendedAshuraPattern(
+        startDate: Date = Date(),
+        timeZone: TimeZone = .current
+    ) -> AshuraQuickAddPattern {
+        let start = DateHelpers.startOfDay(startDate, in: timeZone)
+        guard let firstUpcoming = firstMatchingDate(start: start, timeZone: timeZone, matcher: {
+            $0.month == .muharram && [9, 10, 11].contains($0.day)
+        }),
+        let components = adjustedHijriCalendar.adjustedComponents(for: firstUpcoming, timeZone: timeZone) else {
+            return .nineTen
+        }
+
+        return components.day >= 10 ? .tenEleven : .nineTen
+    }
+
+    func ashuraDates(
+        for pattern: AshuraQuickAddPattern,
+        startDate: Date = Date(),
+        timeZone: TimeZone = .current
+    ) -> [Date] {
+        let start = DateHelpers.startOfDay(startDate, in: timeZone)
+        let anchorDay: Int
+        switch pattern {
+        case .nineTen, .allThree:
+            anchorDay = 9
+        case .tenEleven:
+            anchorDay = 10
+        }
+
+        guard let anchor = firstMatchingDate(start: start, timeZone: timeZone, matcher: {
+            $0.month == .muharram && $0.day == anchorDay
+        }),
+        let components = adjustedHijriCalendar.adjustedComponents(for: anchor, timeZone: timeZone) else {
+            return []
+        }
+
+        let key = HijriYearMonth(hijriYear: components.hijriYear, month: .muharram)
+        let dayNumbers: [Int]
+        switch pattern {
+        case .nineTen:
+            dayNumbers = [9, 10]
+        case .tenEleven:
+            dayNumbers = [10, 11]
+        case .allThree:
+            dayNumbers = [9, 10, 11]
+        }
+
+        return dayNumbers.compactMap {
+            adjustedHijriCalendar.gregorianDate(for: key, dayOfMonth: $0, timeZone: timeZone)
+        }
+    }
+
     func dates(
         for kind: IslamicQuickAddKind,
         startDate: Date = Date(),

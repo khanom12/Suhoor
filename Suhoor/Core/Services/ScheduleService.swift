@@ -22,6 +22,7 @@ final class ScheduleManager: ObservableObject {
     @Published var notificationAuthorizationText: String = "--"
     @Published private(set) var permissionSnapshot: PermissionSnapshot = .empty
     @Published private(set) var activeWindowSnapshot: ActiveAlarmWindowSnapshot = .empty
+    @Published private(set) var bootstrapState: AppBootstrapState = .welcome
 
     private let settingsStore: SuhoorSettingsStore
     private let alarmConfigStore: AlarmConfigStore
@@ -135,6 +136,26 @@ final class ScheduleManager: ObservableObject {
                 }
             }
             .store(in: &cancellables)
+
+        settingsStore.$settings
+            .sink { [weak self] _ in
+                self?.updateBootstrapState()
+            }
+            .store(in: &cancellables)
+
+        locationService.$authorizationStatus
+            .sink { [weak self] _ in
+                self?.updateBootstrapState()
+            }
+            .store(in: &cancellables)
+
+        locationService.$lastLocation
+            .sink { [weak self] _ in
+                self?.updateBootstrapState()
+            }
+            .store(in: &cancellables)
+
+        updateBootstrapState()
     }
 
     var nextUpcomingSchedule: DaySchedule? {
@@ -152,6 +173,10 @@ final class ScheduleManager: ObservableObject {
 
     var usesNotificationFallback: Bool {
         hasAnyEnabledAlarms && schedulingMode == .notifications
+    }
+
+    var showsHome: Bool {
+        bootstrapState == .home
     }
 
     var isAlarmKitDenied: Bool {
@@ -191,7 +216,7 @@ final class ScheduleManager: ObservableObject {
 
     func hasHijriBaseline(for month: HijriMonth, hijriYear: Int? = nil) -> Bool {
         let year = hijriYear ?? currentHijriAdjustmentYear
-        return HijriBaselineMonthStarts.contains(HijriYearMonth(hijriYear: year, month: month))
+        return adjustedHijriCalendar.monthStartPreview(for: HijriYearMonth(hijriYear: year, month: month)) != nil
     }
 
     func setHijriMonthAdjustment(for month: HijriMonth, offsetDays: Int) async {
@@ -286,8 +311,20 @@ final class ScheduleManager: ObservableObject {
         )
     }
 
-    func previewIslamicQuickAdd(_ kind: IslamicQuickAddKind, timeZone: TimeZone = .current) -> IslamicQuickAddPreview? {
-        alarmConfigStore.previewIslamicQuickAdd(kind, timeZone: timeZone)
+    func previewIslamicQuickAdd(
+        _ kind: IslamicQuickAddKind,
+        startDate: Date = Date(),
+        timeZone: TimeZone = .current
+    ) -> IslamicQuickAddPreview? {
+        alarmConfigStore.previewIslamicQuickAdd(kind, startDate: startDate, timeZone: timeZone)
+    }
+
+    func previewAshuraQuickAdd(
+        _ pattern: AshuraQuickAddPattern,
+        startDate: Date = Date(),
+        timeZone: TimeZone = .current
+    ) -> AshuraQuickAddPreview? {
+        alarmConfigStore.previewAshuraQuickAdd(pattern, startDate: startDate, timeZone: timeZone)
     }
 
     func previewGregorianRangeAdd(
@@ -300,9 +337,25 @@ final class ScheduleManager: ObservableObject {
 
     func islamicQuickAddAvailability(
         _ kind: IslamicQuickAddKind,
+        startDate: Date = Date(),
         timeZone: TimeZone = .current
     ) -> IslamicQuickAddAvailability {
-        alarmConfigStore.islamicQuickAddAvailability(kind, timeZone: timeZone)
+        alarmConfigStore.islamicQuickAddAvailability(kind, startDate: startDate, timeZone: timeZone)
+    }
+
+    func recommendedAshuraQuickAddPattern(
+        startDate: Date = Date(),
+        timeZone: TimeZone = .current
+    ) -> AshuraQuickAddPattern {
+        alarmConfigStore.recommendedAshuraQuickAddPattern(startDate: startDate, timeZone: timeZone)
+    }
+
+    func ashuraQuickAddAvailability(
+        _ pattern: AshuraQuickAddPattern,
+        startDate: Date = Date(),
+        timeZone: TimeZone = .current
+    ) -> AshuraQuickAddAvailability {
+        alarmConfigStore.ashuraQuickAddAvailability(pattern, startDate: startDate, timeZone: timeZone)
     }
 
     func recurringRuleStatus(_ rule: RecurringIslamicRule) -> RecurringRuleStatus {
@@ -420,20 +473,44 @@ final class ScheduleManager: ObservableObject {
     }
 
     @discardableResult
-    func addIslamicQuickAdd(_ kind: IslamicQuickAddKind) async -> AddScheduledDatesResult {
-        let result = alarmConfigStore.addIslamicQuickAdd(kind)
+    func addIslamicQuickAdd(
+        _ kind: IslamicQuickAddKind,
+        startDate: Date = Date(),
+        timeZone: TimeZone = .current
+    ) async -> AddScheduledDatesResult {
+        let result = alarmConfigStore.addIslamicQuickAdd(kind, startDate: startDate, timeZone: timeZone)
         guard !result.addedDates.isEmpty else { return result }
 
         for date in result.addedDates {
-            applyAddFlowSelection(FastIntentEngine.defaultAddFlowSelection(for: date, timeZone: .current), for: date)
+            applyAddFlowSelection(FastIntentEngine.defaultAddFlowSelection(for: date, timeZone: timeZone), for: date)
         }
         await refreshSchedules(force: true)
         return result
     }
 
     @discardableResult
-    func addRecurringIslamicRule(_ rule: RecurringIslamicRule) async -> Bool {
-        let added = alarmConfigStore.addRecurringIslamicSource(rule)
+    func addAshuraQuickAdd(
+        _ pattern: AshuraQuickAddPattern,
+        startDate: Date = Date(),
+        timeZone: TimeZone = .current
+    ) async -> AddScheduledDatesResult {
+        let result = alarmConfigStore.addAshuraQuickAdd(pattern, startDate: startDate, timeZone: timeZone)
+        guard !result.addedDates.isEmpty else { return result }
+
+        for date in result.addedDates {
+            applyAddFlowSelection(FastIntentEngine.defaultAddFlowSelection(for: date, timeZone: timeZone), for: date)
+        }
+        await refreshSchedules(force: true)
+        return result
+    }
+
+    @discardableResult
+    func addRecurringIslamicRule(
+        _ rule: RecurringIslamicRule,
+        startDate: Date = Date(),
+        timeZone: TimeZone = .current
+    ) async -> Bool {
+        let added = alarmConfigStore.addRecurringIslamicSource(rule, startDate: startDate, timeZone: timeZone)
         guard added else { return false }
         await refreshSchedules(force: true)
         return true
@@ -535,7 +612,7 @@ final class ScheduleManager: ObservableObject {
         await refreshSchedules(force: true)
     }
 
-    func enableFromUserAction() async -> Bool {
+    func enableFromUserAction(markConfigured: Bool = true) async -> Bool {
         lastEnableFailureMessage = nil
 
         let locationState = await permissionState(for: .location)
@@ -567,9 +644,16 @@ final class ScheduleManager: ObservableObject {
         }
 
         settingsStore.update { draft in
-            draft.isConfigured = true
+            if markConfigured {
+                draft.isConfigured = true
+            }
+            draft.isEnabled = true
+            draft.reminderEnabledGlobal = true
+            draft.atFajrEnabledGlobal = true
         }
         alarmConfigStore.defaults.suhoorEnabledDefault = true
+        alarmConfigStore.defaults.reminderEnabledDefault = true
+        alarmConfigStore.defaults.fajrEnabledDefault = true
 
         await refreshSchedules(force: true)
         return true
@@ -577,6 +661,11 @@ final class ScheduleManager: ObservableObject {
 
     func disableFromUserAction() async {
         lastEnableFailureMessage = nil
+        settingsStore.update { draft in
+            draft.isEnabled = false
+            draft.reminderEnabledGlobal = false
+            draft.atFajrEnabledGlobal = false
+        }
         alarmConfigStore.defaults.suhoorEnabledDefault = false
         alarmConfigStore.defaults.reminderEnabledDefault = false
         alarmConfigStore.defaults.fajrEnabledDefault = false
@@ -588,6 +677,8 @@ final class ScheduleManager: ObservableObject {
         defer { PerformanceTrace.end(token) }
         let settings = settingsStore.settings
         EventTimelineLog.shared.record(category: "schedule", message: "refreshSchedules(force=\(force))")
+        let timeZone = TimeZone.current
+        resetPastHijriAdjustmentsIfNeeded(timeZone: timeZone)
 
         let coordinate: ScheduleLocationSnapshot
         switch settings.locationMode {
@@ -617,7 +708,6 @@ final class ScheduleManager: ObservableObject {
             coordinate = ScheduleLocationSnapshot(latitude: fixed.latitude, longitude: fixed.longitude)
         }
 
-        let timeZone = TimeZone.current
         let startDate = DateHelpers.startOfToday(in: timeZone)
         let mode = await effectiveSchedulingChannel()
         let resolvedEntries = PerformanceTrace.measure("active-window.resolve", metadata: "limit=\(visibleActiveDayLimit)") {
@@ -718,6 +808,7 @@ final class ScheduleManager: ObservableObject {
                     activeWindowSnapshot: activeWindowSnapshot
                 )
             )
+            updateBootstrapState()
             return
         }
 
@@ -737,6 +828,9 @@ final class ScheduleManager: ObservableObject {
         let settings = settingsStore.settings
         let canUseAlarmKit = await alarmKitAvailableAndAuthorized()
         if activeWindowSnapshot.scheduledDays.contains(where: { $0.dateKey == key }) {
+            Logging.diagnostics.debug(
+                "[toggle] scheduleDay \(key, privacy: .public) suhoor=\(updatedDay.effectiveConfig.suhoorEnabled, privacy: .public) reminder=\(updatedDay.effectiveConfig.reminderEnabled, privacy: .public) fajr=\(updatedDay.effectiveConfig.fajrEnabled, privacy: .public)"
+            )
             _ = await alarmScheduler.scheduleDay(
                 schedule: updatedDay.schedule,
                 config: updatedDay.effectiveConfig,
@@ -744,6 +838,7 @@ final class ScheduleManager: ObservableObject {
                 canUseAlarmKit: canUseAlarmKit
             )
         } else {
+            Logging.diagnostics.debug("[toggle] cancelDay \(key, privacy: .public) via schedule window")
             await alarmScheduler.cancelDay(schedule: updatedDay.schedule)
         }
 
@@ -757,6 +852,7 @@ final class ScheduleManager: ObservableObject {
                 activeWindowSnapshot: activeWindowSnapshot
             )
         )
+        updateBootstrapState()
     }
 
     func schedule(for date: Date) -> DaySchedule? {
@@ -793,6 +889,8 @@ final class ScheduleManager: ObservableObject {
 
     func cancelDay(_ date: Date) async {
         guard let schedule = scheduleForCancellation(on: date) else { return }
+        let key = DateHelpers.dayIdentifier(for: schedule.date, timeZone: .current)
+        Logging.diagnostics.debug("[toggle] cancelDay \(key, privacy: .public) via cancelDay()")
         await alarmScheduler.cancelDay(schedule: schedule)
     }
 
@@ -953,7 +1051,11 @@ final class ScheduleManager: ObservableObject {
         case .location:
             return requiresLocationAuthorization && state != .authorized
         case .alarmKit:
-            return state == .notDetermined || state == .restricted
+            #if targetEnvironment(simulator)
+            return state != .authorized && state != .unavailable
+            #else
+            return state != .authorized
+            #endif
         case .notifications:
             return state != .authorized
         }
@@ -979,6 +1081,7 @@ final class ScheduleManager: ObservableObject {
         permissionSummary = snapshot.summaryText
         alarmAuthorizationText = snapshot.alarmAuthorizationText
         notificationAuthorizationText = snapshot.notificationAuthorizationText
+        updateBootstrapState()
         EventTimelineLog.shared.record(category: "permissions", message: "Permission summary: \(snapshot.summaryText)")
     }
 
@@ -1010,6 +1113,7 @@ final class ScheduleManager: ObservableObject {
         permissionSummary = ""
         permissionSnapshot = .empty
         activeWindowSnapshot = .empty
+        updateBootstrapState()
         cacheStore.clear()
         alarmConfigStore.resetScheduledDateSources()
         settingsStore.reset()
@@ -1314,15 +1418,66 @@ final class ScheduleManager: ObservableObject {
         alarmConfigStore.hasAnyEnabledDefaults || alarmConfigStore.hasAnyEnabledOverride()
     }
 
+    private func resetPastHijriAdjustmentsIfNeeded(timeZone: TimeZone) {
+        let today = DateHelpers.startOfToday(in: timeZone)
+        let currentComponents = adjustedHijriCalendar.adjustedComponents(for: today, timeZone: timeZone) ?? {
+            var fallbackCalendar = Calendar(identifier: .islamicUmmAlQura)
+            fallbackCalendar.timeZone = timeZone
+            let fallback = fallbackCalendar.dateComponents([.year, .month], from: today)
+            guard
+                let year = fallback.year,
+                let monthValue = fallback.month,
+                let month = HijriMonth(rawValue: monthValue)
+            else {
+                return nil
+            }
+            return AdjustedHijriDateComponents(
+                hijriYear: year,
+                month: month,
+                day: 1,
+                monthTitle: month.displayName,
+                isDerivedFromBaseline: false
+            )
+        }()
+        guard let currentComponents else { return }
+
+        let currentYear = currentComponents.hijriYear
+        let currentMonthValue = currentComponents.month.rawValue
+
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+
+        if currentMonthValue > 1 {
+            for monthValue in 1..<currentMonthValue {
+                guard let month = HijriMonth(rawValue: monthValue) else { continue }
+                guard let nextMonth = HijriMonth(rawValue: monthValue + 1) else { continue }
+                let nextKey = HijriYearMonth(hijriYear: currentYear, month: nextMonth)
+                guard let nextStart = adjustedHijriCalendar.gregorianDate(for: nextKey, dayOfMonth: 1, timeZone: timeZone) else {
+                    continue
+                }
+                if calendar.startOfDay(for: today) >= calendar.startOfDay(for: nextStart) {
+                    let key = HijriYearMonth(hijriYear: currentYear, month: month)
+                    if hijriAdjustmentStore.readAdjustment(for: key) != 0 {
+                        hijriAdjustmentStore.resetAdjustment(for: key)
+                    }
+                }
+            }
+        }
+
+        let previousYear = currentYear - 1
+        for month in HijriMonth.allCases {
+            let key = HijriYearMonth(hijriYear: previousYear, month: month)
+            if hijriAdjustmentStore.readAdjustment(for: key) != 0 {
+                hijriAdjustmentStore.resetAdjustment(for: key)
+            }
+        }
+    }
+
     private func resolvedCurrentHijriYear(timeZone: TimeZone = .current) -> Int {
         var fallbackCalendar = Calendar(identifier: .islamicUmmAlQura)
         fallbackCalendar.timeZone = timeZone
-        let year = adjustedHijriCalendar.adjustedComponents(for: Date(), timeZone: timeZone)?.hijriYear
+        return adjustedHijriCalendar.adjustedComponents(for: Date(), timeZone: timeZone)?.hijriYear
             ?? fallbackCalendar.component(.year, from: Date())
-        if HijriBaselineMonthStarts.supportedHijriYears.contains(year) {
-            return year
-        }
-        return HijriBaselineMonthStarts.supportedHijriYears.first ?? year
     }
 
     private func currentCoordinate() -> CLLocationCoordinate2D? {
@@ -1676,6 +1831,40 @@ final class ScheduleManager: ObservableObject {
         return "\(location.title): \(location.statusText) · \(alarms.title): \(alarms.statusText) · \(notifications.title): \(notifications.statusText) · Mode: \(modeText)"
     }
 
+    private func updateBootstrapState() {
+        bootstrapState = Self.resolveBootstrapState(
+            settings: settingsStore.settings,
+            permissionStates: permissionSnapshot.presentations.mapValues(\.state),
+            hasVisibleDays: !activeWindowSnapshot.visibleDays.isEmpty
+        )
+    }
+
+    static func resolveBootstrapState(
+        settings: AppSettings,
+        permissionStates: [AppPermissionKind: AppPermissionState],
+        hasVisibleDays: Bool
+    ) -> AppBootstrapState {
+        if !settings.isConfigured {
+            return .welcome
+        }
+
+        let locationReady = permissionStates[.location] == .authorized
+        let notificationsReady = permissionStates[.notifications] == .authorized
+
+        let alarmsReady: Bool
+        #if targetEnvironment(simulator)
+        alarmsReady = permissionStates[.alarmKit] == .authorized || permissionStates[.alarmKit] == .unavailable
+        #else
+        alarmsReady = permissionStates[.alarmKit] == .authorized
+        #endif
+
+        guard locationReady, notificationsReady, alarmsReady, hasVisibleDays else {
+            return .permissions
+        }
+
+        return .home
+    }
+
     private func alarmAuthorizationStateText() async -> String {
         #if targetEnvironment(simulator)
         return "Unavailable on Simulator"
@@ -1901,6 +2090,12 @@ struct PermissionSnapshot: Equatable, Sendable {
         notificationAuthorizationText: "--",
         presentations: [:]
     )
+}
+
+enum AppBootstrapState: Equatable, Sendable {
+    case welcome
+    case permissions
+    case home
 }
 
 enum DuplicateDateStatus {

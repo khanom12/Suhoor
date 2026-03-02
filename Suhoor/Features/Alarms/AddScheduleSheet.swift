@@ -17,6 +17,7 @@ struct AddScheduleSheet: View {
     @State private var singleDayTagSelection = FastIntentSelection.default
     @State private var rangePurposeSelection: RangePurposeSelection = .auto
     @State private var showsTagPicker = false
+    @State private var showsAshuraPatternSheet = false
     @State private var rangePickerTarget: RangePickerTarget?
 
     var body: some View {
@@ -62,6 +63,25 @@ struct AddScheduleSheet: View {
                     selections: fastTagStore.selections,
                     onSave: { selection in
                         singleDayTagSelection = selection
+                    }
+                )
+            }
+            .presentationDetents([.medium, .large])
+        }
+        .sheet(isPresented: $showsAshuraPatternSheet) {
+            NavigationStack {
+                AshuraQuickAddSheet(
+                    onAdd: { pattern in
+                        Task {
+                            let result = await scheduleManager.addAshuraQuickAdd(pattern)
+                            if let firstDate = result.addedDates.first {
+                                onOpenExistingDay(firstDate)
+                            }
+                            if !result.addedDates.isEmpty {
+                                showsAshuraPatternSheet = false
+                                isPresented = false
+                            }
+                        }
                     }
                 )
             }
@@ -236,31 +256,76 @@ struct AddScheduleSheet: View {
 
     @ViewBuilder
     private func quickAddRow(for kind: IslamicQuickAddKind) -> some View {
-        let availability = scheduleManager.islamicQuickAddAvailability(kind)
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .top, spacing: 12) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(kind.title)
-                        .font(.body.weight(.medium))
-                    Text(kind.detailText)
+        if kind == .nextAshura {
+            ashuraQuickAddRow
+        } else {
+            let availability = scheduleManager.islamicQuickAddAvailability(kind)
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(alignment: .top, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(kind.title)
+                            .font(.body.weight(.medium))
+                        Text(kind.detailText)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Button(actionTitle(for: availability)) {
+                        Task {
+                            let result = await scheduleManager.addIslamicQuickAdd(kind)
+                            if let firstDate = result.addedDates.first {
+                                onOpenExistingDay(firstDate)
+                            }
+                            if !result.addedDates.isEmpty {
+                                isPresented = false
+                            }
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                    .disabled(availability.state == .disabled)
+                }
+
+                if let preview = availability.preview {
+                    Text(preview.previewText)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    Text(preview.availabilityText)
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
+
+                if let reasonText = availability.reasonText {
+                    Text(reasonText)
+                        .font(.footnote)
+                        .foregroundStyle(availability.state == .disabled ? Color.secondary : .orange)
+                }
+            }
+        }
+    }
+
+    private var ashuraQuickAddRow: some View {
+        let recommendedPattern = scheduleManager.recommendedAshuraQuickAddPattern()
+        let availability = scheduleManager.ashuraQuickAddAvailability(recommendedPattern)
+
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(IslamicQuickAddKind.nextAshura.title)
+                        .font(.body.weight(.medium))
+                    Text("Choose a recommended two-day Ashura pair, or explicitly add all three dates.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    Text("Recommended: \(recommendedPattern.title)")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.primary)
+                }
                 Spacer()
-                Button(actionTitle(for: availability)) {
-                    Task {
-                        let result = await scheduleManager.addIslamicQuickAdd(kind)
-                        if let firstDate = result.addedDates.first {
-                            onOpenExistingDay(firstDate)
-                        }
-                        if !result.addedDates.isEmpty {
-                            isPresented = false
-                        }
-                    }
+                Button("Select") {
+                    showsAshuraPatternSheet = true
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.small)
-                .disabled(availability.state == .disabled)
             }
 
             if let preview = availability.preview {
@@ -434,6 +499,102 @@ struct AddScheduleSheet: View {
     }
 
     private func actionTitle(for availability: IslamicQuickAddAvailability) -> String {
+        switch availability.state {
+        case .available:
+            return "Add"
+        case .partial:
+            return "Add Remaining"
+        case .disabled:
+            return "Added"
+        }
+    }
+}
+
+private struct AshuraQuickAddSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var scheduleManager: ScheduleManager
+
+    let onAdd: (AshuraQuickAddPattern) -> Void
+
+    var body: some View {
+        Form {
+            Section {
+                Text("Suhoor recommends observing Ashura as a two-day pattern. The app does not recommend 10 Muharram alone as the default quick add.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("Choose Pattern") {
+                ForEach(AshuraQuickAddPattern.allCases) { pattern in
+                    ashuraPatternRow(pattern)
+                }
+            }
+        }
+        .navigationTitle("Next Ashura")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Close") { dismiss() }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func ashuraPatternRow(_ pattern: AshuraQuickAddPattern) -> some View {
+        let availability = scheduleManager.ashuraQuickAddAvailability(pattern)
+
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 8) {
+                        Text(pattern.title)
+                            .font(.body.weight(.medium))
+                        if availability.isRecommended {
+                            Text("Recommended")
+                                .font(.caption.weight(.semibold))
+                                .padding(.vertical, 3)
+                                .padding(.horizontal, 8)
+                                .background(
+                                    Capsule()
+                                        .fill(Color.orange.opacity(0.16))
+                                )
+                                .foregroundStyle(.orange)
+                        }
+                    }
+                    Text(pattern.detailText)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                Button(ashuraActionTitle(for: availability)) {
+                    onAdd(pattern)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+                .disabled(availability.state == .disabled)
+            }
+
+            if let preview = availability.preview {
+                Text(preview.previewText)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                Text(preview.availabilityText)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            if let reasonText = availability.reasonText {
+                Text(reasonText)
+                    .font(.footnote)
+                    .foregroundStyle(availability.state == .disabled ? Color.secondary : .orange)
+            }
+        }
+        .padding(.vertical, 2)
+    }
+
+    private func ashuraActionTitle(for availability: AshuraQuickAddAvailability) -> String {
         switch availability.state {
         case .available:
             return "Add"

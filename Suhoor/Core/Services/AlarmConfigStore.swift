@@ -3,6 +3,8 @@ import Combine
 
 @MainActor
 final class AlarmConfigStore: ObservableObject {
+    private static let latestMigrationVersion = 2
+
     @Published var defaults: DefaultAlarmConfig {
         didSet {
             guard !isPersistenceSuspended else { return }
@@ -103,6 +105,34 @@ final class AlarmConfigStore: ObservableObject {
     func removeOverride(for date: Date, timeZone: TimeZone = .current) {
         let key = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
         overridesByDay.removeValue(forKey: key)
+    }
+
+    func setDayEnabled(_ isEnabled: Bool, for date: Date, timeZone: TimeZone = .current) {
+        let key = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
+        var current = overridesByDay[key] ?? DailyAlarmOverride(date: date, timeZone: timeZone)
+
+        if isEnabled {
+            current.skipDay = false
+
+            let defaultsActive = isDefaultsActive(on: date, timeZone: timeZone)
+            let suhoorEnabled = current.suhoorEnabled ?? (defaultsActive ? defaults.suhoorEnabledDefault : false)
+            let reminderEnabled = current.reminderEnabled ?? (defaultsActive ? defaults.reminderEnabledDefault : false)
+            let fajrEnabled = current.fajrEnabled ?? (defaultsActive ? defaults.fajrEnabledDefault : false)
+
+            if !suhoorEnabled && !reminderEnabled && !fajrEnabled {
+                current.suhoorEnabled = nil
+                current.reminderEnabled = nil
+                current.fajrEnabled = nil
+            }
+        } else {
+            current.skipDay = true
+        }
+
+        if current.hasOverrides {
+            overridesByDay[key] = current
+        } else {
+            overridesByDay.removeValue(forKey: key)
+        }
     }
 
     func isDefaultsActive(on date: Date, timeZone: TimeZone = .current) -> Bool {
@@ -317,6 +347,21 @@ final class AlarmConfigStore: ObservableObject {
         islamicQuickAddGenerator.preview(for: kind, startDate: startDate, timeZone: timeZone)
     }
 
+    func previewAshuraQuickAdd(
+        _ pattern: AshuraQuickAddPattern,
+        startDate: Date = Date(),
+        timeZone: TimeZone = .current
+    ) -> AshuraQuickAddPreview? {
+        islamicQuickAddGenerator.previewAshuraQuickAdd(for: pattern, startDate: startDate, timeZone: timeZone)
+    }
+
+    func recommendedAshuraQuickAddPattern(
+        startDate: Date = Date(),
+        timeZone: TimeZone = .current
+    ) -> AshuraQuickAddPattern {
+        islamicQuickAddGenerator.recommendedAshuraPattern(startDate: startDate, timeZone: timeZone)
+    }
+
     func islamicQuickAddAvailability(
         _ kind: IslamicQuickAddKind,
         startDate: Date = Date(),
@@ -355,6 +400,65 @@ final class AlarmConfigStore: ObservableObject {
             addResult: addResult,
             reasonText: reasonText
         )
+    }
+
+    func ashuraQuickAddAvailability(
+        _ pattern: AshuraQuickAddPattern,
+        startDate: Date = Date(),
+        timeZone: TimeZone = .current
+    ) -> AshuraQuickAddAvailability {
+        let preview = previewAshuraQuickAdd(pattern, startDate: startDate, timeZone: timeZone)
+        let dates = preview?.dates ?? []
+        let provenanceByKey = scheduledDateSourceResolver.provenanceByDate(for: dates, timeZone: timeZone)
+
+        var addedDates: [Date] = []
+        var skippedDates: [Date] = []
+        for date in dates {
+            let key = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
+            if (provenanceByKey[key] ?? []).isEmpty {
+                addedDates.append(date)
+            } else {
+                skippedDates.append(date)
+            }
+        }
+
+        let addResult = AddScheduledDatesResult(addedDates: addedDates, skippedActiveDates: skippedDates)
+        let reasonText: String?
+        if preview == nil {
+            reasonText = "Needs calendar data for a preview right now."
+        } else if addResult.addedDates.isEmpty {
+            reasonText = "All matching dates are already active."
+        } else if !addResult.skippedActiveDates.isEmpty {
+            reasonText = "\(addResult.skippedActiveDates.count) date\(addResult.skippedActiveDates.count == 1 ? "" : "s") already active."
+        } else {
+            reasonText = nil
+        }
+
+        return AshuraQuickAddAvailability(
+            pattern: pattern,
+            preview: preview,
+            addResult: addResult,
+            reasonText: reasonText,
+            isRecommended: pattern == recommendedAshuraQuickAddPattern(startDate: startDate, timeZone: timeZone)
+        )
+    }
+
+    @discardableResult
+    func addAshuraQuickAdd(
+        _ pattern: AshuraQuickAddPattern,
+        startDate: Date = Date(),
+        timeZone: TimeZone = .current
+    ) -> AddScheduledDatesResult {
+        let availability = ashuraQuickAddAvailability(pattern, startDate: startDate, timeZone: timeZone)
+        guard !availability.addResult.addedDates.isEmpty else { return availability.addResult }
+
+        objectWillChange.send()
+        let dates = availability.addResult.addedDates
+        let groupID = dates.count > 1 ? UUID() : nil
+        for date in dates {
+            addSingleDaySource(date, origin: .islamicQuickAdd(.nextAshura), groupID: groupID, timeZone: timeZone)
+        }
+        return availability.addResult
     }
 
     func deleteExplicitSources(on date: Date, timeZone: TimeZone = .current) {
@@ -491,52 +595,58 @@ final class AlarmConfigStore: ObservableObject {
     }
 
     private func performMigrationIfNeeded(legacySettings: AppSettings?) {
-        let currentVersion = defaultsStore.integer(forKey: migrationKey)
-        guard currentVersion < 1 else { return }
-        guard let legacySettings else {
-            defaultsStore.set(1, forKey: migrationKey)
-            return
-        }
+        var currentVersion = defaultsStore.integer(forKey: migrationKey)
 
-        let hasStoredDefaults = defaultsStore.data(forKey: defaultsKey) != nil
-        let hasStoredOverrides = defaultsStore.data(forKey: overridesKey) != nil
-        guard !hasStoredDefaults && !hasStoredOverrides else {
-            defaultsStore.set(1, forKey: migrationKey)
-            return
-        }
+        if currentVersion < 1 {
+            if let legacySettings {
+                let hasStoredDefaults = defaultsStore.data(forKey: defaultsKey) != nil
+                let hasStoredOverrides = defaultsStore.data(forKey: overridesKey) != nil
 
-        defaults = DefaultAlarmConfig(
-            suhoorEnabledDefault: legacySettings.isEnabled,
-            reminderEnabledDefault: legacySettings.reminderEnabledGlobal,
-            fajrEnabledDefault: legacySettings.atFajrEnabledGlobal,
-            defaultSuhoorTimeMode: .relativeToFajrMinusMinutes,
-            defaultSuhoorOffsetMinutes: legacySettings.baseWakeOffsetMinutes,
-            defaultReminderTimeMode: .beforeFajr,
-            defaultReminderMinutesBeforeFajr: max(legacySettings.reminderMinutesBeforeFajrGlobal, 10),
-            defaultReminderFixedTimeMinutes: 0,
-            activationMode: .alwaysOn,
-            activeStartDate: nil,
-            activeEndDate: nil,
-            scheduleWindowDays: legacySettings.schedulePreviewDays
-        )
+                if !hasStoredDefaults && !hasStoredOverrides {
+                    defaults = DefaultAlarmConfig(
+                        suhoorEnabledDefault: legacySettings.isEnabled,
+                        reminderEnabledDefault: legacySettings.reminderEnabledGlobal,
+                        fajrEnabledDefault: legacySettings.atFajrEnabledGlobal,
+                        defaultSuhoorTimeMode: .relativeToFajrMinusMinutes,
+                        defaultSuhoorOffsetMinutes: legacySettings.baseWakeOffsetMinutes,
+                        defaultReminderTimeMode: .beforeFajr,
+                        defaultReminderMinutesBeforeFajr: max(legacySettings.reminderMinutesBeforeFajrGlobal, 10),
+                        defaultReminderFixedTimeMinutes: 0,
+                        activationMode: .alwaysOn,
+                        activeStartDate: nil,
+                        activeEndDate: nil,
+                        scheduleWindowDays: legacySettings.schedulePreviewDays
+                    )
 
-        if !legacySettings.perDayExceptions.isEmpty {
-            var migrated: [String: DailyAlarmOverride] = [:]
-            for (key, exception) in legacySettings.perDayExceptions {
-                guard let date = dateFromKey(key) else { continue }
-                var override = DailyAlarmOverride(date: date)
-                override.skipDay = exception.disabledForDay
-                override.suhoorOffsetOverrideMinutes = exception.wakeOffsetOverrideMinutes
-                override.reminderEnabled = exception.reminderEnabledOverride
-                override.reminderOffsetOverrideMinutes = exception.reminderMinutesOverride
-                override.fajrEnabled = exception.atFajrEnabledOverride
-                override.fajrSoundOverride = exception.atFajrSoundOverride
-                migrated[key] = override
+                    if !legacySettings.perDayExceptions.isEmpty {
+                        var migrated: [String: DailyAlarmOverride] = [:]
+                        for (key, exception) in legacySettings.perDayExceptions {
+                            guard let date = dateFromKey(key) else { continue }
+                            var override = DailyAlarmOverride(date: date)
+                            override.skipDay = exception.disabledForDay
+                            override.suhoorOffsetOverrideMinutes = exception.wakeOffsetOverrideMinutes
+                            override.reminderEnabled = exception.reminderEnabledOverride
+                            override.reminderOffsetOverrideMinutes = exception.reminderMinutesOverride
+                            override.fajrEnabled = exception.atFajrEnabledOverride
+                            override.fajrSoundOverride = exception.atFajrSoundOverride
+                            migrated[key] = override
+                        }
+                        overridesByDay = migrated
+                    }
+                }
             }
-            overridesByDay = migrated
+
+            currentVersion = 1
         }
 
-        defaultsStore.set(1, forKey: migrationKey)
+        if currentVersion < 2 {
+            defaults.suhoorEnabledDefault = true
+            defaults.reminderEnabledDefault = true
+            defaults.fajrEnabledDefault = true
+            currentVersion = 2
+        }
+
+        defaultsStore.set(max(currentVersion, Self.latestMigrationVersion), forKey: migrationKey)
     }
 
     private func dateFromKey(_ key: String) -> Date? {

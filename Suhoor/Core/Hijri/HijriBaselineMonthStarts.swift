@@ -22,6 +22,28 @@ enum HijriBaselineMonthStarts {
 
     static let supportedHijriYears: [Int] = [1447, 1448]
 
+    static func ummAlQuraStarts(for hijriYear: Int, timeZone: TimeZone) -> [HijriMonthBaselineStart] {
+        var calendar = Calendar(identifier: .islamicUmmAlQura)
+        calendar.timeZone = timeZone
+        var gregorian = Calendar(identifier: .gregorian)
+        gregorian.timeZone = timeZone
+        return HijriMonth.allCases.compactMap { month in
+            let components = DateComponents(
+                calendar: calendar,
+                year: hijriYear,
+                month: month.rawValue,
+                day: 1
+            )
+            guard let date = calendar.date(from: components) else { return nil }
+            return HijriMonthBaselineStart(
+                key: HijriYearMonth(hijriYear: hijriYear, month: month),
+                gregorianStartDate: gregorian.startOfDay(for: date),
+                source: "UmmAlQura",
+                generatedAt: Date()
+            )
+        }
+    }
+
     static func starts(for hijriYear: Int, timeZone: TimeZone) -> [HijriMonthBaselineStart] {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = timeZone

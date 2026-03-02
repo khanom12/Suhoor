@@ -89,7 +89,7 @@ struct FastClassificationEngineTests {
         let suite = UserDefaults(suiteName: suiteName)!
         suite.removePersistentDomain(forName: suiteName)
         let store = HijriMonthAdjustmentStore(defaults: suite)
-        let calendarService = HijriCalendarService(adjustmentStore: store)
+        let calendarService = HijriCalendarService(baselineProvider: HijriBaselineMonthStarts.starts, adjustmentStore: store)
         let adjustedCalendar = AdjustedHijriCalendar(calendarService: calendarService)
         let originalResolver = FastIntentEngine.adjustedHijriCalendar
         FastIntentEngine.adjustedHijriCalendar = adjustedCalendar
@@ -142,7 +142,12 @@ struct FastClassificationEngineTests {
         let suiteName = "FastClassificationEngineTests.Helper.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defaults.removePersistentDomain(forName: suiteName)
-        let service = AdjustedHijriCalendar(calendarService: HijriCalendarService(adjustmentStore: HijriMonthAdjustmentStore(defaults: defaults)))
+        let service = AdjustedHijriCalendar(
+            calendarService: HijriCalendarService(
+                baselineProvider: HijriBaselineMonthStarts.starts,
+                adjustmentStore: HijriMonthAdjustmentStore(defaults: defaults)
+            )
+        )
         let date = service.gregorianDate(for: HijriYearMonth(hijriYear: year, month: month), dayOfMonth: day, timeZone: timeZone)
         #expect(date != nil)
         return date ?? Date()

@@ -68,7 +68,7 @@ enum IslamicQuickAddKind: String, Codable, CaseIterable, Identifiable, Hashable,
     var detailText: String {
         switch self {
         case .nextAshura:
-            return "Adds the next corrected 10 Muharram."
+            return "Opens recommended 9 + 10, 10 + 11, or 9 + 10 + 11 Muharram options."
         case .nextArafah:
             return "Adds the next corrected 9 Dhul Hijjah."
         case .nextEidAlFitr:

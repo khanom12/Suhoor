@@ -11,6 +11,7 @@ final class SuhoorSettingsStore: ObservableObject {
     }
 
     private let settingsKey = "Suhoor.AppSettings"
+    private let migrationKey = "Suhoor.AppSettingsMigrationVersion"
     private let defaults: UserDefaults
     private let persistence = DebouncedPersistenceController(
         label: "com.suhoor.app.settings-store",
@@ -26,6 +27,7 @@ final class SuhoorSettingsStore: ObservableObject {
         } else {
             self.settings = .default
         }
+        performMigrationIfNeeded()
     }
 
     func update(_ updateBlock: (inout AppSettings) -> Void) {
@@ -46,11 +48,28 @@ final class SuhoorSettingsStore: ObservableObject {
         }
     }
 
+    private func performMigrationIfNeeded() {
+        let currentVersion = defaults.integer(forKey: migrationKey)
+        guard currentVersion < 1 else { return }
+
+        var migrated = settings
+        migrated.isEnabled = true
+        migrated.reminderEnabledGlobal = true
+        migrated.atFajrEnabledGlobal = true
+
+        isPersistenceSuspended = true
+        settings = migrated
+        isPersistenceSuspended = false
+        saveSettings()
+        defaults.set(1, forKey: migrationKey)
+    }
+
     func reset() {
         isPersistenceSuspended = true
         settings = .default
         isPersistenceSuspended = false
         persistence.cancelPending()
         defaults.removeObject(forKey: settingsKey)
+        defaults.removeObject(forKey: migrationKey)
     }
 }

@@ -2,13 +2,19 @@ import SwiftUI
 import UIKit
 
 struct ContentView: View {
+    @EnvironmentObject private var scheduleManager: ScheduleManager
+
     var body: some View {
         ZStack {
             Color(.systemBackground)
                 .ignoresSafeArea()
 
-            NavigationStack {
-                AlarmsHomeView()
+            Group {
+                if scheduleManager.showsHome {
+                    AlarmsHomeView()
+                } else {
+                    OnboardingView()
+                }
             }
         }
         // Force the root container to occupy the full screen to avoid a centered "panel" layout on iPhone.

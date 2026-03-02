@@ -6,7 +6,7 @@ struct HijriCalendarService {
     let adjustmentStore: HijriMonthAdjustmentStore
 
     init(
-        baselineProvider: @escaping (Int, TimeZone) -> [HijriMonthBaselineStart] = HijriBaselineMonthStarts.starts,
+        baselineProvider: @escaping (Int, TimeZone) -> [HijriMonthBaselineStart] = HijriBaselineMonthStarts.ummAlQuraStarts,
         adjustmentStore: HijriMonthAdjustmentStore
     ) {
         self.baselineProvider = baselineProvider

@@ -13,7 +13,6 @@ struct AlarmDayDetailView: View {
     @State private var reminderTimeClamped = false
     @State private var showsResetConfirmation = false
     @State private var expandedAlarm: ExpandedAlarm?
-    @State private var dayEnabledSnapshot: DayEnabledSnapshot?
     @State private var showsTagPicker = false
     @State private var selectedAbout: FastTagAbout?
     @State private var cachedEditorContext: DayAlarmEditorContext?
@@ -100,14 +99,6 @@ struct AlarmDayDetailView: View {
         effectiveConfig.skipDay
     }
 
-    private var skipBinding: Binding<Bool> {
-        Binding(get: {
-            alarmConfigStore.override(for: schedule.date, timeZone: timeZone)?.skipDay ?? false
-        }, set: { newValue in
-            updateOverride { $0.skipDay = newValue }
-        })
-    }
-
     private var userIntentSelection: FastIntentSelection {
         editorContext.userIntentSelection
     }
@@ -152,9 +143,9 @@ struct AlarmDayDetailView: View {
 
     private var dayActiveBinding: Binding<Bool> {
         Binding(get: {
-            !skipBinding.wrappedValue
+            isDayEnabled
         }, set: { newValue in
-            updateOverride { $0.skipDay = !newValue }
+            setDayEnabled(newValue)
         })
     }
 
@@ -295,18 +286,9 @@ struct AlarmDayDetailView: View {
 
     private var dayToggleBinding: Binding<Bool> {
         Binding(get: {
-            dayActiveBinding.wrappedValue
+            isDayEnabled
         }, set: { newValue in
-            if newValue {
-                restoreDayEnabledStates()
-            } else {
-                dayEnabledSnapshot = DayEnabledSnapshot(
-                    suhoorEnabled: effectiveConfig.suhoorEnabled,
-                    reminderEnabled: effectiveConfig.reminderEnabled,
-                    fajrEnabled: effectiveConfig.fajrEnabled
-                )
-                updateOverride { $0.skipDay = true }
-            }
+            setDayEnabled(newValue)
         })
     }
 
@@ -640,19 +622,6 @@ struct AlarmDayDetailView: View {
         binding.wrappedValue = newValue
     }
 
-    private func restoreDayEnabledStates() {
-        if let snapshot = dayEnabledSnapshot {
-            updateOverride { override in
-                override.skipDay = false
-                override.suhoorEnabled = snapshot.suhoorEnabled
-                override.reminderEnabled = snapshot.reminderEnabled
-                override.fajrEnabled = snapshot.fajrEnabled
-            }
-        } else {
-            updateOverride { $0.skipDay = false }
-        }
-    }
-
     private var usesFixedReminderTime: Bool {
         if alarmConfigStore.override(for: schedule.date, timeZone: timeZone)?.reminderTimeOverrideMinutesFromMidnight != nil {
             return true
@@ -687,6 +656,16 @@ struct AlarmDayDetailView: View {
         alarmConfigStore.updateOverride(for: schedule.date, timeZone: timeZone, update: update)
         scheduleManager.requestRescheduleDay(schedule.date)
         rebuildEditorContext()
+    }
+
+    private func setDayEnabled(_ isEnabled: Bool) {
+        alarmConfigStore.setDayEnabled(isEnabled, for: schedule.date, timeZone: timeZone)
+        scheduleManager.requestRescheduleDay(schedule.date)
+        rebuildEditorContext()
+    }
+
+    private var isDayEnabled: Bool {
+        !effectiveConfig.skipDay && effectiveConfig.hasAnyEnabled
     }
 
     private func clampReminderOffsetIfNeeded() {
@@ -914,12 +893,6 @@ private extension AlarmDayDetailView {
 private enum ExpandedAlarm {
     case suhoor
     case reminder
-}
-
-private struct DayEnabledSnapshot {
-    let suhoorEnabled: Bool
-    let reminderEnabled: Bool
-    let fajrEnabled: Bool
 }
 
 private struct DayAlarmEditorContext {

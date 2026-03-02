@@ -303,6 +303,124 @@ struct SuhoorTests {
     }
 
     @Test
+    func settingsStoreMigrationTurnsLegacyAlarmFlagsOn() throws {
+        let suiteName = "SuhoorTests.SettingsMigration"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+
+        var legacy = AppSettings.default
+        legacy.isEnabled = false
+        legacy.reminderEnabledGlobal = false
+        legacy.atFajrEnabledGlobal = false
+        defaults.set(try JSONEncoder().encode(legacy), forKey: "Suhoor.AppSettings")
+
+        let store = SuhoorSettingsStore(defaults: defaults)
+
+        #expect(store.settings.isEnabled == true)
+        #expect(store.settings.reminderEnabledGlobal == true)
+        #expect(store.settings.atFajrEnabledGlobal == true)
+    }
+
+    @Test
+    func bootstrapStateUsesWelcomeForFreshInstall() {
+        let state = ScheduleManager.resolveBootstrapState(
+            settings: .default,
+            permissionStates: [
+                .location: .authorized,
+                .alarmKit: .authorized,
+                .notifications: .authorized
+            ],
+            hasVisibleDays: true
+        )
+
+        #expect(state == .welcome)
+    }
+
+    @Test
+    func bootstrapStateUsesPermissionsForConfiguredUserWithRevokedPermission() {
+        var settings = AppSettings.default
+        settings.isConfigured = true
+
+        let state = ScheduleManager.resolveBootstrapState(
+            settings: settings,
+            permissionStates: [
+                .location: .denied,
+                .alarmKit: .authorized,
+                .notifications: .authorized
+            ],
+            hasVisibleDays: true
+        )
+
+        #expect(state == .permissions)
+    }
+
+    @Test
+    func bootstrapStateStaysGatedUntilLocationHasFix() {
+        var settings = AppSettings.default
+        settings.isConfigured = true
+
+        let state = ScheduleManager.resolveBootstrapState(
+            settings: settings,
+            permissionStates: [
+                .location: .needsFollowUp,
+                .alarmKit: .authorized,
+                .notifications: .authorized
+            ],
+            hasVisibleDays: true
+        )
+
+        #expect(state == .permissions)
+    }
+
+    @Test
+    func bootstrapStateUsesHomeWhenConfiguredAndReady() {
+        var settings = AppSettings.default
+        settings.isConfigured = true
+
+        let state = ScheduleManager.resolveBootstrapState(
+            settings: settings,
+            permissionStates: [
+                .location: .authorized,
+                .alarmKit: .authorized,
+                .notifications: .authorized
+            ],
+            hasVisibleDays: true
+        )
+
+        #expect(state == .home)
+    }
+
+    @Test
+    func alarmRowDateLabelIncludesHijriDateAndNoRamadanDayCounter() {
+        let timeZone = TimeZone(secondsFromGMT: 0) ?? .current
+        let currentDate = makeDate(year: 2026, month: 2, day: 18)
+        let label = AlarmRowPresentation.dateLabel(
+            for: currentDate,
+            currentDate: currentDate,
+            timeZone: timeZone
+        )
+
+        #expect(label.contains("Today"))
+        #expect(label.contains(HijriDateFormatter.shared.string(from: currentDate)))
+        #expect(label.localizedCaseInsensitiveContains("fasting day") == false)
+    }
+
+    @Test
+    func alarmRowSecondaryTagsAreLimitedToFive() {
+        let result = TagComputationResult(
+            computedPrimaryIntent: .voluntarySunnah,
+            computedSecondaryTags: Set(FastSecondaryVirtueTag.allCases),
+            secondaryDetails: [:],
+            suppressedSecondaryTags: []
+        )
+
+        let secondaryTags = AlarmRowPresentation.secondaryTags(for: result)
+
+        #expect(secondaryTags.count == 5)
+        #expect(AlarmRowPresentation.showsTags(primaryIntent: .other, secondaryTags: []) == false)
+    }
+
+    @Test
     @MainActor
     func requestRescheduleDayAppliesLatestOverrideAfterBurstEdits() async throws {
         let suiteName = "SuhoorTests.DayRescheduleBurst"
@@ -1107,6 +1225,12 @@ struct SuhoorTests {
             showsSimulatorHint: false,
             isBlocking: false
         )
+    }
+
+    private func makeDate(year: Int, month: Int, day: Int) -> Date {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0) ?? .current
+        return calendar.date(from: DateComponents(year: year, month: month, day: day)) ?? Date()
     }
 }
 

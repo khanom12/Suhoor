@@ -9,7 +9,7 @@ struct HijriCalendarServiceTests {
         let suite = UserDefaults(suiteName: "HijriCalendarServiceTests.DayMapping")!
         suite.removePersistentDomain(forName: "HijriCalendarServiceTests.DayMapping")
         let store = HijriMonthAdjustmentStore(defaults: suite)
-        let service = HijriCalendarService(adjustmentStore: store)
+        let service = HijriCalendarService(baselineProvider: HijriBaselineMonthStarts.starts, adjustmentStore: store)
         let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
         let map = service.buildMonthMap(hijriYear: 1447, timeZone: timeZone)
 
@@ -30,7 +30,7 @@ struct HijriCalendarServiceTests {
         let suite = UserDefaults(suiteName: "HijriCalendarServiceTests.Adjustments")!
         suite.removePersistentDomain(forName: "HijriCalendarServiceTests.Adjustments")
         let store = HijriMonthAdjustmentStore(defaults: suite)
-        let service = HijriCalendarService(adjustmentStore: store)
+        let service = HijriCalendarService(baselineProvider: HijriBaselineMonthStarts.starts, adjustmentStore: store)
         let timeZone = TimeZone(secondsFromGMT: 0) ?? .current
         let key = HijriYearMonth(hijriYear: 1447, month: .ramadan)
 
@@ -48,11 +48,45 @@ struct HijriCalendarServiceTests {
     }
 
     @Test
+    func nonRamadanMonthAdjustmentsShiftResolvedStart() {
+        let suite = UserDefaults(suiteName: "HijriCalendarServiceTests.NonRamadanAdjustments")!
+        suite.removePersistentDomain(forName: "HijriCalendarServiceTests.NonRamadanAdjustments")
+        let store = HijriMonthAdjustmentStore(defaults: suite)
+        let service = HijriCalendarService(
+            baselineProvider: { hijriYear, timeZone in
+                var calendar = Calendar(identifier: .gregorian)
+                calendar.timeZone = timeZone
+                guard hijriYear == 1447 else { return [] }
+                let start = calendar.date(from: DateComponents(year: 2025, month: 7, day: 26))!
+                return [
+                    HijriMonthBaselineStart(
+                        key: HijriYearMonth(hijriYear: 1447, month: .safar),
+                        gregorianStartDate: start,
+                        source: "Test",
+                        generatedAt: nil
+                    )
+                ]
+            },
+            adjustmentStore: store
+        )
+        let timeZone = TimeZone(secondsFromGMT: 0) ?? .current
+        let key = HijriYearMonth(hijriYear: 1447, month: .safar)
+
+        let baseline = service.buildMonthMap(hijriYear: 1447, timeZone: timeZone).resolvedStart(for: .safar)
+        store.setAdjustment(for: key, offsetDays: 1)
+        let plusOne = service.buildMonthMap(hijriYear: 1447, timeZone: timeZone).resolvedStart(for: .safar)
+
+        #expect(baseline != nil)
+        #expect(plusOne != nil)
+        #expect(plusOne?.resolvedStart.timeIntervalSince(baseline?.resolvedStart ?? .distantPast) == 24 * 60 * 60)
+    }
+
+    @Test
     func keyEventsResolveFromMonthStarts() {
         let suite = UserDefaults(suiteName: "HijriCalendarServiceTests.KeyEvents")!
         suite.removePersistentDomain(forName: "HijriCalendarServiceTests.KeyEvents")
         let store = HijriMonthAdjustmentStore(defaults: suite)
-        let service = HijriCalendarService(adjustmentStore: store)
+        let service = HijriCalendarService(baselineProvider: HijriBaselineMonthStarts.starts, adjustmentStore: store)
         let timeZone = TimeZone(secondsFromGMT: 0) ?? .current
         let map = service.buildMonthMap(hijriYear: 1447, timeZone: timeZone)
 
@@ -120,7 +154,7 @@ struct HijriCalendarServiceTests {
         let suite = UserDefaults(suiteName: suiteName)!
         suite.removePersistentDomain(forName: suiteName)
         let store = HijriMonthAdjustmentStore(defaults: suite)
-        let service = HijriCalendarService(adjustmentStore: store)
+        let service = HijriCalendarService(baselineProvider: HijriBaselineMonthStarts.starts, adjustmentStore: store)
         let adjustedCalendar = AdjustedHijriCalendar(calendarService: service)
         let timeZone = TimeZone(secondsFromGMT: 0) ?? .current
         let key = HijriYearMonth(hijriYear: 1447, month: .ramadan)
@@ -144,7 +178,7 @@ struct HijriCalendarServiceTests {
         let suite = UserDefaults(suiteName: suiteName)!
         suite.removePersistentDomain(forName: suiteName)
         let store = HijriMonthAdjustmentStore(defaults: suite)
-        let service = HijriCalendarService(adjustmentStore: store)
+        let service = HijriCalendarService(baselineProvider: HijriBaselineMonthStarts.starts, adjustmentStore: store)
         let adjustedCalendar = AdjustedHijriCalendar(calendarService: service)
         let timeZone = TimeZone(secondsFromGMT: 0) ?? .current
         let key = HijriYearMonth(hijriYear: 1447, month: .shawwal)
@@ -165,7 +199,7 @@ struct HijriCalendarServiceTests {
         let suite = UserDefaults(suiteName: suiteName)!
         suite.removePersistentDomain(forName: suiteName)
         let store = HijriMonthAdjustmentStore(defaults: suite)
-        let service = HijriCalendarService(adjustmentStore: store)
+        let service = HijriCalendarService(baselineProvider: HijriBaselineMonthStarts.starts, adjustmentStore: store)
         let adjustedCalendar = AdjustedHijriCalendar(calendarService: service)
         let formatter = HijriDateFormatter(adjustedHijriCalendar: adjustedCalendar)
         let timeZone = TimeZone(secondsFromGMT: 0) ?? .current

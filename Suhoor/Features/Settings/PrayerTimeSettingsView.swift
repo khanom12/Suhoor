@@ -61,7 +61,7 @@ struct PrayerTimeSettingsView: View {
     }
 
     private var hijriSummary: String {
-        let months: [HijriMonth] = [.muharram, .ramadan, .shawwal, .dhulHijjah]
+        let months: [HijriMonth] = HijriMonth.allCases
         let changed = months.filter { scheduleManager.hijriAdjustment(for: $0) != 0 }.count
         if changed == 0 {
             return Strings.Settings.hijriNoChanges

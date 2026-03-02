@@ -8,6 +8,7 @@ struct OnboardingView: View {
     @EnvironmentObject private var locationService: LocationService
 
     @State private var step: Step = .welcome
+    @State private var hasInitializedStep = false
     @State private var showHowItWorks = false
 
     var body: some View {
@@ -23,6 +24,9 @@ struct OnboardingView: View {
             .sheet(isPresented: $showHowItWorks) {
                 HowItWorksView()
             }
+            .task {
+                initializeStepIfNeeded()
+            }
         }
     }
 
@@ -37,6 +41,7 @@ struct OnboardingView: View {
         case .permissions:
             PermissionsChecklistStep(
                 refreshKey: permissionsRefreshKey,
+                hasVisibleSchedule: !scheduleManager.activeWindowSnapshot.visibleDays.isEmpty,
                 onOpenSettings: openAppSettings,
                 onContinue: { step = .offset }
             )
@@ -45,9 +50,12 @@ struct OnboardingView: View {
             OffsetStep(
                 baseMinutes: $settingsStore.settings.baseWakeOffsetMinutes,
                 onEnable: {
-                    Task { _ = await scheduleManager.enableFromUserAction() }
-                    withAnimation(.easeInOut) {
-                        step = .confirmation
+                    Task {
+                        let enabled = await scheduleManager.enableFromUserAction(markConfigured: false)
+                        guard enabled else { return }
+                        withAnimation(.easeInOut) {
+                            step = .confirmation
+                        }
                     }
                 }
             )
@@ -80,6 +88,12 @@ struct OnboardingView: View {
         if let url = URL(string: UIApplication.openSettingsURLString) {
             UIApplication.shared.open(url)
         }
+    }
+
+    private func initializeStepIfNeeded() {
+        guard !hasInitializedStep else { return }
+        step = settingsStore.settings.isConfigured ? .permissions : .welcome
+        hasInitializedStep = true
     }
 }
 
@@ -117,6 +131,7 @@ private struct PermissionsChecklistStep: View {
     @EnvironmentObject private var scheduleManager: ScheduleManager
 
     let refreshKey: String
+    let hasVisibleSchedule: Bool
     let onOpenSettings: () -> Void
     let onContinue: () -> Void
 
@@ -128,7 +143,7 @@ private struct PermissionsChecklistStep: View {
             Text("Set up permissions")
                 .font(.title2.weight(.bold))
 
-            Text("Suhoor will guide you through location, alarms, and notification access so setup doesn’t dead-end later.")
+            Text("Suhoor requires location, alarms, and notifications before it can prepare your alarm schedule.")
                 .font(.body)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -148,7 +163,13 @@ private struct PermissionsChecklistStep: View {
 
             Button("Continue", action: onContinue)
                 .buttonStyle(.borderedProminent)
-                .disabled(hasBlockingPermissions)
+                .disabled(hasBlockingPermissions || !hasVisibleSchedule)
+
+            if !hasBlockingPermissions && !hasVisibleSchedule {
+                Text("Preparing your first alarm schedule…")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
         }
         .task {
             await refresh()
@@ -202,7 +223,7 @@ private struct OffsetStep: View {
                 .font(.footnote)
                 .foregroundStyle(.secondary)
 
-            Button("Enable Suhoor", action: onEnable)
+            Button("Continue", action: onEnable)
                 .buttonStyle(.borderedProminent)
         }
     }

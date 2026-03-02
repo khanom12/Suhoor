@@ -106,9 +106,9 @@ struct DefaultAlarmConfig: Codable, Equatable, Sendable {
     }
 
     static let `default` = DefaultAlarmConfig(
-        suhoorEnabledDefault: false,
-        reminderEnabledDefault: false,
-        fajrEnabledDefault: false,
+        suhoorEnabledDefault: true,
+        reminderEnabledDefault: true,
+        fajrEnabledDefault: true,
         defaultSuhoorTimeMode: .relativeToFajrMinusMinutes,
         defaultSuhoorOffsetMinutes: 30,
         defaultReminderTimeMode: .beforeFajr,

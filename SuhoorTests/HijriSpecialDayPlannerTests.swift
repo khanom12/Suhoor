@@ -145,7 +145,12 @@ struct ScheduledDateSourceResolverTests {
         defaults.removePersistentDomain(forName: suiteName)
         let adjustmentStore = HijriMonthAdjustmentStore(defaults: defaults)
         adjustmentStore.setAdjustment(for: HijriYearMonth(hijriYear: 1447, month: .ramadan), offsetDays: 1)
-        let adjustedCalendar = AdjustedHijriCalendar(calendarService: HijriCalendarService(adjustmentStore: adjustmentStore))
+        let adjustedCalendar = AdjustedHijriCalendar(
+            calendarService: HijriCalendarService(
+                baselineProvider: HijriBaselineMonthStarts.starts,
+                adjustmentStore: adjustmentStore
+            )
+        )
         let sourceStore = ScheduledDateSourceStore(defaults: defaults)
         let suppressedStore = SuppressedScheduledDateStore(defaults: defaults)
         sourceStore.add(

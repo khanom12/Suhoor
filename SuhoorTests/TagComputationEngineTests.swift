@@ -350,7 +350,12 @@ struct TagComputationEngineTests {
         let suiteName = "TagComputationEngineTests.Helper.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defaults.removePersistentDomain(forName: suiteName)
-        let service = AdjustedHijriCalendar(calendarService: HijriCalendarService(adjustmentStore: HijriMonthAdjustmentStore(defaults: defaults)))
+        let service = AdjustedHijriCalendar(
+            calendarService: HijriCalendarService(
+                baselineProvider: HijriBaselineMonthStarts.starts,
+                adjustmentStore: HijriMonthAdjustmentStore(defaults: defaults)
+            )
+        )
         let date = service.gregorianDate(for: HijriYearMonth(hijriYear: year, month: month), dayOfMonth: day, timeZone: timeZone)
         #expect(date != nil)
         return date ?? Date()

@@ -42,8 +42,18 @@ struct HijriSpecialDayPlanner {
         let normalizedStart = calendar.startOfDay(for: startDate)
         let endDate = calendar.date(byAdding: .day, value: max(0, days - 1), to: normalizedStart) ?? normalizedStart
 
+        let startHijriYear = adjustedHijriCalendar.adjustedComponents(for: normalizedStart, timeZone: timeZone)?.hijriYear
+        let endHijriYear = adjustedHijriCalendar.adjustedComponents(for: endDate, timeZone: timeZone)?.hijriYear
+        let fallbackYear = {
+            var fallback = Calendar(identifier: .islamicUmmAlQura)
+            fallback.timeZone = timeZone
+            return fallback.component(.year, from: normalizedStart)
+        }()
+        let yearStart = min(startHijriYear ?? fallbackYear, endHijriYear ?? fallbackYear)
+        let yearEnd = max(startHijriYear ?? fallbackYear, endHijriYear ?? fallbackYear)
+
         var datesByScope: [HijriSpecialDayFeatureScope: Set<Date>] = [:]
-        for hijriYear in HijriBaselineMonthStarts.supportedHijriYears {
+        for hijriYear in yearStart...yearEnd {
             if settings.ramadanDailyEnabled {
                 let key = HijriYearMonth(hijriYear: hijriYear, month: .ramadan)
                 let ramadanDates = Set((1...30).compactMap {
@@ -65,8 +75,6 @@ struct HijriSpecialDayPlanner {
                     }.filter { isWithinHorizon($0, start: normalizedStart, end: endDate, calendar: calendar) })
                     if !dates.isEmpty {
                         datesByScope[.whiteDays, default: []].formUnion(dates)
-                    } else if adjustedHijriCalendar.monthStartPreview(for: HijriYearMonth(hijriYear: hijriYear, month: month), timeZone: timeZone) == nil {
-                        Logging.scheduler.debug("Missing Hijri baseline for white days \(month.displayName, privacy: .public) \(String(hijriYear), privacy: .public)")
                     }
                 }
             }

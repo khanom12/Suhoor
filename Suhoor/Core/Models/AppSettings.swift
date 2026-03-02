@@ -25,11 +25,11 @@ struct AppSettings: Codable, Equatable, Sendable {
 
     static let `default` = AppSettings(
         isConfigured: false,
-        isEnabled: false,
+        isEnabled: true,
         baseWakeOffsetMinutes: 30,
-        reminderEnabledGlobal: false,
+        reminderEnabledGlobal: true,
         reminderMinutesBeforeFajrGlobal: 10,
-        atFajrEnabledGlobal: false,
+        atFajrEnabledGlobal: true,
         atFajrSoundSelectionGlobal: .adhanSoft,
         snoozeEnabled: true,
         snoozeMinutes: 5,

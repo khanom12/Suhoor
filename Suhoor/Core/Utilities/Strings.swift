@@ -380,6 +380,7 @@ enum Strings {
     }
 
     enum SettingsHijri {
+        static func genericEffect(_ month: String) -> String { "Affects \(month) dates." }
         static let muharram = "Affects Muharram dates and Ashura."
         static let ramadan = "Affects Ramadan dates and related schedules."
         static let shawwal = "Affects Eid al-Fitr and Shawwal dates."

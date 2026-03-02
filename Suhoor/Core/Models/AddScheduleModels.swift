@@ -97,6 +97,61 @@ enum IslamicQuickAddAvailabilityState: Hashable, Sendable {
     case disabled
 }
 
+enum AshuraQuickAddPattern: String, CaseIterable, Identifiable, Hashable, Sendable {
+    case nineTen
+    case tenEleven
+    case allThree
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .nineTen:
+            return "9 + 10 Muharram"
+        case .tenEleven:
+            return "10 + 11 Muharram"
+        case .allThree:
+            return "9 + 10 + 11 Muharram"
+        }
+    }
+
+    var detailText: String {
+        switch self {
+        case .nineTen:
+            return "The primary recommended pair when both days are still upcoming."
+        case .tenEleven:
+            return "The alternate pair when 9 Muharram has passed or you prefer the later pairing."
+        case .allThree:
+            return "Adds all three Ashura-adjacent dates together."
+        }
+    }
+}
+
+struct AshuraQuickAddPreview: Hashable, Sendable {
+    let pattern: AshuraQuickAddPattern
+    let dates: [Date]
+    let previewText: String
+    let availabilityText: String
+}
+
+struct AshuraQuickAddAvailability: Hashable, Sendable {
+    let pattern: AshuraQuickAddPattern
+    let preview: AshuraQuickAddPreview?
+    let addResult: AddScheduledDatesResult
+    let reasonText: String?
+    let isRecommended: Bool
+
+    var state: IslamicQuickAddAvailabilityState {
+        if addResult.addedDates.isEmpty {
+            return .disabled
+        }
+        if addResult.skippedActiveDates.isEmpty {
+            return .available
+        }
+        return .partial
+    }
+}
+
 struct IslamicQuickAddAvailability: Hashable, Sendable {
     let kind: IslamicQuickAddKind
     let preview: IslamicQuickAddPreview?

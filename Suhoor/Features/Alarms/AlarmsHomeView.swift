@@ -238,16 +238,68 @@ private struct AlarmListSnapshot {
     static let empty = AlarmListSnapshot(sections: [])
 }
 
+enum AlarmRowPresentation {
+    static func secondaryTags(for result: TagComputationResult) -> [FastSecondaryVirtueTag] {
+        Array(FastIntentEngine.displaySecondaryTags(result.computedSecondaryTags).prefix(5))
+    }
+
+    static func showsTags(primaryIntent: FastPrimaryIntent, secondaryTags: [FastSecondaryVirtueTag]) -> Bool {
+        !(primaryIntent == .other && secondaryTags.isEmpty)
+    }
+
+    static func dateLabel(
+        for date: Date,
+        currentDate: Date = Date(),
+        timeZone: TimeZone = .current,
+        separator: String = " • "
+    ) -> String {
+        var parts: [String] = []
+        if isToday(date, currentDate: currentDate, timeZone: timeZone) {
+            parts.append(Strings.AlarmsTab.todayLabel)
+        } else if isTomorrow(date, currentDate: currentDate, timeZone: timeZone) {
+            parts.append(Strings.AlarmsTab.tomorrowLabel)
+        }
+        parts.append(dateLabelFormatter.string(from: date))
+        parts.append(HijriDateFormatter.shared.string(from: date))
+        return parts.joined(separator: separator)
+    }
+
+    private static func isToday(_ date: Date, currentDate: Date, timeZone: TimeZone) -> Bool {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        return calendar.isDate(date, inSameDayAs: calendar.startOfDay(for: currentDate))
+    }
+
+    private static func isTomorrow(_ date: Date, currentDate: Date, timeZone: TimeZone) -> Bool {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let startOfToday = calendar.startOfDay(for: currentDate)
+        let startOfTomorrow = calendar.date(byAdding: .day, value: 1, to: startOfToday) ?? startOfToday
+        return calendar.isDate(date, inSameDayAs: startOfTomorrow)
+    }
+
+    private static let dateLabelFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "EEEE, MMMM d"
+        formatter.timeZone = .current
+        formatter.locale = .current
+        return formatter
+    }()
+}
+
 private struct AlarmRowEntry: Identifiable {
     let activeDay: ActiveAlarmDay
     let secondaryTags: [FastSecondaryVirtueTag]
     let showsTags: Bool
 
     init(activeDay: ActiveAlarmDay) {
-        let secondaryTags = Array(FastIntentEngine.displaySecondaryTags(activeDay.tagResult.computedSecondaryTags).prefix(2))
+        let secondaryTags = AlarmRowPresentation.secondaryTags(for: activeDay.tagResult)
         self.activeDay = activeDay
         self.secondaryTags = secondaryTags
-        self.showsTags = !(activeDay.tagResult.computedPrimaryIntent == .other && secondaryTags.isEmpty)
+        self.showsTags = AlarmRowPresentation.showsTags(
+            primaryIntent: activeDay.tagResult.computedPrimaryIntent,
+            secondaryTags: secondaryTags
+        )
     }
 
     var schedule: DaySchedule { activeDay.schedule }
@@ -278,6 +330,7 @@ private struct AlarmRowView: View {
     let showsTags: Bool
     let onSelect: () -> Void
     @ScaledMetric(relativeTo: .largeTitle) private var timeFontSize: CGFloat = 46
+    @State private var localIsOn: Bool
 
     private static let timeMainFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -295,58 +348,86 @@ private struct AlarmRowView: View {
         return formatter
     }()
 
+    init(
+        schedule: DaySchedule,
+        config: EffectiveDailyConfig,
+        primaryDisplay: PrimaryDisplay?,
+        primaryIntent: FastPrimaryIntent,
+        secondaryTags: [FastSecondaryVirtueTag],
+        showsTags: Bool,
+        onSelect: @escaping () -> Void
+    ) {
+        self.schedule = schedule
+        self.config = config
+        self.primaryDisplay = primaryDisplay
+        self.primaryIntent = primaryIntent
+        self.secondaryTags = secondaryTags
+        self.showsTags = showsTags
+        self.onSelect = onSelect
+        _localIsOn = State(initialValue: AlarmRowView.isEnabled(config: config))
+    }
+
     var body: some View {
-        HStack(alignment: .center, spacing: DesignTokens.spacingM) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(dateLabel)
-                    .font(.footnote)
-                    .foregroundStyle(isDisabled ? .tertiary : .secondary)
-
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Text(primaryTimeMain)
-                        .font(.system(size: timeFontSize, weight: .regular, design: .default))
-                        .monospacedDigit()
-                        .foregroundStyle(isDisabled ? .tertiary : .primary)
-                        .minimumScaleFactor(0.8)
-
-                    if let primaryTimeSuffix {
-                        Text(primaryTimeSuffix)
-                            .font(.system(size: timeFontSize * 0.55, weight: .regular, design: .default))
-                            .monospacedDigit()
+        HStack(alignment: .top, spacing: DesignTokens.spacingM) {
+            Button {
+                onSelect()
+            } label: {
+                VStack(alignment: .leading, spacing: 10) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(dateLabel)
+                            .font(.footnote)
                             .foregroundStyle(isDisabled ? .tertiary : .secondary)
-                            .baselineOffset(1)
+
+                        HStack(alignment: .firstTextBaseline, spacing: 12) {
+                            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                                Text(primaryTimeMain)
+                                    .font(.system(size: timeFontSize, weight: .regular, design: .default))
+                                    .monospacedDigit()
+                                    .foregroundStyle(isDisabled ? .tertiary : .primary)
+                                    .minimumScaleFactor(0.8)
+
+                                if let primaryTimeSuffix {
+                                    Text(primaryTimeSuffix)
+                                        .font(.system(size: timeFontSize * 0.55, weight: .regular, design: .default))
+                                        .monospacedDigit()
+                                        .foregroundStyle(isDisabled ? .tertiary : .secondary)
+                                        .baselineOffset(1)
+                                }
+                            }
+
+                            Spacer(minLength: 8)
+
+                            Text(fajrLineText)
+                                .font(.callout)
+                                .foregroundStyle(isDisabled ? .tertiary : .secondary)
+                                .monospacedDigit()
+                        }
+                    }
+
+                    if showsTags {
+                        HomeTagCapsuleRow(
+                            primaryIntent: primaryIntent,
+                            secondaryTags: secondaryTags,
+                            isDisabled: isDisabled
+                        )
                     }
                 }
-
-                Text(fajrLineText)
-                    .font(.callout)
-                    .foregroundStyle(isDisabled ? .tertiary : .secondary)
-                    .monospacedDigit()
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(accessibilitySummary)
             }
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(accessibilitySummary)
-
-            Spacer()
-
-            if showsTags {
-                TagIconStack(
-                    primaryIntent: primaryIntent,
-                    secondaryTags: secondaryTags,
-                    isDisabled: isDisabled
-                )
-            }
+            .buttonStyle(.plain)
+            .disabled(editMode?.wrappedValue.isEditing == true)
 
             Toggle("", isOn: dayActiveBinding)
                 .labelsHidden()
                 .tint(DawnColor.accent)
                 .accessibilityLabel("\(primaryLabelText) alarm")
+                .padding(.top, 4)
         }
         .padding(.vertical, 6)
-        .contentShape(Rectangle())
-        .onTapGesture {
-            if editMode?.wrappedValue.isEditing != true {
-                onSelect()
-            }
+        .onChange(of: config) { _, newValue in
+            localIsOn = AlarmRowView.isEnabled(config: newValue)
         }
     }
 
@@ -378,43 +459,16 @@ private struct AlarmRowView: View {
     }
 
     private var dateLabel: String {
-        let dateText = AlarmRowView.dateLabelFormatter.string(from: schedule.date)
-        var parts: [String] = []
-        if isToday {
-            parts.append(Strings.AlarmsTab.todayLabel)
-        } else if isTomorrow {
-            parts.append(Strings.AlarmsTab.tomorrowLabel)
-        }
-        parts.append(dateText)
-        if let fastDayText {
-            parts.append(fastDayText)
-        }
-        return parts.joined(separator: " • ")
-    }
-
-    private var isToday: Bool {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = .current
-        let startOfToday = calendar.startOfDay(for: Date())
-        return calendar.isDate(schedule.date, inSameDayAs: startOfToday)
-    }
-
-    private var isTomorrow: Bool {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = .current
-        let startOfToday = calendar.startOfDay(for: Date())
-        let startOfTomorrow = calendar.date(byAdding: .day, value: 1, to: startOfToday) ?? startOfToday
-        return calendar.isDate(schedule.date, inSameDayAs: startOfTomorrow)
+        AlarmRowPresentation.dateLabel(for: schedule.date, separator: " • ")
     }
 
     private var dayActiveBinding: Binding<Bool> {
         Binding(get: {
-            config.hasAnyEnabled
+            localIsOn
         }, set: { isOn in
+            localIsOn = isOn
             let timeZone = TimeZone.current
-            alarmConfigStore.updateOverride(for: schedule.date, timeZone: timeZone) { override in
-                override.skipDay = !isOn
-            }
+            alarmConfigStore.setDayEnabled(isOn, for: schedule.date, timeZone: timeZone)
             scheduleManager.requestRescheduleDay(schedule.date)
         })
     }
@@ -439,22 +493,11 @@ private struct AlarmRowView: View {
     }
 
     private var isDisabled: Bool {
-        !config.hasAnyEnabled
+        !localIsOn
     }
 
     private var dateLabelWithPrefix: String {
-        let dateText = AlarmRowView.dateLabelFormatter.string(from: schedule.date)
-        var parts: [String] = []
-        if isToday {
-            parts.append(Strings.AlarmsTab.todayLabel)
-        } else if isTomorrow {
-            parts.append(Strings.AlarmsTab.tomorrowLabel)
-        }
-        parts.append(dateText)
-        if let fastDayText {
-            parts.append(fastDayText)
-        }
-        return parts.joined(separator: ", ")
+        AlarmRowPresentation.dateLabel(for: schedule.date, separator: ", ")
     }
 
     private var tagAccessibilityText: String? {
@@ -464,21 +507,9 @@ private struct AlarmRowView: View {
         return "Tags: \(titles.joined(separator: ", "))."
     }
 
-    private var fastDayText: String? {
-        guard let components = FastIntentEngine.adjustedComponents(for: schedule.date, timeZone: .current),
-              components.month == .ramadan else {
-            return nil
-        }
-        return Strings.AlarmsTab.ramadanDayLabel(components.day)
+    private static func isEnabled(config: EffectiveDailyConfig) -> Bool {
+        !config.skipDay && config.hasAnyEnabled
     }
-
-    private static let dateLabelFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "EEEE, MMMM d"
-        formatter.timeZone = .current
-        formatter.locale = .current
-        return formatter
-    }()
 }
 
 private extension AlarmsHomeView {
@@ -493,38 +524,55 @@ private extension AlarmsHomeView {
     }
 }
 
-private struct TagIconStack: View {
+private struct HomeTagCapsuleRow: View {
     let primaryIntent: FastPrimaryIntent
     let secondaryTags: [FastSecondaryVirtueTag]
     let isDisabled: Bool
 
     var body: some View {
-        VStack(spacing: 6) {
-            TagIconBadge(style: primaryIntent.style, isDisabled: isDisabled)
+        FlowLayout(spacing: 6) {
+            HomeTagCapsule(style: primaryIntent.style, prominence: .strong, isDisabled: isDisabled)
             ForEach(secondaryTags, id: \.self) { tag in
-                TagIconBadge(style: tag.style, isDisabled: isDisabled)
+                HomeTagCapsule(style: tag.style, prominence: .subtle, isDisabled: isDisabled)
             }
         }
         .accessibilityHidden(true)
     }
 }
 
-private struct TagIconBadge: View {
+private struct HomeTagCapsule: View {
+    enum Prominence {
+        case strong
+        case subtle
+    }
+
     let style: FastTagStyle
+    let prominence: Prominence
     let isDisabled: Bool
-    @ScaledMetric(relativeTo: .footnote) private var badgeSize: CGFloat = 22
 
     var body: some View {
         let base = style.color
-        Image(systemName: style.systemImage ?? "tag")
-            .font(.caption2.weight(.semibold))
+        let fillOpacity = prominence == .strong ? 0.18 : 0.10
+        let strokeOpacity = prominence == .strong ? 0.35 : 0.22
+
+        HStack(spacing: 5) {
+            if let systemImage = style.systemImage {
+                Image(systemName: systemImage)
+            }
+            Text(style.shortTitle)
+                .lineLimit(1)
+        }
+            .font(.caption.weight(.semibold))
             .foregroundStyle(base)
-            .frame(width: badgeSize, height: badgeSize)
-            .background(base.opacity(0.16))
-            .clipShape(Circle())
+            .padding(.vertical, 4)
+            .padding(.horizontal, 8)
+            .background(
+                Capsule()
+                    .fill(base.opacity(fillOpacity))
+            )
             .overlay(
-                Circle()
-                    .stroke(base.opacity(0.4), lineWidth: 0.8)
+                Capsule()
+                    .stroke(base.opacity(strokeOpacity), lineWidth: 0.8)
             )
             .opacity(isDisabled ? 0.5 : 1.0)
             .accessibilityHidden(true)

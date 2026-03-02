@@ -98,30 +98,70 @@ struct AdjustedHijriCalendar {
 
     private func baselineBackedComponents(for gregorianDate: Date, timeZone: TimeZone) -> AdjustedHijriDateComponents? {
         let normalized = normalizedGregorianDate(for: gregorianDate, timeZone: timeZone)
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = timeZone
-
-        let candidates = HijriBaselineMonthStarts.supportedHijriYears.compactMap { hijriYear -> (Date, AdjustedHijriDateComponents)? in
-            let map = calendarService.buildMonthMap(hijriYear: hijriYear, timeZone: timeZone)
-            return map.resolvedStarts.values.compactMap { resolved -> (Date, AdjustedHijriDateComponents)? in
-                let start = calendar.startOfDay(for: resolved.resolvedStart)
-                let dayOffset = calendar.dateComponents([.day], from: start, to: normalized).day ?? Int.max
-                guard (0...29).contains(dayOffset) else { return nil }
-                return (
-                    start,
-                    AdjustedHijriDateComponents(
-                        hijriYear: resolved.key.hijriYear,
-                        month: resolved.key.month,
-                        day: dayOffset + 1,
-                        monthTitle: resolved.key.month.displayName,
-                        isDerivedFromBaseline: true
-                    )
-                )
-            }
-            .max(by: { $0.0 < $1.0 })
+        var fallback = Calendar(identifier: .islamicUmmAlQura)
+        fallback.timeZone = timeZone
+        let components = fallback.dateComponents([.year, .month, .day], from: normalized)
+        guard
+            let year = components.year,
+            let monthValue = components.month,
+            let month = HijriMonth(rawValue: monthValue)
+        else {
+            return nil
         }
 
-        return candidates.max(by: { $0.0 < $1.0 })?.1
+        let key = HijriYearMonth(hijriYear: year, month: month)
+        if let resolved = resolvedComponents(for: key, normalized: normalized, timeZone: timeZone) {
+            return resolved
+        }
+
+        if let previousKey = previousMonthKey(from: key),
+           let previousResolved = resolvedComponents(for: previousKey, normalized: normalized, timeZone: timeZone) {
+            return previousResolved
+        }
+
+        if let nextKey = nextMonthKey(from: key),
+           let nextResolved = resolvedComponents(for: nextKey, normalized: normalized, timeZone: timeZone) {
+            return nextResolved
+        }
+
+        return nil
+    }
+
+    private func resolvedComponents(
+        for key: HijriYearMonth,
+        normalized: Date,
+        timeZone: TimeZone
+    ) -> AdjustedHijriDateComponents? {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let map = calendarService.buildMonthMap(hijriYear: key.hijriYear, timeZone: timeZone)
+        guard let resolved = map.resolvedStart(for: key.month) else { return nil }
+        let start = calendar.startOfDay(for: resolved.resolvedStart)
+        let dayOffset = calendar.dateComponents([.day], from: start, to: normalized).day ?? Int.max
+        guard (0...29).contains(dayOffset) else { return nil }
+        return AdjustedHijriDateComponents(
+            hijriYear: resolved.key.hijriYear,
+            month: resolved.key.month,
+            day: dayOffset + 1,
+            monthTitle: resolved.key.month.displayName,
+            isDerivedFromBaseline: true
+        )
+    }
+
+    private func previousMonthKey(from key: HijriYearMonth) -> HijriYearMonth? {
+        if key.month.rawValue == 1 {
+            return HijriYearMonth(hijriYear: key.hijriYear - 1, month: .dhulHijjah)
+        }
+        guard let month = HijriMonth(rawValue: key.month.rawValue - 1) else { return nil }
+        return HijriYearMonth(hijriYear: key.hijriYear, month: month)
+    }
+
+    private func nextMonthKey(from key: HijriYearMonth) -> HijriYearMonth? {
+        if key.month.rawValue == 12 {
+            return HijriYearMonth(hijriYear: key.hijriYear + 1, month: .muharram)
+        }
+        guard let month = HijriMonth(rawValue: key.month.rawValue + 1) else { return nil }
+        return HijriYearMonth(hijriYear: key.hijriYear, month: month)
     }
 
     private func fallbackComponents(for gregorianDate: Date, timeZone: TimeZone) -> AdjustedHijriDateComponents? {
