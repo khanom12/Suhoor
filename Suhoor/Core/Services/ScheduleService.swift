@@ -209,26 +209,66 @@ final class ScheduleManager: ObservableObject {
         return TimeFormatters.dayFormatter.string(from: date)
     }
 
-    func hijriAdjustment(for month: HijriMonth, hijriYear: Int? = nil) -> Int {
-        let year = hijriYear ?? currentHijriAdjustmentYear
-        return hijriAdjustmentStore.readAdjustment(for: HijriYearMonth(hijriYear: year, month: month))
+    func hijriAdjustment(for month: HijriMonth) -> Int {
+        hijriAdjustment(for: month, hijriYear: currentHijriAdjustmentYear)
     }
 
-    func hasHijriBaseline(for month: HijriMonth, hijriYear: Int? = nil) -> Bool {
-        let year = hijriYear ?? currentHijriAdjustmentYear
-        return adjustedHijriCalendar.monthStartPreview(for: HijriYearMonth(hijriYear: year, month: month)) != nil
+    func hijriAdjustment(for month: HijriMonth, hijriYear: Int) -> Int {
+        hijriAdjustmentStore.readAdjustment(for: HijriYearMonth(hijriYear: hijriYear, month: month))
+    }
+
+    func hasHijriBaseline(for month: HijriMonth) -> Bool {
+        hasHijriBaseline(for: month, hijriYear: currentHijriAdjustmentYear)
+    }
+
+    func hasHijriBaseline(for month: HijriMonth, hijriYear: Int) -> Bool {
+        adjustedHijriCalendar.monthStartPreview(for: HijriYearMonth(hijriYear: hijriYear, month: month)) != nil
     }
 
     func setHijriMonthAdjustment(for month: HijriMonth, offsetDays: Int) async {
-        let hijriYear = currentHijriAdjustmentYear
+        await setHijriMonthAdjustment(for: month, hijriYear: currentHijriAdjustmentYear, offsetDays: offsetDays)
+    }
+
+    func setHijriMonthAdjustment(for month: HijriMonth, hijriYear: Int, offsetDays: Int) async {
         objectWillChange.send()
         hijriAdjustmentStore.setAdjustment(for: HijriYearMonth(hijriYear: hijriYear, month: month), offsetDays: offsetDays)
         await refreshSchedules(force: true)
     }
 
-    func hijriMonthStartPreview(for month: HijriMonth, hijriYear: Int? = nil, timeZone: TimeZone = .current) -> HijriMonthStartPreview? {
-        let year = hijriYear ?? currentHijriAdjustmentYear
-        return adjustedHijriCalendar.monthStartPreview(for: HijriYearMonth(hijriYear: year, month: month), timeZone: timeZone)
+    func hijriMonthStartPreview(for month: HijriMonth, timeZone: TimeZone = .current) -> HijriMonthStartPreview? {
+        hijriMonthStartPreview(for: month, hijriYear: currentHijriAdjustmentYear, timeZone: timeZone)
+    }
+
+    func hijriMonthStartPreview(for month: HijriMonth, hijriYear: Int, timeZone: TimeZone = .current) -> HijriMonthStartPreview? {
+        adjustedHijriCalendar.monthStartPreview(for: HijriYearMonth(hijriYear: hijriYear, month: month), timeZone: timeZone)
+    }
+
+    func currentHijriYearMonth(timeZone: TimeZone = .current, date: Date = Date()) -> HijriYearMonth? {
+        if let components = adjustedHijriCalendar.adjustedComponents(for: date, timeZone: timeZone) {
+            return HijriYearMonth(hijriYear: components.hijriYear, month: components.month)
+        }
+        var fallbackCalendar = Calendar(identifier: .islamicUmmAlQura)
+        fallbackCalendar.timeZone = timeZone
+        let fallback = fallbackCalendar.dateComponents([.year, .month], from: date)
+        guard
+            let year = fallback.year,
+            let monthValue = fallback.month,
+            let month = HijriMonth(rawValue: monthValue)
+        else {
+            return nil
+        }
+        return HijriYearMonth(hijriYear: year, month: month)
+    }
+
+    func rollingHijriMonths(count: Int = 12, timeZone: TimeZone = .current, date: Date = Date()) -> [HijriYearMonth] {
+        guard let start = currentHijriYearMonth(timeZone: timeZone, date: date), count > 0 else { return [] }
+        return (0..<count).compactMap { offset in
+            let rawMonth = start.month.rawValue - 1 + offset
+            let monthValue = (rawMonth % 12) + 1
+            let yearOffset = rawMonth / 12
+            guard let month = HijriMonth(rawValue: monthValue) else { return nil }
+            return HijriYearMonth(hijriYear: start.hijriYear + yearOffset, month: month)
+        }
     }
 
     func upcomingResolvedEntries(limit: Int = 60, timeZone: TimeZone = .current) -> [ResolvedScheduledDateEntry] {

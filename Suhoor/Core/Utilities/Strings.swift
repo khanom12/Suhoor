@@ -90,6 +90,7 @@ enum Strings {
         static let activationMode = "Activation mode"
         static let activeStartDate = "Start date"
         static let activeEndDate = "End date"
+        static func hijriMonthStarts(_ date: String) -> String { "Starts \(date)" }
     }
 
     enum LocationRationale {

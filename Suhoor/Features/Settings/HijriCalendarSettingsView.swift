@@ -3,8 +3,6 @@ import SwiftUI
 struct HijriCalendarSettingsView: View {
     @EnvironmentObject private var scheduleManager: ScheduleManager
 
-    private let adjustableMonths: [HijriMonth] = HijriMonth.allCases
-
     var body: some View {
         Form {
             Section {
@@ -15,21 +13,21 @@ struct HijriCalendarSettingsView: View {
             }
 
             Section {
-                ForEach(adjustableMonths, id: \.self) { month in
+                ForEach(rollingMonths, id: \.persistenceKey) { yearMonth in
                     NavigationLink {
-                        HijriMonthAdjustmentDetailView(month: month)
+                        HijriMonthAdjustmentDetailView(yearMonth: yearMonth)
                     } label: {
                         HStack {
                             VStack(alignment: .leading, spacing: 4) {
-                                Text(month.displayName)
+                                Text(titleText(for: yearMonth))
                                     .foregroundStyle(.primary)
-                                Text(effectText(for: month))
+                                Text(effectText(for: yearMonth.month))
                                     .font(.footnote)
                                     .foregroundStyle(.secondary)
                                     .lineLimit(2)
                             }
                             Spacer()
-                            Text(adjustmentValueText(for: month))
+                            Text(adjustmentValueText(for: yearMonth))
                                 .foregroundStyle(.secondary)
                         }
                     }
@@ -43,8 +41,16 @@ struct HijriCalendarSettingsView: View {
         .navigationBarTitleDisplayMode(.inline)
     }
 
-    private func adjustmentValueText(for month: HijriMonth) -> String {
-        let value = scheduleManager.hijriAdjustment(for: month)
+    private var rollingMonths: [HijriYearMonth] {
+        scheduleManager.rollingHijriMonths()
+    }
+
+    private func titleText(for yearMonth: HijriYearMonth) -> String {
+        "\(yearMonth.month.displayName) \(yearMonth.hijriYear)"
+    }
+
+    private func adjustmentValueText(for yearMonth: HijriYearMonth) -> String {
+        let value = scheduleManager.hijriAdjustment(for: yearMonth.month, hijriYear: yearMonth.hijriYear)
         switch value {
         case -1:
             return Strings.Settings.hijriMinusOneDay
@@ -63,12 +69,12 @@ struct HijriCalendarSettingsView: View {
 private struct HijriMonthAdjustmentDetailView: View {
     @EnvironmentObject private var scheduleManager: ScheduleManager
 
-    let month: HijriMonth
+    let yearMonth: HijriYearMonth
 
     var body: some View {
         Form {
             Section {
-                Picker(month.displayName, selection: adjustmentBinding) {
+                Picker(titleText, selection: adjustmentBinding) {
                     Text(Strings.Settings.hijriMinusOneDay).tag(-1)
                     Text(Strings.Settings.hijriNoChange).tag(0)
                     Text(Strings.Settings.hijriPlusOneDay).tag(1)
@@ -79,11 +85,11 @@ private struct HijriMonthAdjustmentDetailView: View {
             }
 
             Section {
-                if !scheduleManager.hasHijriBaseline(for: month) {
+                if !scheduleManager.hasHijriBaseline(for: yearMonth.month, hijriYear: yearMonth.hijriYear) {
                     Text(Strings.Settings.hijriPreviewUnavailable)
                         .font(.footnote)
                         .foregroundStyle(.secondary)
-                } else if let preview = scheduleManager.hijriMonthStartPreview(for: month) {
+                } else if let preview = scheduleManager.hijriMonthStartPreview(for: yearMonth.month, hijriYear: yearMonth.hijriYear) {
                     previewRow(title: Strings.Settings.hijriBuiltInStart, value: dateText(preview.baselineStart))
                     previewRow(title: Strings.Settings.hijriCorrectedStart, value: dateText(preview.adjustedStart))
                 }
@@ -92,23 +98,27 @@ private struct HijriMonthAdjustmentDetailView: View {
             }
         }
         .formStyle(.grouped)
-        .navigationTitle(month.displayName)
+        .navigationTitle(titleText)
         .navigationBarTitleDisplayMode(.inline)
     }
 
     private var adjustmentBinding: Binding<Int> {
         Binding(
-            get: { scheduleManager.hijriAdjustment(for: month) },
+            get: { scheduleManager.hijriAdjustment(for: yearMonth.month, hijriYear: yearMonth.hijriYear) },
             set: { newValue in
                 Task {
-                    await scheduleManager.setHijriMonthAdjustment(for: month, offsetDays: newValue)
+                    await scheduleManager.setHijriMonthAdjustment(for: yearMonth.month, hijriYear: yearMonth.hijriYear, offsetDays: newValue)
                 }
             }
         )
     }
 
+    private var titleText: String {
+        "\(yearMonth.month.displayName) \(yearMonth.hijriYear)"
+    }
+
     private var effectText: String {
-        Strings.SettingsHijri.genericEffect(month.displayName)
+        Strings.SettingsHijri.genericEffect(yearMonth.month.displayName)
     }
 
     private func previewRow(title: String, value: String) -> some View {

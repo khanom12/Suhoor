@@ -45,30 +45,32 @@ struct AlarmsHomeView: View {
                                     deleteEntries(in: section.entries, at: offsets)
                                 }
                             }
-                        } header: {
-                            if section.entries.isEmpty {
+                } header: {
+                    if let preview = section.preview, section.entries.isEmpty {
+                        previewHeader(preview)
+                    } else if section.entries.isEmpty {
+                        Text(section.key.title)
+                            .textCase(nil)
+                    } else {
+                        Button {
+                            toggleSectionCollapse(section)
+                        } label: {
+                            HStack {
                                 Text(section.key.title)
-                                    .textCase(nil)
-                            } else {
-                                Button {
-                                    toggleSectionCollapse(section)
-                                } label: {
-                                    HStack {
-                                        Text(section.key.title)
-                                            .foregroundStyle(.primary)
-                                        Spacer()
-                                        Image(systemName: "chevron.right")
-                                            .font(.footnote.weight(.semibold))
-                                            .foregroundStyle(.secondary)
-                                            .rotationEffect(.degrees(isSectionCollapsed(section) ? 0 : 90))
-                                    }
-                                }
-                                .buttonStyle(.plain)
-                                .textCase(nil)
+                                    .foregroundStyle(.primary)
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .font(.footnote.weight(.semibold))
+                                    .foregroundStyle(.secondary)
+                                    .rotationEffect(.degrees(isSectionCollapsed(section) ? 0 : 90))
                             }
                         }
+                        .buttonStyle(.plain)
+                        .textCase(nil)
                     }
                 }
+            }
+        }
             }
             .listStyle(.insetGrouped)
             .navigationTitle("Alarms")
@@ -183,11 +185,33 @@ struct AlarmsHomeView: View {
             grouped[key, default: []].append(entry)
         }
 
-        let sections = grouped.map { key, entries in
+        var sections = grouped.map { key, entries in
             let firstDate = entries.first?.schedule.date ?? Date.distantPast
-            return (key: key, entries: entries, firstDate: firstDate)
-        }.sorted { $0.firstDate < $1.firstDate }
-        listSnapshot = AlarmListSnapshot(sections: sections.map { HijriMonthSection(key: $0.key, entries: $0.entries) })
+            return (key: key, entries: entries, firstDate: firstDate, preview: Optional<HijriMonthPreview>.none)
+        }
+
+        let existingIdentifiers = Set(sections.map { sectionIdentifier($0.key) })
+        let previewMonths = scheduleManager.rollingHijriMonths(count: 4, timeZone: timeZone)
+        for yearMonth in previewMonths {
+            let key = HijriMonthKey(
+                year: yearMonth.hijriYear,
+                month: yearMonth.month.rawValue,
+                title: "\(yearMonth.month.displayName) \(yearMonth.hijriYear)"
+            )
+            guard !existingIdentifiers.contains(sectionIdentifier(key)) else { continue }
+            guard let preview = scheduleManager.hijriMonthStartPreview(
+                for: yearMonth.month,
+                hijriYear: yearMonth.hijriYear,
+                timeZone: timeZone
+            ) else { continue }
+            let previewInfo = HijriMonthPreview(key: key, startDate: preview.adjustedStart, offsetDays: preview.offsetDays)
+            sections.append((key: key, entries: [], firstDate: preview.adjustedStart, preview: previewInfo))
+        }
+
+        sections.sort { $0.firstDate < $1.firstDate }
+        listSnapshot = AlarmListSnapshot(
+            sections: sections.map { HijriMonthSection(key: $0.key, entries: $0.entries, preview: $0.preview) }
+        )
     }
 
     private var showsAddButton: Bool {
@@ -221,6 +245,38 @@ struct AlarmsHomeView: View {
 
     private func sectionIdentifier(_ key: HijriMonthKey) -> String {
         "\(key.year)-\(key.month)"
+    }
+
+    private func previewHeader(_ preview: HijriMonthPreview) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text(preview.key.title)
+                    .foregroundStyle(.primary)
+                Spacer()
+                Text(adjustmentTag(for: preview.offsetDays))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+            Text(Strings.AlarmsTab.hijriMonthStarts(shortDate(preview.startDate)))
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
+        .textCase(nil)
+    }
+
+    private func shortDate(_ date: Date) -> String {
+        DateFormatter.localizedString(from: date, dateStyle: .medium, timeStyle: .none)
+    }
+
+    private func adjustmentTag(for offsetDays: Int) -> String {
+        switch offsetDays {
+        case -1:
+            return Strings.Settings.hijriMinusOneDay
+        case 1:
+            return Strings.Settings.hijriPlusOneDay
+        default:
+            return Strings.Settings.hijriNoChange
+        }
     }
 
     private func dateFromDayIdentifier(_ identifier: String) -> Date? {
@@ -313,8 +369,15 @@ private struct AlarmRowEntry: Identifiable {
 private struct HijriMonthSection: Identifiable {
     let key: HijriMonthKey
     let entries: [AlarmRowEntry]
+    let preview: HijriMonthPreview?
 
     var id: String { "\(key.year)-\(key.month)" }
+}
+
+private struct HijriMonthPreview {
+    let key: HijriMonthKey
+    let startDate: Date
+    let offsetDays: Int
 }
 
 private struct AlarmRowView: View {
