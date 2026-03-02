@@ -50,11 +50,12 @@ enum Strings {
         static let listRangeTitle = "Alarms list range"
         static let listRangeHelper = "Controls how many days are shown in the Alarms tab list."
         static let emptyTitle = "No schedule yet"
-        static let emptySubtitle = "Enable defaults or create a day override to schedule alarms."
+        static let emptySubtitle = "Use the + button to add a day, date range, or Islamic-date schedule."
         static let customizedBadge = "Customized"
         static let skippedBadge = "Skipped"
         static let todayLabel = "Today"
         static let tomorrowLabel = "Tomorrow"
+        static func ramadanDayLabel(_ day: Int) -> String { "Fasting Day \(day)" }
         static let suhoorLabel = "Suhoor"
         static let reminderLabel = "Reminder"
         static let fajrLabel = "Fajr"
