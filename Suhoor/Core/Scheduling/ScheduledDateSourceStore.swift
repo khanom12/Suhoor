@@ -4,6 +4,7 @@ final class ScheduledDateSourceStore {
     private let defaults: UserDefaults
     private let storageKey = "Suhoor.ScheduledDateSources"
     private let migrationKey = "Suhoor.ScheduledDateSourcesMigrationVersion"
+    private let currentMigrationVersion = 2
 
     private(set) var sources: [ScheduledDateSource]
 
@@ -24,6 +25,7 @@ final class ScheduledDateSourceStore {
         if shouldMigrateLegacyData, let legacyDefaults {
             performLegacyMigrationIfNeeded(legacyDefaults: legacyDefaults, timeZone: timeZone)
         }
+        performCleanupMigrationIfNeeded()
     }
 
     func setSources(_ newSources: [ScheduledDateSource]) {
@@ -68,35 +70,6 @@ final class ScheduledDateSourceStore {
 
         var migrated: [ScheduledDateSource] = []
         let now = Date()
-        let today = DateHelpers.startOfToday(in: timeZone)
-
-        switch legacyDefaults.activationMode {
-        case .alwaysOn:
-            let end = dateByAddingDays(59, to: today, timeZone: timeZone)
-            migrated.append(
-                ScheduledDateSource(
-                    id: UUID(),
-                    kind: .gregorianRange(GregorianRangeSource(startDate: today, endDate: end, timeZone: timeZone)),
-                    createdAt: now,
-                    isEnabled: true,
-                    origin: .migratedLegacyAlways,
-                    groupID: nil
-                )
-            )
-        case .dateRange:
-            if let start = legacyDefaults.activeStartDate, let end = legacyDefaults.activeEndDate {
-                migrated.append(
-                    ScheduledDateSource(
-                        id: UUID(),
-                        kind: .gregorianRange(GregorianRangeSource(startDate: start, endDate: end, timeZone: timeZone)),
-                        createdAt: now,
-                        isEnabled: true,
-                        origin: .migratedLegacyDateRange,
-                        groupID: nil
-                    )
-                )
-            }
-        }
 
         for key in legacyDefaults.extraOneOffDates.sorted() {
             guard let date = dateFromKey(key, timeZone: timeZone) else { continue }
@@ -117,6 +90,23 @@ final class ScheduledDateSourceStore {
         defaults.set(1, forKey: migrationKey)
     }
 
+    private func performCleanupMigrationIfNeeded() {
+        let version = defaults.integer(forKey: migrationKey)
+        guard version < currentMigrationVersion else { return }
+
+        sources.removeAll { source in
+            switch source.origin {
+            case .migratedLegacyAlways, .migratedLegacyDateRange:
+                return true
+            default:
+                return false
+            }
+        }
+
+        persist()
+        defaults.set(currentMigrationVersion, forKey: migrationKey)
+    }
+
     private func deduplicatedSources(_ input: [ScheduledDateSource]) -> [ScheduledDateSource] {
         var seenSingleKeys = Set<String>()
         return input.filter { source in
@@ -132,12 +122,6 @@ final class ScheduledDateSourceStore {
     private func persist() {
         guard let data = try? JSONEncoder().encode(sources) else { return }
         defaults.set(data, forKey: storageKey)
-    }
-
-    private func dateByAddingDays(_ value: Int, to date: Date, timeZone: TimeZone) -> Date {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = timeZone
-        return calendar.date(byAdding: .day, value: value, to: date) ?? date
     }
 
     private func dateFromKey(_ key: String, timeZone: TimeZone) -> Date? {

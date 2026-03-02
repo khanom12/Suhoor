@@ -4,6 +4,7 @@ struct ScheduledDateSourceResolver {
     private let sourceStore: ScheduledDateSourceStore
     private let suppressedDateStore: SuppressedScheduledDateStore
     private let adjustedHijriCalendar: AdjustedHijriCalendar
+    private let islamicQuickAddGenerator: IslamicQuickAddGenerator
 
     init(
         sourceStore: ScheduledDateSourceStore,
@@ -13,6 +14,7 @@ struct ScheduledDateSourceResolver {
         self.sourceStore = sourceStore
         self.suppressedDateStore = suppressedDateStore
         self.adjustedHijriCalendar = adjustedHijriCalendar
+        self.islamicQuickAddGenerator = IslamicQuickAddGenerator(adjustedHijriCalendar: adjustedHijriCalendar)
     }
 
     func resolvedEntries(
@@ -48,6 +50,28 @@ struct ScheduledDateSourceResolver {
                 } else {
                     byKey[key] = (normalizedDate, [provenance])
                 }
+            }
+        }
+
+        for date in implicitRamadanDates(from: normalizedStart, timeZone: timeZone) {
+            let normalizedDate = calendar.startOfDay(for: date)
+            let key = DateHelpers.dayIdentifier(for: normalizedDate, timeZone: timeZone)
+            guard !suppressedDateStore.contains(key) else { continue }
+
+            let provenance = ResolvedScheduledDateProvenance(
+                sourceID: DateHelpers.stableUUID(from: "default-ramadan-\(key)"),
+                groupID: DateHelpers.stableUUID(from: "default-ramadan-group"),
+                label: ScheduledDateSourceOrigin.defaultRamadan.label,
+                stopSeriesLabel: nil,
+                isExplicitOneOff: false,
+                sourceOrigin: .defaultRamadan
+            )
+
+            if var existing = byKey[key] {
+                existing.provenances.append(provenance)
+                byKey[key] = existing
+            } else {
+                byKey[key] = (normalizedDate, [provenance])
             }
         }
 
@@ -109,10 +133,10 @@ struct ScheduledDateSourceResolver {
         limit: Int,
         calendar: Calendar
     ) -> [Date] {
-        let scanDays = max(180, limit * 12)
+        let scanDays = 730
         var results: [Date] = []
 
-        for offset in 0..<min(scanDays, 730) {
+        for offset in 0..<scanDays {
             let date = calendar.date(byAdding: .day, value: offset, to: startDate) ?? startDate
             if matchesRecurringRule(rule, date: date, calendar: calendar) {
                 results.append(date)
@@ -142,5 +166,13 @@ struct ScheduledDateSourceResolver {
         case .ramadan:
             return adjustedHijriCalendar.isRamadan(date: date, timeZone: calendar.timeZone)
         }
+    }
+
+    private func implicitRamadanDates(from startDate: Date, timeZone: TimeZone) -> [Date] {
+        islamicQuickAddGenerator.currentOrNextRamadanMonth(
+            startDate: startDate,
+            timeZone: timeZone
+        )
+        .filter { $0 >= startDate }
     }
 }

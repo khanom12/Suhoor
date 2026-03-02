@@ -44,23 +44,32 @@ struct AlarmsHomeView: View {
                                 .onDelete { offsets in
                                     deleteEntries(in: section.entries, at: offsets)
                                 }
+                            } else if section.entries.isEmpty {
+                                Text("No scheduled dates")
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
                             }
                         } header: {
-                            Button {
-                                toggleSectionCollapse(section)
-                            } label: {
-                                HStack {
-                                    Text(section.key.title)
-                                        .foregroundStyle(.primary)
-                                    Spacer()
-                                    Image(systemName: "chevron.right")
-                                        .font(.footnote.weight(.semibold))
-                                        .foregroundStyle(.secondary)
-                                        .rotationEffect(.degrees(isSectionCollapsed(section) ? 0 : 90))
+                            if section.entries.isEmpty {
+                                Text(section.key.title)
+                                    .textCase(nil)
+                            } else {
+                                Button {
+                                    toggleSectionCollapse(section)
+                                } label: {
+                                    HStack {
+                                        Text(section.key.title)
+                                            .foregroundStyle(.primary)
+                                        Spacer()
+                                        Image(systemName: "chevron.right")
+                                            .font(.footnote.weight(.semibold))
+                                            .foregroundStyle(.secondary)
+                                            .rotationEffect(.degrees(isSectionCollapsed(section) ? 0 : 90))
+                                    }
                                 }
+                                .buttonStyle(.plain)
+                                .textCase(nil)
                             }
-                            .buttonStyle(.plain)
-                            .textCase(nil)
                         }
                     }
                 }
@@ -266,9 +275,7 @@ struct AlarmsHomeView: View {
         var keys: [HijriMonthKey] = []
         var month = current.month
         var year = current.hijriYear
-        let targetYear = month.rawValue <= HijriMonth.ramadan.rawValue ? year : year + 1
-
-        while true {
+        for _ in 0..<12 {
             keys.append(
                 HijriMonthKey(
                     year: year,
@@ -276,9 +283,6 @@ struct AlarmsHomeView: View {
                     title: "\(month.displayName) \(year)"
                 )
             )
-            if month == .ramadan, year == targetYear {
-                break
-            }
             if month == .dhulHijjah {
                 month = .muharram
                 year += 1

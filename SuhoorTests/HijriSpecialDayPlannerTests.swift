@@ -41,6 +41,53 @@ struct ScheduledDateSourceResolverTests {
     }
 
     @Test
+    func implicitUpcomingRamadanAppearsWithoutSavedSources() {
+        let suiteName = "ScheduledDateSourceResolverTests.ImplicitRamadan"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+
+        let resolver = ScheduledDateSourceResolver(
+            sourceStore: ScheduledDateSourceStore(defaults: defaults),
+            suppressedDateStore: SuppressedScheduledDateStore(defaults: defaults)
+        )
+        let timeZone = TimeZone(secondsFromGMT: 0) ?? .current
+        let entries = resolver.resolvedEntries(
+            from: makeDate(year: 2026, month: 1, day: 1),
+            limit: 40,
+            timeZone: timeZone
+        )
+
+        #expect(entries.isEmpty == false)
+        #expect(entries.allSatisfy { entry in
+            entry.provenances.contains { $0.sourceOrigin == .defaultRamadan }
+        })
+    }
+
+    @Test
+    func implicitCurrentRamadanUsesRemainingDaysOfOngoingMonth() {
+        let suiteName = "ScheduledDateSourceResolverTests.CurrentRamadan"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+
+        let resolver = ScheduledDateSourceResolver(
+            sourceStore: ScheduledDateSourceStore(defaults: defaults),
+            suppressedDateStore: SuppressedScheduledDateStore(defaults: defaults)
+        )
+        let timeZone = TimeZone(secondsFromGMT: 0) ?? .current
+        let entries = resolver.resolvedEntries(
+            from: makeDate(year: 2026, month: 3, day: 2),
+            limit: 10,
+            timeZone: timeZone
+        )
+
+        #expect(entries.isEmpty == false)
+        #expect(entries.first?.dateKey == "2026-03-02")
+        #expect(entries.allSatisfy { entry in
+            entry.provenances.contains { $0.sourceOrigin == .defaultRamadan }
+        })
+    }
+
+    @Test
     func overlappingSourcesDeduplicateAndSuppressionSkipsOneDate() {
         let suiteName = "ScheduledDateSourceResolverTests.Deduped"
         let defaults = UserDefaults(suiteName: suiteName)!

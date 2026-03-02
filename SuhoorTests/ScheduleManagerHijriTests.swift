@@ -6,21 +6,24 @@ import Testing
 struct ScheduleManagerHijriTests {
     @Test
     @MainActor
-    func legacyAlwaysMigratesTo60VisibleSourceDays() {
-        let suiteName = "ScheduleManagerHijriTests.LegacyAlways"
+    func legacyExtraOneOffDayMigratesButLegacyAlwaysRangeDoesNot() {
+        let suiteName = "ScheduleManagerHijriTests.LegacyMigration"
         let defaults = UserDefaults(suiteName: suiteName)!
         defaults.removePersistentDomain(forName: suiteName)
-        let legacyDefaults = DefaultAlarmConfig.default
+        var legacyDefaults = DefaultAlarmConfig.default
+        legacyDefaults.extraOneOffDates = ["2026-02-20"]
         let data = try? JSONEncoder().encode(legacyDefaults)
         defaults.set(data, forKey: "Suhoor.DefaultAlarmConfig")
 
         let alarmConfigStore = AlarmConfigStore(defaultsStore: defaults)
         let entries = alarmConfigStore.resolvedScheduledEntries(
-            from: DateHelpers.startOfToday(),
+            from: makeDate(year: 2026, month: 2, day: 1),
             limit: 60
         )
 
-        #expect(entries.count == 60)
+        #expect(entries.contains(where: { $0.dateKey == "2026-02-20" }))
+        #expect(entries.contains(where: { $0.provenances.contains { $0.sourceOrigin == .defaultRamadan } }))
+        #expect(entries.contains(where: { $0.provenances.contains { $0.sourceOrigin == .migratedLegacyAlways } }) == false)
     }
 
     @Test

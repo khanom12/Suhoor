@@ -55,6 +55,18 @@ struct IslamicQuickAddGenerator {
         }
     }
 
+    func currentOrNextRamadanMonth(
+        startDate: Date = Date(),
+        timeZone: TimeZone = .current
+    ) -> [Date] {
+        let start = DateHelpers.startOfDay(startDate, in: timeZone)
+        if adjustedHijriCalendar.isRamadan(date: start, timeZone: timeZone) {
+            return ramadanRun(containing: start, timeZone: timeZone)
+                .filter { $0 >= start }
+        }
+        return nextRamadanMonth(start: start, timeZone: timeZone)
+    }
+
     private func nextMatchingDates(
         start: Date,
         timeZone: TimeZone,
@@ -80,10 +92,14 @@ struct IslamicQuickAddGenerator {
             return []
         }
 
+        return ramadanRun(containing: firstDay, timeZone: timeZone)
+    }
+
+    private func ramadanRun(containing day: Date, timeZone: TimeZone) -> [Date] {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = timeZone
         var dates: [Date] = []
-        var current = firstDay
+        var current = DateHelpers.startOfDay(day, in: timeZone)
         while dates.count < 30,
               let components = adjustedHijriCalendar.adjustedComponents(for: current, timeZone: timeZone),
               components.month == .ramadan {

@@ -155,6 +155,7 @@ enum ScheduledDateSourceKind: Codable, Equatable, Hashable {
 }
 
 enum ScheduledDateSourceOrigin: Codable, Equatable, Hashable {
+    case defaultRamadan
     case manualSingleDay
     case manualGregorianRange
     case islamicQuickAdd(IslamicQuickAddKind)
@@ -169,6 +170,7 @@ enum ScheduledDateSourceOrigin: Codable, Equatable, Hashable {
     }
 
     private enum OriginType: String, Codable {
+        case defaultRamadan
         case manualSingleDay
         case manualGregorianRange
         case islamicQuickAdd
@@ -180,6 +182,8 @@ enum ScheduledDateSourceOrigin: Codable, Equatable, Hashable {
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         switch try container.decode(OriginType.self, forKey: .type) {
+        case .defaultRamadan:
+            self = .defaultRamadan
         case .manualSingleDay:
             self = .manualSingleDay
         case .manualGregorianRange:
@@ -198,6 +202,8 @@ enum ScheduledDateSourceOrigin: Codable, Equatable, Hashable {
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         switch self {
+        case .defaultRamadan:
+            try container.encode(OriginType.defaultRamadan, forKey: .type)
         case .manualSingleDay:
             try container.encode(OriginType.manualSingleDay, forKey: .type)
         case .manualGregorianRange:
@@ -217,6 +223,8 @@ enum ScheduledDateSourceOrigin: Codable, Equatable, Hashable {
 
     var label: String {
         switch self {
+        case .defaultRamadan:
+            return "Upcoming Ramadan"
         case .manualSingleDay:
             return "Added manually"
         case .manualGregorianRange:
@@ -234,6 +242,8 @@ enum ScheduledDateSourceOrigin: Codable, Equatable, Hashable {
 
     var stopSeriesLabel: String? {
         switch self {
+        case .defaultRamadan:
+            return nil
         case .manualSingleDay:
             return nil
         case .manualGregorianRange:
@@ -250,10 +260,12 @@ enum ScheduledDateSourceOrigin: Codable, Equatable, Hashable {
     }
 
     var isExplicitOneOff: Bool {
-        if case .manualSingleDay = self {
+        switch self {
+        case .manualSingleDay:
             return true
+        default:
+            return false
         }
-        return false
     }
 }
 
