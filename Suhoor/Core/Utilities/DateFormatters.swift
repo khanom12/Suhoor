@@ -14,6 +14,11 @@ final class HijriDateFormatter {
         return adjustedHijriCalendar.formattedHijriString(for: normalized, timeZone: .current)
     }
 
+    func shortString(from date: Date) -> String {
+        let normalized = normalizedDate(for: date)
+        return adjustedHijriCalendar.formattedHijriDayMonthString(for: normalized, timeZone: .current)
+    }
+
     private func normalizedDate(for date: Date) -> Date {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = .current

@@ -46,6 +46,29 @@ struct AdjustedHijriCalendar {
         return formattedFallbackString(for: normalized, calendarIdentifier: .islamicCivil, timeZone: timeZone)
     }
 
+    func formattedHijriDayMonthString(for gregorianDate: Date, timeZone: TimeZone = .current) -> String {
+        let normalized = normalizedGregorianDate(for: gregorianDate, timeZone: timeZone)
+        if let adjusted = baselineBackedComponents(for: normalized, timeZone: timeZone) {
+            return "\(adjusted.day) \(adjusted.month.displayName)"
+        }
+
+        let primaryText = formattedFallbackString(
+            for: normalized,
+            calendarIdentifier: .islamicUmmAlQura,
+            timeZone: timeZone,
+            dateFormat: "d MMMM"
+        )
+        if !primaryText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return primaryText
+        }
+        return formattedFallbackString(
+            for: normalized,
+            calendarIdentifier: .islamicCivil,
+            timeZone: timeZone,
+            dateFormat: "d MMMM"
+        )
+    }
+
     func monthTitle(for gregorianDate: Date, timeZone: TimeZone = .current) -> String? {
         guard let components = adjustedComponents(for: gregorianDate, timeZone: timeZone) else { return nil }
         return "\(components.monthTitle) \(components.hijriYear)"
@@ -192,9 +215,14 @@ struct AdjustedHijriCalendar {
         return calendar.startOfDay(for: gregorianDate)
     }
 
-    private func formattedFallbackString(for date: Date, calendarIdentifier: Calendar.Identifier, timeZone: TimeZone) -> String {
+    private func formattedFallbackString(
+        for date: Date,
+        calendarIdentifier: Calendar.Identifier,
+        timeZone: TimeZone,
+        dateFormat: String = "d MMMM yyyy"
+    ) -> String {
         let formatter = DateFormatter()
-        formatter.dateFormat = "d MMMM yyyy"
+        formatter.dateFormat = dateFormat
         formatter.timeZone = timeZone
         formatter.locale = .current
         var calendar = Calendar(identifier: calendarIdentifier)

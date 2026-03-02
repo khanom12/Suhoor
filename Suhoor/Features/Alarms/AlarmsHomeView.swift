@@ -34,6 +34,7 @@ struct AlarmsHomeView: View {
                                         primaryDisplay: entry.primary,
                                         primaryIntent: entry.primaryIntent,
                                         secondaryTags: entry.secondaryTags,
+                                        warnings: entry.warnings,
                                         showsTags: entry.showsTags,
                                         onSelect: {
                                             selectedSchedule = entry.schedule
@@ -296,11 +297,15 @@ private struct AlarmListSnapshot {
 
 enum AlarmRowPresentation {
     static func secondaryTags(for result: TagComputationResult) -> [FastSecondaryVirtueTag] {
-        Array(FastIntentEngine.displaySecondaryTags(result.computedSecondaryTags).prefix(5))
+        FastIntentEngine.displaySecondaryTags(result.computedSecondaryTags)
     }
 
-    static func showsTags(primaryIntent: FastPrimaryIntent, secondaryTags: [FastSecondaryVirtueTag]) -> Bool {
-        !(primaryIntent == .other && secondaryTags.isEmpty)
+    static func showsTags(
+        primaryIntent: FastPrimaryIntent,
+        secondaryTags: [FastSecondaryVirtueTag],
+        warnings: [FastWarning]
+    ) -> Bool {
+        !(primaryIntent == .other && secondaryTags.isEmpty && warnings.isEmpty)
     }
 
     static func dateLabel(
@@ -310,13 +315,18 @@ enum AlarmRowPresentation {
         separator: String = " • "
     ) -> String {
         var parts: [String] = []
-        if isToday(date, currentDate: currentDate, timeZone: timeZone) {
+        let isTodayValue = isToday(date, currentDate: currentDate, timeZone: timeZone)
+        let isTomorrowValue = isTomorrow(date, currentDate: currentDate, timeZone: timeZone)
+        if isTodayValue {
             parts.append(Strings.AlarmsTab.todayLabel)
-        } else if isTomorrow(date, currentDate: currentDate, timeZone: timeZone) {
+        } else if isTomorrowValue {
             parts.append(Strings.AlarmsTab.tomorrowLabel)
         }
-        parts.append(dateLabelFormatter.string(from: date))
-        parts.append(HijriDateFormatter.shared.string(from: date))
+        let gregorianLabel = (isTodayValue || isTomorrowValue)
+            ? dateShortLabelFormatter.string(from: date)
+            : dateLabelFormatter.string(from: date)
+        parts.append(gregorianLabel)
+        parts.append(HijriDateFormatter.shared.shortString(from: date))
         return parts.joined(separator: separator)
     }
 
@@ -341,20 +351,32 @@ enum AlarmRowPresentation {
         formatter.locale = .current
         return formatter
     }()
+
+    private static let dateShortLabelFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMMM d"
+        formatter.timeZone = .current
+        formatter.locale = .current
+        return formatter
+    }()
 }
 
 private struct AlarmRowEntry: Identifiable {
     let activeDay: ActiveAlarmDay
     let secondaryTags: [FastSecondaryVirtueTag]
+    let warnings: [FastWarning]
     let showsTags: Bool
 
     init(activeDay: ActiveAlarmDay) {
         let secondaryTags = AlarmRowPresentation.secondaryTags(for: activeDay.tagResult)
+        let warnings = FastIntentEngine.warnings(for: activeDay.schedule.date, timeZone: .current)
         self.activeDay = activeDay
         self.secondaryTags = secondaryTags
+        self.warnings = warnings
         self.showsTags = AlarmRowPresentation.showsTags(
             primaryIntent: activeDay.tagResult.computedPrimaryIntent,
-            secondaryTags: secondaryTags
+            secondaryTags: secondaryTags,
+            warnings: warnings
         )
     }
 
@@ -390,6 +412,7 @@ private struct AlarmRowView: View {
     let primaryDisplay: PrimaryDisplay?
     let primaryIntent: FastPrimaryIntent
     let secondaryTags: [FastSecondaryVirtueTag]
+    let warnings: [FastWarning]
     let showsTags: Bool
     let onSelect: () -> Void
     @ScaledMetric(relativeTo: .largeTitle) private var timeFontSize: CGFloat = 46
@@ -417,6 +440,7 @@ private struct AlarmRowView: View {
         primaryDisplay: PrimaryDisplay?,
         primaryIntent: FastPrimaryIntent,
         secondaryTags: [FastSecondaryVirtueTag],
+        warnings: [FastWarning],
         showsTags: Bool,
         onSelect: @escaping () -> Void
     ) {
@@ -425,13 +449,14 @@ private struct AlarmRowView: View {
         self.primaryDisplay = primaryDisplay
         self.primaryIntent = primaryIntent
         self.secondaryTags = secondaryTags
+        self.warnings = warnings
         self.showsTags = showsTags
         self.onSelect = onSelect
         _localIsOn = State(initialValue: AlarmRowView.isEnabled(config: config))
     }
 
     var body: some View {
-        HStack(alignment: .top, spacing: DesignTokens.spacingM) {
+        HStack(alignment: .center, spacing: DesignTokens.spacingM) {
             Button {
                 onSelect()
             } label: {
@@ -441,36 +466,34 @@ private struct AlarmRowView: View {
                             .font(.footnote)
                             .foregroundStyle(isDisabled ? .tertiary : .secondary)
 
-                        HStack(alignment: .firstTextBaseline, spacing: 12) {
-                            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                                Text(primaryTimeMain)
-                                    .font(.system(size: timeFontSize, weight: .regular, design: .default))
-                                    .monospacedDigit()
-                                    .foregroundStyle(isDisabled ? .tertiary : .primary)
-                                    .minimumScaleFactor(0.8)
-
-                                if let primaryTimeSuffix {
-                                    Text(primaryTimeSuffix)
-                                        .font(.system(size: timeFontSize * 0.55, weight: .regular, design: .default))
-                                        .monospacedDigit()
-                                        .foregroundStyle(isDisabled ? .tertiary : .secondary)
-                                        .baselineOffset(1)
-                                }
-                            }
-
-                            Spacer(minLength: 8)
-
-                            Text(fajrLineText)
-                                .font(.callout)
-                                .foregroundStyle(isDisabled ? .tertiary : .secondary)
+                        HStack(alignment: .firstTextBaseline, spacing: 6) {
+                            Text(primaryTimeMain)
+                                .font(.system(size: timeFontSize, weight: .regular, design: .default))
                                 .monospacedDigit()
+                                .foregroundStyle(isDisabled ? .tertiary : .primary)
+                                .minimumScaleFactor(0.8)
+
+                            if let primaryTimeSuffix {
+                                Text(primaryTimeSuffix)
+                                    .font(.system(size: timeFontSize * 0.55, weight: .regular, design: .default))
+                                    .monospacedDigit()
+                                    .foregroundStyle(isDisabled ? .tertiary : .secondary)
+                                    .baselineOffset(1)
+                            }
                         }
+
+                        Text(fajrLineText)
+                            .font(.callout)
+                            .foregroundStyle(isDisabled ? .tertiary : .secondary)
+                            .monospacedDigit()
                     }
 
                     if showsTags {
                         HomeTagCapsuleRow(
                             primaryIntent: primaryIntent,
                             secondaryTags: secondaryTags,
+                            warnings: warnings,
+                            showPrimaryIntent: showPrimaryIntent,
                             isDisabled: isDisabled
                         )
                     }
@@ -486,7 +509,6 @@ private struct AlarmRowView: View {
                 .labelsHidden()
                 .tint(DawnColor.accent)
                 .accessibilityLabel("\(primaryLabelText) alarm")
-                .padding(.top, 4)
         }
         .padding(.vertical, 6)
         .onChange(of: config) { _, newValue in
@@ -565,9 +587,17 @@ private struct AlarmRowView: View {
 
     private var tagAccessibilityText: String? {
         guard showsTags else { return nil }
-        var titles: [String] = [primaryIntent.style.title]
+        var titles: [String] = []
+        titles.append(contentsOf: warnings.map(\.title))
+        if showPrimaryIntent {
+            titles.append(primaryIntent.style.title)
+        }
         titles.append(contentsOf: secondaryTags.map { $0.title })
         return "Tags: \(titles.joined(separator: ", "))."
+    }
+
+    private var showPrimaryIntent: Bool {
+        primaryIntent != .other || !secondaryTags.isEmpty
     }
 
     private static func isEnabled(config: EffectiveDailyConfig) -> Bool {
@@ -590,11 +620,18 @@ private extension AlarmsHomeView {
 private struct HomeTagCapsuleRow: View {
     let primaryIntent: FastPrimaryIntent
     let secondaryTags: [FastSecondaryVirtueTag]
+    let warnings: [FastWarning]
+    let showPrimaryIntent: Bool
     let isDisabled: Bool
 
     var body: some View {
         FlowLayout(spacing: 6) {
-            HomeTagCapsule(style: primaryIntent.style, prominence: .strong, isDisabled: isDisabled)
+            ForEach(warnings, id: \.self) { warning in
+                HomeWarningCapsule(warning: warning, isDisabled: isDisabled)
+            }
+            if showPrimaryIntent {
+                HomeTagCapsule(style: primaryIntent.style, prominence: .strong, isDisabled: isDisabled)
+            }
             ForEach(secondaryTags, id: \.self) { tag in
                 HomeTagCapsule(style: tag.style, prominence: .subtle, isDisabled: isDisabled)
             }
@@ -623,6 +660,37 @@ private struct HomeTagCapsule: View {
                 Image(systemName: systemImage)
             }
             Text(style.shortTitle)
+                .lineLimit(1)
+        }
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(base)
+            .padding(.vertical, 4)
+            .padding(.horizontal, 8)
+            .background(
+                Capsule()
+                    .fill(base.opacity(fillOpacity))
+            )
+            .overlay(
+                Capsule()
+                    .stroke(base.opacity(strokeOpacity), lineWidth: 0.8)
+            )
+            .opacity(isDisabled ? 0.5 : 1.0)
+            .accessibilityHidden(true)
+    }
+}
+
+private struct HomeWarningCapsule: View {
+    let warning: FastWarning
+    let isDisabled: Bool
+
+    var body: some View {
+        let base = Color.red
+        let fillOpacity: Double = 0.08
+        let strokeOpacity: Double = 0.35
+
+        HStack(spacing: 5) {
+            Image(systemName: warning.systemImage)
+            Text(warning.title)
                 .lineLimit(1)
         }
             .font(.caption.weight(.semibold))
