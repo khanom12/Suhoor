@@ -174,6 +174,14 @@ struct ScheduledDateSourceResolver {
         case .recurringIslamic(let recurring):
             let lowerBound = max(calendar.startOfDay(for: recurring.startDate), normalizedStart)
             return materializedRecurringDates(for: recurring.rule, startDate: lowerBound, limit: limit, calendar: calendar)
+        case .hijriSingleDay(let hijri):
+            let key = HijriYearMonth(hijriYear: hijri.hijriYear, month: hijri.month)
+            guard let resolved = adjustedHijriCalendar.gregorianDate(for: key, dayOfMonth: hijri.day, timeZone: timeZone) else {
+                return []
+            }
+            let normalizedDate = calendar.startOfDay(for: resolved)
+            guard normalizedDate >= normalizedStart else { return [] }
+            return [normalizedDate]
         }
     }
 
@@ -246,6 +254,13 @@ struct ScheduledDateSourceResolver {
             let lowerBound = calendar.startOfDay(for: recurring.startDate)
             guard normalizedDate >= lowerBound else { return false }
             return matchesRecurringRule(recurring.rule, date: normalizedDate, calendar: calendar)
+        case .hijriSingleDay(let hijri):
+            let key = HijriYearMonth(hijriYear: hijri.hijriYear, month: hijri.month)
+            guard let resolved = adjustedHijriCalendar.gregorianDate(for: key, dayOfMonth: hijri.day, timeZone: timeZone) else {
+                return false
+            }
+            let resolvedKey = DateHelpers.dayIdentifier(for: resolved, timeZone: timeZone)
+            return resolvedKey == DateHelpers.dayIdentifier(for: normalizedDate, timeZone: timeZone)
         }
     }
 }

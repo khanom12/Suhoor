@@ -39,6 +39,13 @@ enum Strings {
         static let alarmDenied = "Using notifications. Allow alarms for reliability."
         static let notificationsFallback = "Using notifications (less reliable)."
         static let scheduleUnable = "Schedule couldn’t load. Tap to retry."
+        static let hijriAdjustmentsTitle = "Hijri corrections updated"
+        static func hijriAdjustmentsMessage(_ count: Int) -> String {
+            "\(count) date\(count == 1 ? "" : "s") adjusted."
+        }
+        static let hijriAdjustmentsAction = "Review"
+        static let hijriAdjustmentsReviewTitle = "Hijri adjustments"
+        static let hijriAdjustmentsMarkRead = "Mark as read"
     }
 
     enum AlarmsTab {

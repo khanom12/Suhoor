@@ -14,6 +14,7 @@
 		A1B000001234567890000004 /* HijriMonthAdjustmentStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B000001234567890000102 /* HijriMonthAdjustmentStoreTests.swift */; };
 		A1B000001234567890000005 /* HijriSpecialDayPlannerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B000001234567890000103 /* HijriSpecialDayPlannerTests.swift */; };
 		A1B000001234567890000006 /* ScheduleManagerHijriTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B000001234567890000104 /* ScheduleManagerHijriTests.swift */; };
+		A1B000001234567890000007 /* ScheduledDateSourceStoreHijriTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B000001234567890000105 /* ScheduledDateSourceStoreHijriTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -37,6 +38,7 @@
 		A1B000001234567890000102 /* HijriMonthAdjustmentStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HijriMonthAdjustmentStoreTests.swift; sourceTree = "<group>"; };
 		A1B000001234567890000103 /* HijriSpecialDayPlannerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HijriSpecialDayPlannerTests.swift; sourceTree = "<group>"; };
 		A1B000001234567890000104 /* ScheduleManagerHijriTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScheduleManagerHijriTests.swift; sourceTree = "<group>"; };
+		A1B000001234567890000105 /* ScheduledDateSourceStoreHijriTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScheduledDateSourceStoreHijriTests.swift; sourceTree = "<group>"; };
 		A1B000001234567890000107 /* SuhoorTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SuhoorTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -96,6 +98,7 @@
 				A1B000001234567890000102 /* HijriMonthAdjustmentStoreTests.swift */,
 				A1B000001234567890000103 /* HijriSpecialDayPlannerTests.swift */,
 				A1B000001234567890000104 /* ScheduleManagerHijriTests.swift */,
+				A1B000001234567890000105 /* ScheduledDateSourceStoreHijriTests.swift */,
 			);
 			path = SuhoorTests;
 			sourceTree = "<group>";
@@ -220,6 +223,7 @@
 				A1B000001234567890000004 /* HijriMonthAdjustmentStoreTests.swift in Sources */,
 				A1B000001234567890000005 /* HijriSpecialDayPlannerTests.swift in Sources */,
 				A1B000001234567890000006 /* ScheduleManagerHijriTests.swift in Sources */,
+				A1B000001234567890000007 /* ScheduledDateSourceStoreHijriTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -11,6 +11,7 @@ struct AlarmsListView: View {
     @State private var showLocationRationale = false
     @State private var showNotificationRationale = false
     @State private var pendingEnable = false
+    @State private var showHijriReview = false
 
     private let calculator = PrayerTimeCalculator()
     @State private var scrollOffset: CGFloat = 0
@@ -122,6 +123,10 @@ struct AlarmsListView: View {
             }
             .presentationDetents([.medium, .large])
             .sheetMaterialBackground()
+        }
+        .sheet(isPresented: $showHijriReview) {
+            HijriAdjustmentReviewSheet(changes: scheduleManager.hijriAdjustmentChanges)
+                .environmentObject(scheduleManager)
         }
         .sheet(isPresented: $showLocationRationale) {
             NavigationStack {
@@ -305,6 +310,14 @@ struct AlarmsListView: View {
                 action: .showAlarmInfo
             )
         }
+        if !scheduleManager.hijriAdjustmentChanges.isEmpty {
+            return AlarmBanner(
+                title: Strings.AlarmList.hijriAdjustmentsTitle,
+                message: Strings.AlarmList.hijriAdjustmentsMessage(scheduleManager.hijriAdjustmentChanges.count),
+                actionTitle: Strings.AlarmList.hijriAdjustmentsAction,
+                action: .showHijriAdjustmentReview
+            )
+        }
         return nil
     }
 
@@ -354,6 +367,8 @@ struct AlarmsListView: View {
         switch banner.action {
         case .showAlarmInfo:
             showAlarmInfo = true
+        case .showHijriAdjustmentReview:
+            showHijriReview = true
         case .requestLocation:
             locationService.requestAuthorization()
         case .openSettings:
@@ -531,6 +546,7 @@ private struct RoutineRowLayout<Trailing: View, Footer: View>: View {
 private struct AlarmBanner {
     enum Action {
         case showAlarmInfo
+        case showHijriAdjustmentReview
         case requestLocation
         case openSettings
         case retryLocation

@@ -4,7 +4,7 @@ final class ScheduledDateSourceStore {
     private let defaults: UserDefaults
     private let storageKey = "Suhoor.ScheduledDateSources"
     private let migrationKey = "Suhoor.ScheduledDateSourcesMigrationVersion"
-    private let currentMigrationVersion = 3
+    private let currentMigrationVersion = 4
     private let persistence = DebouncedPersistenceController(
         label: "com.suhoor.app.scheduled-date-sources",
         delay: 0.2
@@ -111,6 +111,33 @@ final class ScheduledDateSourceStore {
                 return rule == .ramadan
             default:
                 return false
+            }
+        }
+
+        if version < 4 {
+            let adjustmentStore = HijriMonthAdjustmentStore(defaults: defaults)
+            let calendar = AdjustedHijriCalendar(
+                calendarService: HijriCalendarService(adjustmentStore: adjustmentStore)
+            )
+            sources = sources.map { source in
+                guard case .singleDay(let singleDay) = source.kind else { return source }
+                guard case .islamicQuickAdd(let kind) = source.origin, kind.isHijriBased else { return source }
+                guard let components = calendar.adjustedComponents(for: singleDay.date, timeZone: .current) else {
+                    return source
+                }
+                let hijriSource = HijriSingleDaySource(
+                    hijriYear: components.hijriYear,
+                    month: components.month,
+                    day: components.day
+                )
+                return ScheduledDateSource(
+                    id: source.id,
+                    kind: .hijriSingleDay(hijriSource),
+                    createdAt: source.createdAt,
+                    isEnabled: source.isEnabled,
+                    origin: source.origin,
+                    groupID: source.groupID
+                )
             }
         }
 

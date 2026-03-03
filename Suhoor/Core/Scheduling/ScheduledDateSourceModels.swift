@@ -90,6 +90,15 @@ enum IslamicQuickAddKind: String, Codable, CaseIterable, Identifiable, Hashable,
         .nextWhiteDays,
         .nextMondayThursdayPair
     ]
+
+    var isHijriBased: Bool {
+        switch self {
+        case .nextMondayThursdayPair:
+            return false
+        default:
+            return true
+        }
+    }
 }
 
 struct SingleDaySource: Codable, Equatable, Hashable, Sendable {
@@ -120,22 +129,31 @@ struct RecurringIslamicSource: Codable, Equatable, Hashable, Sendable {
     let startDate: Date
 }
 
+struct HijriSingleDaySource: Codable, Equatable, Hashable, Sendable {
+    let hijriYear: Int
+    let month: HijriMonth
+    let day: Int
+}
+
 enum ScheduledDateSourceKind: Codable, Equatable, Hashable, Sendable {
     case singleDay(SingleDaySource)
     case gregorianRange(GregorianRangeSource)
     case recurringIslamic(RecurringIslamicSource)
+    case hijriSingleDay(HijriSingleDaySource)
 
     private enum CodingKeys: String, CodingKey {
         case type
         case singleDay
         case gregorianRange
         case recurringIslamic
+        case hijriSingleDay
     }
 
     private enum SourceType: String, Codable {
         case singleDay
         case gregorianRange
         case recurringIslamic
+        case hijriSingleDay
     }
 
     init(from decoder: Decoder) throws {
@@ -147,6 +165,8 @@ enum ScheduledDateSourceKind: Codable, Equatable, Hashable, Sendable {
             self = .gregorianRange(try container.decode(GregorianRangeSource.self, forKey: .gregorianRange))
         case .recurringIslamic:
             self = .recurringIslamic(try container.decode(RecurringIslamicSource.self, forKey: .recurringIslamic))
+        case .hijriSingleDay:
+            self = .hijriSingleDay(try container.decode(HijriSingleDaySource.self, forKey: .hijriSingleDay))
         }
     }
 
@@ -162,6 +182,9 @@ enum ScheduledDateSourceKind: Codable, Equatable, Hashable, Sendable {
         case .recurringIslamic(let source):
             try container.encode(SourceType.recurringIslamic, forKey: .type)
             try container.encode(source, forKey: .recurringIslamic)
+        case .hijriSingleDay(let source):
+            try container.encode(SourceType.hijriSingleDay, forKey: .type)
+            try container.encode(source, forKey: .hijriSingleDay)
         }
     }
 }

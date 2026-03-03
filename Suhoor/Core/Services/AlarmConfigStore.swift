@@ -27,6 +27,7 @@ final class AlarmConfigStore: ObservableObject {
     private let suppressedScheduledDateStore: SuppressedScheduledDateStore
     private let scheduledDateSourceResolver: ScheduledDateSourceResolver
     private let islamicQuickAddGenerator: IslamicQuickAddGenerator
+    private let adjustedHijriCalendar: AdjustedHijriCalendar
     private let defaultsPersistence = DebouncedPersistenceController(
         label: "com.suhoor.app.alarm-config-defaults",
         delay: 0.2
@@ -64,6 +65,7 @@ final class AlarmConfigStore: ObservableObject {
                 adjustmentStore: HijriMonthAdjustmentStore(defaults: defaultsStore)
             )
         )
+        self.adjustedHijriCalendar = adjustedHijriCalendar
         self.scheduledDateSourceStore = ScheduledDateSourceStore(
             defaults: defaultsStore,
             legacyDefaults: defaultsValue,
@@ -233,6 +235,57 @@ final class AlarmConfigStore: ObservableObject {
         suppressedScheduledDateStore.remove(key)
     }
 
+    func addHijriSingleDaySource(
+        _ hijriSource: HijriSingleDaySource,
+        origin: ScheduledDateSourceOrigin,
+        groupID: UUID? = nil,
+        timeZone: TimeZone = .current
+    ) {
+        objectWillChange.send()
+        guard scheduledDateSourceStore.sources.contains(where: { source in
+            guard case .hijriSingleDay(let existing) = source.kind else { return false }
+            return existing == hijriSource && source.groupID == groupID && source.origin == origin
+        }) == false else {
+            if let resolved = adjustedHijriCalendar.gregorianDate(
+                for: HijriYearMonth(hijriYear: hijriSource.hijriYear, month: hijriSource.month),
+                dayOfMonth: hijriSource.day,
+                timeZone: timeZone
+            ) {
+                let key = DateHelpers.dayIdentifier(for: resolved, timeZone: timeZone)
+                suppressedScheduledDateStore.remove(key)
+            }
+            return
+        }
+
+        scheduledDateSourceStore.add(
+            ScheduledDateSource(
+                id: UUID(),
+                kind: .hijriSingleDay(hijriSource),
+                createdAt: Date(),
+                isEnabled: true,
+                origin: origin,
+                groupID: groupID
+            )
+        )
+
+        if let resolved = adjustedHijriCalendar.gregorianDate(
+            for: HijriYearMonth(hijriYear: hijriSource.hijriYear, month: hijriSource.month),
+            dayOfMonth: hijriSource.day,
+            timeZone: timeZone
+        ) {
+            let key = DateHelpers.dayIdentifier(for: resolved, timeZone: timeZone)
+            suppressedScheduledDateStore.remove(key)
+        }
+    }
+
+    func hijriSingleDaySources(for key: HijriYearMonth) -> [ScheduledDateSource] {
+        scheduledDateSourceStore.sources.filter { source in
+            guard source.isEnabled else { return false }
+            guard case .hijriSingleDay(let hijri) = source.kind else { return false }
+            return hijri.hijriYear == key.hijriYear && hijri.month == key.month
+        }
+    }
+
     func previewGregorianRangeAdd(
         startDate: Date,
         endDate: Date,
@@ -334,7 +387,22 @@ final class AlarmConfigStore: ObservableObject {
         let dates = availability.addResult.addedDates
         let groupID = dates.count > 1 ? UUID() : nil
         for date in dates {
-            addSingleDaySource(date, origin: .islamicQuickAdd(kind), groupID: groupID, timeZone: timeZone)
+            if kind.isHijriBased,
+               let components = adjustedHijriCalendar.adjustedComponents(for: date, timeZone: timeZone) {
+                let hijriSource = HijriSingleDaySource(
+                    hijriYear: components.hijriYear,
+                    month: components.month,
+                    day: components.day
+                )
+                addHijriSingleDaySource(
+                    hijriSource,
+                    origin: .islamicQuickAdd(kind),
+                    groupID: groupID,
+                    timeZone: timeZone
+                )
+            } else {
+                addSingleDaySource(date, origin: .islamicQuickAdd(kind), groupID: groupID, timeZone: timeZone)
+            }
         }
         return availability.addResult
     }
@@ -456,7 +524,21 @@ final class AlarmConfigStore: ObservableObject {
         let dates = availability.addResult.addedDates
         let groupID = dates.count > 1 ? UUID() : nil
         for date in dates {
-            addSingleDaySource(date, origin: .islamicQuickAdd(.nextAshura), groupID: groupID, timeZone: timeZone)
+            if let components = adjustedHijriCalendar.adjustedComponents(for: date, timeZone: timeZone) {
+                let hijriSource = HijriSingleDaySource(
+                    hijriYear: components.hijriYear,
+                    month: components.month,
+                    day: components.day
+                )
+                addHijriSingleDaySource(
+                    hijriSource,
+                    origin: .islamicQuickAdd(.nextAshura),
+                    groupID: groupID,
+                    timeZone: timeZone
+                )
+            } else {
+                addSingleDaySource(date, origin: .islamicQuickAdd(.nextAshura), groupID: groupID, timeZone: timeZone)
+            }
         }
         return availability.addResult
     }

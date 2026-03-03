@@ -140,6 +140,148 @@ struct ScheduleManagerHijriTests {
 
     @Test
     @MainActor
+    func hijriSingleDaySourceResolvesAndShiftsWithAdjustment() {
+        let suiteName = "ScheduleManagerHijriTests.HijriSingleDayShift"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+
+        let alarmConfigStore = AlarmConfigStore(defaultsStore: defaults)
+        let adjustmentStore = HijriMonthAdjustmentStore(defaults: defaults)
+        let calendar = AdjustedHijriCalendar(
+            calendarService: HijriCalendarService(adjustmentStore: adjustmentStore)
+        )
+        let referenceDate = Self.makeDate(year: 2026, month: 7, day: 1, timeZone: timeZone)
+        let components = calendar.adjustedComponents(for: referenceDate, timeZone: timeZone)
+        #expect(components != nil)
+        guard let components else { return }
+
+        let hijriSource = HijriSingleDaySource(
+            hijriYear: components.hijriYear,
+            month: components.month,
+            day: components.day
+        )
+        alarmConfigStore.addHijriSingleDaySource(
+            hijriSource,
+            origin: .islamicQuickAdd(.nextWhiteDays),
+            timeZone: timeZone
+        )
+
+        let resolvedBefore = alarmConfigStore.resolvedScheduledEntries(
+            from: referenceDate,
+            limit: 5,
+            timeZone: timeZone
+        )
+        let beforeKey = DateHelpers.dayIdentifier(for: referenceDate, timeZone: timeZone)
+        #expect(resolvedBefore.contains(where: { $0.dateKey == beforeKey }))
+
+        adjustmentStore.setAdjustment(
+            for: HijriYearMonth(hijriYear: components.hijriYear, month: components.month),
+            offsetDays: 1
+        )
+        let shiftedDate = calendar.gregorianDate(
+            for: HijriYearMonth(hijriYear: components.hijriYear, month: components.month),
+            dayOfMonth: components.day,
+            timeZone: timeZone
+        )
+        #expect(shiftedDate != nil)
+        guard let shiftedDate else { return }
+
+        let resolvedAfter = alarmConfigStore.resolvedScheduledEntries(
+            from: referenceDate,
+            limit: 10,
+            timeZone: timeZone
+        )
+        let shiftedKey = DateHelpers.dayIdentifier(for: shiftedDate, timeZone: timeZone)
+        #expect(resolvedAfter.contains(where: { $0.dateKey == shiftedKey }))
+    }
+
+    @Test
+    @MainActor
+    func adjustmentChangeCarriesSuppressionOverridesAndTags() async {
+        let suiteName = "ScheduleManagerHijriTests.AdjustmentCarryOver"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+
+        let settingsStore = SuhoorSettingsStore(defaults: defaults)
+        let alarmConfigStore = AlarmConfigStore(defaultsStore: defaults)
+        let adjustmentStore = HijriMonthAdjustmentStore(defaults: defaults)
+        let changeStore = HijriAdjustmentChangeStore(defaults: defaults)
+        let fastTagStore = FastTagStore(defaults: defaults)
+        let manager = ScheduleManager(
+            settingsStore: settingsStore,
+            locationService: LocationService(),
+            alarmConfigStore: alarmConfigStore,
+            fastTagStore: fastTagStore,
+            hijriAdjustmentStore: adjustmentStore,
+            hijriAdjustmentChangeStore: changeStore
+        )
+
+        let calendar = AdjustedHijriCalendar(
+            calendarService: HijriCalendarService(adjustmentStore: adjustmentStore)
+        )
+        let referenceDate = Self.makeDate(year: 2026, month: 7, day: 1, timeZone: timeZone)
+        guard let components = calendar.adjustedComponents(for: referenceDate, timeZone: timeZone) else {
+            #expect(false)
+            return
+        }
+
+        let hijriSource = HijriSingleDaySource(
+            hijriYear: components.hijriYear,
+            month: components.month,
+            day: components.day
+        )
+        alarmConfigStore.addHijriSingleDaySource(
+            hijriSource,
+            origin: .islamicQuickAdd(.nextWhiteDays),
+            timeZone: timeZone
+        )
+
+        let oldDate = calendar.gregorianDate(
+            for: HijriYearMonth(hijriYear: components.hijriYear, month: components.month),
+            dayOfMonth: components.day,
+            timeZone: timeZone
+        )
+        #expect(oldDate != nil)
+        guard let oldDate else { return }
+
+        alarmConfigStore.updateOverride(for: oldDate, timeZone: timeZone) { override in
+            override.skipDay = true
+            override.suhoorEnabled = false
+        }
+        alarmConfigStore.addDeletedDate(oldDate, timeZone: timeZone)
+        if let selection = FastIntentEngine.defaultAddFlowSelection(for: oldDate, timeZone: timeZone) {
+            fastTagStore.setSelection(selection, for: oldDate, timeZone: timeZone)
+        }
+
+        await manager.setHijriMonthAdjustment(
+            for: components.month,
+            hijriYear: components.hijriYear,
+            offsetDays: 1
+        )
+
+        let newDate = calendar.gregorianDate(
+            for: HijriYearMonth(hijriYear: components.hijriYear, month: components.month),
+            dayOfMonth: components.day,
+            timeZone: timeZone
+        )
+        #expect(newDate != nil)
+        guard let newDate else { return }
+
+        #expect(alarmConfigStore.isDeletedDate(on: oldDate, timeZone: timeZone) == false)
+        #expect(alarmConfigStore.isDeletedDate(on: newDate, timeZone: timeZone) == true)
+        #expect(alarmConfigStore.override(for: oldDate, timeZone: timeZone) == nil)
+        #expect(alarmConfigStore.override(for: newDate, timeZone: timeZone)?.skipDay == true)
+        #expect(fastTagStore.selection(for: oldDate, timeZone: timeZone) == nil)
+        #expect(fastTagStore.selection(for: newDate, timeZone: timeZone) != nil)
+
+        let pending = changeStore.pendingChanges()
+        #expect(pending.isEmpty == false)
+    }
+
+    @Test
+    @MainActor
     func alarmConfigMigrationTurnsAllDefaultsOnWithoutDroppingOverrides() throws {
         let suiteName = "ScheduleManagerHijriTests.DefaultMigration"
         let defaults = UserDefaults(suiteName: suiteName)!

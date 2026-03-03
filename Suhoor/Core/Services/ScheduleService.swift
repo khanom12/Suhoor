@@ -23,6 +23,7 @@ final class ScheduleManager: ObservableObject {
     @Published private(set) var permissionSnapshot: PermissionSnapshot = .empty
     @Published private(set) var activeWindowSnapshot: ActiveAlarmWindowSnapshot = .empty
     @Published private(set) var bootstrapState: AppBootstrapState = .welcome
+    @Published private(set) var hijriAdjustmentChanges: [HijriAdjustmentChange] = []
 
     private let settingsStore: SuhoorSettingsStore
     private let alarmConfigStore: AlarmConfigStore
@@ -32,6 +33,7 @@ final class ScheduleManager: ObservableObject {
     private let calculator = PrayerTimeCalculator()
     private let hijriAdjustmentStore: HijriMonthAdjustmentStore
     private let adjustedHijriCalendar: AdjustedHijriCalendar
+    private let hijriAdjustmentChangeStore: HijriAdjustmentChangeStore
     private let alarmRecordStore = AlarmRecordStore()
     private let alarmStateStore = AlarmStateStore()
     private let countdownStore = CountdownSessionStore()
@@ -57,13 +59,15 @@ final class ScheduleManager: ObservableObject {
         locationService: LocationService,
         alarmConfigStore: AlarmConfigStore,
         fastTagStore: FastTagStore = FastTagStore(),
-        hijriAdjustmentStore: HijriMonthAdjustmentStore = HijriMonthAdjustmentStore()
+        hijriAdjustmentStore: HijriMonthAdjustmentStore = HijriMonthAdjustmentStore(),
+        hijriAdjustmentChangeStore: HijriAdjustmentChangeStore = HijriAdjustmentChangeStore()
     ) {
         self.settingsStore = settingsStore
         self.alarmConfigStore = alarmConfigStore
         self.locationService = locationService
         self.fastTagStore = fastTagStore
         self.hijriAdjustmentStore = hijriAdjustmentStore
+        self.hijriAdjustmentChangeStore = hijriAdjustmentChangeStore
         let hijriCalendarService = HijriCalendarService(adjustmentStore: hijriAdjustmentStore)
         let adjustedHijriCalendar = AdjustedHijriCalendar(calendarService: hijriCalendarService)
         self.adjustedHijriCalendar = adjustedHijriCalendar
@@ -127,6 +131,7 @@ final class ScheduleManager: ObservableObject {
                 timeZone: .current
             )
         self.schedules = activeWindowSnapshot.visibleDays.map(\.schedule)
+        self.hijriAdjustmentChanges = hijriAdjustmentChangeStore.pendingChanges()
 
         fastTagStore.$selections
             .dropFirst()
@@ -231,7 +236,24 @@ final class ScheduleManager: ObservableObject {
 
     func setHijriMonthAdjustment(for month: HijriMonth, hijriYear: Int, offsetDays: Int) async {
         objectWillChange.send()
-        hijriAdjustmentStore.setAdjustment(for: HijriYearMonth(hijriYear: hijriYear, month: month), offsetDays: offsetDays)
+        let timeZone = TimeZone.current
+        let key = HijriYearMonth(hijriYear: hijriYear, month: month)
+        let hijriSources = alarmConfigStore.hijriSingleDaySources(for: key)
+        let oldResolved = resolveHijriSourceDates(hijriSources, timeZone: timeZone)
+
+        hijriAdjustmentStore.setAdjustment(for: key, offsetDays: offsetDays)
+
+        let newResolved = resolveHijriSourceDates(hijriSources, timeZone: timeZone)
+        let changes = applyHijriAdjustmentShifts(
+            sources: hijriSources,
+            oldResolved: oldResolved,
+            newResolved: newResolved,
+            timeZone: timeZone
+        )
+        if !changes.isEmpty {
+            hijriAdjustmentChangeStore.record(changes)
+            hijriAdjustmentChanges = hijriAdjustmentChangeStore.pendingChanges()
+        }
         await refreshSchedules(force: true)
     }
 
@@ -241,6 +263,11 @@ final class ScheduleManager: ObservableObject {
 
     func hijriMonthStartPreview(for month: HijriMonth, hijriYear: Int, timeZone: TimeZone = .current) -> HijriMonthStartPreview? {
         adjustedHijriCalendar.monthStartPreview(for: HijriYearMonth(hijriYear: hijriYear, month: month), timeZone: timeZone)
+    }
+
+    func acknowledgeHijriAdjustmentChanges() {
+        hijriAdjustmentChangeStore.acknowledgeAll()
+        hijriAdjustmentChanges = []
     }
 
     func currentHijriYearMonth(timeZone: TimeZone = .current, date: Date = Date()) -> HijriYearMonth? {
@@ -1511,6 +1538,116 @@ final class ScheduleManager: ObservableObject {
                 hijriAdjustmentStore.resetAdjustment(for: key)
             }
         }
+    }
+
+    private func resolveHijriSourceDates(
+        _ sources: [ScheduledDateSource],
+        timeZone: TimeZone
+    ) -> [UUID: Date] {
+        var results: [UUID: Date] = [:]
+        for source in sources {
+            guard case .hijriSingleDay(let hijri) = source.kind else { continue }
+            let key = HijriYearMonth(hijriYear: hijri.hijriYear, month: hijri.month)
+            guard let resolved = adjustedHijriCalendar.gregorianDate(for: key, dayOfMonth: hijri.day, timeZone: timeZone) else {
+                continue
+            }
+            results[source.id] = resolved
+        }
+        return results
+    }
+
+    private func applyHijriAdjustmentShifts(
+        sources: [ScheduledDateSource],
+        oldResolved: [UUID: Date],
+        newResolved: [UUID: Date],
+        timeZone: TimeZone
+    ) -> [HijriAdjustmentChange] {
+        var changes: [HijriAdjustmentChange] = []
+
+        for source in sources {
+            guard case .hijriSingleDay(let hijri) = source.kind else { continue }
+            guard let oldDate = oldResolved[source.id], let newDate = newResolved[source.id] else { continue }
+            let oldKey = DateHelpers.dayIdentifier(for: oldDate, timeZone: timeZone)
+            let newKey = DateHelpers.dayIdentifier(for: newDate, timeZone: timeZone)
+            guard oldKey != newKey else { continue }
+
+            if alarmConfigStore.isDeletedDate(on: oldDate, timeZone: timeZone) {
+                alarmConfigStore.removeDeletedDate(oldDate, timeZone: timeZone)
+                alarmConfigStore.addDeletedDate(newDate, timeZone: timeZone)
+            }
+
+            if let oldOverride = alarmConfigStore.override(for: oldDate, timeZone: timeZone) {
+                let merged = mergedOverride(
+                    existing: alarmConfigStore.override(for: newDate, timeZone: timeZone),
+                    incoming: oldOverride,
+                    newDate: newDate,
+                    timeZone: timeZone
+                )
+                alarmConfigStore.updateOverride(for: newDate, timeZone: timeZone) { override in
+                    override.skipDay = merged.skipDay
+                    override.suhoorEnabled = merged.suhoorEnabled
+                    override.reminderEnabled = merged.reminderEnabled
+                    override.fajrEnabled = merged.fajrEnabled
+                    override.suhoorOffsetOverrideMinutes = merged.suhoorOffsetOverrideMinutes
+                    override.reminderOffsetOverrideMinutes = merged.reminderOffsetOverrideMinutes
+                    override.suhoorTimeOverrideMinutesFromMidnight = merged.suhoorTimeOverrideMinutesFromMidnight
+                    override.reminderTimeOverrideMinutesFromMidnight = merged.reminderTimeOverrideMinutesFromMidnight
+                    override.fajrSoundOverride = merged.fajrSoundOverride
+                    override.notes = merged.notes
+                }
+                alarmConfigStore.removeOverride(for: oldDate, timeZone: timeZone)
+            }
+
+            if let oldSelection = fastTagStore.selection(for: oldDate, timeZone: timeZone) {
+                if fastTagStore.selection(for: newDate, timeZone: timeZone) == nil {
+                    fastTagStore.setSelection(oldSelection, for: newDate, timeZone: timeZone)
+                }
+                fastTagStore.removeSelection(for: oldDate, timeZone: timeZone)
+            }
+
+            changes.append(
+                HijriAdjustmentChange(
+                    id: UUID(),
+                    hijriYear: hijri.hijriYear,
+                    month: hijri.month,
+                    day: hijri.day,
+                    oldDateKey: oldKey,
+                    newDateKey: newKey,
+                    sourceLabel: source.origin.label,
+                    timestamp: Date()
+                )
+            )
+        }
+
+        return changes
+    }
+
+    private func mergedOverride(
+        existing: DailyAlarmOverride?,
+        incoming: DailyAlarmOverride,
+        newDate: Date,
+        timeZone: TimeZone
+    ) -> DailyAlarmOverride {
+        var merged = existing ?? DailyAlarmOverride(date: newDate, timeZone: timeZone)
+        merged.skipDay = merged.skipDay || incoming.skipDay
+
+        if merged.suhoorEnabled == nil { merged.suhoorEnabled = incoming.suhoorEnabled }
+        if merged.reminderEnabled == nil { merged.reminderEnabled = incoming.reminderEnabled }
+        if merged.fajrEnabled == nil { merged.fajrEnabled = incoming.fajrEnabled }
+        if merged.suhoorOffsetOverrideMinutes == nil { merged.suhoorOffsetOverrideMinutes = incoming.suhoorOffsetOverrideMinutes }
+        if merged.reminderOffsetOverrideMinutes == nil { merged.reminderOffsetOverrideMinutes = incoming.reminderOffsetOverrideMinutes }
+        if merged.suhoorTimeOverrideMinutesFromMidnight == nil {
+            merged.suhoorTimeOverrideMinutesFromMidnight = incoming.suhoorTimeOverrideMinutesFromMidnight
+        }
+        if merged.reminderTimeOverrideMinutesFromMidnight == nil {
+            merged.reminderTimeOverrideMinutesFromMidnight = incoming.reminderTimeOverrideMinutesFromMidnight
+        }
+        if merged.fajrSoundOverride == nil { merged.fajrSoundOverride = incoming.fajrSoundOverride }
+        if (merged.notes == nil || merged.notes?.isEmpty == true) {
+            merged.notes = incoming.notes
+        }
+
+        return merged
     }
 
     private func resolvedCurrentHijriYear(timeZone: TimeZone = .current) -> Int {
