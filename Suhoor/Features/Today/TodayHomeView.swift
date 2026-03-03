@@ -11,7 +11,7 @@ struct TodayHomeView: View {
                 ForEach(visibleCards) { card in
                     switch card {
                     case .countdown:
-                        placeholderCard(title: "Next Countdown", detail: "Coming next: Fajr/Iftar countdown card.")
+                        TodayCountdownCard()
                     case .ramadanProgress:
                         placeholderCard(title: "Ramadan Progress", detail: "Coming next: day/progress until Eid.")
                     case .fastCheckIn:
@@ -47,10 +47,7 @@ struct TodayHomeView: View {
         .sheet(isPresented: $isEditingCards) {
             TodayEditCardsSheet(layoutStore: layoutStore)
         }
-        .onAppear {
-            // Touch scheduleManager to ensure the environment object is wired for this tab.
-            _ = scheduleManager.lastUpdated
-        }
+        .onAppear { _ = scheduleManager.lastUpdated }
     }
 
     private var visibleCards: [TodayCardKind] {
@@ -69,4 +66,3 @@ struct TodayHomeView: View {
         }
     }
 }
-
