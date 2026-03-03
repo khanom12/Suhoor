@@ -26,20 +26,20 @@ struct RootTabView: View {
             .tag(RootTab.today)
 
             NavigationStack {
-                PlanRootView()
-            }
-            .tabItem {
-                Label("Plan", systemImage: "calendar")
-            }
-            .tag(RootTab.plan)
-
-            NavigationStack {
                 AlarmsHomeView()
             }
             .tabItem {
                 Label("Alarms", systemImage: "alarm")
             }
             .tag(RootTab.alarms)
+
+            NavigationStack {
+                PlanRootView()
+            }
+            .tabItem {
+                Label("Plan", systemImage: "calendar")
+            }
+            .tag(RootTab.plan)
 
             NavigationStack(path: $profilePath) {
                 ProfileRootView()
@@ -68,4 +68,3 @@ struct RootTabView: View {
         }
     }
 }
-
