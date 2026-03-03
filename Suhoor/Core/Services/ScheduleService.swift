@@ -790,6 +790,10 @@ final class ScheduleManager: ObservableObject {
             draft.reminderEnabledGlobal = true
             draft.atFajrEnabledGlobal = true
         }
+        alarmConfigStore.defaults.defaultSuhoorTimeMode = .relativeToFajrMinusMinutes
+        alarmConfigStore.defaults.defaultSuhoorOffsetMinutes = settingsStore.settings.baseWakeOffsetMinutes
+        alarmConfigStore.defaults.defaultReminderTimeMode = .beforeFajr
+        alarmConfigStore.defaults.defaultReminderMinutesBeforeFajr = settingsStore.settings.reminderMinutesBeforeFajrGlobal
         alarmConfigStore.defaults.suhoorEnabledDefault = true
         alarmConfigStore.defaults.reminderEnabledDefault = true
         alarmConfigStore.defaults.fajrEnabledDefault = true
@@ -1858,6 +1862,12 @@ final class ScheduleManager: ObservableObject {
     private func locationMessage(for state: AppPermissionState) -> String {
         switch state {
         case .authorized:
+            if settingsStore.settings.locationMode == .fixed {
+                if let fixedName = fixedLocationDisplayName() {
+                    return Strings.LocationAccess.fixedExplanation(fixedName)
+                }
+                return Strings.LocationAccess.fixedExplanationFallback
+            }
             if !locationService.locationName.isEmpty {
                 return Strings.LocationAccess.currentLocation(locationService.locationName)
             }
@@ -1869,6 +1879,19 @@ final class ScheduleManager: ObservableObject {
         case .notDetermined, .unavailable:
             return Strings.LocationAccess.autoExplanation
         }
+    }
+
+    private func fixedLocationDisplayName() -> String? {
+        guard let fixed = settingsStore.settings.fixedLocation else { return nil }
+        if let city = City.all.first(where: {
+            abs($0.latitude - fixed.latitude) < 0.001 && abs($0.longitude - fixed.longitude) < 0.001
+        }) {
+            return city.name
+        }
+        if !locationService.locationName.isEmpty {
+            return locationService.locationName
+        }
+        return nil
     }
 
     private func alarmMessage(for state: AppPermissionState) -> String {

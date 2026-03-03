@@ -76,6 +76,10 @@ struct EditSuhoorView: View {
             Text(Strings.AlarmDetail.wakeHelper)
                 .font(.footnote)
                 .foregroundStyle(.secondary)
+
+            Text(Strings.AlarmDetail.wakeCustomHelper)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
         }
     }
 

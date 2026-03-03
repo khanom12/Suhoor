@@ -1,19 +1,22 @@
 import SwiftUI
-import UIKit
-import CoreLocation
 
 struct OnboardingView: View {
     @EnvironmentObject private var settingsStore: SuhoorSettingsStore
     @EnvironmentObject private var scheduleManager: ScheduleManager
     @EnvironmentObject private var locationService: LocationService
 
-    @State private var step: Step = .welcome
-    @State private var hasInitializedStep = false
+    @StateObject private var viewModel = OnboardingViewModel()
     @State private var showHowItWorks = false
+    @State private var showLocationSearch = false
 
     var body: some View {
         NavigationStack {
             VStack(alignment: .leading, spacing: 24) {
+                OnboardingProgressView(
+                    stepIndex: viewModel.progressIndex,
+                    stepCount: viewModel.progressCount
+                )
+                .padding(.top, 4)
                 Spacer(minLength: 0)
                 stepView
                 Spacer(minLength: 0)
@@ -24,51 +27,97 @@ struct OnboardingView: View {
             .sheet(isPresented: $showHowItWorks) {
                 HowItWorksView()
             }
+            .sheet(isPresented: $showLocationSearch) {
+                NavigationStack {
+                    LocationSearchView(
+                        selectedName: viewModel.locationName,
+                        onSelectCity: viewModel.chooseCity,
+                        onSelectMapItem: viewModel.chooseMapItem
+                    )
+                }
+            }
             .task {
-                initializeStepIfNeeded()
+                viewModel.bind(
+                    scheduleManager: scheduleManager,
+                    locationService: locationService,
+                    settingsStore: settingsStore
+                )
+                await viewModel.load()
+            }
+            .onChange(of: scheduleManager.permissionSnapshot) { _, _ in
+                viewModel.updateFromSnapshot()
+            }
+            .onChange(of: scheduleManager.activeWindowSnapshot) { _, _ in
+                viewModel.updateScheduleReadiness()
+            }
+            .onChange(of: settingsStore.settings.locationMode) { _, _ in
+                viewModel.syncSettings()
+            }
+            .onChange(of: settingsStore.settings.fixedLocation) { _, _ in
+                viewModel.syncSettings()
+            }
+            .onChange(of: locationService.locationName) { _, _ in
+                viewModel.syncSettings()
             }
         }
     }
 
     @ViewBuilder
     private var stepView: some View {
-        switch step {
-        case .welcome:
-            WelcomeStep(
-                onGetStarted: { step = .permissions },
-                onHowItWorks: { showHowItWorks = true }
-            )
-        case .permissions:
-            PermissionsChecklistStep(
-                refreshKey: permissionsRefreshKey,
-                hasVisibleSchedule: !scheduleManager.activeWindowSnapshot.visibleDays.isEmpty,
-                onOpenSettings: openAppSettings,
-                onContinue: { step = .offset }
-            )
-            .environmentObject(scheduleManager)
-        case .offset:
-            OffsetStep(
-                baseMinutes: $settingsStore.settings.baseWakeOffsetMinutes,
-                onEnable: {
-                    Task {
-                        let enabled = await scheduleManager.enableFromUserAction(markConfigured: false)
-                        guard enabled else { return }
-                        withAnimation(.easeInOut) {
-                            step = .confirmation
-                        }
+        Group {
+            switch viewModel.step {
+            case .welcome:
+                WelcomeStep(
+                    onGetStarted: { viewModel.goTo(.location) },
+                    onHowItWorks: { showHowItWorks = true }
+                )
+            case .location:
+                LocationStep(
+                    locationMode: viewModel.locationMode,
+                    locationState: viewModel.locationState,
+                    locationName: viewModel.locationName,
+                    hasFixedLocation: viewModel.hasFixedLocation,
+                    isWorking: viewModel.isWorking,
+                    onRequestLocation: viewModel.requestLocation,
+                    onOpenSettings: viewModel.openSettings,
+                    onChooseCity: { showLocationSearch = true },
+                    onContinue: { viewModel.advance() }
+                )
+            case .alarmKit:
+                AlarmKitStep(
+                    alarmState: viewModel.alarmKitState,
+                    isRequestable: viewModel.alarmKitRequestable,
+                    shouldShowFallback: viewModel.shouldShowAlarmKitFallback,
+                    onRequestAlarmKit: viewModel.requestAlarmKit,
+                    onOpenSettings: viewModel.openSettings,
+                    onContinue: { viewModel.advance() }
+                )
+        case .notifications:
+            NotificationsStep(
+                notificationState: viewModel.notificationState,
+                showAlarmKitFallback: viewModel.shouldShowAlarmKitFallback,
+                onRequestNotifications: viewModel.requestNotifications,
+                onOpenSettings: viewModel.openSettings,
+                onContinue: {
+                    guard !viewModel.isConfigured else { return }
+                    viewModel.advance()
                     }
-                }
-            )
-        case .confirmation:
-            ConfirmationStep(
-                nextAlarmText: nextAlarmText,
-                onDone: {
-                    settingsStore.update { draft in
-                        draft.isConfigured = true
-                    }
-                }
-            )
+                )
+            case .offset:
+                OffsetStep(
+                    baseMinutes: $settingsStore.settings.baseWakeOffsetMinutes,
+                    failureMessage: viewModel.lastEnableFailureMessage,
+                    onEnable: viewModel.enableRoutineAndContinue
+                )
+            case .confirmation:
+                ConfirmationStep(
+                    nextAlarmText: nextAlarmText,
+                    onDone: viewModel.markOnboardingComplete
+                )
+            }
         }
+        .id(viewModel.step)
+        .transition(viewModel.transition)
     }
 
     private var nextAlarmText: String {
@@ -79,29 +128,6 @@ struct OnboardingView: View {
         let time = TimeFormatters.timeFormatter.string(from: schedule.wakeDate)
         return "Next alarm: \(weekday) \(time)"
     }
-
-    private var permissionsRefreshKey: String {
-        "\(locationService.authorizationStatus.rawValue)-\(locationService.lastLocation != nil)-\(scheduleManager.alarmAuthorizationText)-\(scheduleManager.notificationAuthorizationText)"
-    }
-
-    private func openAppSettings() {
-        if let url = URL(string: UIApplication.openSettingsURLString) {
-            UIApplication.shared.open(url)
-        }
-    }
-
-    private func initializeStepIfNeeded() {
-        guard !hasInitializedStep else { return }
-        step = settingsStore.settings.isConfigured ? .permissions : .welcome
-        hasInitializedStep = true
-    }
-}
-
-private enum Step {
-    case welcome
-    case permissions
-    case offset
-    case confirmation
 }
 
 private struct WelcomeStep: View {
@@ -110,120 +136,303 @@ private struct WelcomeStep: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Wake up before Fajr")
+            Text(Strings.Onboarding.welcomeTitle)
                 .font(.largeTitle.weight(.bold))
-            Text("Set it once. We’ll update your alarm daily.")
+            Text(Strings.Onboarding.welcomeBody)
                 .font(.body)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
-            Button("Get started", action: onGetStarted)
+            Button(Strings.Onboarding.welcomePrimaryAction, action: onGetStarted)
                 .buttonStyle(.borderedProminent)
 
-            Button("How it works", action: onHowItWorks)
+            Button(Strings.Onboarding.welcomeSecondaryAction, action: onHowItWorks)
                 .font(.footnote)
                 .foregroundStyle(.secondary)
         }
     }
 }
 
-private struct PermissionsChecklistStep: View {
-    @EnvironmentObject private var scheduleManager: ScheduleManager
-
-    let refreshKey: String
-    let hasVisibleSchedule: Bool
+private struct LocationStep: View {
+    let locationMode: LocationMode
+    let locationState: AppPermissionState
+    let locationName: String?
+    let hasFixedLocation: Bool
+    let isWorking: Bool
+    let onRequestLocation: () -> Void
     let onOpenSettings: () -> Void
+    let onChooseCity: () -> Void
     let onContinue: () -> Void
-
-    @State private var presentations: [PermissionPresentation] = []
-    @State private var isLoading = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Set up permissions")
+            Text(Strings.Onboarding.locationTitle)
                 .font(.title2.weight(.bold))
 
-            Text("Suhoor requires location, alarms, and notifications before it can prepare your alarm schedule.")
+            Text(Strings.Onboarding.locationBody)
                 .font(.body)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
-            if isLoading && presentations.isEmpty {
-                ProgressView()
-            } else {
-                ForEach(presentations) { presentation in
-                    PermissionCardView(
-                        presentation: presentation,
-                        action: presentation.actionTitle == nil ? nil : {
-                            Task { await handleAction(for: presentation) }
-                        }
-                    )
-                }
-            }
-
-            Button("Continue", action: onContinue)
-                .buttonStyle(.borderedProminent)
-                .disabled(hasBlockingPermissions || !hasVisibleSchedule)
-
-            if !hasBlockingPermissions && !hasVisibleSchedule {
-                Text("Preparing your first alarm schedule…")
+            if let message = statusMessage {
+                Text(message)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
-        }
-        .task {
-            await refresh()
-        }
-        .task(id: refreshKey) {
-            await refresh()
+
+            if locationState == .needsFollowUp || isWorking {
+                ProgressView()
+            }
+
+            if let actionTitle = primaryActionTitle {
+                Button(actionTitle, action: primaryAction)
+                    .buttonStyle(.borderedProminent)
+            }
+
+            Button(Strings.Onboarding.locationSecondaryAction, action: onChooseCity)
+                .buttonStyle(.bordered)
+
+            Button(Strings.Onboarding.continueAction, action: onContinue)
+                .buttonStyle(.borderedProminent)
+                .disabled(!isLocationReady)
         }
     }
 
-    private var hasBlockingPermissions: Bool {
-        presentations.contains(where: \.isBlocking)
+    private var isLocationReady: Bool {
+        switch locationMode {
+        case .auto:
+            return locationState == .authorized
+        case .fixed:
+            return hasFixedLocation
+        }
     }
 
-    private func handleAction(for presentation: PermissionPresentation) async {
-        switch presentation.state {
-        case .notDetermined, .needsFollowUp:
-            _ = await scheduleManager.requestPermission(presentation.kind)
-        case .denied, .restricted:
+    private var primaryActionTitle: String? {
+        switch (locationMode, locationState) {
+        case (.auto, .notDetermined):
+            return Strings.Onboarding.locationPrimaryAction
+        case (.auto, .denied), (.auto, .restricted):
+            return Strings.LocationAccess.openSettings
+        case (.auto, .needsFollowUp):
+            return Strings.LocationAccess.tryAgain
+        case (.fixed, _):
+            return nil
+        default:
+            return nil
+        }
+    }
+
+    private func primaryAction() {
+        switch (locationMode, locationState) {
+        case (.auto, .notDetermined), (.auto, .needsFollowUp):
+            onRequestLocation()
+        case (.auto, .denied), (.auto, .restricted):
             onOpenSettings()
-        case .authorized, .unavailable:
+        default:
             break
         }
-        await refresh()
     }
 
-    private func refresh() async {
-        isLoading = true
-        let kinds = await scheduleManager.requiredOnboardingPermissions()
-        var updated: [PermissionPresentation] = []
-        for kind in kinds {
-            updated.append(await scheduleManager.permissionPresentation(for: kind))
+    private var statusMessage: String? {
+        switch locationMode {
+        case .fixed:
+            if let locationName {
+                return Strings.Onboarding.locationFixedStatus(locationName)
+            }
+            return hasFixedLocation
+                ? Strings.Onboarding.locationFixedReady
+                : Strings.Onboarding.locationFixedMissing
+        case .auto:
+            switch locationState {
+            case .authorized:
+                if let locationName {
+                    return Strings.LocationAccess.currentLocation(locationName)
+                }
+                return Strings.Onboarding.locationReady
+            case .needsFollowUp:
+                return Strings.LocationAccess.waitingForLocation
+            case .denied, .restricted:
+                return Strings.LocationAccess.deniedExplanation
+            case .notDetermined:
+                return nil
+            case .unavailable:
+                return Strings.LocationAccess.autoExplanation
+            }
         }
-        presentations = updated
-        await scheduleManager.refreshPermissionSummary()
-        isLoading = false
+    }
+}
+
+private struct AlarmKitStep: View {
+    let alarmState: AppPermissionState
+    let isRequestable: Bool
+    let shouldShowFallback: Bool
+    let onRequestAlarmKit: () -> Void
+    let onOpenSettings: () -> Void
+    let onContinue: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text(Strings.Onboarding.alarmKitTitle)
+                .font(.title2.weight(.bold))
+
+            Text(Strings.Onboarding.alarmKitBody)
+                .font(.body)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if let statusMessage {
+                Text(statusMessage)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            if shouldShowFallback {
+                InfoBanner(systemImage: "alarm", text: Strings.Onboarding.alarmKitFallbackBanner)
+            }
+
+            if let actionTitle = primaryActionTitle {
+                Button(actionTitle, action: primaryAction)
+                    .buttonStyle(.borderedProminent)
+            }
+
+            Button(Strings.Onboarding.continueAction, action: onContinue)
+                .buttonStyle(.borderedProminent)
+        }
+    }
+
+    private var primaryActionTitle: String? {
+        switch alarmState {
+        case .notDetermined where isRequestable:
+            return Strings.Onboarding.alarmKitPrimaryAction
+        case .denied, .restricted:
+            return Strings.LocationAccess.openSettings
+        default:
+            return nil
+        }
+    }
+
+    private var statusMessage: String? {
+        switch alarmState {
+        case .authorized:
+            return Strings.Onboarding.alarmKitReady
+        case .denied, .restricted:
+            return Strings.AlarmAccess.deniedExplanation
+        case .unavailable:
+            return Strings.AlarmAccess.unavailableExplanation
+        default:
+            return nil
+        }
+    }
+
+    private func primaryAction() {
+        switch alarmState {
+        case .notDetermined where isRequestable:
+            onRequestAlarmKit()
+        case .denied, .restricted:
+            onOpenSettings()
+        default:
+            break
+        }
+    }
+}
+
+private struct NotificationsStep: View {
+    let notificationState: AppPermissionState
+    let showAlarmKitFallback: Bool
+    let onRequestNotifications: () -> Void
+    let onOpenSettings: () -> Void
+    let onContinue: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text(Strings.Onboarding.notificationsTitle)
+                .font(.title2.weight(.bold))
+
+            Text(Strings.Onboarding.notificationsBody)
+                .font(.body)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if showAlarmKitFallback {
+                InfoBanner(systemImage: "alarm", text: Strings.Onboarding.alarmKitFallbackBanner)
+            }
+
+            if let statusMessage {
+                Text(statusMessage)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            if let actionTitle = primaryActionTitle {
+                Button(actionTitle, action: primaryAction)
+                    .buttonStyle(.borderedProminent)
+            }
+
+            Button(Strings.Onboarding.continueAction, action: onContinue)
+                .buttonStyle(.borderedProminent)
+                .disabled(notificationState != .authorized)
+        }
+    }
+
+    private var statusMessage: String? {
+        switch notificationState {
+        case .authorized:
+            return Strings.Onboarding.notificationsReady
+        case .denied, .restricted:
+            return Strings.NotificationAccess.deniedExplanation
+        default:
+            return nil
+        }
+    }
+
+    private var primaryActionTitle: String? {
+        switch notificationState {
+        case .notDetermined:
+            return Strings.Onboarding.notificationsPrimaryAction
+        case .denied, .restricted:
+            return Strings.LocationAccess.openSettings
+        default:
+            return nil
+        }
+    }
+
+    private func primaryAction() {
+        switch notificationState {
+        case .notDetermined:
+            onRequestNotifications()
+        case .denied, .restricted:
+            onOpenSettings()
+        default:
+            break
+        }
     }
 }
 
 private struct OffsetStep: View {
     @Binding var baseMinutes: Int
+    let failureMessage: String?
     let onEnable: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("How early?")
+            Text(Strings.Onboarding.offsetTitle)
                 .font(.title2.weight(.bold))
 
             OffsetPickerView(baseMinutes: $baseMinutes)
 
-            Text("Wake me \(baseMinutes) min before Fajr.")
+            Text(Strings.Onboarding.offsetHelper(baseMinutes))
                 .font(.footnote)
                 .foregroundStyle(.secondary)
 
-            Button("Continue", action: onEnable)
+            Text(Strings.Onboarding.offsetCustomHelper)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+
+            if let failureMessage {
+                InfoBanner(systemImage: "exclamationmark.triangle", text: failureMessage)
+            }
+
+            Button(Strings.Onboarding.continueAction, action: onEnable)
                 .buttonStyle(.borderedProminent)
         }
     }
@@ -235,17 +444,17 @@ private struct ConfirmationStep: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Label("All set", systemImage: "checkmark.circle.fill")
+            Label(Strings.Onboarding.confirmationTitle, systemImage: "checkmark.circle.fill")
                 .font(.title2.weight(.bold))
 
             Text(nextAlarmText)
                 .font(.body)
 
-            Text("We’ll keep this updated every day.")
+            Text(Strings.Onboarding.confirmationBody)
                 .font(.footnote)
                 .foregroundStyle(.secondary)
 
-            Button("Done", action: onDone)
+            Button(Strings.Onboarding.doneAction, action: onDone)
                 .buttonStyle(.borderedProminent)
         }
     }
@@ -267,5 +476,16 @@ private struct HowItWorksView: View {
             .navigationTitle("How it works")
             .navigationBarTitleDisplayMode(.inline)
         }
+    }
+}
+
+private struct OnboardingProgressView: View {
+    let stepIndex: Int
+    let stepCount: Int
+
+    var body: some View {
+        ProgressView(value: Double(stepIndex + 1), total: Double(max(stepCount, 1)))
+            .tint(.orange)
+            .accessibilityLabel("Onboarding progress")
     }
 }
