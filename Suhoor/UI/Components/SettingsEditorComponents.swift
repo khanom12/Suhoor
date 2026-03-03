@@ -92,17 +92,23 @@ struct SettingsEditorCard<Content: View>: View {
     let title: String?
     let subtitle: String?
     let trailing: AnyView?
+    let isExpanded: Bool
+    let onToggleExpanded: (() -> Void)?
     @ViewBuilder let content: () -> Content
 
     init(
         title: String? = nil,
         subtitle: String? = nil,
         trailing: AnyView? = nil,
+        isExpanded: Bool = true,
+        onToggleExpanded: (() -> Void)? = nil,
         @ViewBuilder content: @escaping () -> Content
     ) {
         self.title = title
         self.subtitle = subtitle
         self.trailing = trailing
+        self.isExpanded = isExpanded
+        self.onToggleExpanded = onToggleExpanded
         self.content = content
     }
 
@@ -110,29 +116,52 @@ struct SettingsEditorCard<Content: View>: View {
         VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
             if title != nil || subtitle != nil || trailing != nil {
                 HStack(alignment: .top, spacing: DesignTokens.spacingM) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        if let title {
-                            Text(title)
-                                .font(.body.weight(.semibold))
+                    if let onToggleExpanded {
+                        Button(action: onToggleExpanded) {
+                            HStack(alignment: .top, spacing: 12) {
+                                headerText
+                                Spacer(minLength: 0)
+                                Image(systemName: "chevron.right")
+                                    .font(.footnote.weight(.semibold))
+                                    .foregroundStyle(.secondary)
+                                    .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                                    .animation(.easeInOut(duration: 0.2), value: isExpanded)
+                            }
                         }
-                        if let subtitle {
-                            Text(subtitle)
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .buttonStyle(.plain)
+                    } else {
+                        headerText
+                        Spacer(minLength: 0)
                     }
-                    Spacer(minLength: 0)
                     trailing
                 }
             }
-            content()
+            if onToggleExpanded == nil || isExpanded {
+                content()
+            }
         }
         .padding(DesignTokens.spacingM)
         .background(
             RoundedRectangle(cornerRadius: DesignTokens.innerCardRadius, style: .continuous)
                 .fill(Color(.secondarySystemGroupedBackground))
         )
+    }
+
+    @ViewBuilder
+    private var headerText: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            if let title {
+                Text(title)
+                    .font(.body.weight(.semibold))
+            }
+            if let subtitle {
+                Text(subtitle)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
     }
 }
 
@@ -292,4 +321,3 @@ struct AlarmTimingEditor: View {
         onToggleExpanded?()
     }
 }
-

@@ -76,16 +76,20 @@ struct DefaultAlarmsSettingsView: View {
                         trailing: AnyView(
                             Toggle("", isOn: iftarDefaultBinding)
                                 .labelsHidden()
-                        )
+                        ),
+                        isExpanded: expandedAlarm == .iftar,
+                        onToggleExpanded: { toggleExpanded(.iftar) }
                     ) {
-                        VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
-                            Text("Timing follows sunset. Adjust it from Prayer times.")
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
+                        if alarmConfigStore.defaults.iftarEnabledDefault {
+                            VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
+                                Text("Timing follows sunset. Adjust it from Prayer times.")
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
 
-                            Toggle("Notification", isOn: iftarNotificationBinding)
-                            Toggle("Alarm", isOn: iftarAlarmBinding)
-                            Toggle("Adhan", isOn: iftarAdhanBinding)
+                                Toggle("Notification", isOn: iftarNotificationBinding)
+                                Toggle("Alarm", isOn: iftarAlarmBinding)
+                                Toggle("Adhan", isOn: iftarAdhanBinding)
+                            }
                         }
                     }
                 }
@@ -432,4 +436,5 @@ struct DefaultAlarmsSettingsView: View {
 private enum DefaultAlarmSection {
     case suhoor
     case reminder
+    case iftar
 }

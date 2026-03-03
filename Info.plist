@@ -17,11 +17,11 @@
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>NSAlarmKitUsageDescription</key>
-	<string>Suhoor schedules alarms to wake you before Fajr.</string>
+	<string>Suhoor uses alarms to wake you before Fajr.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Suhoor uses your location to calculate tomorrow’s Fajr time.</string>
+	<string>Suhoor uses your location to calculate accurate Fajr times.</string>
 	<key>NSUserNotificationUsageDescription</key>
-	<string>Suhoor can send a fallback wake alert if alarms aren’t available.</string>
+	<string>Suhoor sends reminders before Fajr and fallback alerts.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

@@ -493,19 +493,23 @@ struct AlarmDayDetailView: View {
                         trailing: AnyView(
                             Toggle("", isOn: iftarEnabledBinding)
                                 .labelsHidden()
-                        )
+                        ),
+                        isExpanded: expandedAlarm == .iftar,
+                        onToggleExpanded: { toggleExpanded(.iftar) }
                     ) {
-                        VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
-                            Text("Calculated from sunset. Adjust globally from Prayer times.")
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
+                        if effectiveConfig.iftarEnabled {
+                            VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
+                                Text("Calculated from sunset. Adjust globally from Prayer times.")
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
 
-                            Toggle("Notification", isOn: iftarNotificationBinding)
-                                .disabled(isSkippingDay || !effectiveConfig.iftarEnabled)
-                            Toggle("Alarm", isOn: iftarAlarmBinding)
-                                .disabled(isSkippingDay || !effectiveConfig.iftarEnabled)
-                            Toggle("Adhan", isOn: iftarAdhanBinding)
-                                .disabled(isSkippingDay || !effectiveConfig.iftarEnabled)
+                                Toggle("Notification", isOn: iftarNotificationBinding)
+                                    .disabled(isSkippingDay || !effectiveConfig.iftarEnabled)
+                                Toggle("Alarm", isOn: iftarAlarmBinding)
+                                    .disabled(isSkippingDay || !effectiveConfig.iftarEnabled)
+                                Toggle("Adhan", isOn: iftarAdhanBinding)
+                                    .disabled(isSkippingDay || !effectiveConfig.iftarEnabled)
+                            }
                         }
                     }
                 }
@@ -851,6 +855,7 @@ struct AlarmDayDetailView: View {
 private enum ExpandedAlarm {
     case suhoor
     case reminder
+    case iftar
 }
 
 private struct DayAlarmEditorContext {
