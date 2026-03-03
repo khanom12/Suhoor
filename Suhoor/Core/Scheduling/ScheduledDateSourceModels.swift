@@ -21,11 +21,11 @@ enum RecurringIslamicRule: String, Codable, CaseIterable, Identifiable, Hashable
     var detailText: String {
         switch self {
         case .whiteDays:
-            return "Adds the 13th, 14th, and 15th of each Hijri month."
+            return "13th, 14th, and 15th of each Hijri month."
         case .mondayThursday:
-            return "Adds upcoming Mondays and Thursdays."
+            return "Upcoming Mondays and Thursdays."
         case .ramadan:
-            return "Adds every day of Ramadan."
+            return "Every day of Ramadan."
         }
     }
 
@@ -68,19 +68,19 @@ enum IslamicQuickAddKind: String, Codable, CaseIterable, Identifiable, Hashable,
     var detailText: String {
         switch self {
         case .nextAshura:
-            return "Opens recommended 9 + 10, 10 + 11, or 9 + 10 + 11 Muharram options."
+            return "Choose a recommended Ashura pairing or add all three dates."
         case .nextArafah:
-            return "Adds the next corrected 9 Dhul Hijjah."
+            return "Next corrected 9 Dhul Hijjah."
         case .nextEidAlFitr:
-            return "Adds the next corrected 1 Shawwal."
+            return "Next corrected 1 Shawwal."
         case .nextEidAlAdha:
-            return "Adds the next corrected 10 Dhul Hijjah."
+            return "Next corrected 10 Dhul Hijjah."
         case .nextWhiteDays:
-            return "Adds the next corrected 13, 14, and 15."
+            return "Next corrected 13, 14, and 15."
         case .nextRamadanMonth:
-            return "Adds the next corrected Ramadan run."
+            return "Next corrected Ramadan run."
         case .nextMondayThursdayPair:
-            return "Adds the next upcoming Monday and Thursday."
+            return "Next upcoming Monday and Thursday."
         }
     }
 

@@ -29,6 +29,10 @@ struct AddScheduleSheet: View {
                     }
                 }
                 .pickerStyle(.segmented)
+
+                Text(modeHelperText)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
             }
 
             switch mode {
@@ -39,9 +43,17 @@ struct AddScheduleSheet: View {
             case .islamicDates:
                 islamicDatesContent
             }
+
+            if let disabledReason, mode != .islamicDates {
+                Section {
+                    Text(disabledReason)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
         }
         .formStyle(.grouped)
-        .navigationTitle("Add Schedule")
+        .navigationTitle(Strings.AddSchedule.title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
@@ -49,7 +61,7 @@ struct AddScheduleSheet: View {
             }
             ToolbarItem(placement: .confirmationAction) {
                 if mode != .islamicDates {
-                    Button("Add") { submitCurrentMode() }
+                    Button(confirmActionTitle) { submitCurrentMode() }
                         .disabled(submitDisabled)
                 }
             }
@@ -133,7 +145,10 @@ struct AddScheduleSheet: View {
                 context: singleDayMonthContext
             )
 
-            CalendarSelectionDetailCard(detail: singleDayDetail)
+            CalendarSelectionDetailCard(detail: singleDayDetail) {
+                onOpenExistingDay(selectedDate)
+                isPresented = false
+            }
         }
 
         Section("Purpose") {
@@ -156,46 +171,25 @@ struct AddScheduleSheet: View {
             }
         }
 
-        if singleDayDetail.isAlreadyActive {
-            Section("Already Active") {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("This day is already active.")
-                        .font(.footnote.weight(.semibold))
-                    if let sourceSummary = singleDayDetail.activeSourceSummary {
-                        Text("Source: \(sourceSummary)")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-                    Button("View Existing Day") {
-                        onOpenExistingDay(selectedDate)
-                        isPresented = false
-                    }
-                    .font(.footnote.weight(.semibold))
-                }
-            }
-        }
     }
 
     @ViewBuilder
     private var dateRangeContent: some View {
         Section {
-            CalendarSelectionButton(
-                title: "Start date",
-                gregorianText: rangeStartDetail.gregorianText,
-                hijriText: rangeStartDetail.hijriText
-            ) {
-                rangePickerTarget = .start
-            }
-
-            CalendarSelectionButton(
-                title: "End date",
-                gregorianText: rangeEndDetail.gregorianText,
-                hijriText: rangeEndDetail.hijriText
-            ) {
-                rangePickerTarget = .end
-            }
+            RangeSelectionCard(
+                startTitle: "Start",
+                startGregorian: rangeStartDetail.gregorianText,
+                startHijri: rangeStartDetail.hijriText,
+                endTitle: "End",
+                endGregorian: rangeEndDetail.gregorianText,
+                endHijri: rangeEndDetail.hijriText,
+                onSelectStart: { rangePickerTarget = .start },
+                onSelectEnd: { rangePickerTarget = .end }
+            )
         } header: {
             Text("Dates")
+        } footer: {
+            Text(Strings.AddSchedule.rangeHelper)
         }
 
         Section("Purpose") {
@@ -205,29 +199,31 @@ struct AddScheduleSheet: View {
                 }
             }
 
-            Text(rangePurposeSelection.detailText)
+            Text(Strings.AddSchedule.purposeHelper)
                 .font(.footnote)
                 .foregroundStyle(.secondary)
 
-            Text("Secondary observance tags stay automatic and are derived per date after add.")
+            DisclosureGroup(Strings.AddSchedule.detailsTitle) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(rangePurposeSelection.detailText)
+                    Text("Secondary observance tags stay automatic and are derived per date after add.")
+                }
                 .font(.footnote)
                 .foregroundStyle(.secondary)
+                .padding(.top, 4)
+            }
+            .font(.footnote.weight(.semibold))
+            .foregroundStyle(.secondary)
         }
 
         Section("Range Preview") {
-            LabeledContent("Total selected") {
-                Text("\(rangePreview.totalSelectedCount)")
-            }
-            LabeledContent("Will add") {
-                Text("\(rangePreview.addedCount)")
-                    .foregroundStyle(rangePreview.addedCount == 0 ? .secondary : .primary)
-            }
-            LabeledContent("Already active") {
-                Text("\(rangePreview.skippedCount)")
-                    .foregroundStyle(rangePreview.skippedCount == 0 ? Color.secondary : .orange)
-            }
+            RangePreviewGrid(
+                total: rangePreview.totalSelectedCount,
+                added: rangePreview.addedCount,
+                skipped: rangePreview.skippedCount
+            )
 
-            Text("Dates already active, including Ramadan, are skipped automatically.")
+            Text(Strings.AddSchedule.rangePreviewFooter)
                 .font(.footnote)
                 .foregroundStyle(.secondary)
         }
@@ -236,9 +232,15 @@ struct AddScheduleSheet: View {
     @ViewBuilder
     private var islamicDatesContent: some View {
         Section {
-            Text("Use corrected Hijri dates for upcoming one-time adds or recurring presets. Ramadan remains automatic.")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
+            InfoBanner(
+                systemImage: "calendar.badge.clock",
+                text: Strings.AddSchedule.hijriBanner
+            ) {
+                NavigationLink(Strings.AddSchedule.manageCorrections) {
+                    HijriCalendarSettingsView()
+                }
+                .font(.footnote.weight(.semibold))
+            }
         }
 
         Section("Upcoming Once") {
@@ -260,45 +262,23 @@ struct AddScheduleSheet: View {
             ashuraQuickAddRow
         } else {
             let availability = scheduleManager.islamicQuickAddAvailability(kind)
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(alignment: .top, spacing: 12) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(kind.title)
-                            .font(.body.weight(.medium))
-                        Text(kind.detailText)
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    Button(actionTitle(for: availability)) {
-                        Task {
-                            let result = await scheduleManager.addIslamicQuickAdd(kind)
-                            if let firstDate = result.addedDates.first {
-                                onOpenExistingDay(firstDate)
-                            }
-                            if !result.addedDates.isEmpty {
-                                isPresented = false
-                            }
+            QuickAddCard(
+                title: kind.title,
+                description: kind.detailText,
+                previewLine: previewLine(for: availability.preview),
+                statusLine: availabilityStatusLine(availability.addResult, state: availability.state),
+                detailLine: availability.reasonText
+            ) {
+                actionView(for: availability) {
+                    Task {
+                        let result = await scheduleManager.addIslamicQuickAdd(kind)
+                        if let firstDate = result.addedDates.first {
+                            onOpenExistingDay(firstDate)
+                        }
+                        if !result.addedDates.isEmpty {
+                            isPresented = false
                         }
                     }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
-                    .disabled(availability.state == .disabled)
-                }
-
-                if let preview = availability.preview {
-                    Text(preview.previewText)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                    Text(preview.availabilityText)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-
-                if let reasonText = availability.reasonText {
-                    Text(reasonText)
-                        .font(.footnote)
-                        .foregroundStyle(availability.state == .disabled ? Color.secondary : .orange)
                 }
             }
         }
@@ -308,74 +288,48 @@ struct AddScheduleSheet: View {
         let recommendedPattern = scheduleManager.recommendedAshuraQuickAddPattern()
         let availability = scheduleManager.ashuraQuickAddAvailability(recommendedPattern)
 
-        return VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .top, spacing: 12) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(IslamicQuickAddKind.nextAshura.title)
-                        .font(.body.weight(.medium))
-                    Text("Choose a recommended two-day Ashura pair, or explicitly add all three dates.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                    Text("Recommended: \(recommendedPattern.title)")
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(.primary)
-                }
-                Spacer()
-                Button("Select") {
+        return QuickAddCard(
+            title: IslamicQuickAddKind.nextAshura.title,
+            description: IslamicQuickAddKind.nextAshura.detailText,
+            previewLine: previewLine(for: availability.preview),
+            statusLine: availabilityStatusLine(availability.addResult, state: availability.state),
+            detailLine: availability.reasonText,
+            leadingAccessory: {
+                PillBadge(text: "Recommended", style: .custom)
+            },
+            action: {
+                actionView(for: availability) {
                     showsAshuraPatternSheet = true
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.small)
             }
-
-            if let preview = availability.preview {
-                Text(preview.previewText)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                Text(preview.availabilityText)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-
-            if let reasonText = availability.reasonText {
-                Text(reasonText)
-                    .font(.footnote)
-                    .foregroundStyle(availability.state == .disabled ? Color.secondary : .orange)
-            }
-        }
+        )
     }
 
     private func recurringRuleRow(for rule: RecurringIslamicRule) -> some View {
         let status = scheduleManager.recurringRuleStatus(rule)
-        return HStack(alignment: .top, spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(rule.title)
-                    .font(.body.weight(.medium))
-                Text(rule.detailText)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                if let detailText = status.detailText {
-                    Text(detailText)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            Spacer()
-            Button(status.isAdded ? "Added" : "Add") {
-                Task {
-                    let added = await scheduleManager.addRecurringIslamicRule(rule)
-                    guard added else { return }
-                    if let firstDate = scheduleManager.activeWindowSnapshot.visibleDays.first(where: { day in
-                        day.provenances.contains(where: { $0.sourceOrigin == .recurringIslamic(rule) })
-                    })?.date {
-                        onOpenExistingDay(firstDate)
+        return QuickAddCard(
+            title: rule.title,
+            description: rule.detailText,
+            statusLine: status.detailText
+        ) {
+            if status.isAdded {
+                PillBadge(text: "Added", style: .off)
+            } else {
+                Button("Add") {
+                    Task {
+                        let added = await scheduleManager.addRecurringIslamicRule(rule)
+                        guard added else { return }
+                        if let firstDate = scheduleManager.activeWindowSnapshot.visibleDays.first(where: { day in
+                            day.provenances.contains(where: { $0.sourceOrigin == .recurringIslamic(rule) })
+                        })?.date {
+                            onOpenExistingDay(firstDate)
+                        }
+                        isPresented = false
                     }
-                    isPresented = false
                 }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.small)
-            .disabled(status.isAdded)
         }
     }
 
@@ -424,6 +378,40 @@ struct AddScheduleSheet: View {
             return rangePreview.addedDates.isEmpty
         case .islamicDates:
             return true
+        }
+    }
+
+    private var disabledReason: String? {
+        guard submitDisabled else { return nil }
+        switch mode {
+        case .singleDay:
+            return Strings.AddSchedule.disabledSingleDay
+        case .dateRange:
+            return Strings.AddSchedule.disabledRange
+        case .islamicDates:
+            return nil
+        }
+    }
+
+    private var confirmActionTitle: String {
+        switch mode {
+        case .singleDay:
+            return Strings.AddSchedule.addDay
+        case .dateRange:
+            return Strings.AddSchedule.addRange
+        case .islamicDates:
+            return Strings.AddSchedule.addDay
+        }
+    }
+
+    private var modeHelperText: String {
+        switch mode {
+        case .singleDay:
+            return Strings.AddSchedule.modeHelperSingleDay
+        case .dateRange:
+            return Strings.AddSchedule.modeHelperDateRange
+        case .islamicDates:
+            return Strings.AddSchedule.modeHelperIslamicDates
         }
     }
 
@@ -508,6 +496,80 @@ struct AddScheduleSheet: View {
             return "Added"
         }
     }
+
+    private func actionView(for availability: IslamicQuickAddAvailability, action: @escaping () -> Void) -> some View {
+        switch availability.state {
+        case .disabled:
+            return AnyView(PillBadge(text: "Added", style: .off))
+        case .available, .partial:
+            return AnyView(
+                Button(actionTitle(for: availability)) {
+                    action()
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+            )
+        }
+    }
+
+    private func actionView(for availability: AshuraQuickAddAvailability, action: @escaping () -> Void) -> some View {
+        switch availability.state {
+        case .disabled:
+            return AnyView(PillBadge(text: "Added", style: .off))
+        case .available:
+            return AnyView(
+                Button("Select") {
+                    action()
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+            )
+        case .partial:
+            return AnyView(
+                Button("Select") {
+                    action()
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+            )
+        }
+    }
+
+    private func previewLine(for preview: IslamicQuickAddPreview?) -> String? {
+        guard let preview else { return nil }
+        return combinePreviewLines(primary: preview.previewText, secondary: preview.availabilityText)
+    }
+
+    private func previewLine(for preview: AshuraQuickAddPreview?) -> String? {
+        guard let preview else { return nil }
+        return combinePreviewLines(primary: preview.previewText, secondary: preview.availabilityText)
+    }
+
+    private func combinePreviewLines(primary: String?, secondary: String?) -> String? {
+        let normalizedPrimary = primary?.replacingOccurrences(of: " • ", with: " · ")
+        let normalizedSecondary = secondary?.replacingOccurrences(of: " • ", with: " · ")
+        switch (normalizedPrimary, normalizedSecondary) {
+        case let (p?, s?):
+            return "\(p) (\(s))"
+        case let (p?, nil):
+            return p
+        case let (nil, s?):
+            return s
+        default:
+            return nil
+        }
+    }
+
+    private func availabilityStatusLine(_ result: AddScheduledDatesResult, state: IslamicQuickAddAvailabilityState) -> String? {
+        switch state {
+        case .available:
+            return nil
+        case .partial:
+            return "Some dates are already active."
+        case .disabled:
+            return result.isEmpty ? "Already active." : "All matching dates are already active."
+        }
+    }
 }
 
 private struct AshuraQuickAddSheet: View {
@@ -519,13 +581,25 @@ private struct AshuraQuickAddSheet: View {
     var body: some View {
         Form {
             Section {
-                Text("Suhoor recommends observing Ashura as a two-day pattern. The app does not recommend 10 Muharram alone as the default quick add.")
+                Text("Suhoor recommends observing Ashura as a two-day pattern.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
 
+            Section {
+                let recommendedPattern = scheduleManager.recommendedAshuraQuickAddPattern()
+                let availability = scheduleManager.ashuraQuickAddAvailability(recommendedPattern)
+                Button(recommendedActionTitle(for: availability)) {
+                    onAdd(recommendedPattern)
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(availability.state == .disabled)
+            }
+
             Section("Choose Pattern") {
-                ForEach(AshuraQuickAddPattern.allCases) { pattern in
+                let recommendedPattern = scheduleManager.recommendedAshuraQuickAddPattern()
+                let patterns = [recommendedPattern] + AshuraQuickAddPattern.allCases.filter { $0 != recommendedPattern }
+                ForEach(patterns) { pattern in
                     ashuraPatternRow(pattern)
                 }
             }
@@ -600,6 +674,17 @@ private struct AshuraQuickAddSheet: View {
             return "Add"
         case .partial:
             return "Add Remaining"
+        case .disabled:
+            return "Added"
+        }
+    }
+
+    private func recommendedActionTitle(for availability: AshuraQuickAddAvailability) -> String {
+        switch availability.state {
+        case .available:
+            return "Add Recommended"
+        case .partial:
+            return "Add Recommended Remaining"
         case .disabled:
             return "Added"
         }
@@ -792,15 +877,20 @@ private struct CalendarDayCell: View {
         Button(action: onSelect) {
             VStack(spacing: 4) {
                 Text(state.dayNumberText)
-                    .font(.footnote.weight(state.isSelected ? .semibold : .regular))
+                    .font(.subheadline.weight(state.isSelected ? .semibold : .medium))
                     .foregroundStyle(textColor)
                     .frame(width: 34, height: 34)
                     .background(background)
                     .overlay(selectionOutline)
 
-                Circle()
-                    .fill(state.isAlreadyActive ? DawnColor.accent : .clear)
-                    .frame(width: 5, height: 5)
+                HStack(spacing: 4) {
+                    Circle()
+                        .fill(state.isToday ? Color.primary.opacity(0.5) : .clear)
+                        .frame(width: 4, height: 4)
+                    Circle()
+                        .fill(state.isAlreadyActive ? DawnColor.accent : .clear)
+                        .frame(width: 5, height: 5)
+                }
             }
             .frame(maxWidth: .infinity)
             .opacity(state.isDisabled ? 0.35 : 1.0)
@@ -856,6 +946,12 @@ private struct CalendarDayCell: View {
 
 private struct CalendarSelectionDetailCard: View {
     let detail: CalendarDayDetail
+    let onViewExistingDay: (() -> Void)?
+
+    init(detail: CalendarDayDetail, onViewExistingDay: (() -> Void)? = nil) {
+        self.detail = detail
+        self.onViewExistingDay = onViewExistingDay
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -865,18 +961,23 @@ private struct CalendarSelectionDetailCard: View {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
 
-            if detail.isAlreadyActive {
-                Text("Already active")
+            HStack {
+                PillBadge(
+                    text: detail.isAlreadyActive ? "Already active" : "Available to add",
+                    style: detail.isAlreadyActive ? .custom : .default
+                )
+                Spacer()
+                if detail.isAlreadyActive, let onViewExistingDay {
+                    Button("View Existing Day") {
+                        onViewExistingDay()
+                    }
                     .font(.footnote.weight(.semibold))
-                    .foregroundStyle(DawnColor.accentPressed)
-                if let sourceSummary = detail.activeSourceSummary {
-                    Text(sourceSummary)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
                 }
-            } else {
-                Text("Available to add")
-                    .font(.footnote.weight(.semibold))
+            }
+
+            if detail.isAlreadyActive, let sourceSummary = detail.activeSourceSummary {
+                Text(sourceSummary)
+                    .font(.footnote)
                     .foregroundStyle(.secondary)
             }
 
@@ -890,6 +991,84 @@ private struct CalendarSelectionDetailCard: View {
             RoundedRectangle(cornerRadius: DesignTokens.innerCardRadius, style: .continuous)
                 .fill(Color(.secondarySystemGroupedBackground))
         )
+    }
+}
+
+private struct RangeSelectionCard: View {
+    let startTitle: String
+    let startGregorian: String
+    let startHijri: String
+    let endTitle: String
+    let endGregorian: String
+    let endHijri: String
+    let onSelectStart: () -> Void
+    let onSelectEnd: () -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            rangeRow(title: startTitle, gregorian: startGregorian, hijri: startHijri, action: onSelectStart)
+            Divider()
+            rangeRow(title: endTitle, gregorian: endGregorian, hijri: endHijri, action: onSelectEnd)
+        }
+        .padding(.vertical, 6)
+        .background(
+            RoundedRectangle(cornerRadius: DesignTokens.innerCardRadius, style: .continuous)
+                .fill(Color(.secondarySystemGroupedBackground))
+        )
+    }
+
+    private func rangeRow(title: String, gregorian: String, hijri: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.primary)
+                    Text(gregorian)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    Text(hijri)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Image(systemName: "calendar")
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.vertical, 10)
+            .padding(.horizontal, DesignTokens.spacingM)
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct RangePreviewGrid: View {
+    let total: Int
+    let added: Int
+    let skipped: Int
+
+    var body: some View {
+        HStack(spacing: DesignTokens.spacingM) {
+            previewCell(title: "Total", value: total, accent: .secondary)
+            Divider()
+            previewCell(title: "Will add", value: added, accent: added == 0 ? .secondary : .primary)
+            Divider()
+            previewCell(title: "Already active", value: skipped, accent: skipped == 0 ? .secondary : .orange)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 4)
+    }
+
+    private func previewCell(title: String, value: Int, accent: Color) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            Text("\(value)")
+                .font(.headline.weight(.semibold))
+                .foregroundStyle(accent)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

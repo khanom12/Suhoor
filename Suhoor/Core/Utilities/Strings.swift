@@ -93,6 +93,23 @@ enum Strings {
         static func hijriMonthStarts(_ date: String) -> String { "Starts \(date)" }
     }
 
+    enum AddSchedule {
+        static let title = "Add Schedule"
+        static let modeHelperSingleDay = "Add one specific date."
+        static let modeHelperDateRange = "Add a span of dates."
+        static let modeHelperIslamicDates = "Add common fasting dates using your Hijri corrections."
+        static let addDay = "Add Day"
+        static let addRange = "Add Range"
+        static let disabledSingleDay = "This day is already active."
+        static let disabledRange = "No new dates in this range."
+        static let hijriBanner = "Hijri dates use your corrections. Ramadan is automatic."
+        static let manageCorrections = "Manage corrections"
+        static let rangeHelper = "Choose a start and end date."
+        static let rangePreviewFooter = "Ramadan dates are skipped automatically."
+        static let purposeHelper = "Applies to every date in the range."
+        static let detailsTitle = "Details"
+    }
+
     enum LocationRationale {
         static let title = "Use your location"
         static let body = "Suhoor uses your location to calculate Fajr times for your area and keep your routine updated."
