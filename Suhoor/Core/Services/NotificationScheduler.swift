@@ -326,6 +326,9 @@ final class NotificationScheduler {
         case .iftarAlarm:
             return .default
         case .iftarAdhan:
+            if Bundle.main.url(forResource: "adhan", withExtension: "caf") != nil {
+                return UNNotificationSound(named: UNNotificationSoundName("adhan.caf"))
+            }
             if Bundle.main.url(forResource: "adhan_maghrib", withExtension: "caf") != nil {
                 return UNNotificationSound(named: UNNotificationSoundName("adhan_maghrib.caf"))
             }

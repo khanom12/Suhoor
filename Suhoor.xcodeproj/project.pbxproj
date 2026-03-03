@@ -8,6 +8,8 @@
 
 /* Begin PBXBuildFile section */
 		07EF93442F49055C00BD8692 /* TEST_PLAN.md in Resources */ = {isa = PBXBuildFile; fileRef = 07EF93432F49055C00BD8692 /* TEST_PLAN.md */; };
+		A1B000001234567890000401 /* adhan.caf in Resources */ = {isa = PBXBuildFile; fileRef = A1B000001234567890000301 /* adhan.caf */; };
+		A1B000001234567890000402 /* adhan_fajr.caf in Resources */ = {isa = PBXBuildFile; fileRef = A1B000001234567890000302 /* adhan_fajr.caf */; };
 		A1B000001234567890000001 /* FastClassificationEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 076EFDFD2F54B8BE00F577DC /* FastClassificationEngineTests.swift */; };
 		A1B000001234567890000002 /* TagComputationEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0731CC082F54CA1200C6864E /* TagComputationEngineTests.swift */; };
 		A1B000001234567890000003 /* HijriCalendarServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B000001234567890000101 /* HijriCalendarServiceTests.swift */; };
@@ -34,6 +36,8 @@
 		07EF91CF2F43B5E600BD8692 /* SuhoorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SuhoorTests.swift; sourceTree = "<group>"; };
 		07EF91D22F43B70800BD8692 /* Suhoor.xctestplan */ = {isa = PBXFileReference; lastKnownFileType = text; path = Suhoor.xctestplan; sourceTree = "<group>"; };
 		07EF93432F49055C00BD8692 /* TEST_PLAN.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = TEST_PLAN.md; sourceTree = "<group>"; };
+		A1B000001234567890000301 /* adhan.caf */ = {isa = PBXFileReference; lastKnownFileType = audio.caf; path = Suhoor/Resources/adhan.caf; sourceTree = "<group>"; };
+		A1B000001234567890000302 /* adhan_fajr.caf */ = {isa = PBXFileReference; lastKnownFileType = audio.caf; path = Suhoor/Resources/adhan_fajr.caf; sourceTree = "<group>"; };
 		A1B000001234567890000101 /* HijriCalendarServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HijriCalendarServiceTests.swift; sourceTree = "<group>"; };
 		A1B000001234567890000102 /* HijriMonthAdjustmentStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HijriMonthAdjustmentStoreTests.swift; sourceTree = "<group>"; };
 		A1B000001234567890000103 /* HijriSpecialDayPlannerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HijriSpecialDayPlannerTests.swift; sourceTree = "<group>"; };
@@ -193,6 +197,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				07EF93442F49055C00BD8692 /* TEST_PLAN.md in Resources */,
+				A1B000001234567890000401 /* adhan.caf in Resources */,
+				A1B000001234567890000402 /* adhan_fajr.caf in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

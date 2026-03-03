@@ -660,6 +660,9 @@ final class RoutineScheduler {
         case .iftarAdhan:
             let soundChoice = schedule.iftarSoundChoice
             guard soundChoice == .adhanSoft else { return nil }
+            if Bundle.main.url(forResource: "adhan", withExtension: "caf") != nil {
+                return "adhan.caf"
+            }
             if Bundle.main.url(forResource: "adhan_maghrib", withExtension: "caf") != nil {
                 return "adhan_maghrib.caf"
             }
