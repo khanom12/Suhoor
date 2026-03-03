@@ -109,18 +109,23 @@ final class OnboardingViewModel: ObservableObject {
         scheduleManager.requestRefresh(reason: .settingsChanged)
     }
 
-    func goTo(_ newStep: Step) {
+    func goTo(_ newStep: Step, animation: Animation?) {
         guard newStep != step else { return }
-        withAnimation(.easeInOut) {
+        if let animation {
+            withAnimation(animation) {
+                previousStep = step
+                step = newStep
+            }
+        } else {
             previousStep = step
             step = newStep
         }
     }
 
-    func advance() {
+    func advance(animation: Animation?) {
         guard let next = nextStep(after: step) else { return }
         guard let resolved = resolvedStep(startingAt: next) else { return }
-        goTo(resolved)
+        goTo(resolved, animation: animation)
     }
 
     func requestLocation() {
@@ -181,14 +186,14 @@ final class OnboardingViewModel: ObservableObject {
         refreshPermissionsInBackground()
     }
 
-    func enableRoutineAndContinue() {
+    func enableRoutineAndContinue(animation: Animation?) {
         Task {
             guard let scheduleManager else { return }
             lastEnableFailureMessage = nil
             let enabled = await scheduleManager.enableFromUserAction(markConfigured: false)
             lastEnableFailureMessage = scheduleManager.lastEnableFailureMessage
             guard enabled else { return }
-            goTo(.confirmation)
+            goTo(.confirmation, animation: animation)
         }
     }
 
@@ -217,7 +222,8 @@ final class OnboardingViewModel: ObservableObject {
         useShortFlow ? 3 : stepCount
     }
 
-    var transition: AnyTransition {
+    func transition(reduceMotion: Bool) -> AnyTransition {
+        guard !reduceMotion else { return .opacity }
         guard let previousStep else { return .opacity }
         if step.rawValue >= previousStep.rawValue {
             return .asymmetric(
@@ -259,7 +265,7 @@ final class OnboardingViewModel: ObservableObject {
     private func skipIfNeeded() {
         guard let resolved = resolvedStep(startingAt: step) else { return }
         guard resolved != step else { return }
-        goTo(resolved)
+        goTo(resolved, animation: nil)
     }
 
     private func resolvedStep(startingAt start: Step) -> Step? {

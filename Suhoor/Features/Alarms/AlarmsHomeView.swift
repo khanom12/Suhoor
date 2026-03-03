@@ -8,6 +8,7 @@ struct AlarmsHomeView: View {
     @EnvironmentObject private var locationService: LocationService
     @EnvironmentObject private var fastTagStore: FastTagStore
     @EnvironmentObject private var alarmConfigStore: AlarmConfigStore
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var selectedSchedule: DaySchedule?
     @State private var showSettingsSheet = false
@@ -41,44 +42,49 @@ struct AlarmsHomeView: View {
                     ForEach(listSnapshot.sections) { section in
                         Section {
                             if !isSectionCollapsed(section) {
-                                if section.entries.isEmpty {
-                                    if loadingSectionIDs.contains(section.id) {
-                                        HStack {
-                                            ProgressView()
-                                            Text("Loading month")
-                                                .foregroundStyle(.secondary)
-                                        }
-                                        .padding(.vertical, DesignTokens.spacingS)
-                                    } else {
-                                        Text(monthEmptyStateText)
-                                            .font(.footnote)
-                                            .foregroundStyle(.secondary)
-                                            .padding(.vertical, DesignTokens.spacingS)
-                                    }
-                                } else {
-                                    ForEach(section.entries) { entry in
-                                        AlarmRowView(
-                                            schedule: entry.schedule,
-                                            config: entry.config,
-                                            primaryDisplay: entry.primary,
-                                            primaryIntent: entry.primaryIntent,
-                                            secondaryTags: entry.secondaryTags,
-                                            warnings: entry.warnings,
-                                            showsTags: entry.showsTags,
-                                            deleteCapability: entry.deleteCapability,
-                                            onSelect: {
-                                                selectedSchedule = entry.schedule
-                                            },
-                                            onRequestRamadanDisable: {
-                                                pendingRamadanEntry = entry
+                                Group {
+                                    if section.entries.isEmpty {
+                                        if loadingSectionIDs.contains(section.id) {
+                                            HStack {
+                                                ProgressView()
+                                                Text("Loading month")
+                                                    .foregroundStyle(.secondary)
                                             }
-                                        )
-                                        .deleteDisabled(entry.deleteCapability == .ramadan)
-                                    }
-                                    .onDelete { offsets in
-                                        deleteEntries(in: section.entries, at: offsets)
+                                            .padding(.vertical, DesignTokens.spacingS)
+                                        } else {
+                                            Text(monthEmptyStateText)
+                                                .font(.footnote)
+                                                .foregroundStyle(.secondary)
+                                                .padding(.vertical, DesignTokens.spacingS)
+                                        }
+                                    } else {
+                                        ForEach(section.entries) { entry in
+                                            AlarmRowView(
+                                                schedule: entry.schedule,
+                                                config: entry.config,
+                                                primaryDisplay: entry.primary,
+                                                primaryIntent: entry.primaryIntent,
+                                                secondaryTags: entry.secondaryTags,
+                                                warnings: entry.warnings,
+                                                showsTags: entry.showsTags,
+                                                deleteCapability: entry.deleteCapability,
+                                                onSelect: {
+                                                    selectedSchedule = entry.schedule
+                                                },
+                                                onRequestRamadanDisable: {
+                                                    pendingRamadanEntry = entry
+                                                }
+                                            )
+                                            .deleteDisabled(entry.deleteCapability == .ramadan)
+                                        }
+                                        .onDelete { offsets in
+                                            withAnimation(Motion.standard(reduceMotion: reduceMotion)) {
+                                                deleteEntries(in: section.entries, at: offsets)
+                                            }
+                                        }
                                     }
                                 }
+                                .transition(.opacity.combined(with: .move(edge: .top)))
                             }
                 } header: {
                     Button {
@@ -203,36 +209,28 @@ struct AlarmsHomeView: View {
                 }
             }
             .task {
-                rebuildListSnapshot()
-                ensureExpandedSectionsLoaded()
+                refreshListSnapshot(animated: false)
             }
             .onAppear {
-                rebuildListSnapshot()
-                ensureExpandedSectionsLoaded()
+                refreshListSnapshot(animated: false)
             }
             .onChange(of: scheduleManager.activeWindowSnapshot) { _, _ in
-                rebuildListSnapshot()
-                ensureExpandedSectionsLoaded()
+                refreshListSnapshot(animated: false)
             }
             .onChange(of: alarmConfigStore.overridesByDay) { _, _ in
-                rebuildListSnapshot()
-                ensureExpandedSectionsLoaded()
+                refreshListSnapshot(animated: false)
             }
             .onChange(of: alarmConfigStore.defaults) { _, _ in
-                rebuildListSnapshot()
-                ensureExpandedSectionsLoaded()
+                refreshListSnapshot(animated: false)
             }
             .onChange(of: fastTagStore.currentRevision) { _, _ in
-                rebuildListSnapshot()
-                ensureExpandedSectionsLoaded()
+                refreshListSnapshot(animated: false)
             }
             .onChange(of: scheduleManager.lastUpdated) { _, _ in
-                rebuildListSnapshot()
-                ensureExpandedSectionsLoaded()
+                refreshListSnapshot(animated: false)
             }
             .onChange(of: tagFilter) { _, _ in
-                rebuildListSnapshot()
-                ensureExpandedSectionsLoaded()
+                refreshListSnapshot(animated: true)
             }
             .sheet(isPresented: $showSettingsSheet) {
                 NavigationStack {
@@ -389,6 +387,24 @@ struct AlarmsHomeView: View {
         )
     }
 
+    private func refreshListSnapshot(animated: Bool) {
+        let update = {
+            rebuildListSnapshot()
+            ensureExpandedSectionsLoaded()
+        }
+        if animated {
+            withAnimation(Motion.standard(reduceMotion: reduceMotion)) {
+                update()
+            }
+        } else {
+            var transaction = Transaction()
+            transaction.animation = nil
+            withTransaction(transaction) {
+                update()
+            }
+        }
+    }
+
     private var showsAddButton: Bool {
         !editMode.isEditing
     }
@@ -447,7 +463,9 @@ struct AlarmsHomeView: View {
     private func toggleSectionCollapse(_ section: HijriMonthSection) {
         let identifier = sectionIdentifier(section.key)
         let currentState = isSectionCollapsed(section)
-        sectionCollapseOverrides[identifier] = !currentState
+        withAnimation(Motion.standard(reduceMotion: reduceMotion)) {
+            sectionCollapseOverrides[identifier] = !currentState
+        }
         guard currentState else { return }
         ensureMonthEntriesLoaded(for: section)
     }
@@ -560,7 +578,7 @@ struct AlarmsHomeView: View {
             _ = await scheduleManager.monthEntries(for: section.key, timeZone: .current)
             await MainActor.run {
                 loadingSectionIDs.remove(section.id)
-                rebuildListSnapshot()
+                refreshListSnapshot(animated: false)
             }
         }
     }

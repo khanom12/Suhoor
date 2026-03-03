@@ -8,6 +8,7 @@ struct AlarmDayDetailView: View {
     @EnvironmentObject private var alarmConfigStore: AlarmConfigStore
     @EnvironmentObject private var scheduleManager: ScheduleManager
     @EnvironmentObject private var fastTagStore: FastTagStore
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private let timeZone: TimeZone = .current
     @State private var reminderTimeClamped = false
@@ -432,7 +433,7 @@ struct AlarmDayDetailView: View {
             } footer: {
                 Text(Strings.AlarmsTab.dayDisabledHelper)
             }
-            .animation(.easeInOut(duration: 0.2), value: dayToggleBinding.wrappedValue)
+            .animation(Motion.standard(reduceMotion: reduceMotion), value: dayToggleBinding.wrappedValue)
 
             Section {
                 VStack(spacing: DesignTokens.spacingM) {
@@ -518,7 +519,7 @@ struct AlarmDayDetailView: View {
                 Text("Alarms")
                     .textCase(nil)
             }
-            .animation(.easeInOut(duration: 0.2), value: expandedAlarm)
+            .animation(Motion.standard(reduceMotion: reduceMotion), value: expandedAlarm)
             .disabled(!dayToggleBinding.wrappedValue)
             .opacity(dayToggleBinding.wrappedValue ? 1.0 : 0.5)
 
@@ -638,10 +639,12 @@ struct AlarmDayDetailView: View {
     }
 
     private func toggleExpanded(_ alarm: ExpandedAlarm) {
-        if expandedAlarm == alarm {
-            expandedAlarm = nil
-        } else {
-            expandedAlarm = alarm
+        withAnimation(Motion.standard(reduceMotion: reduceMotion)) {
+            if expandedAlarm == alarm {
+                expandedAlarm = nil
+            } else {
+                expandedAlarm = alarm
+            }
         }
     }
 

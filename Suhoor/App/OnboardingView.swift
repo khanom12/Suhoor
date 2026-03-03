@@ -4,6 +4,7 @@ struct OnboardingView: View {
     @EnvironmentObject private var settingsStore: SuhoorSettingsStore
     @EnvironmentObject private var scheduleManager: ScheduleManager
     @EnvironmentObject private var locationService: LocationService
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @StateObject private var viewModel = OnboardingViewModel()
     @State private var showHowItWorks = false
@@ -68,7 +69,7 @@ struct OnboardingView: View {
             switch viewModel.step {
             case .welcome:
                 WelcomeStep(
-                    onGetStarted: { viewModel.goTo(.location) },
+                    onGetStarted: { viewModel.goTo(.location, animation: Motion.standard(reduceMotion: reduceMotion)) },
                     onHowItWorks: { showHowItWorks = true }
                 )
             case .location:
@@ -81,7 +82,7 @@ struct OnboardingView: View {
                     onRequestLocation: viewModel.requestLocation,
                     onOpenSettings: viewModel.openSettings,
                     onChooseCity: { showLocationSearch = true },
-                    onContinue: { viewModel.advance() }
+                    onContinue: { viewModel.advance(animation: Motion.standard(reduceMotion: reduceMotion)) }
                 )
             case .alarmKit:
                 AlarmKitStep(
@@ -90,7 +91,7 @@ struct OnboardingView: View {
                     shouldShowFallback: viewModel.shouldShowAlarmKitFallback,
                     onRequestAlarmKit: viewModel.requestAlarmKit,
                     onOpenSettings: viewModel.openSettings,
-                    onContinue: { viewModel.advance() }
+                    onContinue: { viewModel.advance(animation: Motion.standard(reduceMotion: reduceMotion)) }
                 )
         case .notifications:
             NotificationsStep(
@@ -100,14 +101,14 @@ struct OnboardingView: View {
                 onOpenSettings: viewModel.openSettings,
                 onContinue: {
                     guard !viewModel.isConfigured else { return }
-                    viewModel.advance()
+                    viewModel.advance(animation: Motion.standard(reduceMotion: reduceMotion))
                     }
                 )
             case .offset:
                 OffsetStep(
                     baseMinutes: $settingsStore.settings.baseWakeOffsetMinutes,
                     failureMessage: viewModel.lastEnableFailureMessage,
-                    onEnable: viewModel.enableRoutineAndContinue
+                    onEnable: { viewModel.enableRoutineAndContinue(animation: Motion.standard(reduceMotion: reduceMotion)) }
                 )
             case .confirmation:
                 ConfirmationStep(
@@ -117,7 +118,7 @@ struct OnboardingView: View {
             }
         }
         .id(viewModel.step)
-        .transition(viewModel.transition)
+        .transition(viewModel.transition(reduceMotion: reduceMotion))
     }
 
     private var nextAlarmText: String {

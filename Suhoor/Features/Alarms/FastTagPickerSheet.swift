@@ -8,6 +8,7 @@ struct FastTagPickerSheet: View {
     let onSave: (FastIntentSelection) -> Void
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var selection: FastIntentSelection
     @State private var noteText: String?
     @State private var selectedAbout: FastTagAbout?
@@ -215,7 +216,7 @@ struct FastTagPickerSheet: View {
     private func showNote(_ text: String) {
         noteText = text
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-            withAnimation {
+            withAnimation(Motion.fade(reduceMotion: reduceMotion)) {
                 noteText = nil
             }
         }

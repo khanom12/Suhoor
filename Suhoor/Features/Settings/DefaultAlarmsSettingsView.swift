@@ -3,6 +3,7 @@ import SwiftUI
 struct DefaultAlarmsSettingsView: View {
     @EnvironmentObject private var alarmConfigStore: AlarmConfigStore
     @EnvironmentObject private var scheduleManager: ScheduleManager
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var reminderTimeClamped = false
     @State private var expandedAlarm: DefaultAlarmSection? = .suhoor
@@ -188,7 +189,9 @@ struct DefaultAlarmsSettingsView: View {
     }
 
     private func toggleExpanded(_ section: DefaultAlarmSection) {
-        expandedAlarm = expandedAlarm == section ? nil : section
+        withAnimation(Motion.standard(reduceMotion: reduceMotion)) {
+            expandedAlarm = expandedAlarm == section ? nil : section
+        }
     }
 
     private var suhoorDefaultBinding: Binding<Bool> {

@@ -6,6 +6,7 @@ struct OffsetPickerView: View {
     let range: ClosedRange<Int>
     let step: Int
     let sentenceText: (Int) -> String
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var isCustomSelected: Bool = false
 
@@ -29,7 +30,7 @@ struct OffsetPickerView: View {
                 ForEach(presetMinutes, id: \.self) { minutes in
                     Button {
                         Haptics.light()
-                        withAnimation(.easeInOut(duration: 0.2)) {
+                        withAnimation(Motion.standard(reduceMotion: reduceMotion)) {
                             isCustomSelected = false
                             baseMinutes = minutes
                         }
@@ -43,7 +44,7 @@ struct OffsetPickerView: View {
 
                 Button {
                     Haptics.light()
-                    withAnimation(.easeInOut(duration: 0.2)) {
+                    withAnimation(Motion.standard(reduceMotion: reduceMotion)) {
                         isCustomSelected = true
                     }
                 } label: {

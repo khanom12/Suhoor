@@ -95,6 +95,7 @@ struct SettingsEditorCard<Content: View>: View {
     let isExpanded: Bool
     let onToggleExpanded: (() -> Void)?
     @ViewBuilder let content: () -> Content
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     init(
         title: String? = nil,
@@ -125,7 +126,7 @@ struct SettingsEditorCard<Content: View>: View {
                                     .font(.footnote.weight(.semibold))
                                     .foregroundStyle(.secondary)
                                     .rotationEffect(.degrees(isExpanded ? 90 : 0))
-                                    .animation(.easeInOut(duration: 0.2), value: isExpanded)
+                                    .animation(Motion.standard(reduceMotion: reduceMotion), value: isExpanded)
                             }
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -139,6 +140,7 @@ struct SettingsEditorCard<Content: View>: View {
             }
             if onToggleExpanded == nil || isExpanded {
                 content()
+                    .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
         .padding(DesignTokens.spacingM)
@@ -235,6 +237,7 @@ struct AlarmTimingEditor: View {
     var isExpanded: Bool = true
     var onToggleExpanded: (() -> Void)? = nil
     var isDisabled: Bool = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         SettingsEditorCard {
@@ -242,48 +245,51 @@ struct AlarmTimingEditor: View {
                 header
 
                 if isEnabled && isExpanded {
-                    Divider()
+                    Group {
+                        Divider()
 
-                    Picker(Strings.AlarmsTab.timeModeLabel, selection: $mode) {
-                        ForEach(AlarmTimingEditorMode.allCases) { mode in
-                            Text(mode.title).tag(mode)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    .disabled(isDisabled)
-
-                    if mode == .fixedTime {
-                        DatePicker(
-                            selection: $fixedTime,
-                            displayedComponents: [.hourAndMinute]
-                        ) {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(fixedLabel)
-                                if let fixedDetail {
-                                    Text(fixedDetail)
-                                        .font(.footnote)
-                                        .foregroundStyle(.secondary)
-                                }
+                        Picker(Strings.AlarmsTab.timeModeLabel, selection: $mode) {
+                            ForEach(AlarmTimingEditorMode.allCases) { mode in
+                                Text(mode.title).tag(mode)
                             }
                         }
+                        .pickerStyle(.segmented)
                         .disabled(isDisabled)
-                    } else {
-                        RelativeOffsetControl(
-                            label: relativeLabel,
-                            detail: relativeDetail,
-                            value: $relativeValue,
-                            range: relativeRange,
-                            step: relativeStep,
-                            isDisabled: isDisabled
-                        )
-                    }
 
-                    if let warningText {
-                        Text(warningText)
-                            .font(.footnote)
-                            .foregroundStyle(.orange)
-                            .fixedSize(horizontal: false, vertical: true)
+                        if mode == .fixedTime {
+                            DatePicker(
+                                selection: $fixedTime,
+                                displayedComponents: [.hourAndMinute]
+                            ) {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(fixedLabel)
+                                    if let fixedDetail {
+                                        Text(fixedDetail)
+                                            .font(.footnote)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                            }
+                            .disabled(isDisabled)
+                        } else {
+                            RelativeOffsetControl(
+                                label: relativeLabel,
+                                detail: relativeDetail,
+                                value: $relativeValue,
+                                range: relativeRange,
+                                step: relativeStep,
+                                isDisabled: isDisabled
+                            )
+                        }
+
+                        if let warningText {
+                            Text(warningText)
+                                .font(.footnote)
+                                .foregroundStyle(.orange)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                     }
+                    .transition(.opacity.combined(with: .move(edge: .top)))
                 }
             }
         }
@@ -306,7 +312,7 @@ struct AlarmTimingEditor: View {
                             .font(.footnote.weight(.semibold))
                             .foregroundStyle(.secondary)
                             .rotationEffect(.degrees(isExpanded ? 90 : 0))
-                            .animation(.easeInOut(duration: 0.2), value: isExpanded)
+                            .animation(Motion.standard(reduceMotion: reduceMotion), value: isExpanded)
                     }
                 }
             }
