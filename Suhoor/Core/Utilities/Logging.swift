@@ -35,6 +35,22 @@ final class DebouncedPersistenceController {
         lock.unlock()
         item?.cancel()
     }
+
+    /// Executes the latest scheduled work item immediately (if any).
+    ///
+    /// Intended for deterministic unit tests where `asyncAfter` delays are undesirable.
+    func flush() {
+        lock.lock()
+        let item = pendingWorkItem
+        pendingWorkItem = nil
+        lock.unlock()
+
+        guard let item else { return }
+        item.cancel()
+        queue.sync {
+            item.perform()
+        }
+    }
 }
 
 struct PerformanceTraceToken {

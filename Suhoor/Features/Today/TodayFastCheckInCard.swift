@@ -8,8 +8,11 @@ struct TodayFastCheckInCard: View {
 
     var body: some View {
         let timeZone = TimeZone.current
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = timeZone
+        let calendar: Calendar = {
+            var calendar = Calendar(identifier: .gregorian)
+            calendar.timeZone = timeZone
+            return calendar
+        }()
         let now = Date()
         let todayStart = calendar.startOfDay(for: now)
         let dateKey = DateHelpers.dayIdentifier(for: todayStart, timeZone: timeZone)
@@ -161,4 +164,3 @@ private struct FlexibleTagRow: View {
         return result
     }
 }
-

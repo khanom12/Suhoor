@@ -38,7 +38,7 @@ final class TodayCardLayoutStore: ObservableObject {
 
     func move(fromOffsets: IndexSet, toOffset: Int) {
         var updated = layout
-        updated.ordered.move(fromOffsets: fromOffsets, toOffset: toOffset)
+        updated.ordered.moveElements(fromOffsets: fromOffsets, toOffset: toOffset)
         setLayout(updated)
     }
 
@@ -76,5 +76,26 @@ final class TodayCardLayoutStore: ObservableObject {
             defaults.set(data, forKey: storageKey)
         }
     }
+
+#if DEBUG
+    func flushPersistenceForTesting() {
+        persistence.flush()
+    }
+#endif
 }
 
+private extension Array {
+    mutating func moveElements(fromOffsets: IndexSet, toOffset: Int) {
+        guard isEmpty == false, fromOffsets.isEmpty == false else { return }
+
+        let moving = fromOffsets.map { self[$0] }
+        for index in fromOffsets.sorted(by: >) {
+            remove(at: index)
+        }
+
+        var destination = toOffset
+        destination -= fromOffsets.filter { $0 < toOffset }.count
+        destination = Swift.min(Swift.max(0, destination), count)
+        insert(contentsOf: moving, at: destination)
+    }
+}

@@ -7,8 +7,11 @@ struct FastHistoryView: View {
 
     var body: some View {
         let timeZone = TimeZone.current
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = timeZone
+        let calendar: Calendar = {
+            var calendar = Calendar(identifier: .gregorian)
+            calendar.timeZone = timeZone
+            return calendar
+        }()
         let today = calendar.startOfDay(for: Date())
 
         List {
@@ -97,4 +100,3 @@ struct FastHistoryView: View {
         }
     }
 }
-

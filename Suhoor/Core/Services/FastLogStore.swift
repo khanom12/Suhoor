@@ -90,5 +90,10 @@ final class FastLogStore: ObservableObject {
             defaults.set(revision, forKey: revisionKey)
         }
     }
-}
 
+#if DEBUG
+    func flushPersistenceForTesting() {
+        persistence.flush()
+    }
+#endif
+}

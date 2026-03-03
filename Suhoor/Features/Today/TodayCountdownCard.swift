@@ -6,18 +6,18 @@ struct TodayCountdownCard: View {
     var body: some View {
         GlassCard(style: .header) {
             let now = Date()
-            if let target = countdownTarget(now: now) {
+            if let target = TodayCountdownEngine.target(now: now, snapshot: scheduleManager.activeWindowSnapshot, timeZone: .current) {
                 VStack(alignment: .leading, spacing: 12) {
                     HStack(alignment: .firstTextBaseline) {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(target.title)
+                            Text(title(for: target.kind))
                                 .font(.headline.weight(.semibold))
-                            Text(target.subtitle)
+                            Text(subtitle(for: target.kind))
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
                         }
                         Spacer()
-                        Text(target.targetTimeText)
+                        Text(TimeFormatters.timeFormatter.string(from: target.targetDate))
                             .font(.footnote.weight(.semibold))
                             .foregroundStyle(.secondary)
                     }
@@ -28,7 +28,7 @@ struct TodayCountdownCard: View {
                             .font(.system(size: 40, weight: .semibold, design: .rounded))
                             .monospacedDigit()
                             .foregroundStyle(.primary)
-                            .accessibilityLabel(accessibilityLabel(for: remaining, target: target))
+                            .accessibilityLabel(accessibilityLabel(for: remaining, kind: target.kind))
                     }
                 }
             } else {
@@ -48,38 +48,12 @@ struct TodayCountdownCard: View {
         }
     }
 
-    private func countdownTarget(now: Date) -> CountdownTarget? {
-        let snapshot = scheduleManager.activeWindowSnapshot
-        guard snapshot.visibleDays.isEmpty == false else { return nil }
-
-        let timeZone = TimeZone.current
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = timeZone
-        let startOfToday = calendar.startOfDay(for: now)
-        let todayKey = DateHelpers.dayIdentifier(for: startOfToday, timeZone: timeZone)
-        let tomorrow = calendar.date(byAdding: .day, value: 1, to: startOfToday) ?? startOfToday
-        let tomorrowKey = DateHelpers.dayIdentifier(for: tomorrow, timeZone: timeZone)
-
-        guard let today = snapshot.byDateKey[todayKey]?.schedule else { return nil }
-
-        let iftarOrMaghrib = today.iftarDate ?? today.maghribDate
-        if now < today.fajrDate {
-            return CountdownTarget(kind: .fajr, targetDate: today.fajrDate)
-        }
-        if now < iftarOrMaghrib {
-            return CountdownTarget(kind: .iftar, targetDate: iftarOrMaghrib)
-        }
-
-        guard let tomorrowSchedule = snapshot.byDateKey[tomorrowKey]?.schedule else { return nil }
-        return CountdownTarget(kind: .fajr, targetDate: tomorrowSchedule.fajrDate)
-    }
-
-    private func accessibilityLabel(for remaining: TimeInterval, target: CountdownTarget) -> String {
+    private func accessibilityLabel(for remaining: TimeInterval, kind: TodayCountdownEngine.Target.Kind) -> String {
         let totalSeconds = Int(remaining.rounded())
         let hours = totalSeconds / 3600
         let minutes = (totalSeconds % 3600) / 60
         let seconds = totalSeconds % 60
-        return "\(target.title). \(hours) hours, \(minutes) minutes, \(seconds) seconds remaining."
+        return "\(title(for: kind)). \(hours) hours, \(minutes) minutes, \(seconds) seconds remaining."
     }
 
     private static func formattedCountdown(remaining: TimeInterval) -> String {
@@ -93,36 +67,21 @@ struct TodayCountdownCard: View {
         return String(format: "%02d:%02d", minutes, seconds)
     }
 
-    private struct CountdownTarget: Equatable {
-        enum Kind: String, Equatable {
-            case fajr
-            case iftar
+    private func title(for kind: TodayCountdownEngine.Target.Kind) -> String {
+        switch kind {
+        case .fajr:
+            return "Time to Fajr"
+        case .iftar:
+            return "Time to Iftar"
         }
+    }
 
-        let kind: Kind
-        let targetDate: Date
-
-        var title: String {
-            switch kind {
-            case .fajr:
-                return "Time to Fajr"
-            case .iftar:
-                return "Time to Iftar"
-            }
-        }
-
-        var subtitle: String {
-            switch kind {
-            case .fajr:
-                return "Next prayer time"
-            case .iftar:
-                return "Maghrib / Iftar"
-            }
-        }
-
-        var targetTimeText: String {
-            TimeFormatters.timeFormatter.string(from: targetDate)
+    private func subtitle(for kind: TodayCountdownEngine.Target.Kind) -> String {
+        switch kind {
+        case .fajr:
+            return "Next prayer time"
+        case .iftar:
+            return "Maghrib / Iftar"
         }
     }
 }
-
