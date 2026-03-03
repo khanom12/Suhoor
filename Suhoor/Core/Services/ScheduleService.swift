@@ -49,6 +49,8 @@ final class ScheduleManager: ObservableObject {
     private let alarmEventRouter: AlarmEventRouter?
     private let visibleActiveDayLimit = 60
     private let scheduledActiveDayLimit = 30
+    private var expandedMonthSnapshots: [String: ExpandedMonthSnapshot] = [:]
+    private var expandedMonthInvalidationToken: Int = 0
     private var queuedRefresh: PendingScheduleRefresh?
     private var refreshTask: Task<Void, Never>?
     private var pendingDayRescheduleTasks: [String: Task<Void, Never>] = [:]
@@ -298,6 +300,51 @@ final class ScheduleManager: ObservableObject {
         }
     }
 
+    func hasRecurringIslamicSchedules() -> Bool {
+        alarmConfigStore.hasAnyRecurringIslamicSource()
+    }
+
+    func cachedMonthEntries(for key: HijriMonthKey) -> [ActiveAlarmDay]? {
+        expandedMonthSnapshots[expandedMonthIdentifier(for: key)]?.entries
+    }
+
+    func monthEntries(for key: HijriMonthKey, timeZone: TimeZone = .current) async -> [ActiveAlarmDay] {
+        let identifier = expandedMonthIdentifier(for: key)
+        if let cached = expandedMonthSnapshots[identifier],
+           cached.invalidationToken == expandedMonthInvalidationToken {
+            return cached.entries
+        }
+
+        guard let coordinate = currentCoordinate() else { return [] }
+        guard let month = HijriMonth(rawValue: key.month) else { return [] }
+
+        let resolvedEntries = alarmConfigStore.resolvedScheduledEntries(
+            forHijriMonth: HijriYearMonth(hijriYear: key.year, month: month),
+            timeZone: timeZone
+        )
+        let entries = activeDays(
+            from: resolvedEntries,
+            coordinate: coordinate,
+            timeZone: timeZone
+        )
+
+        expandedMonthSnapshots[identifier] = ExpandedMonthSnapshot(
+            key: key,
+            generatedAt: Date(),
+            invalidationToken: expandedMonthInvalidationToken,
+            entries: entries
+        )
+        return entries
+    }
+
+    func invalidateExpandedMonthSnapshots(reason: String? = nil) {
+        expandedMonthInvalidationToken += 1
+        expandedMonthSnapshots.removeAll()
+        if let reason {
+            Logging.diagnostics.debug("[cache] invalidated expanded month snapshots: \(reason, privacy: .public)")
+        }
+    }
+
     func upcomingResolvedEntries(limit: Int = 60, timeZone: TimeZone = .current) -> [ResolvedScheduledDateEntry] {
         let snapshotEntries = activeWindowSnapshot.visibleDays
             .prefix(limit)
@@ -336,6 +383,10 @@ final class ScheduleManager: ObservableObject {
             return cached
         }
         return buildActiveDayIfNeeded(for: date, timeZone: timeZone)
+    }
+
+    func refreshedActiveDay(for date: Date, timeZone: TimeZone = .current) -> ActiveAlarmDay? {
+        buildActiveDayIfNeeded(for: date, timeZone: timeZone)
     }
 
     func duplicateStatus(for date: Date, timeZone: TimeZone = .current) -> DuplicateDateStatus {
@@ -427,8 +478,7 @@ final class ScheduleManager: ObservableObject {
 
     func recurringRuleStatus(_ rule: RecurringIslamicRule) -> RecurringRuleStatus {
         let isAdded = alarmConfigStore.hasRecurringIslamicSource(rule)
-        let detailText = isAdded ? "Already added." : nil
-        return RecurringRuleStatus(rule: rule, isAdded: isAdded, detailText: detailText)
+        return RecurringRuleStatus(rule: rule, isAdded: isAdded, detailText: nil)
     }
 
     func calendarMonthContext(
@@ -670,11 +720,15 @@ final class ScheduleManager: ObservableObject {
             await countdownManager.reconcileIfNeeded()
         }
         let now = Date()
-        if reason == .foreground || reason == .appLaunch {
-            if DateHelpers.isSameDay(settingsStore.settings.lastScheduledDate, now, in: .current) {
+        if Self.shouldReuseScheduleWindow(
+            reason: reason,
+            lastScheduledDate: settingsStore.settings.lastScheduledDate,
+            snapshot: activeWindowSnapshot,
+            now: now,
+            timeZone: .current
+        ) {
                 await refreshPermissionSummary()
                 return
-            }
         }
         await refreshSchedules(force: true)
     }
@@ -742,6 +796,7 @@ final class ScheduleManager: ObservableObject {
     func refreshSchedules(force: Bool) async {
         let token = PerformanceTrace.begin("schedule.refresh", metadata: "force=\(force)")
         defer { PerformanceTrace.end(token) }
+        invalidateExpandedMonthSnapshots(reason: "schedule_refresh")
         let settings = settingsStore.settings
         EventTimelineLog.shared.record(category: "schedule", message: "refreshSchedules(force=\(force))")
         let timeZone = TimeZone.current
@@ -949,6 +1004,7 @@ final class ScheduleManager: ObservableObject {
             timeZone: timeZone,
             method: method,
             adjustmentMinutes: settings.fajrAdjustmentMinutes,
+            maghribAdjustmentMinutes: settings.maghribAdjustmentMinutes,
             effectiveConfig: effectiveConfig,
             locationDescription: "Based on your location"
         )
@@ -1118,11 +1174,7 @@ final class ScheduleManager: ObservableObject {
         case .location:
             return requiresLocationAuthorization && state != .authorized
         case .alarmKit:
-            #if targetEnvironment(simulator)
-            return state != .authorized && state != .unavailable
-            #else
-            return state != .authorized
-            #endif
+            return state == .notDetermined
         case .notifications:
             return state != .authorized
         }
@@ -1385,6 +1437,7 @@ final class ScheduleManager: ObservableObject {
                 timeZone: timeZone,
                 method: settings.calculationMethod,
                 adjustmentMinutes: settings.fajrAdjustmentMinutes,
+                maghribAdjustmentMinutes: settings.maghribAdjustmentMinutes,
                 effectiveConfig: effectiveConfig,
                 locationDescription: "Audit"
             ) else { continue }
@@ -1442,6 +1495,57 @@ final class ScheduleManager: ObservableObject {
                         isPast: boundaryDate <= now
                     )
                 )
+            }
+
+            if effectiveConfig.iftarEnabled, !effectiveConfig.skipDay, let iftarDate = schedule.iftarDate {
+                if effectiveConfig.iftarDelivery.includesNotification {
+                    expectedEvents.append(
+                        ExpectedScheduledEvent(
+                            kind: .iftarNotification,
+                            date: iftarDate,
+                            dayLabel: dayLabelText,
+                            scheduleId: schedule.id,
+                            channel: .notification,
+                            identifier: SchedulingIdentifiers.dailyIdentifier(for: schedule, kind: .iftarNotification),
+                            isPast: iftarDate <= now
+                        )
+                    )
+                }
+
+                switch effectiveConfig.iftarDelivery.audibleMode {
+                case .none:
+                    break
+                case .alarm:
+                    let channel: ExpectedScheduledEvent.Channel = canUseAlarmKit ? .alarmKit : .notification
+                    expectedEvents.append(
+                        ExpectedScheduledEvent(
+                            kind: .iftarAlarm,
+                            date: iftarDate,
+                            dayLabel: dayLabelText,
+                            scheduleId: schedule.id,
+                            channel: channel,
+                            identifier: channel == .alarmKit
+                                ? SchedulingIdentifiers.alarmID(for: schedule, kind: .iftarAlarm).uuidString
+                                : SchedulingIdentifiers.dailyIdentifier(for: schedule, kind: .iftarAlarm),
+                            isPast: iftarDate <= now
+                        )
+                    )
+                case .adhan:
+                    let channel: ExpectedScheduledEvent.Channel = canUseAlarmKit ? .alarmKit : .notification
+                    expectedEvents.append(
+                        ExpectedScheduledEvent(
+                            kind: .iftarAdhan,
+                            date: iftarDate,
+                            dayLabel: dayLabelText,
+                            scheduleId: schedule.id,
+                            channel: channel,
+                            identifier: channel == .alarmKit
+                                ? SchedulingIdentifiers.alarmID(for: schedule, kind: .iftarAdhan).uuidString
+                                : SchedulingIdentifiers.dailyIdentifier(for: schedule, kind: .iftarAdhan),
+                            isPast: iftarDate <= now
+                        )
+                    )
+                }
             }
         }
 
@@ -1838,6 +1942,7 @@ final class ScheduleManager: ObservableObject {
 
     private func retagActiveWindow() {
         guard !activeWindowSnapshot.visibleDays.isEmpty else { return }
+        invalidateExpandedMonthSnapshots(reason: "tag_selection_changed")
         let token = PerformanceTrace.begin("tags.compute-window", metadata: "visible=\(activeWindowSnapshot.visibleDays.count)")
         defer { PerformanceTrace.end(token) }
 
@@ -1930,6 +2035,28 @@ final class ScheduleManager: ObservableObject {
             primaryDisplay: config.primaryDisplay(schedule: schedule),
             sourceSummaryText: summary
         )
+    }
+
+    private func activeDays(
+        from resolvedEntries: [ResolvedScheduledDateEntry],
+        coordinate: CLLocationCoordinate2D,
+        timeZone: TimeZone
+    ) -> [ActiveAlarmDay] {
+        guard !resolvedEntries.isEmpty else { return [] }
+
+        let input = ScheduleComputationInput(
+            settings: settingsStore.settings,
+            defaultConfig: alarmConfigStore.defaults,
+            overridesByDay: alarmConfigStore.overridesByDay,
+            location: ScheduleLocationSnapshot(latitude: coordinate.latitude, longitude: coordinate.longitude),
+            timeZoneIdentifier: timeZone.identifier,
+            resolvedEntries: resolvedEntries,
+            tagSelections: fastTagStore.selections,
+            visibleHorizonDays: resolvedEntries.count,
+            scheduledHorizonDays: resolvedEntries.count
+        )
+
+        return ScheduleComputationEngine.compute(input: input).snapshot.visibleDays
     }
 
     private func debugValidateActiveWindow(
@@ -2025,21 +2152,34 @@ final class ScheduleManager: ObservableObject {
             return .welcome
         }
 
-        let locationReady = permissionStates[.location] == .authorized
+        let locationReady = settings.locationMode == .fixed || permissionStates[.location] == .authorized
         let notificationsReady = permissionStates[.notifications] == .authorized
+        _ = hasVisibleDays
 
-        let alarmsReady: Bool
-        #if targetEnvironment(simulator)
-        alarmsReady = permissionStates[.alarmKit] == .authorized || permissionStates[.alarmKit] == .unavailable
-        #else
-        alarmsReady = permissionStates[.alarmKit] == .authorized
-        #endif
-
-        guard locationReady, notificationsReady, alarmsReady, hasVisibleDays else {
+        guard locationReady, notificationsReady else {
             return .permissions
         }
 
         return .home
+    }
+
+    static func shouldReuseScheduleWindow(
+        reason: ScheduleRefreshReason,
+        lastScheduledDate: Date?,
+        snapshot: ActiveAlarmWindowSnapshot,
+        now: Date = Date(),
+        timeZone: TimeZone = .current
+    ) -> Bool {
+        guard reason == .foreground || reason == .appLaunch else {
+            return false
+        }
+        guard DateHelpers.isSameDay(lastScheduledDate, now, in: timeZone) else {
+            return false
+        }
+        guard !snapshot.visibleDays.isEmpty else {
+            return false
+        }
+        return DateHelpers.isSameDay(snapshot.generatedAt, now, in: timeZone)
     }
 
     private func alarmAuthorizationStateText() async -> String {
@@ -2094,6 +2234,7 @@ final class ScheduleManager: ObservableObject {
         timeZone: TimeZone,
         method: CalculationMethod,
         adjustmentMinutes: Int,
+        maghribAdjustmentMinutes: Int,
         effectiveConfig: EffectiveDailyConfig,
         locationDescription: String
     ) -> DaySchedule? {
@@ -2106,6 +2247,12 @@ final class ScheduleManager: ObservableObject {
             timeZone: timeZone,
             method: method,
             adjustmentMinutes: adjustmentMinutes
+        ) else { return nil }
+        guard let maghrib = calculator.maghribDate(
+            for: day,
+            location: coordinate,
+            timeZone: timeZone,
+            adjustmentMinutes: maghribAdjustmentMinutes
         ) else { return nil }
 
         let wake = resolvedSuhoorDate(for: day, fajr: fajr, config: effectiveConfig, calendar: calendar)
@@ -2122,14 +2269,18 @@ final class ScheduleManager: ObservableObject {
         }
         let boundary = effectiveConfig.fajrEnabled ? fajr : nil
         let fajrSoundChoice = effectiveConfig.fajrSoundChoice
+        let iftar = effectiveConfig.iftarEnabled ? maghrib : nil
 
         return DaySchedule(
             date: day,
             fajrDate: fajr,
+            maghribDate: maghrib,
             wakeDate: wake,
             reminderDate: reminder,
             boundaryDate: boundary,
+            iftarDate: iftar,
             fajrSoundChoice: fajrSoundChoice,
+            iftarSoundChoice: effectiveConfig.iftarSoundChoice,
             locationDescription: locationDescription,
             offsetMinutes: offsetMinutes,
             calculationMethodName: method.displayName,
@@ -2143,6 +2294,7 @@ final class ScheduleManager: ObservableObject {
         timeZone: TimeZone,
         method: CalculationMethod,
         adjustmentMinutes: Int,
+        maghribAdjustmentMinutes: Int,
         effectiveConfigProvider: (Date) -> EffectiveDailyConfig,
         locationDescription: String
     ) -> [(DaySchedule, EffectiveDailyConfig)] {
@@ -2155,6 +2307,7 @@ final class ScheduleManager: ObservableObject {
                 timeZone: timeZone,
                 method: method,
                 adjustmentMinutes: adjustmentMinutes,
+                maghribAdjustmentMinutes: maghribAdjustmentMinutes,
                 effectiveConfig: config,
                 locationDescription: locationDescription
             ) {
@@ -2235,6 +2388,10 @@ final class ScheduleManager: ObservableObject {
         calendar.timeZone = timeZone
         let normalizedStart = calendar.startOfDay(for: startDate)
         return DateHelpers.dates(startingFrom: normalizedStart, count: days, calendar: calendar)
+    }
+
+    private func expandedMonthIdentifier(for key: HijriMonthKey) -> String {
+        "\(key.year)-\(key.month)"
     }
 }
 
@@ -2366,6 +2523,13 @@ struct ActiveAlarmWindowSnapshot: Codable, Equatable, Sendable {
     }
 }
 
+struct ExpandedMonthSnapshot: Equatable, Sendable {
+    let key: HijriMonthKey
+    let generatedAt: Date
+    let invalidationToken: Int
+    let entries: [ActiveAlarmDay]
+}
+
 private struct ScheduleLocationSnapshot: Sendable {
     let latitude: Double
     let longitude: Double
@@ -2426,6 +2590,7 @@ private enum ScheduleComputationEngine {
                 timeZone: timeZone,
                 method: input.settings.calculationMethod,
                 adjustmentMinutes: input.settings.fajrAdjustmentMinutes,
+                maghribAdjustmentMinutes: input.settings.maghribAdjustmentMinutes,
                 effectiveConfig: config,
                 calculator: calculator,
                 locationDescription: "Based on your location"
@@ -2484,6 +2649,7 @@ private enum ScheduleComputationEngine {
         var suhoorEnabled = defaultConfig.suhoorEnabledDefault
         var reminderEnabled = defaultConfig.reminderEnabledDefault
         var fajrEnabled = defaultConfig.fajrEnabledDefault
+        var iftarEnabled = defaultConfig.iftarEnabledDefault
 
         if let overrideSuhoor = override?.suhoorEnabled {
             suhoorEnabled = overrideSuhoor
@@ -2494,11 +2660,15 @@ private enum ScheduleComputationEngine {
         if let overrideFajr = override?.fajrEnabled {
             fajrEnabled = overrideFajr
         }
+        if let overrideIftar = override?.iftarEnabled {
+            iftarEnabled = overrideIftar
+        }
 
         if override?.skipDay == true || ruleSummary.disabledForDay {
             suhoorEnabled = false
             reminderEnabled = false
             fajrEnabled = false
+            iftarEnabled = false
         }
 
         let reminderTimeMode: ReminderTimeMode
@@ -2517,6 +2687,7 @@ private enum ScheduleComputationEngine {
             suhoorEnabled: suhoorEnabled,
             reminderEnabled: reminderEnabled,
             fajrEnabled: fajrEnabled,
+            iftarEnabled: iftarEnabled,
             suhoorTimeMode: defaultConfig.defaultSuhoorTimeMode,
             suhoorOffsetMinutes: ruleSummary.finalOffsetMinutes,
             reminderTimeMode: reminderTimeMode,
@@ -2525,6 +2696,8 @@ private enum ScheduleComputationEngine {
             suhoorTimeOverrideMinutesFromMidnight: override?.suhoorTimeOverrideMinutesFromMidnight,
             reminderTimeOverrideMinutesFromMidnight: override?.reminderTimeOverrideMinutesFromMidnight,
             fajrSoundChoice: override?.fajrSoundOverride ?? settings.atFajrSoundSelectionGlobal,
+            iftarDelivery: (override?.iftarDeliveryOverride ?? defaultConfig.defaultIftarDelivery).normalized(),
+            iftarSoundChoice: override?.iftarSoundOverride ?? defaultConfig.defaultIftarSoundChoice,
             hasOverrides: override?.hasOverrides ?? false
         )
     }
@@ -2570,6 +2743,7 @@ private enum ScheduleComputationEngine {
         timeZone: TimeZone,
         method: CalculationMethod,
         adjustmentMinutes: Int,
+        maghribAdjustmentMinutes: Int,
         effectiveConfig: EffectiveDailyConfig,
         calculator: PrayerTimeCalculator,
         locationDescription: String
@@ -2580,6 +2754,14 @@ private enum ScheduleComputationEngine {
             timeZone: timeZone,
             method: method,
             adjustmentMinutes: adjustmentMinutes
+        ) else {
+            return nil
+        }
+        guard let maghrib = calculator.maghribDate(
+            for: day,
+            location: coordinate,
+            timeZone: timeZone,
+            adjustmentMinutes: maghribAdjustmentMinutes
         ) else {
             return nil
         }
@@ -2605,10 +2787,13 @@ private enum ScheduleComputationEngine {
         return DaySchedule(
             date: day,
             fajrDate: fajr,
+            maghribDate: maghrib,
             wakeDate: wake,
             reminderDate: reminder,
             boundaryDate: effectiveConfig.fajrEnabled ? fajr : nil,
+            iftarDate: effectiveConfig.iftarEnabled ? maghrib : nil,
             fajrSoundChoice: effectiveConfig.fajrSoundChoice,
+            iftarSoundChoice: effectiveConfig.iftarSoundChoice,
             locationDescription: locationDescription,
             offsetMinutes: offsetMinutes,
             calculationMethodName: method.displayName,

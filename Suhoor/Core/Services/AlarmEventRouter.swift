@@ -89,6 +89,11 @@ final class AlarmEventRouter {
             if enableCountdown {
                 await countdownManager.endCountdownIfNeeded(reason: "adhan_fired")
             }
+        case .iftarNotification, .iftarAlarm, .iftarAdhan:
+            eventLog.record(.firedFajrAdhan, metadata: [
+                "id": record.id.uuidString,
+                "phase": "iftar"
+            ])
         }
     }
 

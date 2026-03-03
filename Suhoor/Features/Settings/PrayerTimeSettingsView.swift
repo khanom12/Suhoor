@@ -23,6 +23,14 @@ struct PrayerTimeSettingsView: View {
                     range: -30...30,
                     step: 1
                 )
+
+                RelativeOffsetControl(
+                    label: "Maghrib adjustment",
+                    detail: "Adjust sunset/Maghrib earlier or later.",
+                    value: maghribAdjustmentBinding,
+                    range: -30...30,
+                    step: 1
+                )
             } header: {
                 SettingsSectionHeader(
                     title: Strings.Settings.prayerTimeCalculationSection,
@@ -51,6 +59,16 @@ struct PrayerTimeSettingsView: View {
             get: { settingsStore.settings.fajrAdjustmentMinutes },
             set: { newValue in
                 settingsStore.settings.fajrAdjustmentMinutes = newValue
+                scheduleManager.requestRefresh(reason: .settingsChanged)
+            }
+        )
+    }
+
+    private var maghribAdjustmentBinding: Binding<Int> {
+        Binding(
+            get: { settingsStore.settings.maghribAdjustmentMinutes },
+            set: { newValue in
+                settingsStore.settings.maghribAdjustmentMinutes = newValue
                 scheduleManager.requestRefresh(reason: .settingsChanged)
             }
         )

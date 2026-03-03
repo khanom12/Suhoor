@@ -250,6 +250,11 @@ struct AddScheduleSheet: View {
         }
 
         Section("Recurring") {
+            InfoBanner(
+                systemImage: "repeat",
+                text: Strings.AddSchedule.recurringBanner
+            )
+
             ForEach(RecurringIslamicRule.addFlowVisibleCases) { rule in
                 recurringRuleRow(for: rule)
             }
@@ -262,12 +267,16 @@ struct AddScheduleSheet: View {
             ashuraQuickAddRow
         } else {
             let availability = scheduleManager.islamicQuickAddAvailability(kind)
+            let statusLine = quickAddStatusLine(
+                previewDates: availability.preview?.dates ?? [],
+                state: availability.state,
+                fallback: availability.reasonText
+            )
             QuickAddCard(
                 title: kind.title,
                 description: kind.detailText,
-                previewLine: previewLine(for: availability.preview),
-                statusLine: availabilityStatusLine(availability.addResult, state: availability.state),
-                detailLine: availability.reasonText
+                previewLine: compactPreviewLine(for: availability.preview?.dates),
+                statusLine: statusLine
             ) {
                 actionView(for: availability) {
                     Task {
@@ -287,13 +296,17 @@ struct AddScheduleSheet: View {
     private var ashuraQuickAddRow: some View {
         let recommendedPattern = scheduleManager.recommendedAshuraQuickAddPattern()
         let availability = scheduleManager.ashuraQuickAddAvailability(recommendedPattern)
+        let statusLine = quickAddStatusLine(
+            previewDates: availability.preview?.dates ?? [],
+            state: availability.state,
+            fallback: availability.reasonText
+        )
 
         return QuickAddCard(
             title: IslamicQuickAddKind.nextAshura.title,
             description: IslamicQuickAddKind.nextAshura.detailText,
-            previewLine: previewLine(for: availability.preview),
-            statusLine: availabilityStatusLine(availability.addResult, state: availability.state),
-            detailLine: availability.reasonText,
+            previewLine: compactPreviewLine(for: availability.preview?.dates),
+            statusLine: statusLine,
             leadingAccessory: {
                 PillBadge(text: "Recommended", style: .custom)
             },
@@ -535,39 +548,80 @@ struct AddScheduleSheet: View {
         }
     }
 
-    private func previewLine(for preview: IslamicQuickAddPreview?) -> String? {
-        guard let preview else { return nil }
-        return combinePreviewLines(primary: preview.previewText, secondary: preview.availabilityText)
+    private func compactPreviewLine(for dates: [Date]?) -> String? {
+        guard let dates, !dates.isEmpty else { return nil }
+        let gregorian = dates
+            .map { GregorianDateFormatter.shared.headerString(for: $0) }
+            .joined(separator: " · ")
+        guard let hijri = compactHijriSummary(for: dates) else { return gregorian }
+        return "\(gregorian) (\(hijri))"
     }
 
-    private func previewLine(for preview: AshuraQuickAddPreview?) -> String? {
-        guard let preview else { return nil }
-        return combinePreviewLines(primary: preview.previewText, secondary: preview.availabilityText)
+    private func compactHijriSummary(for dates: [Date]) -> String? {
+        let components = dates.compactMap { AdjustedHijriCalendar.shared.adjustedComponents(for: $0, timeZone: .current) }
+        guard components.count == dates.count else { return nil }
+        guard let first = components.first else { return nil }
+
+        let sameMonth = components.allSatisfy {
+            $0.hijriYear == first.hijriYear && $0.month == first.month
+        }
+
+        if sameMonth {
+            let days = components.map(\.day).sorted()
+            let isSequential = zip(days, days.dropFirst()).allSatisfy { current, next in next == current + 1 }
+            if let firstDay = days.first, let lastDay = days.last {
+                let dayText = (isSequential && days.count > 1) ? "\(firstDay)-\(lastDay)" : days.map(String.init).joined(separator: ", ")
+                return "\(dayText) \(first.month.displayName) \(first.hijriYear)"
+            }
+        }
+
+        return components
+            .map { "\($0.day) \($0.month.displayName) \($0.hijriYear)" }
+            .joined(separator: " · ")
     }
 
-    private func combinePreviewLines(primary: String?, secondary: String?) -> String? {
-        let normalizedPrimary = primary?.replacingOccurrences(of: " • ", with: " · ")
-        let normalizedSecondary = secondary?.replacingOccurrences(of: " • ", with: " · ")
-        switch (normalizedPrimary, normalizedSecondary) {
-        case let (p?, s?):
-            return "\(p) (\(s))"
-        case let (p?, nil):
-            return p
-        case let (nil, s?):
-            return s
-        default:
-            return nil
+    private func quickAddStatusLine(
+        previewDates: [Date],
+        state: IslamicQuickAddAvailabilityState,
+        fallback: String?
+    ) -> String? {
+        switch state {
+        case .available:
+            return fallback == Strings.AddSchedule.previewUnavailable ? fallback : nil
+        case .partial:
+            return someActiveDatesCoveredByRecurring(previewDates)
+                ? Strings.AddSchedule.someDatesAlreadyCovered
+                : Strings.AddSchedule.someAlreadyActive
+        case .disabled:
+            return allActiveDatesCoveredByRecurring(previewDates)
+                ? Strings.AddSchedule.alreadyActiveThroughRecurring
+                : (fallback ?? Strings.AddSchedule.allMatchingDatesActive)
         }
     }
 
-    private func availabilityStatusLine(_ result: AddScheduledDatesResult, state: IslamicQuickAddAvailabilityState) -> String? {
-        switch state {
-        case .available:
-            return nil
-        case .partial:
-            return "Some dates are already active."
-        case .disabled:
-            return result.isEmpty ? "Already active." : "All matching dates are already active."
+    private func someActiveDatesCoveredByRecurring(_ dates: [Date]) -> Bool {
+        let activeDates = dates.filter { !scheduleManager.provenance(for: $0, timeZone: .current).isEmpty }
+        guard !activeDates.isEmpty else { return false }
+        return activeDates.contains { date in
+            scheduleManager.provenance(for: date, timeZone: .current).contains {
+                if case .recurringIslamic = $0.sourceOrigin {
+                    return true
+                }
+                return false
+            }
+        }
+    }
+
+    private func allActiveDatesCoveredByRecurring(_ dates: [Date]) -> Bool {
+        let activeDates = dates.filter { !scheduleManager.provenance(for: $0, timeZone: .current).isEmpty }
+        guard activeDates.isEmpty == false else { return false }
+        return activeDates.allSatisfy { date in
+            scheduleManager.provenance(for: date, timeZone: .current).contains {
+                if case .recurringIslamic = $0.sourceOrigin {
+                    return true
+                }
+                return false
+            }
         }
     }
 }

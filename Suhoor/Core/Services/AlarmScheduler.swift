@@ -60,6 +60,7 @@ final class AlarmScheduler {
             await routineScheduler.cancelWake(for: schedule)
             await routineScheduler.cancelReminder(for: schedule)
             await routineScheduler.cancelAdhan(for: schedule)
+            await routineScheduler.cancelIftar(for: schedule)
             return
         }
         _ = await reconcile(
@@ -172,6 +173,52 @@ final class AlarmScheduler {
                 )
                 plans[plan.planID] = plan
             }
+
+            if config.iftarEnabled, let iftarDate = schedule.iftarDate, iftarDate > now {
+                let delivery = config.iftarDelivery.normalized()
+                if delivery.includesNotification {
+                    let plan = PlannedScheduledEvent(
+                        planID: SchedulingIdentifiers.dailyIdentifier(for: schedule, kind: .iftarNotification),
+                        dayID: schedule.id,
+                        kind: .iftarNotification,
+                        channel: .notification,
+                        fireDate: iftarDate,
+                        schedule: schedule,
+                        label: settings.label,
+                        snoozeMinutes: nil
+                    )
+                    plans[plan.planID] = plan
+                }
+
+                switch delivery.audibleMode {
+                case .none:
+                    break
+                case .alarm:
+                    let plan = PlannedScheduledEvent(
+                        planID: SchedulingIdentifiers.dailyIdentifier(for: schedule, kind: .iftarAlarm),
+                        dayID: schedule.id,
+                        kind: .iftarAlarm,
+                        channel: channel,
+                        fireDate: iftarDate,
+                        schedule: schedule,
+                        label: settings.label,
+                        snoozeMinutes: nil
+                    )
+                    plans[plan.planID] = plan
+                case .adhan:
+                    let plan = PlannedScheduledEvent(
+                        planID: SchedulingIdentifiers.dailyIdentifier(for: schedule, kind: .iftarAdhan),
+                        dayID: schedule.id,
+                        kind: .iftarAdhan,
+                        channel: channel,
+                        fireDate: iftarDate,
+                        schedule: schedule,
+                        label: settings.label,
+                        snoozeMinutes: nil
+                    )
+                    plans[plan.planID] = plan
+                }
+            }
         }
 
         return plans
@@ -198,6 +245,18 @@ final class AlarmScheduler {
                 settings: settings,
                 canUseAlarmKit: plan.channel == .alarmKit
             )
+        case .iftarNotification:
+            return await routineScheduler.scheduleIftarNotification(
+                for: plan.schedule,
+                settings: settings
+            )
+        case .iftarAlarm, .iftarAdhan:
+            return await routineScheduler.scheduleIftarAudible(
+                for: plan.schedule,
+                settings: settings,
+                canUseAlarmKit: plan.channel == .alarmKit,
+                kind: plan.kind
+            )
         }
     }
 
@@ -209,6 +268,8 @@ final class AlarmScheduler {
             await routineScheduler.cancelReminder(for: plan.schedule)
         case .boundary:
             await routineScheduler.cancelAdhan(for: plan.schedule)
+        case .iftarNotification, .iftarAlarm, .iftarAdhan:
+            await routineScheduler.cancelIftar(for: plan.schedule)
         }
     }
 }

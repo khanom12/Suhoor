@@ -124,6 +124,8 @@ final class AlarmKitScheduler {
             ids.append(SchedulingIdentifiers.alarmID(for: schedule, kind: .wake))
             ids.append(SchedulingIdentifiers.alarmID(for: schedule, kind: .reminder))
             ids.append(SchedulingIdentifiers.alarmID(for: schedule, kind: .boundary))
+            ids.append(SchedulingIdentifiers.alarmID(for: schedule, kind: .iftarAlarm))
+            ids.append(SchedulingIdentifiers.alarmID(for: schedule, kind: .iftarAdhan))
             ids.append(SchedulingIdentifiers.legacyAlarmID(for: schedule, kind: .wake))
             ids.append(SchedulingIdentifiers.legacyAlarmID(for: schedule, kind: .reminder))
             ids.append(SchedulingIdentifiers.legacyAlarmID(for: schedule, kind: .boundary))
@@ -218,10 +220,13 @@ final class AlarmKitScheduler {
             let dummy = DaySchedule(
                 date: day,
                 fajrDate: day,
+                maghribDate: day,
                 wakeDate: day,
                 reminderDate: nil,
                 boundaryDate: nil,
+                iftarDate: nil,
                 fajrSoundChoice: nil,
+                iftarSoundChoice: nil,
                 locationDescription: "",
                 offsetMinutes: 0,
                 calculationMethodName: "",

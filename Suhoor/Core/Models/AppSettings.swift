@@ -13,6 +13,7 @@ struct AppSettings: Codable, Equatable, Sendable {
     var label: String
     var calculationMethod: CalculationMethod
     var fajrAdjustmentMinutes: Int
+    var maghribAdjustmentMinutes: Int
     var schedulePreviewDays: Int
     var locationMode: LocationMode
     var fixedLocation: FixedLocation?
@@ -36,6 +37,7 @@ struct AppSettings: Codable, Equatable, Sendable {
         label: "Suhoor",
         calculationMethod: CalculationMethod.defaultForTimeZone(TimeZone.current),
         fajrAdjustmentMinutes: 0,
+        maghribAdjustmentMinutes: 0,
         schedulePreviewDays: 14,
         locationMode: .auto,
         fixedLocation: nil,
@@ -83,6 +85,7 @@ extension AppSettings {
         case label
         case calculationMethod
         case fajrAdjustmentMinutes
+        case maghribAdjustmentMinutes
         case schedulePreviewDays
         case locationMode
         case fixedLocation
@@ -144,6 +147,7 @@ extension AppSettings {
         calculationMethod = try container.decodeIfPresent(CalculationMethod.self, forKey: .calculationMethod)
             ?? CalculationMethod.defaultForTimeZone(TimeZone.current)
         fajrAdjustmentMinutes = try container.decodeIfPresent(Int.self, forKey: .fajrAdjustmentMinutes) ?? 0
+        maghribAdjustmentMinutes = try container.decodeIfPresent(Int.self, forKey: .maghribAdjustmentMinutes) ?? 0
         schedulePreviewDays = try container.decodeIfPresent(Int.self, forKey: .schedulePreviewDays) ?? 14
         locationMode = try container.decodeIfPresent(LocationMode.self, forKey: .locationMode) ?? .auto
         fixedLocation = try container.decodeIfPresent(FixedLocation.self, forKey: .fixedLocation)
@@ -161,7 +165,8 @@ extension AppSettings {
                     reminderEnabledOverride: nil,
                     atFajrEnabledOverride: nil,
                     reminderMinutesOverride: nil,
-                    atFajrSoundOverride: nil
+                    atFajrSoundOverride: nil,
+                    iftarEnabledOverride: nil
                 )
             }
         }
@@ -181,6 +186,7 @@ extension AppSettings {
         try container.encode(label, forKey: .label)
         try container.encode(calculationMethod, forKey: .calculationMethod)
         try container.encode(fajrAdjustmentMinutes, forKey: .fajrAdjustmentMinutes)
+        try container.encode(maghribAdjustmentMinutes, forKey: .maghribAdjustmentMinutes)
         try container.encode(schedulePreviewDays, forKey: .schedulePreviewDays)
         try container.encode(locationMode, forKey: .locationMode)
         try container.encodeIfPresent(fixedLocation, forKey: .fixedLocation)
@@ -280,6 +286,7 @@ struct DayException: Codable, Equatable, Sendable {
     var atFajrEnabledOverride: Bool?
     var reminderMinutesOverride: Int?
     var atFajrSoundOverride: SoundChoice?
+    var iftarEnabledOverride: Bool?
 }
 
 extension AppSettings {
@@ -291,6 +298,10 @@ extension AppSettings {
     var hasAnyAtFajrEnabled: Bool {
         if atFajrEnabledGlobal { return true }
         return perDayExceptions.values.contains { $0.atFajrEnabledOverride == true }
+    }
+
+    var hasAnyIftarEnabled: Bool {
+        perDayExceptions.values.contains { $0.iftarEnabledOverride == true }
     }
 
     var hasAnyAtFajrNonDefaultSound: Bool {

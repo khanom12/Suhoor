@@ -25,6 +25,35 @@ struct PrayerTimeCalculator {
         return adjusted
     }
 
+    func maghribDate(
+        for date: Date,
+        location: CLLocationCoordinate2D,
+        timeZone: TimeZone,
+        adjustmentMinutes: Int
+    ) -> Date? {
+        let latitude = location.latitude
+        let longitude = location.longitude
+
+        guard let sunsetTime = solarTime(
+            for: date,
+            latitude: latitude,
+            longitude: longitude,
+            timeZone: timeZone,
+            zenith: 90.833,
+            isMorning: false,
+            highLatitudeRule: .none
+        ) else {
+            return nil
+        }
+
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let startOfDay = calendar.startOfDay(for: date)
+        let maghribDate = startOfDay.addingTimeInterval(sunsetTime * 3600)
+        let adjusted = calendar.date(byAdding: .minute, value: adjustmentMinutes, to: maghribDate) ?? maghribDate
+        return adjusted
+    }
+
     private func solarTime(for date: Date, latitude: Double, longitude: Double, timeZone: TimeZone, zenith: Double, isMorning: Bool, highLatitudeRule: HighLatitudeRule) -> Double? {
         let calendar = Calendar(identifier: .gregorian)
         let dayOfYear = calendar.ordinality(of: .day, in: .year, for: date) ?? 1

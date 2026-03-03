@@ -87,7 +87,8 @@ struct DayOverrideSheet: View {
                 reminderEnabledOverride: nil,
                 atFajrEnabledOverride: nil,
                 reminderMinutesOverride: nil,
-                atFajrSoundOverride: nil
+                atFajrSoundOverride: nil,
+                iftarEnabledOverride: nil
             )
         } else {
             settings.perDayExceptions.removeValue(forKey: key)

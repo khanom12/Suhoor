@@ -57,15 +57,76 @@ enum ReminderTimeMode: String, Codable, CaseIterable, Identifiable, Sendable {
     }
 }
 
+enum IftarAudibleMode: String, Codable, Sendable {
+    case none
+    case alarm
+    case adhan
+}
+
+struct IftarDeliverySelection: Codable, Equatable, Sendable {
+    var notification: Bool
+    var alarm: Bool
+    var adhan: Bool
+
+    static let notificationOnly = IftarDeliverySelection(notification: true, alarm: false, adhan: false)
+    static let off = IftarDeliverySelection(notification: false, alarm: false, adhan: false)
+
+    var includesNotification: Bool { normalized().notification }
+    var isOff: Bool { !notification && !alarm && !adhan }
+
+    var audibleMode: IftarAudibleMode {
+        let normalized = normalized()
+        if normalized.adhan {
+            return .adhan
+        }
+        if normalized.alarm {
+            return .alarm
+        }
+        return .none
+    }
+
+    func normalized() -> IftarDeliverySelection {
+        // Keep the user's notification preference, but collapse duplicate audible intent to adhan precedence.
+        IftarDeliverySelection(
+            notification: notification,
+            alarm: alarm && !adhan,
+            adhan: adhan
+        )
+    }
+
+    var summaryText: String {
+        let normalized = normalized()
+        var parts: [String] = []
+        if normalized.notification {
+            parts.append("Notification")
+        }
+        switch normalized.audibleMode {
+        case .none:
+            break
+        case .alarm:
+            parts.append("Alarm")
+        case .adhan:
+            parts.append("Adhan")
+        }
+        if parts.isEmpty {
+            return "Off"
+        }
+        return parts.joined(separator: " + ")
+    }
+}
+
 struct DefaultAlarmConfig: Codable, Equatable, Sendable {
     var suhoorEnabledDefault: Bool
     var reminderEnabledDefault: Bool
     var fajrEnabledDefault: Bool
+    var iftarEnabledDefault: Bool
     var defaultSuhoorTimeMode: SuhoorTimeMode
     var defaultSuhoorOffsetMinutes: Int
     var defaultReminderTimeMode: ReminderTimeMode
     var defaultReminderMinutesBeforeFajr: Int
     var defaultReminderFixedTimeMinutes: Int
+    var defaultIftarDelivery: IftarDeliverySelection
+    var defaultIftarSoundChoice: SoundChoice
     var activationMode: AlarmActivationMode
     var activeStartDate: Date?
     var activeEndDate: Date?
@@ -77,11 +138,14 @@ struct DefaultAlarmConfig: Codable, Equatable, Sendable {
         suhoorEnabledDefault: Bool,
         reminderEnabledDefault: Bool,
         fajrEnabledDefault: Bool,
+        iftarEnabledDefault: Bool,
         defaultSuhoorTimeMode: SuhoorTimeMode,
         defaultSuhoorOffsetMinutes: Int,
         defaultReminderTimeMode: ReminderTimeMode,
         defaultReminderMinutesBeforeFajr: Int,
         defaultReminderFixedTimeMinutes: Int,
+        defaultIftarDelivery: IftarDeliverySelection,
+        defaultIftarSoundChoice: SoundChoice,
         activationMode: AlarmActivationMode,
         activeStartDate: Date?,
         activeEndDate: Date?,
@@ -92,11 +156,14 @@ struct DefaultAlarmConfig: Codable, Equatable, Sendable {
         self.suhoorEnabledDefault = suhoorEnabledDefault
         self.reminderEnabledDefault = reminderEnabledDefault
         self.fajrEnabledDefault = fajrEnabledDefault
+        self.iftarEnabledDefault = iftarEnabledDefault
         self.defaultSuhoorTimeMode = defaultSuhoorTimeMode
         self.defaultSuhoorOffsetMinutes = defaultSuhoorOffsetMinutes
         self.defaultReminderTimeMode = defaultReminderTimeMode
         self.defaultReminderMinutesBeforeFajr = defaultReminderMinutesBeforeFajr
         self.defaultReminderFixedTimeMinutes = defaultReminderFixedTimeMinutes
+        self.defaultIftarDelivery = defaultIftarDelivery
+        self.defaultIftarSoundChoice = defaultIftarSoundChoice
         self.activationMode = activationMode
         self.activeStartDate = activeStartDate
         self.activeEndDate = activeEndDate
@@ -109,11 +176,14 @@ struct DefaultAlarmConfig: Codable, Equatable, Sendable {
         suhoorEnabledDefault: true,
         reminderEnabledDefault: true,
         fajrEnabledDefault: true,
+        iftarEnabledDefault: true,
         defaultSuhoorTimeMode: .relativeToFajrMinusMinutes,
         defaultSuhoorOffsetMinutes: 30,
         defaultReminderTimeMode: .beforeFajr,
         defaultReminderMinutesBeforeFajr: 10,
         defaultReminderFixedTimeMinutes: 0,
+        defaultIftarDelivery: .notificationOnly,
+        defaultIftarSoundChoice: .adhanSoft,
         activationMode: .alwaysOn,
         activeStartDate: nil,
         activeEndDate: nil,
@@ -126,11 +196,14 @@ struct DefaultAlarmConfig: Codable, Equatable, Sendable {
         case suhoorEnabledDefault
         case reminderEnabledDefault
         case fajrEnabledDefault
+        case iftarEnabledDefault
         case defaultSuhoorTimeMode
         case defaultSuhoorOffsetMinutes
         case defaultReminderTimeMode
         case defaultReminderMinutesBeforeFajr
         case defaultReminderFixedTimeMinutes
+        case defaultIftarDelivery
+        case defaultIftarSoundChoice
         case activationMode
         case activeStartDate
         case activeEndDate
@@ -147,6 +220,7 @@ struct DefaultAlarmConfig: Codable, Equatable, Sendable {
         suhoorEnabledDefault = try container.decode(Bool.self, forKey: .suhoorEnabledDefault)
         reminderEnabledDefault = try container.decode(Bool.self, forKey: .reminderEnabledDefault)
         fajrEnabledDefault = try container.decode(Bool.self, forKey: .fajrEnabledDefault)
+        iftarEnabledDefault = try container.decodeIfPresent(Bool.self, forKey: .iftarEnabledDefault) ?? true
         defaultSuhoorTimeMode = try container.decodeIfPresent(SuhoorTimeMode.self, forKey: .defaultSuhoorTimeMode)
             ?? .relativeToFajrMinusMinutes
         defaultSuhoorOffsetMinutes = try container.decodeIfPresent(Int.self, forKey: .defaultSuhoorOffsetMinutes) ?? 30
@@ -159,6 +233,10 @@ struct DefaultAlarmConfig: Codable, Equatable, Sendable {
             ?? 10
         defaultReminderMinutesBeforeFajr = max(decodedMinutes, 10)
         defaultReminderFixedTimeMinutes = try container.decodeIfPresent(Int.self, forKey: .defaultReminderFixedTimeMinutes) ?? 0
+        defaultIftarDelivery = try container.decodeIfPresent(IftarDeliverySelection.self, forKey: .defaultIftarDelivery)
+            ?? .notificationOnly
+        defaultIftarSoundChoice = try container.decodeIfPresent(SoundChoice.self, forKey: .defaultIftarSoundChoice)
+            ?? .adhanSoft
         activationMode = try container.decodeIfPresent(AlarmActivationMode.self, forKey: .activationMode) ?? .alwaysOn
         activeStartDate = try container.decodeIfPresent(Date.self, forKey: .activeStartDate)
         activeEndDate = try container.decodeIfPresent(Date.self, forKey: .activeEndDate)
@@ -174,11 +252,14 @@ struct DefaultAlarmConfig: Codable, Equatable, Sendable {
         try container.encode(suhoorEnabledDefault, forKey: .suhoorEnabledDefault)
         try container.encode(reminderEnabledDefault, forKey: .reminderEnabledDefault)
         try container.encode(fajrEnabledDefault, forKey: .fajrEnabledDefault)
+        try container.encode(iftarEnabledDefault, forKey: .iftarEnabledDefault)
         try container.encode(defaultSuhoorTimeMode, forKey: .defaultSuhoorTimeMode)
         try container.encode(defaultSuhoorOffsetMinutes, forKey: .defaultSuhoorOffsetMinutes)
         try container.encode(defaultReminderTimeMode, forKey: .defaultReminderTimeMode)
         try container.encode(defaultReminderMinutesBeforeFajr, forKey: .defaultReminderMinutesBeforeFajr)
         try container.encode(defaultReminderFixedTimeMinutes, forKey: .defaultReminderFixedTimeMinutes)
+        try container.encode(defaultIftarDelivery, forKey: .defaultIftarDelivery)
+        try container.encode(defaultIftarSoundChoice, forKey: .defaultIftarSoundChoice)
         try container.encode(activationMode, forKey: .activationMode)
         try container.encodeIfPresent(activeStartDate, forKey: .activeStartDate)
         try container.encodeIfPresent(activeEndDate, forKey: .activeEndDate)
@@ -195,11 +276,14 @@ struct DailyAlarmOverride: Codable, Equatable, Identifiable, Sendable {
     var suhoorEnabled: Bool?
     var reminderEnabled: Bool?
     var fajrEnabled: Bool?
+    var iftarEnabled: Bool?
     var suhoorOffsetOverrideMinutes: Int?
     var reminderOffsetOverrideMinutes: Int?
     var suhoorTimeOverrideMinutesFromMidnight: Int?
     var reminderTimeOverrideMinutesFromMidnight: Int?
     var fajrSoundOverride: SoundChoice?
+    var iftarDeliveryOverride: IftarDeliverySelection?
+    var iftarSoundOverride: SoundChoice?
     var notes: String?
 
     var id: String { dateKey }
@@ -214,11 +298,14 @@ struct DailyAlarmOverride: Codable, Equatable, Identifiable, Sendable {
         self.suhoorEnabled = nil
         self.reminderEnabled = nil
         self.fajrEnabled = nil
+        self.iftarEnabled = nil
         self.suhoorOffsetOverrideMinutes = nil
         self.reminderOffsetOverrideMinutes = nil
         self.suhoorTimeOverrideMinutesFromMidnight = nil
         self.reminderTimeOverrideMinutesFromMidnight = nil
         self.fajrSoundOverride = nil
+        self.iftarDeliveryOverride = nil
+        self.iftarSoundOverride = nil
         self.notes = nil
     }
 
@@ -227,11 +314,14 @@ struct DailyAlarmOverride: Codable, Equatable, Identifiable, Sendable {
         if suhoorEnabled != nil { return true }
         if reminderEnabled != nil { return true }
         if fajrEnabled != nil { return true }
+        if iftarEnabled != nil { return true }
         if suhoorOffsetOverrideMinutes != nil { return true }
         if reminderOffsetOverrideMinutes != nil { return true }
         if suhoorTimeOverrideMinutesFromMidnight != nil { return true }
         if reminderTimeOverrideMinutesFromMidnight != nil { return true }
         if fajrSoundOverride != nil { return true }
+        if iftarDeliveryOverride != nil { return true }
+        if iftarSoundOverride != nil { return true }
         if let notes, !notes.isEmpty { return true }
         return false
     }
@@ -244,6 +334,7 @@ struct EffectiveDailyConfig: Codable, Equatable, Sendable {
     let suhoorEnabled: Bool
     let reminderEnabled: Bool
     let fajrEnabled: Bool
+    let iftarEnabled: Bool
     let suhoorTimeMode: SuhoorTimeMode
     let suhoorOffsetMinutes: Int
     let reminderTimeMode: ReminderTimeMode
@@ -252,10 +343,12 @@ struct EffectiveDailyConfig: Codable, Equatable, Sendable {
     let suhoorTimeOverrideMinutesFromMidnight: Int?
     let reminderTimeOverrideMinutesFromMidnight: Int?
     let fajrSoundChoice: SoundChoice
+    let iftarDelivery: IftarDeliverySelection
+    let iftarSoundChoice: SoundChoice
     let hasOverrides: Bool
 
     var hasAnyEnabled: Bool {
-        suhoorEnabled || reminderEnabled || fajrEnabled
+        suhoorEnabled || reminderEnabled || fajrEnabled || iftarEnabled
     }
 }
 
@@ -263,6 +356,7 @@ enum PrimaryDisplayKind: Codable, Equatable, Sendable {
     case suhoor
     case reminder
     case fajr
+    case iftar
 }
 
 struct PrimaryDisplay: Codable, Equatable, Sendable {
@@ -280,6 +374,9 @@ extension EffectiveDailyConfig {
         }
         if fajrEnabled {
             return PrimaryDisplay(time: schedule.fajrDate, kind: .fajr)
+        }
+        if iftarEnabled, let iftarDate = schedule.iftarDate {
+            return PrimaryDisplay(time: iftarDate, kind: .iftar)
         }
         return nil
     }

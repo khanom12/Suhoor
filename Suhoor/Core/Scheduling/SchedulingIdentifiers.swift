@@ -9,6 +9,12 @@ struct SchedulingIdentifiers {
             return "reminder-\(schedule.id)"
         case .boundary:
             return "fajr-\(schedule.id)"
+        case .iftarNotification:
+            return "iftar-notification-\(schedule.id)"
+        case .iftarAlarm:
+            return "iftar-alarm-\(schedule.id)"
+        case .iftarAdhan:
+            return "iftar-adhan-\(schedule.id)"
         }
     }
 

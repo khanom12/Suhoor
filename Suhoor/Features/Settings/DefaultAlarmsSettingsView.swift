@@ -13,6 +13,7 @@ struct DefaultAlarmsSettingsView: View {
                 Toggle(Strings.Settings.wakeAlarmLabel, isOn: suhoorDefaultBinding)
                 Toggle(Strings.Settings.reminderLabel, isOn: reminderDefaultBinding)
                 Toggle(Strings.Settings.fajrAdhanLabel, isOn: fajrDefaultBinding)
+                Toggle("Iftar / Maghrib", isOn: iftarDefaultBinding)
             } header: {
                 SettingsSectionHeader(
                     title: Strings.Settings.alertsSection,
@@ -68,6 +69,25 @@ struct DefaultAlarmsSettingsView: View {
                     ) {
                         EmptyView()
                     }
+
+                    SettingsEditorCard(
+                        title: "Iftar / Maghrib",
+                        subtitle: iftarSummaryText,
+                        trailing: AnyView(
+                            Toggle("", isOn: iftarDefaultBinding)
+                                .labelsHidden()
+                        )
+                    ) {
+                        VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
+                            Text("Timing follows sunset. Adjust it from Prayer times.")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+
+                            Toggle("Notification", isOn: iftarNotificationBinding)
+                            Toggle("Alarm", isOn: iftarAlarmBinding)
+                            Toggle("Adhan", isOn: iftarAdhanBinding)
+                        }
+                    }
                 }
                 .padding(.vertical, 4)
             } header: {
@@ -94,6 +114,13 @@ struct DefaultAlarmsSettingsView: View {
                         title: Strings.Settings.fajrAdhanLabel,
                         value: alarmConfigStore.defaults.fajrEnabledDefault
                             ? TimeFormatters.timeFormatter.string(from: preview.fajrDate)
+                            : Strings.AlarmList.offLabel
+                    )
+
+                    previewRow(
+                        title: "Iftar / Maghrib",
+                        value: alarmConfigStore.defaults.iftarEnabledDefault
+                            ? TimeFormatters.timeFormatter.string(from: preview.iftarDate ?? preview.maghribDate)
                             : Strings.AlarmList.offLabel
                     )
                 } else {
@@ -139,6 +166,13 @@ struct DefaultAlarmsSettingsView: View {
             : Strings.AlarmsTab.alarmOffLabel
     }
 
+    private var iftarSummaryText: String {
+        guard alarmConfigStore.defaults.iftarEnabledDefault else {
+            return Strings.AlarmsTab.alarmOffLabel
+        }
+        return alarmConfigStore.defaults.defaultIftarDelivery.summaryText
+    }
+
     private func previewRow(title: String, value: String) -> some View {
         HStack {
             Text(title)
@@ -180,6 +214,48 @@ struct DefaultAlarmsSettingsView: View {
             alarmConfigStore.defaults.fajrEnabledDefault
         }, set: { newValue in
             alarmConfigStore.defaults.fajrEnabledDefault = newValue
+            rescheduleFromDefaults()
+        })
+    }
+
+    private var iftarDefaultBinding: Binding<Bool> {
+        Binding(get: {
+            alarmConfigStore.defaults.iftarEnabledDefault
+        }, set: { newValue in
+            alarmConfigStore.defaults.iftarEnabledDefault = newValue
+            rescheduleFromDefaults()
+        })
+    }
+
+    private var iftarNotificationBinding: Binding<Bool> {
+        Binding(get: {
+            alarmConfigStore.defaults.defaultIftarDelivery.notification
+        }, set: { newValue in
+            var delivery = alarmConfigStore.defaults.defaultIftarDelivery
+            delivery.notification = newValue
+            alarmConfigStore.defaults.defaultIftarDelivery = delivery.normalized()
+            rescheduleFromDefaults()
+        })
+    }
+
+    private var iftarAlarmBinding: Binding<Bool> {
+        Binding(get: {
+            alarmConfigStore.defaults.defaultIftarDelivery.normalized().alarm
+        }, set: { newValue in
+            var delivery = alarmConfigStore.defaults.defaultIftarDelivery
+            delivery.alarm = newValue
+            alarmConfigStore.defaults.defaultIftarDelivery = delivery.normalized()
+            rescheduleFromDefaults()
+        })
+    }
+
+    private var iftarAdhanBinding: Binding<Bool> {
+        Binding(get: {
+            alarmConfigStore.defaults.defaultIftarDelivery.normalized().adhan
+        }, set: { newValue in
+            var delivery = alarmConfigStore.defaults.defaultIftarDelivery
+            delivery.adhan = newValue
+            alarmConfigStore.defaults.defaultIftarDelivery = delivery.normalized()
             rescheduleFromDefaults()
         })
     }

@@ -7,12 +7,14 @@ struct AlarmsHomeView: View {
     @EnvironmentObject private var scheduleManager: ScheduleManager
     @EnvironmentObject private var locationService: LocationService
     @EnvironmentObject private var fastTagStore: FastTagStore
+    @EnvironmentObject private var alarmConfigStore: AlarmConfigStore
 
     @State private var selectedSchedule: DaySchedule?
     @State private var showSettingsSheet = false
     @State private var showAddDaySheet = false
     @State private var editMode: EditMode = .inactive
     @State private var sectionCollapseOverrides: [String: Bool] = [:]
+    @State private var loadingSectionIDs: Set<String> = []
     @State private var listSnapshot: AlarmListSnapshot = .empty
     @State private var pendingFocusDateKey: String?
 
@@ -27,48 +29,49 @@ struct AlarmsHomeView: View {
                     ForEach(listSnapshot.sections) { section in
                         Section {
                             if !isSectionCollapsed(section) {
-                                ForEach(section.entries) { entry in
-                                    AlarmRowView(
-                                        schedule: entry.schedule,
-                                        config: entry.config,
-                                        primaryDisplay: entry.primary,
-                                        primaryIntent: entry.primaryIntent,
-                                        secondaryTags: entry.secondaryTags,
-                                        warnings: entry.warnings,
-                                        showsTags: entry.showsTags,
-                                        onSelect: {
-                                            selectedSchedule = entry.schedule
+                                if section.entries.isEmpty {
+                                    if loadingSectionIDs.contains(section.id) {
+                                        HStack {
+                                            ProgressView()
+                                            Text("Loading month")
+                                                .foregroundStyle(.secondary)
                                         }
-                                    )
-                                    .deleteDisabled(!entry.isOneOff)
-                                }
-                                .onDelete { offsets in
-                                    deleteEntries(in: section.entries, at: offsets)
+                                        .padding(.vertical, DesignTokens.spacingS)
+                                    } else {
+                                        Text("No alarms in this month yet.")
+                                            .font(.footnote)
+                                            .foregroundStyle(.secondary)
+                                            .padding(.vertical, DesignTokens.spacingS)
+                                    }
+                                } else {
+                                    ForEach(section.entries) { entry in
+                                        AlarmRowView(
+                                            schedule: entry.schedule,
+                                            config: entry.config,
+                                            primaryDisplay: entry.primary,
+                                            primaryIntent: entry.primaryIntent,
+                                            secondaryTags: entry.secondaryTags,
+                                            warnings: entry.warnings,
+                                            showsTags: entry.showsTags,
+                                            onSelect: {
+                                                selectedSchedule = entry.schedule
+                                            }
+                                        )
+                                        .deleteDisabled(!entry.isOneOff)
+                                    }
+                                    .onDelete { offsets in
+                                        deleteEntries(in: section.entries, at: offsets)
+                                    }
                                 }
                             }
                 } header: {
-                    if let preview = section.preview, section.entries.isEmpty {
-                        previewHeader(preview)
-                    } else if section.entries.isEmpty {
-                        Text(section.key.title)
-                            .textCase(nil)
-                    } else {
-                        Button {
-                            toggleSectionCollapse(section)
-                        } label: {
-                            HStack {
-                                Text(section.key.title)
-                                    .foregroundStyle(.primary)
-                                Spacer()
-                                Image(systemName: "chevron.right")
-                                    .font(.footnote.weight(.semibold))
-                                    .foregroundStyle(.secondary)
-                                    .rotationEffect(.degrees(isSectionCollapsed(section) ? 0 : 90))
-                            }
-                        }
-                        .buttonStyle(.plain)
-                        .textCase(nil)
+                    Button {
+                        toggleSectionCollapse(section)
+                    } label: {
+                        headerLabel(for: section)
                     }
+                    .buttonStyle(.plain)
+                    .textCase(nil)
                 }
             }
         }
@@ -105,9 +108,23 @@ struct AlarmsHomeView: View {
             }
             .task {
                 rebuildListSnapshot()
+                ensureExpandedSectionsLoaded()
+            }
+            .onAppear {
+                rebuildListSnapshot()
+                ensureExpandedSectionsLoaded()
             }
             .onChange(of: scheduleManager.activeWindowSnapshot) { _, _ in
                 rebuildListSnapshot()
+                ensureExpandedSectionsLoaded()
+            }
+            .onChange(of: alarmConfigStore.overridesByDay) { _, _ in
+                rebuildListSnapshot()
+                ensureExpandedSectionsLoaded()
+            }
+            .onChange(of: alarmConfigStore.defaults) { _, _ in
+                rebuildListSnapshot()
+                ensureExpandedSectionsLoaded()
             }
             .sheet(isPresented: $showSettingsSheet) {
                 NavigationStack {
@@ -178,40 +195,76 @@ struct AlarmsHomeView: View {
         defer { PerformanceTrace.end(token) }
 
         let timeZone = TimeZone.current
-        let displayEntries = scheduleManager.activeWindowSnapshot.visibleDays.map(AlarmRowEntry.init)
+        let nearTermEntries = scheduleManager.activeWindowSnapshot.visibleDays.map { day in
+            let refreshedDay = scheduleManager.refreshedActiveDay(for: day.date, timeZone: timeZone) ?? day
+            return AlarmRowEntry(activeDay: refreshedDay)
+        }
 
-        var grouped: [HijriMonthKey: [AlarmRowEntry]] = [:]
-        for entry in displayEntries {
+        var nearTermGrouped: [HijriMonthKey: [AlarmRowEntry]] = [:]
+        for entry in nearTermEntries {
             guard let key = FastIntentEngine.hijriMonthKey(for: entry.schedule.date, timeZone: timeZone) else { continue }
-            grouped[key, default: []].append(entry)
+            nearTermGrouped[key, default: []].append(entry)
         }
 
-        var sections = grouped.map { key, entries in
-            let firstDate = entries.first?.schedule.date ?? Date.distantPast
-            return (key: key, entries: entries, firstDate: firstDate, preview: Optional<HijriMonthPreview>.none)
-        }
+        let previewMonths = scheduleManager.rollingHijriMonths(
+            count: scheduleManager.hasRecurringIslamicSchedules() ? 12 : 4,
+            timeZone: timeZone
+        )
+        var sections: [HijriMonthSection] = []
+        let defaultExpandedSectionID = previewMonths.first.map { "\( $0.hijriYear)-\($0.month.rawValue)" }
 
-        let existingIdentifiers = Set(sections.map { sectionIdentifier($0.key) })
-        let previewMonths = scheduleManager.rollingHijriMonths(count: 4, timeZone: timeZone)
         for yearMonth in previewMonths {
             let key = HijriMonthKey(
                 year: yearMonth.hijriYear,
                 month: yearMonth.month.rawValue,
                 title: "\(yearMonth.month.displayName) \(yearMonth.hijriYear)"
             )
-            guard !existingIdentifiers.contains(sectionIdentifier(key)) else { continue }
             guard let preview = scheduleManager.hijriMonthStartPreview(
                 for: yearMonth.month,
                 hijriYear: yearMonth.hijriYear,
                 timeZone: timeZone
             ) else { continue }
             let previewInfo = HijriMonthPreview(key: key, startDate: preview.adjustedStart, offsetDays: preview.offsetDays)
-            sections.append((key: key, entries: [], firstDate: preview.adjustedStart, preview: previewInfo))
+
+            let cachedEntries = scheduleManager.cachedMonthEntries(for: key)?.map(AlarmRowEntry.init)
+            let entries = cachedEntries ?? nearTermGrouped[key] ?? []
+            let isLoaded = cachedEntries != nil || !entries.isEmpty
+            sections.append(
+                HijriMonthSection(
+                    key: key,
+                    entries: entries,
+                    preview: previewInfo,
+                    isLoaded: isLoaded
+                )
+            )
         }
 
-        sections.sort { $0.firstDate < $1.firstDate }
+        let extraSections = nearTermGrouped.keys
+            .filter { key in
+                sections.contains(where: { $0.key == key }) == false
+            }
+            .sorted { lhs, rhs in
+                (nearTermGrouped[lhs]?.first?.schedule.date ?? .distantPast) < (nearTermGrouped[rhs]?.first?.schedule.date ?? .distantPast)
+            }
+            .map { key in
+                HijriMonthSection(
+                    key: key,
+                    entries: nearTermGrouped[key] ?? [],
+                    preview: nil,
+                    isLoaded: true
+                )
+            }
+
+        let resolvedSections = (sections + extraSections).sorted {
+            ($0.preview?.startDate ?? $0.entries.first?.schedule.date ?? .distantPast) <
+            ($1.preview?.startDate ?? $1.entries.first?.schedule.date ?? .distantPast)
+        }
+        let sectionIdentifiers = Set(resolvedSections.map(\.id))
+        sectionCollapseOverrides = sectionCollapseOverrides.filter { sectionIdentifiers.contains($0.key) }
+        loadingSectionIDs = loadingSectionIDs.filter { sectionIdentifiers.contains($0) }
         listSnapshot = AlarmListSnapshot(
-            sections: sections.map { HijriMonthSection(key: $0.key, entries: $0.entries, preview: $0.preview) }
+            sections: resolvedSections,
+            defaultExpandedSectionID: defaultExpandedSectionID ?? resolvedSections.first?.id
         )
     }
 
@@ -235,13 +288,15 @@ struct AlarmsHomeView: View {
 
     private func isSectionCollapsed(_ section: HijriMonthSection) -> Bool {
         let identifier = sectionIdentifier(section.key)
-        return sectionCollapseOverrides[identifier] ?? false
+        return sectionCollapseOverrides[identifier] ?? listSnapshot.defaultCollapsedState(for: identifier)
     }
 
     private func toggleSectionCollapse(_ section: HijriMonthSection) {
         let identifier = sectionIdentifier(section.key)
         let currentState = isSectionCollapsed(section)
         sectionCollapseOverrides[identifier] = !currentState
+        guard currentState else { return }
+        ensureMonthEntriesLoaded(for: section)
     }
 
     private func sectionIdentifier(_ key: HijriMonthKey) -> String {
@@ -287,12 +342,65 @@ struct AlarmsHomeView: View {
         formatter.dateFormat = "yyyy-MM-dd"
         return formatter.date(from: identifier)
     }
+
+    @ViewBuilder
+    private func headerLabel(for section: HijriMonthSection) -> some View {
+        HStack(alignment: .center, spacing: DesignTokens.spacingS) {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text(section.key.title)
+                        .foregroundStyle(.primary)
+                    Spacer()
+                    if let preview = section.preview {
+                        Text(adjustmentTag(for: preview.offsetDays))
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                if let preview = section.preview {
+                    Text(Strings.AlarmsTab.hijriMonthStarts(shortDate(preview.startDate)))
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Image(systemName: "chevron.right")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .rotationEffect(.degrees(isSectionCollapsed(section) ? 0 : 90))
+        }
+    }
+
+    private func ensureExpandedSectionsLoaded() {
+        for section in listSnapshot.sections where !isSectionCollapsed(section) {
+            ensureMonthEntriesLoaded(for: section)
+        }
+    }
+
+    private func ensureMonthEntriesLoaded(for section: HijriMonthSection) {
+        guard section.isLoaded == false else { return }
+        guard loadingSectionIDs.contains(section.id) == false else { return }
+
+        loadingSectionIDs.insert(section.id)
+        Task {
+            _ = await scheduleManager.monthEntries(for: section.key, timeZone: .current)
+            await MainActor.run {
+                loadingSectionIDs.remove(section.id)
+                rebuildListSnapshot()
+            }
+        }
+    }
 }
 
 private struct AlarmListSnapshot {
     let sections: [HijriMonthSection]
+    let defaultExpandedSectionID: String?
 
-    static let empty = AlarmListSnapshot(sections: [])
+    static let empty = AlarmListSnapshot(sections: [], defaultExpandedSectionID: nil)
+
+    func defaultCollapsedState(for identifier: String) -> Bool {
+        guard let defaultExpandedSectionID else { return true }
+        return identifier != defaultExpandedSectionID
+    }
 }
 
 enum AlarmRowPresentation {
@@ -392,6 +500,7 @@ private struct HijriMonthSection: Identifiable {
     let key: HijriMonthKey
     let entries: [AlarmRowEntry]
     let preview: HijriMonthPreview?
+    let isLoaded: Bool
 
     var id: String { "\(key.year)-\(key.month)" }
 }
@@ -540,7 +649,11 @@ private struct AlarmRowView: View {
     }
 
     private var fajrLineText: String {
-        "Fajr \(fajrTimeText)"
+        if config.iftarEnabled {
+            let iftarTime = TimeFormatters.timeFormatter.string(from: schedule.iftarDate ?? schedule.maghribDate)
+            return "Fajr \(fajrTimeText) • Iftar \(iftarTime)"
+        }
+        return "Fajr \(fajrTimeText)"
     }
 
     private var dateLabel: String {
@@ -560,6 +673,10 @@ private struct AlarmRowView: View {
 
     private var accessibilitySummary: String {
         var summary = "\(dateLabelWithPrefix). \(primaryLabelText) alarm. \(primaryTimeText). Fajr \(fajrTimeText)."
+        if config.iftarEnabled {
+            let iftarTime = TimeFormatters.timeFormatter.string(from: schedule.iftarDate ?? schedule.maghribDate)
+            summary += " Iftar \(iftarTime)."
+        }
         if let tagAccessibilityText {
             summary += " \(tagAccessibilityText)"
         }
@@ -574,6 +691,8 @@ private struct AlarmRowView: View {
             return "Reminder"
         case .fajr:
             return "Fajr"
+        case .iftar:
+            return "Iftar"
         }
     }
 

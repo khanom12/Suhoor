@@ -79,6 +79,7 @@ struct DayDetailView: View {
                     timeRow(label: "Suhoor Alarm", value: wakeTimeText)
                     timeRow(label: "Reminder for Fajr Alarm", value: reminderValueText)
                     timeRow(label: "Fajr Adhan", value: atFajrValueText)
+                    timeRow(label: "Iftar / Maghrib", value: iftarValueText)
                 }
             }
         }
@@ -173,7 +174,8 @@ struct DayDetailView: View {
                 reminderEnabledOverride: nil,
                 atFajrEnabledOverride: nil,
                 reminderMinutesOverride: nil,
-                atFajrSoundOverride: nil
+                atFajrSoundOverride: nil,
+                iftarEnabledOverride: nil
             )
             current.disabledForDay = newValue
             settings.perDayExceptions[dayKey] = current
@@ -222,7 +224,10 @@ struct DayDetailView: View {
             reminderLine = "Reminder alarm: Off."
         }
         let atFajrLine = atFajrEnabledEffective ? "Fajr Adhan: On." : "Fajr Adhan: Off."
-        return [wakeLine, reminderLine, atFajrLine]
+        let iftarLine = iftarEnabledEffective
+            ? "Iftar / Maghrib: \(iftarDeliveryText) at \(TimeFormatters.timeFormatter.string(from: day.iftarDate ?? day.maghribDate))."
+            : "Iftar / Maghrib: Off."
+        return [wakeLine, reminderLine, atFajrLine, iftarLine]
     }
 
     private var ruleBadgeText: String {
@@ -262,5 +267,19 @@ struct DayDetailView: View {
             || exception.reminderMinutesOverride != nil
             || exception.atFajrEnabledOverride != nil
             || exception.atFajrSoundOverride != nil
+            || exception.iftarEnabledOverride != nil
+    }
+
+    private var iftarEnabledEffective: Bool {
+        scheduleManager.activeDay(for: day.date, timeZone: .current)?.effectiveConfig.iftarEnabled ?? false
+    }
+
+    private var iftarDeliveryText: String {
+        scheduleManager.activeDay(for: day.date, timeZone: .current)?.effectiveConfig.iftarDelivery.summaryText ?? "Notification"
+    }
+
+    private var iftarValueText: String {
+        guard iftarEnabledEffective, !isDayOff else { return Strings.Schedule.offBadge }
+        return TimeFormatters.timeFormatter.string(from: day.iftarDate ?? day.maghribDate)
     }
 }

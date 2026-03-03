@@ -4,6 +4,11 @@ import os
 
 final class NotificationScheduler {
     private let center = UNUserNotificationCenter.current()
+    static let iftarCategoryIdentifier = "suhoor.iftar"
+
+    init() {
+        registerNotificationCategories()
+    }
 
     var authorizationStateText: String {
         get async {
@@ -136,10 +141,13 @@ final class NotificationScheduler {
         let dummySchedule = DaySchedule(
             date: Date(),
             fajrDate: Date(),
+            maghribDate: Date(),
             wakeDate: Date(),
             reminderDate: nil,
             boundaryDate: nil,
+            iftarDate: nil,
             fajrSoundChoice: settings.atFajrSoundSelectionGlobal,
+            iftarSoundChoice: nil,
             locationDescription: "",
             offsetMinutes: 0,
             calculationMethodName: "",
@@ -192,9 +200,12 @@ final class NotificationScheduler {
         schedule: DaySchedule
     ) async throws -> UNNotificationRequest {
         let content = UNMutableNotificationContent()
-        content.title = kind == .wake ? settings.label : kind.title
-        content.body = kind.body
+        content.title = notificationTitle(for: kind, settings: settings)
+        content.body = notificationBody(for: kind)
         content.sound = notificationSound(for: kind, schedule: schedule, settings: settings)
+        if kind == .iftarNotification {
+            content.categoryIdentifier = Self.iftarCategoryIdentifier
+        }
 
         let calendar = Calendar.current
         let components = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: date)
@@ -226,10 +237,13 @@ final class NotificationScheduler {
             let schedule = DaySchedule(
                 date: day,
                 fajrDate: day,
+                maghribDate: day,
                 wakeDate: day,
                 reminderDate: nil,
                 boundaryDate: nil,
+                iftarDate: nil,
                 fajrSoundChoice: nil,
+                iftarSoundChoice: nil,
                 locationDescription: "",
                 offsetMinutes: 0,
                 calculationMethodName: "",
@@ -238,6 +252,9 @@ final class NotificationScheduler {
             results.append(identifier(for: schedule, kind: .wake))
             results.append(identifier(for: schedule, kind: .reminder))
             results.append(identifier(for: schedule, kind: .boundary))
+            results.append(identifier(for: schedule, kind: .iftarNotification))
+            results.append(identifier(for: schedule, kind: .iftarAlarm))
+            results.append(identifier(for: schedule, kind: .iftarAdhan))
         }
         return results
     }
@@ -252,10 +269,13 @@ final class NotificationScheduler {
             let schedule = DaySchedule(
                 date: day,
                 fajrDate: day,
+                maghribDate: day,
                 wakeDate: day,
                 reminderDate: nil,
                 boundaryDate: nil,
+                iftarDate: nil,
                 fajrSoundChoice: nil,
+                iftarSoundChoice: nil,
                 locationDescription: "",
                 offsetMinutes: 0,
                 calculationMethodName: "",
@@ -266,6 +286,26 @@ final class NotificationScheduler {
             results.append(SchedulingIdentifiers.legacyDailyIdentifier(for: schedule, kind: .boundary))
         }
         return results
+    }
+
+    private func notificationTitle(for kind: ScheduleEventKind, settings: AppSettings) -> String {
+        switch kind {
+        case .wake:
+            return settings.label
+        case .iftarNotification:
+            return "It’s time to break your fast"
+        default:
+            return kind.title
+        }
+    }
+
+    private func notificationBody(for kind: ScheduleEventKind) -> String {
+        switch kind {
+        case .iftarNotification:
+            return "Maghrib has begun."
+        default:
+            return kind.body
+        }
     }
 
     private func notificationSound(for kind: ScheduleEventKind, schedule: DaySchedule, settings: AppSettings) -> UNNotificationSound? {
@@ -281,6 +321,25 @@ final class NotificationScheduler {
                 return UNNotificationSound(named: UNNotificationSoundName("adhan_fajr.caf"))
             }
             return .default
+        case .iftarNotification:
+            return .default
+        case .iftarAlarm:
+            return .default
+        case .iftarAdhan:
+            if Bundle.main.url(forResource: "adhan_maghrib", withExtension: "caf") != nil {
+                return UNNotificationSound(named: UNNotificationSoundName("adhan_maghrib.caf"))
+            }
+            return .default
         }
+    }
+
+    private func registerNotificationCategories() {
+        let iftarCategory = UNNotificationCategory(
+            identifier: Self.iftarCategoryIdentifier,
+            actions: [],
+            intentIdentifiers: [],
+            options: []
+        )
+        center.setNotificationCategories([iftarCategory])
     }
 }

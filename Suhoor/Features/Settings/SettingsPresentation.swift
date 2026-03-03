@@ -32,7 +32,11 @@ struct SettingsSummaryFormatter {
             ? Strings.SettingsSummary.fajrOn
             : Strings.SettingsSummary.fajrOff
 
-        return [wakeSummary, reminderSummary, fajrSummary].joined(separator: " · ")
+        let iftarSummary = config.iftarEnabledDefault
+            ? "Iftar \(config.defaultIftarDelivery.summaryText)"
+            : "Iftar Off"
+
+        return [wakeSummary, reminderSummary, fajrSummary, iftarSummary].joined(separator: " · ")
     }
 
     static func locationSummary(settings: AppSettings, locationService: LocationService) -> String {
@@ -51,7 +55,8 @@ struct SettingsSummaryFormatter {
     static func prayerTimesSummary(settings: AppSettings) -> String {
         [
             settings.calculationMethod.displayName,
-            Strings.SettingsSummary.fajrAdjustment(adjustmentText(settings.fajrAdjustmentMinutes))
+            Strings.SettingsSummary.fajrAdjustment(adjustmentText(settings.fajrAdjustmentMinutes)),
+            "Maghrib \(adjustmentText(settings.maghribAdjustmentMinutes))"
         ].joined(separator: " · ")
     }
 

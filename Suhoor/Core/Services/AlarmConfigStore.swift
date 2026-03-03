@@ -3,7 +3,7 @@ import Combine
 
 @MainActor
 final class AlarmConfigStore: ObservableObject {
-    private static let latestMigrationVersion = 2
+    private static let latestMigrationVersion = 3
 
     @Published var defaults: DefaultAlarmConfig {
         didSet {
@@ -120,11 +120,13 @@ final class AlarmConfigStore: ObservableObject {
             let suhoorEnabled = current.suhoorEnabled ?? (defaultsActive ? defaults.suhoorEnabledDefault : false)
             let reminderEnabled = current.reminderEnabled ?? (defaultsActive ? defaults.reminderEnabledDefault : false)
             let fajrEnabled = current.fajrEnabled ?? (defaultsActive ? defaults.fajrEnabledDefault : false)
+            let iftarEnabled = current.iftarEnabled ?? (defaultsActive ? defaults.iftarEnabledDefault : false)
 
-            if !suhoorEnabled && !reminderEnabled && !fajrEnabled {
+            if !suhoorEnabled && !reminderEnabled && !fajrEnabled && !iftarEnabled {
                 current.suhoorEnabled = nil
                 current.reminderEnabled = nil
                 current.fajrEnabled = nil
+                current.iftarEnabled = nil
             }
         } else {
             current.skipDay = true
@@ -182,6 +184,20 @@ final class AlarmConfigStore: ObservableObject {
         timeZone: TimeZone = .current
     ) -> [ResolvedScheduledDateEntry] {
         scheduledDateSourceResolver.resolvedEntries(from: startDate, limit: limit, timeZone: timeZone)
+    }
+
+    func resolvedScheduledEntries(
+        in interval: DateInterval,
+        timeZone: TimeZone = .current
+    ) -> [ResolvedScheduledDateEntry] {
+        scheduledDateSourceResolver.resolvedEntries(in: interval, timeZone: timeZone)
+    }
+
+    func resolvedScheduledEntries(
+        forHijriMonth key: HijriYearMonth,
+        timeZone: TimeZone = .current
+    ) -> [ResolvedScheduledDateEntry] {
+        scheduledDateSourceResolver.resolvedEntries(forHijriMonth: key, timeZone: timeZone)
     }
 
     func provenance(for date: Date, timeZone: TimeZone = .current) -> [ResolvedScheduledDateProvenance] {
@@ -352,6 +368,14 @@ final class AlarmConfigStore: ObservableObject {
         }
     }
 
+    func hasAnyRecurringIslamicSource() -> Bool {
+        scheduledDateSourceStore.sources.contains { source in
+            guard source.isEnabled else { return false }
+            guard case .recurringIslamic = source.kind else { return false }
+            return true
+        }
+    }
+
     @discardableResult
     func addRecurringIslamicSource(
         _ rule: RecurringIslamicRule,
@@ -453,9 +477,9 @@ final class AlarmConfigStore: ObservableObject {
         let addResult = AddScheduledDatesResult(addedDates: addedDates, skippedActiveDates: skippedDates)
         let reasonText: String?
         if preview == nil {
-            reasonText = "Needs calendar data for a preview right now."
+            reasonText = Strings.AddSchedule.previewUnavailable
         } else if addResult.addedDates.isEmpty {
-            reasonText = "All matching dates are already active."
+            reasonText = Strings.AddSchedule.allMatchingDatesActive
         } else if !addResult.skippedActiveDates.isEmpty {
             reasonText = "\(addResult.skippedActiveDates.count) date\(addResult.skippedActiveDates.count == 1 ? "" : "s") already active."
         } else {
@@ -493,9 +517,9 @@ final class AlarmConfigStore: ObservableObject {
         let addResult = AddScheduledDatesResult(addedDates: addedDates, skippedActiveDates: skippedDates)
         let reasonText: String?
         if preview == nil {
-            reasonText = "Needs calendar data for a preview right now."
+            reasonText = Strings.AddSchedule.previewUnavailable
         } else if addResult.addedDates.isEmpty {
-            reasonText = "All matching dates are already active."
+            reasonText = Strings.AddSchedule.allMatchingDatesActive
         } else if !addResult.skippedActiveDates.isEmpty {
             reasonText = "\(addResult.skippedActiveDates.count) date\(addResult.skippedActiveDates.count == 1 ? "" : "s") already active."
         } else {
@@ -617,10 +641,12 @@ final class AlarmConfigStore: ObservableObject {
         let baseSuhoorEnabled = defaultsActive ? defaults.suhoorEnabledDefault : false
         let baseReminderEnabled = defaultsActive ? defaults.reminderEnabledDefault : false
         let baseFajrEnabled = defaultsActive ? defaults.fajrEnabledDefault : false
+        let baseIftarEnabled = defaultsActive ? defaults.iftarEnabledDefault : false
 
         var suhoorEnabled = override?.suhoorEnabled ?? baseSuhoorEnabled
         var reminderEnabled = override?.reminderEnabled ?? baseReminderEnabled
         var fajrEnabled = override?.fajrEnabled ?? baseFajrEnabled
+        var iftarEnabled = override?.iftarEnabled ?? baseIftarEnabled
 
         let reminderOffset = override?.reminderOffsetOverrideMinutes ?? defaults.defaultReminderMinutesBeforeFajr
         let reminderTimeMode: ReminderTimeMode
@@ -639,9 +665,12 @@ final class AlarmConfigStore: ObservableObject {
             suhoorEnabled = false
             reminderEnabled = false
             fajrEnabled = false
+            iftarEnabled = false
         }
 
         let fajrSoundChoice = override?.fajrSoundOverride ?? settings.atFajrSoundSelectionGlobal
+        let iftarDelivery = (override?.iftarDeliveryOverride ?? defaults.defaultIftarDelivery).normalized()
+        let iftarSoundChoice = override?.iftarSoundOverride ?? defaults.defaultIftarSoundChoice
         let hasOverrides = override?.hasOverrides ?? false
 
         return EffectiveDailyConfig(
@@ -651,6 +680,7 @@ final class AlarmConfigStore: ObservableObject {
             suhoorEnabled: suhoorEnabled,
             reminderEnabled: reminderEnabled,
             fajrEnabled: fajrEnabled,
+            iftarEnabled: iftarEnabled,
             suhoorTimeMode: defaults.defaultSuhoorTimeMode,
             suhoorOffsetMinutes: suhoorOffset,
             reminderTimeMode: reminderTimeMode,
@@ -659,12 +689,14 @@ final class AlarmConfigStore: ObservableObject {
             suhoorTimeOverrideMinutesFromMidnight: suhoorTimeOverride,
             reminderTimeOverrideMinutesFromMidnight: reminderTimeOverride,
             fajrSoundChoice: fajrSoundChoice,
+            iftarDelivery: iftarDelivery,
+            iftarSoundChoice: iftarSoundChoice,
             hasOverrides: hasOverrides
         )
     }
 
     var hasAnyEnabledDefaults: Bool {
-        defaults.suhoorEnabledDefault || defaults.reminderEnabledDefault || defaults.fajrEnabledDefault
+        defaults.suhoorEnabledDefault || defaults.reminderEnabledDefault || defaults.fajrEnabledDefault || defaults.iftarEnabledDefault
     }
 
     func hasAnyEnabledOverride() -> Bool {
@@ -673,6 +705,7 @@ final class AlarmConfigStore: ObservableObject {
             return override.suhoorEnabled == true
                 || override.reminderEnabled == true
                 || override.fajrEnabled == true
+                || override.iftarEnabled == true
         }
     }
 
@@ -689,11 +722,14 @@ final class AlarmConfigStore: ObservableObject {
                         suhoorEnabledDefault: legacySettings.isEnabled,
                         reminderEnabledDefault: legacySettings.reminderEnabledGlobal,
                         fajrEnabledDefault: legacySettings.atFajrEnabledGlobal,
+                        iftarEnabledDefault: true,
                         defaultSuhoorTimeMode: .relativeToFajrMinusMinutes,
                         defaultSuhoorOffsetMinutes: legacySettings.baseWakeOffsetMinutes,
                         defaultReminderTimeMode: .beforeFajr,
                         defaultReminderMinutesBeforeFajr: max(legacySettings.reminderMinutesBeforeFajrGlobal, 10),
                         defaultReminderFixedTimeMinutes: 0,
+                        defaultIftarDelivery: .notificationOnly,
+                        defaultIftarSoundChoice: .adhanSoft,
                         activationMode: .alwaysOn,
                         activeStartDate: nil,
                         activeEndDate: nil,
@@ -711,6 +747,7 @@ final class AlarmConfigStore: ObservableObject {
                             override.reminderOffsetOverrideMinutes = exception.reminderMinutesOverride
                             override.fajrEnabled = exception.atFajrEnabledOverride
                             override.fajrSoundOverride = exception.atFajrSoundOverride
+                            override.iftarEnabled = exception.iftarEnabledOverride
                             migrated[key] = override
                         }
                         overridesByDay = migrated
@@ -726,6 +763,13 @@ final class AlarmConfigStore: ObservableObject {
             defaults.reminderEnabledDefault = true
             defaults.fajrEnabledDefault = true
             currentVersion = 2
+        }
+
+        if currentVersion < 3 {
+            defaults.iftarEnabledDefault = true
+            defaults.defaultIftarDelivery = .notificationOnly
+            defaults.defaultIftarSoundChoice = .adhanSoft
+            currentVersion = 3
         }
 
         defaultsStore.set(max(currentVersion, Self.latestMigrationVersion), forKey: migrationKey)

@@ -251,9 +251,8 @@ struct ScheduleManagerHijriTests {
             override.suhoorEnabled = false
         }
         alarmConfigStore.addDeletedDate(oldDate, timeZone: timeZone)
-        if let selection = FastIntentEngine.defaultAddFlowSelection(for: oldDate, timeZone: timeZone) {
-            fastTagStore.setSelection(selection, for: oldDate, timeZone: timeZone)
-        }
+        let selection = FastIntentEngine.defaultAddFlowSelection(for: oldDate, timeZone: timeZone)
+        fastTagStore.setSelection(selection, for: oldDate, timeZone: timeZone)
 
         await manager.setHijriMonthAdjustment(
             for: components.month,
@@ -291,11 +290,14 @@ struct ScheduleManagerHijriTests {
             suhoorEnabledDefault: false,
             reminderEnabledDefault: false,
             fajrEnabledDefault: false,
+            iftarEnabledDefault: true,
             defaultSuhoorTimeMode: .relativeToFajrMinusMinutes,
             defaultSuhoorOffsetMinutes: 30,
             defaultReminderTimeMode: .beforeFajr,
             defaultReminderMinutesBeforeFajr: 10,
             defaultReminderFixedTimeMinutes: 0,
+            defaultIftarDelivery: .notificationOnly,
+            defaultIftarSoundChoice: .adhanSoft,
             activationMode: .alwaysOn,
             activeStartDate: nil,
             activeEndDate: nil,
@@ -490,6 +492,322 @@ struct ScheduleManagerHijriTests {
     }
 
     @Test
+    @MainActor
+    func recurringMondayThursdayStopsAfterOneHijriYear() {
+        let suiteName = "ScheduleManagerHijriTests.RecurringHijriYearBound"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+
+        let adjustmentStore = HijriMonthAdjustmentStore(defaults: defaults)
+        let adjustedCalendar = AdjustedHijriCalendar(
+            calendarService: HijriCalendarService(adjustmentStore: adjustmentStore)
+        )
+        guard let startDate = Self.firstDateMatching(
+            start: Self.makeDate(year: 2026, month: 6, day: 1, timeZone: timeZone),
+            timeZone: timeZone,
+            adjustedCalendar: adjustedCalendar,
+            matcher: { components, _ in
+                components.month == .muharram && components.day <= 5
+            }
+        ) else {
+            Issue.record("Expected to find an early Muharram date.")
+            return
+        }
+
+        let store = AlarmConfigStore(defaultsStore: defaults)
+        #expect(store.addRecurringIslamicSource(.mondayThursday, startDate: startDate, timeZone: timeZone) == true)
+
+        let recurringEntries = store.resolvedScheduledEntries(from: startDate, limit: 160, timeZone: timeZone)
+            .filter { entry in
+                entry.provenances.contains { $0.sourceOrigin == .recurringIslamic(.mondayThursday) }
+            }
+        #expect(recurringEntries.isEmpty == false)
+
+        guard let startComponents = adjustedCalendar.adjustedComponents(for: startDate, timeZone: timeZone) else {
+            Issue.record("Expected adjusted Hijri components for recurring start date.")
+            return
+        }
+        let startMonth = HijriYearMonth(hijriYear: startComponents.hijriYear, month: startComponents.month)
+        guard
+            let monthAfterWindow = startMonth.advanced(byMonths: 12),
+            let endExclusive = adjustedCalendar.gregorianDate(
+                for: monthAfterWindow,
+                dayOfMonth: 1,
+                timeZone: timeZone
+            )
+        else {
+            Issue.record("Expected a recurring horizon boundary.")
+            return
+        }
+
+        #expect(recurringEntries.allSatisfy { $0.date < endExclusive })
+
+        guard let firstFutureMatch = Self.firstGregorianDate(
+            onOrAfter: endExclusive,
+            timeZone: timeZone,
+            matcher: { weekday in weekday == 2 || weekday == 5 }
+        ) else {
+            Issue.record("Expected a Monday or Thursday after the recurring horizon.")
+            return
+        }
+
+        #expect(store.provenance(for: firstFutureMatch, timeZone: timeZone).isEmpty)
+    }
+
+    @Test
+    @MainActor
+    func recurringWhiteDaysStartsFromCurrentHijriMonthForwardOnly() {
+        let suiteName = "ScheduleManagerHijriTests.WhiteDaysMidMonth"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+
+        let adjustmentStore = HijriMonthAdjustmentStore(defaults: defaults)
+        let adjustedCalendar = AdjustedHijriCalendar(
+            calendarService: HijriCalendarService(adjustmentStore: adjustmentStore)
+        )
+        guard let startDate = Self.firstDateMatching(
+            start: Self.makeDate(year: 2026, month: 1, day: 1, timeZone: timeZone),
+            timeZone: timeZone,
+            adjustedCalendar: adjustedCalendar,
+            matcher: { components, _ in components.day == 14 && components.month != .ramadan }
+        ) else {
+            Issue.record("Expected to find a mid-month White Days start date.")
+            return
+        }
+
+        let store = AlarmConfigStore(defaultsStore: defaults)
+        #expect(store.addRecurringIslamicSource(.whiteDays, startDate: startDate, timeZone: timeZone) == true)
+
+        let recurringEntries = store.resolvedScheduledEntries(from: startDate, limit: 48, timeZone: timeZone)
+            .filter { entry in
+                entry.provenances.contains { $0.sourceOrigin == .recurringIslamic(.whiteDays) }
+            }
+        #expect(recurringEntries.isEmpty == false)
+
+        guard let startComponents = adjustedCalendar.adjustedComponents(for: startDate, timeZone: timeZone) else {
+            Issue.record("Expected adjusted Hijri components for White Days start date.")
+            return
+        }
+        let startMonth = HijriYearMonth(hijriYear: startComponents.hijriYear, month: startComponents.month)
+        guard
+            let day13 = adjustedCalendar.gregorianDate(for: startMonth, dayOfMonth: 13, timeZone: timeZone),
+            let day15 = adjustedCalendar.gregorianDate(for: startMonth, dayOfMonth: 15, timeZone: timeZone)
+        else {
+            Issue.record("Expected White Days within the start month.")
+            return
+        }
+
+        let recurringKeys = Set(recurringEntries.map(\.dateKey))
+        #expect(recurringKeys.contains(DateHelpers.dayIdentifier(for: startDate, timeZone: timeZone)))
+        #expect(recurringKeys.contains(DateHelpers.dayIdentifier(for: day15, timeZone: timeZone)))
+        #expect(recurringKeys.contains(DateHelpers.dayIdentifier(for: day13, timeZone: timeZone)) == false)
+    }
+
+    @Test
+    @MainActor
+    func recurringOverlapMergesToOneDateInEitherAddOrder() {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+
+        for (index, order) in [[RecurringIslamicRule.mondayThursday, .whiteDays], [.whiteDays, .mondayThursday]].enumerated() {
+            let suiteName = "ScheduleManagerHijriTests.RecurringOverlapOrder\(index)"
+            let defaults = UserDefaults(suiteName: suiteName)!
+            defaults.removePersistentDomain(forName: suiteName)
+
+            let adjustmentStore = HijriMonthAdjustmentStore(defaults: defaults)
+            let adjustedCalendar = AdjustedHijriCalendar(
+                calendarService: HijriCalendarService(adjustmentStore: adjustmentStore)
+            )
+            guard let overlapDate = Self.firstDateMatching(
+                start: Self.makeDate(year: 2026, month: 1, day: 1, timeZone: timeZone),
+                timeZone: timeZone,
+                adjustedCalendar: adjustedCalendar,
+                matcher: { components, weekday in
+                    components.month != .ramadan &&
+                    (13...15).contains(components.day) &&
+                    (weekday == 2 || weekday == 5)
+                }
+            ) else {
+                Issue.record("Expected to find an overlapping White Days and Monday/Thursday date.")
+                return
+            }
+
+            var calendar = Calendar(identifier: .gregorian)
+            calendar.timeZone = timeZone
+            let recurringStartDate = calendar.date(byAdding: .day, value: -30, to: overlapDate) ?? overlapDate
+            let store = AlarmConfigStore(defaultsStore: defaults)
+
+            for rule in order {
+                #expect(store.addRecurringIslamicSource(rule, startDate: recurringStartDate, timeZone: timeZone) == true)
+            }
+
+            let provenance = store.provenance(for: overlapDate, timeZone: timeZone)
+            #expect(provenance.contains { $0.sourceOrigin == .recurringIslamic(.mondayThursday) })
+            #expect(provenance.contains { $0.sourceOrigin == .recurringIslamic(.whiteDays) })
+
+            let overlapKey = DateHelpers.dayIdentifier(for: overlapDate, timeZone: timeZone)
+            let resolved = store.resolvedScheduledEntries(from: recurringStartDate, limit: 120, timeZone: timeZone)
+            #expect(resolved.filter { $0.dateKey == overlapKey }.count == 1)
+        }
+    }
+
+    @Test
+    @MainActor
+    func stoppingOneRecurringSeriesKeepsOverlapActiveUntilBothAreRemoved() {
+        let suiteName = "ScheduleManagerHijriTests.RecurringOverlapStop"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+
+        let adjustmentStore = HijriMonthAdjustmentStore(defaults: defaults)
+        let adjustedCalendar = AdjustedHijriCalendar(
+            calendarService: HijriCalendarService(adjustmentStore: adjustmentStore)
+        )
+        guard let overlapDate = Self.firstDateMatching(
+            start: Self.makeDate(year: 2026, month: 1, day: 1, timeZone: timeZone),
+            timeZone: timeZone,
+            adjustedCalendar: adjustedCalendar,
+            matcher: { components, weekday in
+                components.month != .ramadan &&
+                (13...15).contains(components.day) &&
+                (weekday == 2 || weekday == 5)
+            }
+        ) else {
+            Issue.record("Expected to find an overlapping recurring date.")
+            return
+        }
+
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let recurringStartDate = calendar.date(byAdding: .day, value: -30, to: overlapDate) ?? overlapDate
+        let store = AlarmConfigStore(defaultsStore: defaults)
+        #expect(store.addRecurringIslamicSource(.mondayThursday, startDate: recurringStartDate, timeZone: timeZone) == true)
+        #expect(store.addRecurringIslamicSource(.whiteDays, startDate: recurringStartDate, timeZone: timeZone) == true)
+
+        guard let mondayThursday = store.provenance(for: overlapDate, timeZone: timeZone)
+            .first(where: { $0.sourceOrigin == .recurringIslamic(.mondayThursday) }) else {
+            Issue.record("Expected Monday & Thursday provenance on overlap date.")
+            return
+        }
+
+        store.stopSeries(for: mondayThursday)
+        let remainingAfterFirstStop = store.provenance(for: overlapDate, timeZone: timeZone)
+        #expect(remainingAfterFirstStop.contains { $0.sourceOrigin == .recurringIslamic(.whiteDays) })
+        #expect(remainingAfterFirstStop.contains { $0.sourceOrigin == .recurringIslamic(.mondayThursday) } == false)
+
+        guard let whiteDays = remainingAfterFirstStop
+            .first(where: { $0.sourceOrigin == .recurringIslamic(.whiteDays) }) else {
+            Issue.record("Expected White Days provenance to remain after stopping Monday & Thursday.")
+            return
+        }
+
+        store.stopSeries(for: whiteDays)
+        #expect(store.provenance(for: overlapDate, timeZone: timeZone).isEmpty)
+    }
+
+    @Test
+    @MainActor
+    func monthEntriesCanResolveFutureRollingMonthOutsideActiveWindow() async {
+        let suiteName = "ScheduleManagerHijriTests.FutureMonthEntries"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+
+        let settingsStore = SuhoorSettingsStore(defaults: defaults)
+        settingsStore.update { draft in
+            draft.locationMode = .fixed
+            draft.fixedLocation = FixedLocation(latitude: 43.6532, longitude: -79.3832)
+        }
+
+        let manager = ScheduleManager(
+            settingsStore: settingsStore,
+            locationService: LocationService(),
+            alarmConfigStore: AlarmConfigStore(defaultsStore: defaults),
+            fastTagStore: FastTagStore(defaults: defaults),
+            hijriAdjustmentStore: HijriMonthAdjustmentStore(defaults: defaults)
+        )
+
+        let added = await manager.addRecurringIslamicRule(
+            .whiteDays,
+            startDate: Self.makeDate(year: 2026, month: 3, day: 20, timeZone: timeZone),
+            timeZone: timeZone
+        )
+        #expect(added == true)
+
+        let visibleLastDate = manager.activeWindowSnapshot.visibleDays.last?.date
+        #expect(visibleLastDate != nil)
+        guard
+            let futureMonth = manager.rollingHijriMonths(count: 12, timeZone: timeZone).dropFirst(4).first,
+            let visibleLastDate
+        else {
+            Issue.record("Expected future month and visible horizon data.")
+            return
+        }
+
+        let monthKey = HijriMonthKey(
+            year: futureMonth.hijriYear,
+            month: futureMonth.month.rawValue,
+            title: "\(futureMonth.month.displayName) \(futureMonth.hijriYear)"
+        )
+        let entries = await manager.monthEntries(for: monthKey, timeZone: timeZone)
+
+        #expect(entries.isEmpty == false)
+        #expect(entries.contains(where: { $0.date > visibleLastDate }))
+        #expect(entries.allSatisfy {
+            guard let components = AdjustedHijriCalendar.shared.adjustedComponents(for: $0.date, timeZone: timeZone) else {
+                return false
+            }
+            return components.hijriYear == futureMonth.hijriYear && components.month == futureMonth.month
+        })
+    }
+
+    @Test
+    @MainActor
+    func monthEntriesRefreshAfterRecurringRulesChange() async {
+        let suiteName = "ScheduleManagerHijriTests.MonthEntriesInvalidate"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+
+        let settingsStore = SuhoorSettingsStore(defaults: defaults)
+        settingsStore.update { draft in
+            draft.locationMode = .fixed
+            draft.fixedLocation = FixedLocation(latitude: 43.6532, longitude: -79.3832)
+        }
+
+        let manager = ScheduleManager(
+            settingsStore: settingsStore,
+            locationService: LocationService(),
+            alarmConfigStore: AlarmConfigStore(defaultsStore: defaults),
+            fastTagStore: FastTagStore(defaults: defaults),
+            hijriAdjustmentStore: HijriMonthAdjustmentStore(defaults: defaults)
+        )
+
+        let startDate = Self.makeDate(year: 2026, month: 3, day: 20, timeZone: timeZone)
+        #expect(await manager.addRecurringIslamicRule(.whiteDays, startDate: startDate, timeZone: timeZone) == true)
+
+        guard let targetMonth = manager.rollingHijriMonths(count: 12, timeZone: timeZone).dropFirst(1).first else {
+            Issue.record("Expected a target month for cached browsing.")
+            return
+        }
+        let monthKey = HijriMonthKey(
+            year: targetMonth.hijriYear,
+            month: targetMonth.month.rawValue,
+            title: "\(targetMonth.month.displayName) \(targetMonth.hijriYear)"
+        )
+
+        let whiteDaysEntries = await manager.monthEntries(for: monthKey, timeZone: timeZone)
+        #expect(whiteDaysEntries.contains(where: { $0.provenances.contains { $0.sourceOrigin == .recurringIslamic(.whiteDays) } }))
+
+        #expect(await manager.addRecurringIslamicRule(.mondayThursday, startDate: startDate, timeZone: timeZone) == true)
+        let refreshedEntries = await manager.monthEntries(for: monthKey, timeZone: timeZone)
+
+        #expect(refreshedEntries.contains(where: { $0.provenances.contains { $0.sourceOrigin == .recurringIslamic(.whiteDays) } }))
+        #expect(refreshedEntries.contains(where: { $0.provenances.contains { $0.sourceOrigin == .recurringIslamic(.mondayThursday) } }))
+    }
+
+    @Test
     func cleanupMigrationRemovesDisallowedRamadanAndEidSources() throws {
         let suiteName = "ScheduleManagerHijriTests.CleanupMigration"
         let defaults = UserDefaults(suiteName: suiteName)!
@@ -606,6 +924,47 @@ struct ScheduleManagerHijriTests {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = timeZone
         return calendar.date(from: DateComponents(year: year, month: month, day: day)) ?? Date()
+    }
+
+    private static func firstDateMatching(
+        start: Date,
+        timeZone: TimeZone,
+        adjustedCalendar: AdjustedHijriCalendar,
+        matcher: (AdjustedHijriDateComponents, Int) -> Bool
+    ) -> Date? {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let normalizedStart = calendar.startOfDay(for: start)
+
+        for offset in 0..<730 {
+            let candidate = calendar.date(byAdding: .day, value: offset, to: normalizedStart) ?? normalizedStart
+            guard let components = adjustedCalendar.adjustedComponents(for: candidate, timeZone: timeZone) else { continue }
+            let weekday = calendar.component(.weekday, from: candidate)
+            if matcher(components, weekday) {
+                return candidate
+            }
+        }
+
+        return nil
+    }
+
+    private static func firstGregorianDate(
+        onOrAfter start: Date,
+        timeZone: TimeZone,
+        matcher: (Int) -> Bool
+    ) -> Date? {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let normalizedStart = calendar.startOfDay(for: start)
+
+        for offset in 0..<14 {
+            let candidate = calendar.date(byAdding: .day, value: offset, to: normalizedStart) ?? normalizedStart
+            if matcher(calendar.component(.weekday, from: candidate)) {
+                return candidate
+            }
+        }
+
+        return nil
     }
 
 }

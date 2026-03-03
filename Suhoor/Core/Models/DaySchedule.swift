@@ -4,10 +4,13 @@ struct DaySchedule: Identifiable, Codable, Equatable, Sendable {
     let id: String
     let date: Date
     let fajrDate: Date
+    let maghribDate: Date
     let wakeDate: Date
     let reminderDate: Date?
     let boundaryDate: Date?
+    let iftarDate: Date?
     let fajrSoundChoice: SoundChoice?
+    let iftarSoundChoice: SoundChoice?
     let locationDescription: String
     let offsetMinutes: Int
     let calculationMethodName: String
@@ -15,10 +18,13 @@ struct DaySchedule: Identifiable, Codable, Equatable, Sendable {
     init(
         date: Date,
         fajrDate: Date,
+        maghribDate: Date,
         wakeDate: Date,
         reminderDate: Date?,
         boundaryDate: Date?,
+        iftarDate: Date?,
         fajrSoundChoice: SoundChoice? = nil,
+        iftarSoundChoice: SoundChoice? = nil,
         locationDescription: String,
         offsetMinutes: Int,
         calculationMethodName: String,
@@ -26,10 +32,13 @@ struct DaySchedule: Identifiable, Codable, Equatable, Sendable {
     ) {
         self.date = date
         self.fajrDate = fajrDate
+        self.maghribDate = maghribDate
         self.wakeDate = wakeDate
         self.reminderDate = reminderDate
         self.boundaryDate = boundaryDate
+        self.iftarDate = iftarDate
         self.fajrSoundChoice = fajrSoundChoice
+        self.iftarSoundChoice = iftarSoundChoice
         self.locationDescription = locationDescription
         self.offsetMinutes = offsetMinutes
         self.calculationMethodName = calculationMethodName

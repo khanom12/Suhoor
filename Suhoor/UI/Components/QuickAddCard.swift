@@ -49,12 +49,14 @@ struct QuickAddCard<LeadingAccessory: View, Action: View>: View {
                 Text(previewLine)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
+                    .lineLimit(2)
             }
 
             if let statusLine {
                 Text(statusLine)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
+                    .lineLimit(2)
             }
 
             if let detailLine {

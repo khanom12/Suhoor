@@ -80,6 +80,8 @@ enum Strings {
         static let reminderAlarmLabel = "Reminder Alarm"
         static let dayDisabledHelper = "If off, no alarms will run on this date."
         static let dayEnableToConfigureHelper = "Turn on \"Enable this day\" to configure alarms."
+        static let resetDayTitle = "Reset this day to defaults?"
+        static let resetDayMessage = "This removes day-specific edits and restores the default alarm settings you saved during onboarding or in Settings."
         static let suhoorTime = "Suhoor time"
         static func suhoorComputed(_ time: String) -> String { "Computed: \(time)" }
         static func reminderOffsetLabel(_ minutes: Int) -> String { "Minutes before Fajr: \(minutes)m" }
@@ -92,6 +94,13 @@ enum Strings {
         static func computedAt(_ time: String) -> String { "Computed: \(time)" }
         static let fajrHelper = "Matches your calculated Fajr time."
         static let resetDay = "Reset this day to defaults"
+        static let resetDayHelper = "Restores the default alarm settings you saved in onboarding or Settings and removes any edits made just for this date."
+        static let sourceGeneratedHelper = "This date is included because of a recurring schedule or saved date range."
+        static let sourceManualHelper = "This date was added directly."
+        static let sourceDayExclusion = "Exclude this date from the schedule"
+        static let sourceDayExclusionHelper = "Keeps the schedule, but leaves this specific date out."
+        static let sourceDeleteDay = "Delete this day"
+        static let sourceDeleteDayHelper = "Removes this one manually added date."
         static let defaultsSection = "Default Alarms"
         static let suhoorMode = "Suhoor time mode"
         static let activationMode = "Activation mode"
@@ -111,10 +120,16 @@ enum Strings {
         static let disabledRange = "No new dates in this range."
         static let hijriBanner = "Hijri dates use your corrections. Ramadan is automatic."
         static let manageCorrections = "Manage corrections"
+        static let recurringBanner = "Recurring schedules fill the next Hijri year. Suhoor schedules upcoming alarms automatically, and matching dates are merged."
         static let rangeHelper = "Choose a start and end date."
         static let rangePreviewFooter = "Ramadan dates are skipped automatically."
         static let purposeHelper = "Applies to every date in the range."
         static let detailsTitle = "Details"
+        static let alreadyActiveThroughRecurring = "Already active through another recurring schedule."
+        static let someDatesAlreadyCovered = "Some matching dates are already covered."
+        static let someAlreadyActive = "Some already active."
+        static let allMatchingDatesActive = "All matching dates are already active."
+        static let previewUnavailable = "Needs calendar data for a preview right now."
     }
 
     enum LocationRationale {

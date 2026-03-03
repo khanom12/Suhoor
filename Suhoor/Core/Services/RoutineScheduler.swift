@@ -44,6 +44,7 @@ final class RoutineScheduler {
             success = await scheduleWakeIfNeeded(for: schedule, settings: settings, canUseAlarmKit: canUseAlarmKit, now: now) && success
             success = await scheduleReminderIfNeeded(for: schedule, settings: settings, canUseAlarmKit: canUseAlarmKit, now: now) && success
             success = await scheduleAdhanIfNeeded(for: schedule, settings: settings, canUseAlarmKit: canUseAlarmKit, now: now) && success
+            success = await scheduleIftarIfNeeded(for: schedule, settings: settings, now: now) && success
         }
         eventLog.record(category: "schedule", message: "scheduleAllEnabledEvents finished success=\(success)")
         return success
@@ -59,6 +60,67 @@ final class RoutineScheduler {
 
     func scheduleAdhan(for schedule: DaySchedule, settings: AppSettings, canUseAlarmKit: Bool) async -> Bool {
         await scheduleAdhanIfNeeded(for: schedule, settings: settings, canUseAlarmKit: canUseAlarmKit, now: Date())
+    }
+
+    func scheduleIftarNotification(for schedule: DaySchedule, settings: AppSettings) async -> Bool {
+        guard let iftarDate = schedule.iftarDate else { return true }
+        let identifier = SchedulingIdentifiers.dailyIdentifier(for: schedule, kind: .iftarNotification)
+        let scheduled = await notificationScheduler.scheduleNotification(
+            identifier: identifier,
+            kind: .iftarNotification,
+            date: iftarDate,
+            settings: settings,
+            schedule: schedule
+        )
+        eventLog.record(category: "schedule", message: "Scheduled iftar notification id=\(identifier) date=\(iftarDate)")
+        return scheduled
+    }
+
+    func scheduleIftarAudible(for schedule: DaySchedule, settings: AppSettings, canUseAlarmKit: Bool, kind: ScheduleEventKind) async -> Bool {
+        guard let iftarDate = schedule.iftarDate else { return true }
+        if canUseAlarmKit, #available(iOS 26.0, *) {
+            if FeatureFlags.useAlarmCoordinatorForScheduling, let alarmCoordinator {
+                let id = SchedulingIdentifiers.alarmID(for: schedule, kind: kind)
+                let scheduled = await alarmCoordinator.scheduleAlarm(
+                    id: id,
+                    kind: kind,
+                    date: iftarDate,
+                    label: settings.label,
+                    fajrDateTime: schedule.fajrDate,
+                    soundName: alarmSoundName(for: kind, schedule: schedule, settings: settings),
+                    snoozeDuration: nil
+                )
+                eventLog.record(category: "schedule", message: "Scheduled iftar AlarmKit id=\(id.uuidString) date=\(iftarDate) kind=\(kind.rawValue)")
+                return scheduled
+            } else if let alarmKitScheduler {
+                do {
+                    try await alarmKitScheduler.scheduleAlarm(
+                        for: schedule,
+                        kind: kind,
+                        date: iftarDate,
+                        label: settings.label,
+                        soundName: alarmSoundName(for: kind, schedule: schedule, settings: settings)
+                    )
+                    eventLog.record(category: "schedule", message: "Scheduled iftar AlarmKit id=\(SchedulingIdentifiers.alarmID(for: schedule, kind: kind).uuidString) date=\(iftarDate) kind=\(kind.rawValue)")
+                    return true
+                } catch {
+                    Logging.scheduler.error("AlarmKit iftar scheduling error: \(error.localizedDescription)")
+                    eventLog.record(category: "schedule", message: "AlarmKit iftar scheduling error: \(error.localizedDescription)")
+                    return false
+                }
+            }
+        }
+
+        let identifier = SchedulingIdentifiers.dailyIdentifier(for: schedule, kind: kind)
+        let scheduled = await notificationScheduler.scheduleNotification(
+            identifier: identifier,
+            kind: kind,
+            date: iftarDate,
+            settings: settings,
+            schedule: schedule
+        )
+        eventLog.record(category: "schedule", message: "Scheduled iftar fallback notification id=\(identifier) date=\(iftarDate) kind=\(kind.rawValue)")
+        return scheduled
     }
 
     func cancelWake(for schedule: DaySchedule) async {
@@ -94,6 +156,22 @@ final class RoutineScheduler {
         await notificationScheduler.cancelNotifications(identifiers: [SchedulingIdentifiers.legacyDailyIdentifier(for: schedule, kind: .boundary)])
     }
 
+    func cancelIftar(for schedule: DaySchedule) async {
+        eventLog.record(category: "schedule", message: "Cancel iftar for \(schedule.id)")
+        let kinds: [ScheduleEventKind] = [.iftarNotification, .iftarAlarm, .iftarAdhan]
+        for kind in kinds {
+            if kind != .iftarNotification {
+                if FeatureFlags.useAlarmCoordinatorForScheduling, #available(iOS 26.0, *), let alarmCoordinator {
+                    alarmCoordinator.cancel(id: SchedulingIdentifiers.alarmID(for: schedule, kind: kind))
+                } else if #available(iOS 26.0, *), let alarmKitScheduler {
+                    alarmKitScheduler.cancel(schedule: schedule, kind: kind)
+                }
+            }
+            await notificationScheduler.cancelNotifications(identifiers: [SchedulingIdentifiers.dailyIdentifier(for: schedule, kind: kind)])
+            await notificationScheduler.cancelNotifications(identifiers: [SchedulingIdentifiers.legacyDailyIdentifier(for: schedule, kind: kind)])
+        }
+    }
+
     func cancelAllUpcoming(days: Int) async {
         eventLog.record(category: "schedule", message: "Cancel all upcoming schedules (days=\(days))")
         if FeatureFlags.useAlarmCoordinatorForScheduling, #available(iOS 26.0, *), let alarmCoordinator {
@@ -103,6 +181,8 @@ final class RoutineScheduler {
                 ids.append(SchedulingIdentifiers.alarmID(for: schedule, kind: .wake))
                 ids.append(SchedulingIdentifiers.alarmID(for: schedule, kind: .reminder))
                 ids.append(SchedulingIdentifiers.alarmID(for: schedule, kind: .boundary))
+                ids.append(SchedulingIdentifiers.alarmID(for: schedule, kind: .iftarAlarm))
+                ids.append(SchedulingIdentifiers.alarmID(for: schedule, kind: .iftarAdhan))
                 ids.append(SchedulingIdentifiers.legacyAlarmID(for: schedule, kind: .wake))
                 ids.append(SchedulingIdentifiers.legacyAlarmID(for: schedule, kind: .reminder))
                 ids.append(SchedulingIdentifiers.legacyAlarmID(for: schedule, kind: .boundary))
@@ -146,10 +226,13 @@ final class RoutineScheduler {
         let dummySchedule = DaySchedule(
             date: now,
             fajrDate: adhanDate,
+            maghribDate: now.addingTimeInterval(240),
             wakeDate: wakeDate,
             reminderDate: reminderDate,
             boundaryDate: adhanDate,
+            iftarDate: now.addingTimeInterval(240),
             fajrSoundChoice: settings.atFajrSoundSelectionGlobal,
+            iftarSoundChoice: nil,
             locationDescription: "",
             offsetMinutes: settings.baseWakeOffsetMinutes,
             calculationMethodName: settings.calculationMethod.displayName,
@@ -373,6 +456,9 @@ final class RoutineScheduler {
         if let boundaryDate = schedule.boundaryDate {
             candidateDates.append(boundaryDate)
         }
+        if let iftarDate = schedule.iftarDate {
+            candidateDates.append(iftarDate)
+        }
         return candidateDates.contains { $0 > now }
     }
 
@@ -549,14 +635,38 @@ final class RoutineScheduler {
         return scheduled
     }
 
-    private func alarmSoundName(for kind: ScheduleEventKind, schedule: DaySchedule, settings: AppSettings) -> String? {
-        guard kind == .boundary else { return nil }
-        let soundChoice = schedule.fajrSoundChoice ?? settings.atFajrSoundSelectionGlobal
-        guard soundChoice == .adhanSoft else { return nil }
-        if Bundle.main.url(forResource: "adhan_fajr", withExtension: "caf") != nil {
-            return "adhan_fajr.caf"
+    private func scheduleIftarIfNeeded(
+        for schedule: DaySchedule,
+        settings: AppSettings,
+        now: Date
+    ) async -> Bool {
+        guard let iftarDate = schedule.iftarDate else { return true }
+        guard iftarDate > now else {
+            eventLog.record(category: "schedule", message: "Skip iftar in past for \(schedule.id) date=\(iftarDate)")
+            return true
         }
-        return nil
+        return await scheduleIftarNotification(for: schedule, settings: settings)
+    }
+
+    private func alarmSoundName(for kind: ScheduleEventKind, schedule: DaySchedule, settings: AppSettings) -> String? {
+        switch kind {
+        case .boundary:
+            let soundChoice = schedule.fajrSoundChoice ?? settings.atFajrSoundSelectionGlobal
+            guard soundChoice == .adhanSoft else { return nil }
+            if Bundle.main.url(forResource: "adhan_fajr", withExtension: "caf") != nil {
+                return "adhan_fajr.caf"
+            }
+            return nil
+        case .iftarAdhan:
+            let soundChoice = schedule.iftarSoundChoice
+            guard soundChoice == .adhanSoft else { return nil }
+            if Bundle.main.url(forResource: "adhan_maghrib", withExtension: "caf") != nil {
+                return "adhan_maghrib.caf"
+            }
+            return nil
+        default:
+            return nil
+        }
     }
 
     private func notificationIdentifiers(days: Int) -> [String] {
@@ -585,6 +695,9 @@ final class RoutineScheduler {
             results.append(identifier(schedule, .wake))
             results.append(identifier(schedule, .reminder))
             results.append(identifier(schedule, .boundary))
+            results.append(identifier(schedule, .iftarNotification))
+            results.append(identifier(schedule, .iftarAlarm))
+            results.append(identifier(schedule, .iftarAdhan))
         }
         return results
     }
@@ -593,10 +706,13 @@ final class RoutineScheduler {
         DaySchedule(
             date: day,
             fajrDate: day,
+            maghribDate: day,
             wakeDate: day,
             reminderDate: nil,
             boundaryDate: nil,
+            iftarDate: nil,
             fajrSoundChoice: nil,
+            iftarSoundChoice: nil,
             locationDescription: "",
             offsetMinutes: 0,
             calculationMethodName: "",

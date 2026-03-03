@@ -121,6 +121,8 @@ final class AlarmCoordinator {
             eventLog.record(.scheduledFajrReminder, metadata: metadata)
         case .boundary:
             eventLog.record(.scheduledFajrAdhan, metadata: metadata)
+        case .iftarNotification, .iftarAlarm, .iftarAdhan:
+            eventLog.record(.scheduledFajrAdhan, metadata: metadata.merging(["phase": "iftar"]) { _, new in new })
         }
     }
 

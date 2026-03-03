@@ -387,9 +387,13 @@ struct TagComputationEngineTests {
         DaySchedule(
             date: date,
             fajrDate: date,
+            maghribDate: date,
             wakeDate: date,
             reminderDate: nil,
             boundaryDate: nil,
+            iftarDate: nil,
+            fajrSoundChoice: nil,
+            iftarSoundChoice: nil,
             locationDescription: "Test",
             offsetMinutes: 0,
             calculationMethodName: "Test",
