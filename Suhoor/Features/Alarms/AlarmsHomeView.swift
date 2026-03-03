@@ -17,6 +17,8 @@ struct AlarmsHomeView: View {
     @State private var loadingSectionIDs: Set<String> = []
     @State private var listSnapshot: AlarmListSnapshot = .empty
     @State private var pendingFocusDateKey: String?
+    @State private var pendingSeriesDeleteEntry: AlarmRowEntry?
+    @State private var pendingRamadanEntry: AlarmRowEntry?
 
     var body: some View {
         NavigationStack {
@@ -53,11 +55,15 @@ struct AlarmsHomeView: View {
                                             secondaryTags: entry.secondaryTags,
                                             warnings: entry.warnings,
                                             showsTags: entry.showsTags,
+                                            deleteCapability: entry.deleteCapability,
                                             onSelect: {
                                                 selectedSchedule = entry.schedule
+                                            },
+                                            onRequestRamadanDisable: {
+                                                pendingRamadanEntry = entry
                                             }
                                         )
-                                        .deleteDisabled(!entry.isOneOff)
+                                        .deleteDisabled(entry.deleteCapability == .ramadan)
                                     }
                                     .onDelete { offsets in
                                         deleteEntries(in: section.entries, at: offsets)
@@ -100,6 +106,81 @@ struct AlarmsHomeView: View {
                         Image(systemName: "gearshape")
                     }
                 }
+            }
+            .confirmationDialog(
+                "Delete alarm",
+                isPresented: Binding(
+                    get: { pendingSeriesDeleteEntry != nil },
+                    set: { isPresented in
+                        if !isPresented {
+                            pendingSeriesDeleteEntry = nil
+                        }
+                    }
+                ),
+                titleVisibility: .visible
+            ) {
+                if let entry = pendingSeriesDeleteEntry {
+                    let excludable = entry.excludableProvenances
+                    if excludable.count == 1, let provenance = excludable.first {
+                        Button("Remove this day only") {
+                            Task {
+                                await deleteDayOnly(entry: entry, provenance: provenance)
+                                await MainActor.run { pendingSeriesDeleteEntry = nil }
+                            }
+                        }
+                    } else {
+                        Button("Remove this day from all schedules", role: .destructive) {
+                            Task {
+                                await deleteDayFromAllSchedules(entry: entry, provenances: excludable)
+                                await MainActor.run { pendingSeriesDeleteEntry = nil }
+                            }
+                        }
+                        ForEach(excludable, id: \.id) { provenance in
+                            Button("Remove this day from \(provenance.label)") {
+                                Task {
+                                    await deleteDayOnly(entry: entry, provenance: provenance)
+                                    await MainActor.run { pendingSeriesDeleteEntry = nil }
+                                }
+                            }
+                        }
+                    }
+
+                    ForEach(entry.stoppableProvenances, id: \.id) { provenance in
+                        let title = provenance.stopSeriesLabel ?? "Remove schedule"
+                        Button(title, role: .destructive) {
+                            Task {
+                                await scheduleManager.stopSeries(for: provenance)
+                                await MainActor.run { pendingSeriesDeleteEntry = nil }
+                            }
+                        }
+                    }
+
+                    Button(Strings.Settings.cancel, role: .cancel) {}
+                }
+            }
+            .alert(
+                "Ramadan alarms can’t be deleted",
+                isPresented: Binding(
+                    get: { pendingRamadanEntry != nil },
+                    set: { isPresented in
+                        if !isPresented {
+                            pendingRamadanEntry = nil
+                        }
+                    }
+                )
+            ) {
+                Button("Turn off for this day") {
+                    if let entry = pendingRamadanEntry {
+                        alarmConfigStore.setDayEnabled(false, for: entry.schedule.date, timeZone: .current)
+                        scheduleManager.requestRescheduleDay(entry.schedule.date)
+                    }
+                    pendingRamadanEntry = nil
+                }
+                Button(Strings.Settings.cancel, role: .cancel) {
+                    pendingRamadanEntry = nil
+                }
+            } message: {
+                Text("This date is part of Ramadan. You can turn it off for the day instead.")
             }
             .navigationDestination(isPresented: navigationIsActiveBinding) {
                 if let schedule = selectedSchedule {
@@ -273,17 +354,49 @@ struct AlarmsHomeView: View {
     }
 
     private func deleteEntries(in entries: [AlarmRowEntry], at offsets: IndexSet) {
+        var pending: AlarmRowEntry?
         for index in offsets {
             guard entries.indices.contains(index) else { continue }
             let entry = entries[index]
-            guard entry.isOneOff else { continue }
-            deleteOneOff(entry)
+            switch entry.deleteCapability {
+            case .explicitOneOff:
+                deleteOneOff(entry)
+            case .series, .mixed:
+                if pending == nil {
+                    pending = entry
+                }
+            case .ramadan:
+                break
+            }
+        }
+        if let pending {
+            pendingSeriesDeleteEntry = pending
         }
     }
 
     private func deleteOneOff(_ entry: AlarmRowEntry) {
         let date = entry.schedule.date
         Task { await scheduleManager.deleteExplicitScheduledDate(date) }
+    }
+
+    private func deleteDayOnly(entry: AlarmRowEntry, provenance: ResolvedScheduledDateProvenance) async {
+        await scheduleManager.deleteDayAndSuppress(
+            entry.schedule.date,
+            scopes: [suppressionScope(for: provenance)],
+            deleteExplicit: entry.hasExplicitOneOff
+        )
+    }
+
+    private func deleteDayFromAllSchedules(
+        entry: AlarmRowEntry,
+        provenances: [ResolvedScheduledDateProvenance]
+    ) async {
+        let scopes = provenances.map { suppressionScope(for: $0) }
+        await scheduleManager.deleteDayAndSuppress(
+            entry.schedule.date,
+            scopes: scopes,
+            deleteExplicit: entry.hasExplicitOneOff
+        )
     }
 
     private func isSectionCollapsed(_ section: HijriMonthSection) -> Bool {
@@ -474,6 +587,10 @@ private struct AlarmRowEntry: Identifiable {
     let secondaryTags: [FastSecondaryVirtueTag]
     let warnings: [FastWarning]
     let showsTags: Bool
+    let deleteCapability: AlarmRowDeleteCapability
+    let stoppableProvenances: [ResolvedScheduledDateProvenance]
+    let excludableProvenances: [ResolvedScheduledDateProvenance]
+    let hasExplicitOneOff: Bool
 
     init(activeDay: ActiveAlarmDay) {
         let secondaryTags = AlarmRowPresentation.secondaryTags(for: activeDay.tagResult)
@@ -486,6 +603,22 @@ private struct AlarmRowEntry: Identifiable {
             secondaryTags: secondaryTags,
             warnings: warnings
         )
+        let provenances = activeDay.provenances
+        let isRamadan = activeDay.isImplicitRamadan
+        let hasExplicit = provenances.contains(where: \.isExplicitOneOff)
+        let nonExplicit = provenances.filter { !$0.isExplicitOneOff }
+        self.hasExplicitOneOff = hasExplicit
+        self.excludableProvenances = nonExplicit
+        self.stoppableProvenances = AlarmRowEntry.uniqueStoppableProvenances(from: provenances)
+        if isRamadan {
+            self.deleteCapability = .ramadan
+        } else if activeDay.isExplicitOneOff && nonExplicit.isEmpty {
+            self.deleteCapability = .explicitOneOff
+        } else if hasExplicit && !nonExplicit.isEmpty {
+            self.deleteCapability = .mixed
+        } else {
+            self.deleteCapability = .series
+        }
     }
 
     var schedule: DaySchedule { activeDay.schedule }
@@ -494,6 +627,28 @@ private struct AlarmRowEntry: Identifiable {
     var isOneOff: Bool { activeDay.isExplicitOneOff }
     var primaryIntent: FastPrimaryIntent { activeDay.tagResult.computedPrimaryIntent }
     var id: String { activeDay.dateKey }
+
+    private static func uniqueStoppableProvenances(
+        from provenances: [ResolvedScheduledDateProvenance]
+    ) -> [ResolvedScheduledDateProvenance] {
+        var seen = Set<String>()
+        return provenances.filter { provenance in
+            guard provenance.canStopSeries else { return false }
+            let key = "\(provenance.groupID?.uuidString ?? provenance.sourceID.uuidString)-\(provenance.stopSeriesLabel ?? "")"
+            if seen.contains(key) {
+                return false
+            }
+            seen.insert(key)
+            return true
+        }
+    }
+}
+
+private enum AlarmRowDeleteCapability: Equatable {
+    case ramadan
+    case explicitOneOff
+    case series
+    case mixed
 }
 
 private struct HijriMonthSection: Identifiable {
@@ -523,7 +678,9 @@ private struct AlarmRowView: View {
     let secondaryTags: [FastSecondaryVirtueTag]
     let warnings: [FastWarning]
     let showsTags: Bool
+    let deleteCapability: AlarmRowDeleteCapability
     let onSelect: () -> Void
+    let onRequestRamadanDisable: () -> Void
     @ScaledMetric(relativeTo: .largeTitle) private var timeFontSize: CGFloat = 46
     @State private var localIsOn: Bool
 
@@ -551,7 +708,9 @@ private struct AlarmRowView: View {
         secondaryTags: [FastSecondaryVirtueTag],
         warnings: [FastWarning],
         showsTags: Bool,
-        onSelect: @escaping () -> Void
+        deleteCapability: AlarmRowDeleteCapability,
+        onSelect: @escaping () -> Void,
+        onRequestRamadanDisable: @escaping () -> Void
     ) {
         self.schedule = schedule
         self.config = config
@@ -560,7 +719,9 @@ private struct AlarmRowView: View {
         self.secondaryTags = secondaryTags
         self.warnings = warnings
         self.showsTags = showsTags
+        self.deleteCapability = deleteCapability
         self.onSelect = onSelect
+        self.onRequestRamadanDisable = onRequestRamadanDisable
         _localIsOn = State(initialValue: AlarmRowView.isEnabled(config: config))
     }
 
@@ -620,6 +781,19 @@ private struct AlarmRowView: View {
                 .accessibilityLabel("\(primaryLabelText) alarm")
         }
         .padding(.vertical, 6)
+        .overlay(alignment: .leading) {
+            if editMode?.wrappedValue.isEditing == true, deleteCapability == .ramadan {
+                Button(action: onRequestRamadanDisable) {
+                    Rectangle()
+                        .fill(Color.clear)
+                        .frame(width: 44, height: 44)
+                }
+                .buttonStyle(.plain)
+                .contentShape(Rectangle())
+                .padding(.leading, -16)
+                .accessibilityLabel("Turn off Ramadan alarm")
+            }
+        }
         .onChange(of: config) { _, newValue in
             localIsOn = AlarmRowView.isEnabled(config: newValue)
         }
@@ -734,6 +908,13 @@ private extension AlarmsHomeView {
             }
         })
     }
+}
+
+private func suppressionScope(for provenance: ResolvedScheduledDateProvenance) -> SuppressionScope {
+    if let groupID = provenance.groupID {
+        return .groupID(groupID)
+    }
+    return .sourceID(provenance.sourceID)
 }
 
 private struct HomeTagCapsuleRow: View {

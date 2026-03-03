@@ -12,6 +12,7 @@ struct AlarmDayDetailView: View {
     private let timeZone: TimeZone = .current
     @State private var reminderTimeClamped = false
     @State private var showsResetConfirmation = false
+    @State private var showsExclusionDialog = false
     @State private var expandedAlarm: ExpandedAlarm?
     @State private var showsTagPicker = false
     @State private var selectedAbout: FastTagAbout?
@@ -33,6 +34,24 @@ struct AlarmDayDetailView: View {
                 Button(Strings.Settings.cancel, role: .cancel) {}
             } message: {
                 Text(Strings.AlarmsTab.resetDayMessage)
+            }
+            .confirmationDialog(
+                "Exclude this date from which schedule?",
+                isPresented: $showsExclusionDialog,
+                titleVisibility: .visible
+            ) {
+                ForEach(stoppableProvenances, id: \.id) { provenance in
+                    Button("Exclude from \(provenance.label)") {
+                        Task {
+                            await scheduleManager.skipScheduledDate(
+                                schedule.date,
+                                scope: suppressionScope(for: provenance)
+                            )
+                            dismiss()
+                        }
+                    }
+                }
+                Button(Strings.Settings.cancel, role: .cancel) {}
             }
             .sheet(isPresented: $showsTagPicker) {
                 NavigationStack {
@@ -537,9 +556,16 @@ struct AlarmDayDetailView: View {
                             subtitle: Strings.AlarmsTab.sourceDayExclusionHelper,
                             tint: DawnColor.accent
                         ) {
-                            Task {
-                                await scheduleManager.skipScheduledDate(schedule.date)
-                                dismiss()
+                            if stoppableProvenances.count == 1, let provenance = stoppableProvenances.first {
+                                Task {
+                                    await scheduleManager.skipScheduledDate(
+                                        schedule.date,
+                                        scope: suppressionScope(for: provenance)
+                                    )
+                                    dismiss()
+                                }
+                            } else {
+                                showsExclusionDialog = true
                             }
                         }
 
@@ -1239,4 +1265,11 @@ private struct DetailActionButton: View {
         }
         return tint ?? .primary
     }
+}
+
+private func suppressionScope(for provenance: ResolvedScheduledDateProvenance) -> SuppressionScope {
+    if let groupID = provenance.groupID {
+        return .groupID(groupID)
+    }
+    return .sourceID(provenance.sourceID)
 }

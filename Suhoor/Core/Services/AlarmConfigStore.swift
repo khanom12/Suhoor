@@ -165,17 +165,23 @@ final class AlarmConfigStore: ObservableObject {
 
     func isDeletedDate(on date: Date, timeZone: TimeZone = .current) -> Bool {
         let key = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
-        return suppressedScheduledDateStore.contains(key)
+        return suppressedScheduledDateStore.hasAnySuppression(key)
     }
 
     func addDeletedDate(_ date: Date, timeZone: TimeZone = .current) {
         let key = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
-        suppressedScheduledDateStore.insert(key)
+        suppressedScheduledDateStore.insert(key, scope: .global)
     }
 
     func removeDeletedDate(_ date: Date, timeZone: TimeZone = .current) {
         let key = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
         suppressedScheduledDateStore.remove(key)
+    }
+
+    func moveSuppression(from oldDate: Date, to newDate: Date, timeZone: TimeZone = .current) {
+        let oldKey = DateHelpers.dayIdentifier(for: oldDate, timeZone: timeZone)
+        let newKey = DateHelpers.dayIdentifier(for: newDate, timeZone: timeZone)
+        suppressedScheduledDateStore.moveEntry(from: oldKey, to: newKey)
     }
 
     func resolvedScheduledEntries(
@@ -577,10 +583,14 @@ final class AlarmConfigStore: ObservableObject {
         }
     }
 
-    func suppressScheduledDate(_ date: Date, timeZone: TimeZone = .current) {
+    func suppressScheduledDate(
+        _ date: Date,
+        scope: SuppressionScope = .global,
+        timeZone: TimeZone = .current
+    ) {
         objectWillChange.send()
         let key = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
-        suppressedScheduledDateStore.insert(key)
+        suppressedScheduledDateStore.insert(key, scope: scope)
     }
 
     func stopSeries(for provenance: ResolvedScheduledDateProvenance) {
@@ -590,6 +600,12 @@ final class AlarmConfigStore: ObservableObject {
         } else {
             scheduledDateSourceStore.remove(id: provenance.sourceID)
         }
+        suppressedScheduledDateStore.clearScopes(for: provenance)
+    }
+
+    func clearSuppressionScopes(for provenance: ResolvedScheduledDateProvenance) {
+        objectWillChange.send()
+        suppressedScheduledDateStore.clearScopes(for: provenance)
     }
 
     func resetScheduledDateSources() {

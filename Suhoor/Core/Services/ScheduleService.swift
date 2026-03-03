@@ -633,9 +633,27 @@ final class ScheduleManager: ObservableObject {
         return true
     }
 
-    func skipScheduledDate(_ date: Date) async {
-        alarmConfigStore.suppressScheduledDate(date)
+    func skipScheduledDate(
+        _ date: Date,
+        scope: SuppressionScope = .global
+    ) async {
+        alarmConfigStore.suppressScheduledDate(date, scope: scope)
         alarmConfigStore.removeOverride(for: date)
+        await refreshSchedules(force: true)
+    }
+
+    func deleteDayAndSuppress(
+        _ date: Date,
+        scopes: [SuppressionScope],
+        deleteExplicit: Bool
+    ) async {
+        if deleteExplicit {
+            alarmConfigStore.deleteExplicitSources(on: date)
+            alarmConfigStore.removeOverride(for: date)
+        }
+        for scope in scopes {
+            alarmConfigStore.suppressScheduledDate(date, scope: scope)
+        }
         await refreshSchedules(force: true)
     }
 
@@ -1676,8 +1694,7 @@ final class ScheduleManager: ObservableObject {
             guard oldKey != newKey else { continue }
 
             if alarmConfigStore.isDeletedDate(on: oldDate, timeZone: timeZone) {
-                alarmConfigStore.removeDeletedDate(oldDate, timeZone: timeZone)
-                alarmConfigStore.addDeletedDate(newDate, timeZone: timeZone)
+                alarmConfigStore.moveSuppression(from: oldDate, to: newDate, timeZone: timeZone)
             }
 
             if let oldOverride = alarmConfigStore.override(for: oldDate, timeZone: timeZone) {

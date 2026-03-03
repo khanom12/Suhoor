@@ -174,16 +174,46 @@ final class ScheduledDateSourceStore {
     }
 }
 
+enum SuppressionScope: Equatable, Hashable, Sendable {
+    case global
+    case groupID(UUID)
+    case sourceID(UUID)
+}
+
+struct SuppressedDateEntry: Codable, Hashable, Sendable {
+    let dateKey: String
+    var scopedToGroupIDs: Set<UUID>
+    var scopedToSourceIDs: Set<UUID>
+    var isGlobal: Bool
+
+    init(
+        dateKey: String,
+        scopedToGroupIDs: Set<UUID> = [],
+        scopedToSourceIDs: Set<UUID> = [],
+        isGlobal: Bool = false
+    ) {
+        self.dateKey = dateKey
+        self.scopedToGroupIDs = scopedToGroupIDs
+        self.scopedToSourceIDs = scopedToSourceIDs
+        self.isGlobal = isGlobal
+    }
+
+    var isEmpty: Bool {
+        !isGlobal && scopedToGroupIDs.isEmpty && scopedToSourceIDs.isEmpty
+    }
+}
+
 final class SuppressedScheduledDateStore {
     private let defaults: UserDefaults
     private let storageKey = "Suhoor.SuppressedScheduledDateKeys"
     private let migrationKey = "Suhoor.SuppressedScheduledDateMigrationVersion"
+    private let currentMigrationVersion = 2
     private let persistence = DebouncedPersistenceController(
         label: "com.suhoor.app.suppressed-scheduled-date-keys",
         delay: 0.2
     )
 
-    private(set) var suppressedDateKeys: Set<String>
+    private(set) var suppressedDateEntries: [String: SuppressedDateEntry]
 
     init(
         defaults: UserDefaults = .standard,
@@ -191,49 +221,141 @@ final class SuppressedScheduledDateStore {
         shouldMigrateLegacyData: Bool = false
     ) {
         self.defaults = defaults
+        var needsPersist = false
         if let data = defaults.data(forKey: storageKey),
-           let decoded = try? JSONDecoder().decode(Set<String>.self, from: data) {
-            self.suppressedDateKeys = decoded
+           let decoded = try? JSONDecoder().decode([String: SuppressedDateEntry].self, from: data) {
+            self.suppressedDateEntries = decoded
+        } else if let data = defaults.data(forKey: storageKey),
+                  let decodedLegacy = try? JSONDecoder().decode(Set<String>.self, from: data) {
+            self.suppressedDateEntries = Dictionary(
+                uniqueKeysWithValues: decodedLegacy.map { key in
+                    (key, SuppressedDateEntry(dateKey: key, isGlobal: true))
+                }
+            )
+            needsPersist = true
         } else {
-            self.suppressedDateKeys = []
+            self.suppressedDateEntries = [:]
         }
 
         if shouldMigrateLegacyData {
-            performLegacyMigrationIfNeeded(legacyDeletedDateKeys: legacyDeletedDateKeys)
+            needsPersist = performLegacyMigrationIfNeeded(legacyDeletedDateKeys: legacyDeletedDateKeys) || needsPersist
+        }
+        if needsPersist {
+            persist()
+        }
+        if defaults.integer(forKey: migrationKey) < currentMigrationVersion {
+            defaults.set(currentMigrationVersion, forKey: migrationKey)
         }
     }
 
     func contains(_ dateKey: String) -> Bool {
-        suppressedDateKeys.contains(dateKey)
+        suppressedDateEntries[dateKey] != nil
     }
 
-    func insert(_ dateKey: String) {
-        suppressedDateKeys.insert(dateKey)
+    func shouldSuppress(dateKey: String, sourceID: UUID?, groupID: UUID?) -> Bool {
+        guard let entry = suppressedDateEntries[dateKey] else { return false }
+        if entry.isGlobal {
+            return true
+        }
+        if let groupID, entry.scopedToGroupIDs.contains(groupID) {
+            return true
+        }
+        if let sourceID, entry.scopedToSourceIDs.contains(sourceID) {
+            return true
+        }
+        return false
+    }
+
+    func insert(_ dateKey: String, scope: SuppressionScope = .global) {
+        var entry = suppressedDateEntries[dateKey] ?? SuppressedDateEntry(dateKey: dateKey)
+        switch scope {
+        case .global:
+            entry.isGlobal = true
+        case .groupID(let groupID):
+            entry.scopedToGroupIDs.insert(groupID)
+        case .sourceID(let sourceID):
+            entry.scopedToSourceIDs.insert(sourceID)
+        }
+        suppressedDateEntries[dateKey] = entry
         persist()
     }
 
     func remove(_ dateKey: String) {
-        suppressedDateKeys.remove(dateKey)
+        suppressedDateEntries.removeValue(forKey: dateKey)
+        persist()
+    }
+
+    func removeScope(_ dateKey: String, scope: SuppressionScope) {
+        guard var entry = suppressedDateEntries[dateKey] else { return }
+        switch scope {
+        case .global:
+            entry.isGlobal = false
+        case .groupID(let groupID):
+            entry.scopedToGroupIDs.remove(groupID)
+        case .sourceID(let sourceID):
+            entry.scopedToSourceIDs.remove(sourceID)
+        }
+        if entry.isEmpty {
+            suppressedDateEntries.removeValue(forKey: dateKey)
+        } else {
+            suppressedDateEntries[dateKey] = entry
+        }
+        persist()
+    }
+
+    func clearScopes(for provenance: ResolvedScheduledDateProvenance) {
+        guard !suppressedDateEntries.isEmpty else { return }
+        let groupID = provenance.groupID
+        let sourceID = provenance.sourceID
+        var updated: [String: SuppressedDateEntry] = [:]
+
+        for (key, var entry) in suppressedDateEntries {
+            if let groupID {
+                entry.scopedToGroupIDs.remove(groupID)
+            }
+            entry.scopedToSourceIDs.remove(sourceID)
+            if !entry.isEmpty {
+                updated[key] = entry
+            }
+        }
+        suppressedDateEntries = updated
+        persist()
+    }
+
+    func hasAnySuppression(_ dateKey: String) -> Bool {
+        suppressedDateEntries[dateKey] != nil
+    }
+
+    func moveEntry(from oldKey: String, to newKey: String) {
+        guard let entry = suppressedDateEntries.removeValue(forKey: oldKey) else { return }
+        let updated = SuppressedDateEntry(
+            dateKey: newKey,
+            scopedToGroupIDs: entry.scopedToGroupIDs,
+            scopedToSourceIDs: entry.scopedToSourceIDs,
+            isGlobal: entry.isGlobal
+        )
+        suppressedDateEntries[newKey] = updated
         persist()
     }
 
     func reset() {
         persistence.cancelPending()
-        suppressedDateKeys = []
+        suppressedDateEntries = [:]
         defaults.removeObject(forKey: storageKey)
         defaults.removeObject(forKey: migrationKey)
     }
 
-    private func performLegacyMigrationIfNeeded(legacyDeletedDateKeys: Set<String>) {
+    private func performLegacyMigrationIfNeeded(legacyDeletedDateKeys: Set<String>) -> Bool {
         let version = defaults.integer(forKey: migrationKey)
-        guard version < 1 else { return }
-        suppressedDateKeys.formUnion(legacyDeletedDateKeys)
-        persist()
-        defaults.set(1, forKey: migrationKey)
+        guard version < 1 else { return false }
+        for key in legacyDeletedDateKeys {
+            suppressedDateEntries[key] = SuppressedDateEntry(dateKey: key, isGlobal: true)
+        }
+        return !legacyDeletedDateKeys.isEmpty
     }
 
     private func persist() {
-        let snapshot = suppressedDateKeys
+        let snapshot = suppressedDateEntries
         persistence.schedule { [defaults, storageKey] in
             guard let data = try? JSONEncoder().encode(snapshot) else { return }
             defaults.set(data, forKey: storageKey)
