@@ -51,6 +51,7 @@ final class ScheduleManager: ObservableObject {
     private let scheduledActiveDayLimit = 30
     private var expandedMonthSnapshots: [String: ExpandedMonthSnapshot] = [:]
     private var expandedMonthInvalidationToken: Int = 0
+    private var activeTagSelectionRevision: Int = -1
     private var queuedRefresh: PendingScheduleRefresh?
     private var refreshTask: Task<Void, Never>?
     private var pendingDayRescheduleTasks: [String: Task<Void, Never>] = [:]
@@ -132,6 +133,7 @@ final class ScheduleManager: ObservableObject {
                 scheduledHorizonDays: scheduledActiveDayLimit,
                 timeZone: .current
             )
+        self.activeTagSelectionRevision = cache.tagSelectionRevision ?? -1
         self.schedules = activeWindowSnapshot.visibleDays.map(\.schedule)
         self.hijriAdjustmentChanges = hijriAdjustmentChangeStore.pendingChanges()
 
@@ -311,7 +313,8 @@ final class ScheduleManager: ObservableObject {
     func monthEntries(for key: HijriMonthKey, timeZone: TimeZone = .current) async -> [ActiveAlarmDay] {
         let identifier = expandedMonthIdentifier(for: key)
         if let cached = expandedMonthSnapshots[identifier],
-           cached.invalidationToken == expandedMonthInvalidationToken {
+           cached.invalidationToken == expandedMonthInvalidationToken,
+           cached.tagSelectionRevision == fastTagStore.currentRevision {
             return cached.entries
         }
 
@@ -332,6 +335,7 @@ final class ScheduleManager: ObservableObject {
             key: key,
             generatedAt: Date(),
             invalidationToken: expandedMonthInvalidationToken,
+            tagSelectionRevision: fastTagStore.currentRevision,
             entries: entries
         )
         return entries
@@ -745,8 +749,17 @@ final class ScheduleManager: ObservableObject {
             now: now,
             timeZone: .current
         ) {
-                await refreshPermissionSummary()
+            if activeTagSelectionRevision != fastTagStore.currentRevision {
+                if !activeWindowSnapshot.visibleDays.isEmpty {
+                    retagActiveWindow(reason: "tag_selection_revision_mismatch")
+                    await refreshPermissionSummary()
+                    return
+                }
+                await refreshSchedules(force: true)
                 return
+            }
+            await refreshPermissionSummary()
+            return
         }
         await refreshSchedules(force: true)
     }
@@ -920,13 +933,15 @@ final class ScheduleManager: ObservableObject {
             draft.lastSchedulingMode = schedulingMode
         }
 
+        activeTagSelectionRevision = fastTagStore.currentRevision
         cacheStore.save(
             ScheduleCacheStore.Cache(
                 lastScheduledDate: settingsStore.settings.lastScheduledDate,
                 lastUpdated: lastUpdated,
                 schedulingMode: schedulingMode,
                 schedules: schedules,
-                activeWindowSnapshot: activeWindowSnapshot
+                activeWindowSnapshot: activeWindowSnapshot,
+                tagSelectionRevision: activeTagSelectionRevision
             )
         )
 
@@ -943,13 +958,15 @@ final class ScheduleManager: ObservableObject {
             activeWindowSnapshot = activeWindowSnapshot.removing(dateKey: key)
             schedules = activeWindowSnapshot.visibleDays.map(\.schedule)
             lastUpdated = Date()
+            activeTagSelectionRevision = fastTagStore.currentRevision
             cacheStore.save(
                 ScheduleCacheStore.Cache(
                     lastScheduledDate: settingsStore.settings.lastScheduledDate,
                     lastUpdated: lastUpdated,
                     schedulingMode: schedulingMode,
                     schedules: schedules,
-                    activeWindowSnapshot: activeWindowSnapshot
+                    activeWindowSnapshot: activeWindowSnapshot,
+                    tagSelectionRevision: activeTagSelectionRevision
                 )
             )
             updateBootstrapState()
@@ -987,13 +1004,15 @@ final class ScheduleManager: ObservableObject {
         }
 
         lastUpdated = Date()
+        activeTagSelectionRevision = fastTagStore.currentRevision
         cacheStore.save(
             ScheduleCacheStore.Cache(
                 lastScheduledDate: settingsStore.settings.lastScheduledDate,
                 lastUpdated: lastUpdated,
                 schedulingMode: schedulingMode,
                 schedules: schedules,
-                activeWindowSnapshot: activeWindowSnapshot
+                activeWindowSnapshot: activeWindowSnapshot,
+                tagSelectionRevision: activeTagSelectionRevision
             )
         )
         updateBootstrapState()
@@ -1980,9 +1999,9 @@ final class ScheduleManager: ObservableObject {
         return mismatches
     }
 
-    private func retagActiveWindow() {
+    private func retagActiveWindow(reason: String = "tag_selection_changed") {
         guard !activeWindowSnapshot.visibleDays.isEmpty else { return }
-        invalidateExpandedMonthSnapshots(reason: "tag_selection_changed")
+        invalidateExpandedMonthSnapshots(reason: reason)
         let token = PerformanceTrace.begin("tags.compute-window", metadata: "visible=\(activeWindowSnapshot.visibleDays.count)")
         defer { PerformanceTrace.end(token) }
 
@@ -2016,13 +2035,15 @@ final class ScheduleManager: ObservableObject {
             scheduledHorizonDays: activeWindowSnapshot.scheduledHorizonDays
         )
         schedules = activeWindowSnapshot.visibleDays.map(\.schedule)
+        activeTagSelectionRevision = fastTagStore.currentRevision
         cacheStore.save(
             ScheduleCacheStore.Cache(
                 lastScheduledDate: settingsStore.settings.lastScheduledDate,
                 lastUpdated: lastUpdated,
                 schedulingMode: schedulingMode,
                 schedules: schedules,
-                activeWindowSnapshot: activeWindowSnapshot
+                activeWindowSnapshot: activeWindowSnapshot,
+                tagSelectionRevision: activeTagSelectionRevision
             )
         )
     }
@@ -2176,10 +2197,18 @@ final class ScheduleManager: ObservableObject {
     }
 
     private func updateBootstrapState() {
+        let hasVisibleDays = !activeWindowSnapshot.visibleDays.isEmpty
+        if settingsStore.settings.isConfigured,
+           !permissionsLoaded,
+           hasVisibleDays {
+            bootstrapState = .home
+            return
+        }
+
         bootstrapState = Self.resolveBootstrapState(
             settings: settingsStore.settings,
             permissionStates: permissionSnapshot.presentations.mapValues(\.state),
-            hasVisibleDays: !activeWindowSnapshot.visibleDays.isEmpty
+            hasVisibleDays: hasVisibleDays
         )
     }
 
@@ -2201,6 +2230,10 @@ final class ScheduleManager: ObservableObject {
         }
 
         return .home
+    }
+
+    private var permissionsLoaded: Bool {
+        permissionSnapshot.presentations.count == AppPermissionKind.allCases.count
     }
 
     static func shouldReuseScheduleWindow(
@@ -2505,6 +2538,8 @@ private func defaultPrimaryIntent(for provenances: [ResolvedScheduledDateProvena
         switch $0.sourceOrigin {
         case .recurringIslamic(let rule):
             return rule == .whiteDays || rule == .mondayThursday
+        case .islamicQuickAdd:
+            return true
         default:
             return false
         }
@@ -2567,6 +2602,7 @@ struct ExpandedMonthSnapshot: Equatable, Sendable {
     let key: HijriMonthKey
     let generatedAt: Date
     let invalidationToken: Int
+    let tagSelectionRevision: Int
     let entries: [ActiveAlarmDay]
 }
 
