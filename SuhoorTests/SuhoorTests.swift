@@ -93,44 +93,6 @@ struct SuhoorTests {
     }
 
     @Test
-    func perDayOverrideWinsOverLayers() {
-        var settings = AppSettings.default
-        settings.ramadanModeEnabled = true
-        settings.weekendBoostEnabled = true
-        settings.weekendBoostMinutes = 60
-        settings.last10Enabled = true
-        settings.last10BoostMinutes = 90
-        settings.lqEnabled = true
-        settings.lqBoostMinutes = 120
-
-        let engine = RamadanProfileEngine()
-        guard let range = engine.computeRamadanRange(
-            forGregorianYear: 2026,
-            startAdjustmentDays: 0,
-            endAdjustmentDays: 0,
-            timeZone: .current
-        ) else {
-            #expect(false)
-            return
-        }
-
-        let overrideDate = range.startDate
-        let key = DateHelpers.dayIdentifier(for: overrideDate, timeZone: .current)
-        settings.perDayExceptions[key] = DayException(
-            disabledForDay: false,
-            wakeOffsetOverrideMinutes: 90,
-            reminderEnabledOverride: nil,
-            atFajrEnabledOverride: nil,
-            reminderMinutesOverride: nil,
-            atFajrSoundOverride: nil,
-            iftarEnabledOverride: nil
-        )
-
-        let ruleEngine = RuleEngine(settings: settings, timeZone: .current)
-        #expect(ruleEngine.effectiveWakeOffsetMinutes(for: overrideDate) == 90)
-    }
-
-    @Test
     func precedenceWinsWhenMultipleApply() {
         var settings = AppSettings.default
         settings.ramadanModeEnabled = true
@@ -157,39 +119,6 @@ struct SuhoorTests {
 
         let ruleEngine = RuleEngine(settings: settings, timeZone: .current)
         #expect(ruleEngine.effectiveWakeOffsetMinutes(for: date) == 70)
-    }
-
-    @Test
-    func badgesIncludeCustomWhenOverrideExists() {
-        var settings = AppSettings.default
-        settings.ramadanModeEnabled = true
-
-        let profileEngine = RamadanProfileEngine()
-        guard let range = profileEngine.computeRamadanRange(
-            forGregorianYear: 2026,
-            startAdjustmentDays: 0,
-            endAdjustmentDays: 0,
-            timeZone: .current
-        ) else {
-            #expect(false)
-            return
-        }
-
-        let date = range.startDate
-        let key = DateHelpers.dayIdentifier(for: date, timeZone: .current)
-        settings.perDayExceptions[key] = DayException(
-            disabledForDay: false,
-            wakeOffsetOverrideMinutes: 45,
-            reminderEnabledOverride: nil,
-            atFajrEnabledOverride: nil,
-            reminderMinutesOverride: nil,
-            atFajrSoundOverride: nil,
-            iftarEnabledOverride: nil
-        )
-
-        let ruleEngine = RuleEngine(settings: settings, timeZone: .current)
-        let badges = ruleEngine.applicableBadges(for: date)
-        #expect(badges.contains(.custom))
     }
 
     @Test
@@ -799,25 +728,6 @@ struct SuhoorTests {
         let scheduledKeys = snapshot.scheduledDays.map(\.dateKey)
         #expect(!visibleKeys.isEmpty)
         #expect(scheduledKeys == Array(visibleKeys.prefix(snapshot.scheduledHorizonDays)))
-    }
-
-    @Test
-    func skippedDayReturnsDisabledSummary() {
-        var settings = AppSettings.default
-        let date = Date()
-        let key = DateHelpers.dayIdentifier(for: date, timeZone: .current)
-        settings.perDayExceptions[key] = DayException(
-            disabledForDay: true,
-            wakeOffsetOverrideMinutes: nil,
-            reminderEnabledOverride: nil,
-            atFajrEnabledOverride: nil,
-            reminderMinutesOverride: nil,
-            atFajrSoundOverride: nil,
-            iftarEnabledOverride: nil
-        )
-
-        let summary = RuleEngine(settings: settings, timeZone: .current).ruleSummary(for: date)
-        #expect(summary.disabledForDay == true)
     }
 
     @Test

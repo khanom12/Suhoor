@@ -753,25 +753,8 @@ final class AlarmConfigStore: ObservableObject {
                         activationMode: .alwaysOn,
                         activeStartDate: nil,
                         activeEndDate: nil,
-                        scheduleWindowDays: legacySettings.schedulePreviewDays
+                        scheduleWindowDays: DefaultAlarmConfig.default.scheduleWindowDays
                     )
-
-                    if !legacySettings.perDayExceptions.isEmpty {
-                        var migrated: [String: DailyAlarmOverride] = [:]
-                        for (key, exception) in legacySettings.perDayExceptions {
-                            guard let date = dateFromKey(key) else { continue }
-                            var override = DailyAlarmOverride(date: date)
-                            override.skipDay = exception.disabledForDay
-                            override.suhoorOffsetOverrideMinutes = exception.wakeOffsetOverrideMinutes
-                            override.reminderEnabled = exception.reminderEnabledOverride
-                            override.reminderOffsetOverrideMinutes = exception.reminderMinutesOverride
-                            override.fajrEnabled = exception.atFajrEnabledOverride
-                            override.fajrSoundOverride = exception.atFajrSoundOverride
-                            override.iftarEnabled = exception.iftarEnabledOverride
-                            migrated[key] = override
-                        }
-                        overridesByDay = migrated
-                    }
                 }
             }
 
@@ -793,14 +776,6 @@ final class AlarmConfigStore: ObservableObject {
         }
 
         defaultsStore.set(max(currentVersion, Self.latestMigrationVersion), forKey: migrationKey)
-    }
-
-    private func dateFromKey(_ key: String) -> Date? {
-        let formatter = DateFormatter()
-        formatter.calendar = Calendar(identifier: .gregorian)
-        formatter.timeZone = .current
-        formatter.dateFormat = "yyyy-MM-dd"
-        return formatter.date(from: key)
     }
 
     private func persistDefaults() {

@@ -14,15 +14,11 @@ struct AppSettings: Codable, Equatable, Sendable {
     var calculationMethod: CalculationMethod
     var fajrAdjustmentMinutes: Int
     var maghribAdjustmentMinutes: Int
-    var schedulePreviewDays: Int
     var locationMode: LocationMode
     var fixedLocation: FixedLocation?
     var lastScheduledDate: Date?
     var lastSchedulingMode: SchedulingMode
     var hijriSpecialDaySettings: HijriSpecialDaySettings
-
-    var perDayExceptions: [String: DayException]
-    var perDayOverrideOffsets: [String: Int]
 
     static let `default` = AppSettings(
         isConfigured: false,
@@ -38,14 +34,11 @@ struct AppSettings: Codable, Equatable, Sendable {
         calculationMethod: CalculationMethod.defaultForTimeZone(TimeZone.current),
         fajrAdjustmentMinutes: 0,
         maghribAdjustmentMinutes: 0,
-        schedulePreviewDays: 14,
         locationMode: .auto,
         fixedLocation: nil,
         lastScheduledDate: nil,
         lastSchedulingMode: .none,
-        hijriSpecialDaySettings: .default,
-        perDayExceptions: [:],
-        perDayOverrideOffsets: [:]
+        hijriSpecialDaySettings: .default
     )
 }
 
@@ -86,7 +79,6 @@ extension AppSettings {
         case calculationMethod
         case fajrAdjustmentMinutes
         case maghribAdjustmentMinutes
-        case schedulePreviewDays
         case locationMode
         case fixedLocation
         case lastScheduledDate
@@ -94,8 +86,6 @@ extension AppSettings {
         case hijriSpecialDaySettings
         case snoozeEnabled
         case snoozeMinutes
-        case perDayExceptions
-        case perDayOverrideOffsets
 
         case hasCompletedOnboarding
         case alarmEnabled
@@ -148,28 +138,11 @@ extension AppSettings {
             ?? CalculationMethod.defaultForTimeZone(TimeZone.current)
         fajrAdjustmentMinutes = try container.decodeIfPresent(Int.self, forKey: .fajrAdjustmentMinutes) ?? 0
         maghribAdjustmentMinutes = try container.decodeIfPresent(Int.self, forKey: .maghribAdjustmentMinutes) ?? 0
-        schedulePreviewDays = try container.decodeIfPresent(Int.self, forKey: .schedulePreviewDays) ?? 14
         locationMode = try container.decodeIfPresent(LocationMode.self, forKey: .locationMode) ?? .auto
         fixedLocation = try container.decodeIfPresent(FixedLocation.self, forKey: .fixedLocation)
         lastScheduledDate = try container.decodeIfPresent(Date.self, forKey: .lastScheduledDate)
         lastSchedulingMode = try container.decodeIfPresent(SchedulingMode.self, forKey: .lastSchedulingMode) ?? .none
         hijriSpecialDaySettings = try container.decodeIfPresent(HijriSpecialDaySettings.self, forKey: .hijriSpecialDaySettings) ?? .default
-
-        perDayExceptions = try container.decodeIfPresent([String: DayException].self, forKey: .perDayExceptions) ?? [:]
-        perDayOverrideOffsets = try container.decodeIfPresent([String: Int].self, forKey: .perDayOverrideOffsets) ?? [:]
-        if perDayExceptions.isEmpty, !perDayOverrideOffsets.isEmpty {
-            perDayExceptions = perDayOverrideOffsets.mapValues {
-                DayException(
-                    disabledForDay: false,
-                    wakeOffsetOverrideMinutes: $0,
-                    reminderEnabledOverride: nil,
-                    atFajrEnabledOverride: nil,
-                    reminderMinutesOverride: nil,
-                    atFajrSoundOverride: nil,
-                    iftarEnabledOverride: nil
-                )
-            }
-        }
     }
 
     func encode(to encoder: Encoder) throws {
@@ -187,14 +160,11 @@ extension AppSettings {
         try container.encode(calculationMethod, forKey: .calculationMethod)
         try container.encode(fajrAdjustmentMinutes, forKey: .fajrAdjustmentMinutes)
         try container.encode(maghribAdjustmentMinutes, forKey: .maghribAdjustmentMinutes)
-        try container.encode(schedulePreviewDays, forKey: .schedulePreviewDays)
         try container.encode(locationMode, forKey: .locationMode)
         try container.encodeIfPresent(fixedLocation, forKey: .fixedLocation)
         try container.encodeIfPresent(lastScheduledDate, forKey: .lastScheduledDate)
         try container.encode(lastSchedulingMode, forKey: .lastSchedulingMode)
         try container.encode(hijriSpecialDaySettings, forKey: .hijriSpecialDaySettings)
-        try container.encode(perDayExceptions, forKey: .perDayExceptions)
-        try container.encode(perDayOverrideOffsets, forKey: .perDayOverrideOffsets)
     }
 }
 
@@ -279,39 +249,21 @@ struct FixedLocation: Codable, Equatable, Sendable {
     let longitude: Double
 }
 
-struct DayException: Codable, Equatable, Sendable {
-    var disabledForDay: Bool
-    var wakeOffsetOverrideMinutes: Int?
-    var reminderEnabledOverride: Bool?
-    var atFajrEnabledOverride: Bool?
-    var reminderMinutesOverride: Int?
-    var atFajrSoundOverride: SoundChoice?
-    var iftarEnabledOverride: Bool?
-}
-
 extension AppSettings {
     var hasAnyReminderEnabled: Bool {
-        if reminderEnabledGlobal { return true }
-        return perDayExceptions.values.contains { $0.reminderEnabledOverride == true }
+        reminderEnabledGlobal
     }
 
     var hasAnyAtFajrEnabled: Bool {
-        if atFajrEnabledGlobal { return true }
-        return perDayExceptions.values.contains { $0.atFajrEnabledOverride == true }
+        atFajrEnabledGlobal
     }
 
     var hasAnyIftarEnabled: Bool {
-        perDayExceptions.values.contains { $0.iftarEnabledOverride == true }
+        false
     }
 
     var hasAnyAtFajrNonDefaultSound: Bool {
-        if atFajrEnabledGlobal, atFajrSoundSelectionGlobal != .systemDefault { return true }
-        return perDayExceptions.values.contains { exception in
-            if let override = exception.atFajrSoundOverride {
-                return override != .systemDefault
-            }
-            return false
-        }
+        atFajrEnabledGlobal && atFajrSoundSelectionGlobal != .systemDefault
     }
 
     func requiresReschedule(comparedTo other: AppSettings) -> Bool {

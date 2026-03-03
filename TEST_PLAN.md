@@ -83,7 +83,7 @@ Test Data Setup
 - AlarmKit denied/unavailable: schedulingMode == .notifications.
 
 2.3 Schedule Generation
-- Dates generated match rule engine range rules and schedulePreviewDays.
+- Dates generated match rule engine range rules.
 - Upcoming filter: schedule excluded if all events <= now.
 - Per-day exceptions remove disabled days.
 

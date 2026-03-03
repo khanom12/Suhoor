@@ -271,33 +271,6 @@ enum Strings {
         static let viewSchedule = "View schedule"
     }
 
-    enum Schedule {
-        static let title = "Schedule"
-        static func nextDays(_ count: Int) -> String { "Next \(count) days" }
-        static let reminderOff = "Reminder Off"
-        static let defaultBadge = "Default"
-        static let customBadge = "Custom"
-        static let offBadge = "Off"
-    }
-
-    enum DayDetail {
-        static let timesSection = "Times"
-        static let ruleSection = "Rule"
-        static let exceptionSection = "Exception"
-        static let skipDay = "Skip this day"
-        static let createException = "Create exception"
-        static let editException = "Edit exception"
-        static let resetDefault = "Reset to default"
-    }
-
-    enum ExceptionEditor {
-        static let title = "Exception"
-        static let dateSection = "Date"
-        static let exceptionSection = "Exception"
-        static let save = "Save"
-        static let cancel = "Cancel"
-    }
-
     enum Settings {
         static let title = "Settings"
         static let needsAttentionSection = "Needs Attention"
@@ -437,8 +410,6 @@ enum Strings {
         static let hijriBuiltInStart = "Built-in start"
         static let hijriCorrectedStart = "Corrected start"
         static let schedulingSection = "Scheduling"
-        static let schedulePreview = "Schedule preview"
-        static let schedulePreviewHelper = "Changes Schedule only."
         static let permissionsSection = "Permissions"
         static let locationStatus = "Location"
         static let notificationsStatus = "Notifications"
