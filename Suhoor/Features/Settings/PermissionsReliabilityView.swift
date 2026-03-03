@@ -1,6 +1,5 @@
 import SwiftUI
 import UIKit
-import CoreLocation
 
 struct PermissionsReliabilityView: View {
     @EnvironmentObject private var scheduleManager: ScheduleManager
@@ -8,12 +7,11 @@ struct PermissionsReliabilityView: View {
     var body: some View {
         Form {
             Section {
-                Text(modeSummaryTitle)
-                    .font(.body.weight(.semibold))
-                Text(modeSummaryMessage)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                SettingsInfoBanner(
+                    title: modeSummaryTitle,
+                    message: modeSummaryMessage,
+                    systemImage: modeSystemImage
+                )
             }
 
             Section {
@@ -26,21 +24,23 @@ struct PermissionsReliabilityView: View {
                     )
                 }
             } header: {
-                Text(Strings.Settings.permissionsSection)
+                SettingsSectionHeader(title: Strings.Settings.permissionsSection)
             }
 
             Section {
-                NavigationLink {
-                    AlarmInfoView()
-                } label: {
-                    SettingsSummaryRow(
-                        title: Strings.Settings.alarmReliabilityTitle,
-                        subtitle: Strings.Settings.alarmReliabilitySummary,
-                        systemImage: "alarm.waves.left.and.right"
-                    )
+                DisclosureGroup(Strings.SettingsReliability.educationTitle) {
+                    Text(Strings.SettingsReliability.educationBody)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .padding(.top, 4)
                 }
+
+                NavigationLink(Strings.Settings.alarmReliabilityLearnMore) {
+                    AlarmInfoView()
+                }
+                .font(.footnote.weight(.semibold))
             } header: {
-                Text(Strings.Settings.alarmReliabilityTitle)
+                SettingsSectionHeader(title: Strings.Settings.alarmReliabilityTitle)
             }
         }
         .formStyle(.grouped)
@@ -67,6 +67,17 @@ struct PermissionsReliabilityView: View {
             return Strings.SettingsReliability.notificationsModeMessage
         case .none:
             return Strings.SettingsReliability.blockedModeMessage
+        }
+    }
+
+    private var modeSystemImage: String {
+        switch scheduleManager.schedulingMode {
+        case .alarmKit:
+            return "alarm.waves.left.and.right"
+        case .notifications:
+            return "bell.badge"
+        case .none:
+            return "exclamationmark.triangle"
         }
     }
 
@@ -97,25 +108,18 @@ private struct PermissionStatusRow: View {
     let action: (() -> Void)?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(presentation.title)
-                    .font(.body.weight(.semibold))
-                Spacer()
+        SettingsEditorCard(
+            title: presentation.title,
+            subtitle: presentation.message,
+            trailing: AnyView(
                 SettingsStatusBadge(text: presentation.statusText, tone: badgeTone)
-            }
-
-            Text(presentation.message)
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-
+            )
+        ) {
             if let actionTitle = presentation.actionTitle, let action {
                 Button(actionTitle, action: action)
                     .buttonStyle(.borderedProminent)
             }
         }
-        .padding(.vertical, 4)
     }
 
     private var badgeTone: SettingsBadgeTone {

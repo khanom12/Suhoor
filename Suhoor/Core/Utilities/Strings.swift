@@ -216,11 +216,17 @@ enum Strings {
     enum Settings {
         static let title = "Settings"
         static let needsAttentionSection = "Needs Attention"
+        static let alertsGroup = "Alerts"
+        static let calendarTimesGroup = "Calendar & times"
+        static let appHealthGroup = "App health"
+        static let aboutGroup = "About"
         static let defaultAlarmsScreenTitle = "Default alarms"
         static let prayerTimesTitle = "Prayer times"
+        static let prayerTimesHelper = "Choose how Fajr is calculated for your schedule."
         static let permissionsReliabilityTitle = "Permissions & reliability"
         static let alarmReliabilityTitle = "Alarm reliability"
         static let alarmReliabilitySummary = "How wake-ups work, when notifications are used, and what to check if alarms are quiet."
+        static let alarmReliabilityLearnMore = "Learn how wake-ups work"
         static let aboutDescription = "Suhoor keeps your routine in sync with local Fajr times so your wake-up, reminder, and Fajr adhan stay easy to review."
         static let badgeLocating = "Locating"
         static let badgeNeedsAttention = "Needs attention"
@@ -259,6 +265,7 @@ enum Strings {
         static let reminderSection = "Reminder"
         static let reminderScreenHelper = "Use a reminder when you want a heads-up before Fajr."
         static let timeStyleLabel = "Time style"
+        static let fixedTime = "Fixed time"
         static let wakeTimeLabel = "Wake time"
         static let wakeOffsetTitle = "Wake time"
         static let reminderOffsetTitle = "Reminder time"
@@ -332,6 +339,8 @@ enum Strings {
         static let hijriCalendarTitle = "Hijri calendar corrections"
         static let hijriMonthCorrectionsTitle = "Month corrections"
         static let hijriCalendarHelper = "Adjust month starts if your local mosque begins a Hijri month one day earlier or later."
+        static let hijriCalendarBannerTitle = "Affects Hijri-based schedules"
+        static let hijriCalendarBannerBody = "These corrections affect Hijri fast presets, corrected Islamic dates, and calendar-based schedule generation."
         static let hijriNoChanges = "No changes"
         static func hijriAdjustedMonths(_ count: Int) -> String { "\(count) adjusted" }
         static let hijriMinusOneDay = "-1 day"
@@ -376,6 +385,7 @@ enum Strings {
         static let locationCity = "City"
         static let locationChooseCity = "Choose city"
         static func fajrAdjustment(_ value: String) -> String { "Fajr \(value)" }
+        static func hijriCorrections(_ value: String) -> String { "Corrections \(value)" }
         static let permissionsNeedsAttention = "Needs attention"
         static let permissionsChecking = "Checking status"
         static let permissionsUsingNotifications = "Using notifications"
@@ -413,11 +423,13 @@ enum Strings {
     }
 
     enum SettingsReliability {
-        static let alarmKitModeTitle = "Wake-ups use AlarmKit"
-        static let alarmKitModeMessage = "Your device can schedule Suhoor wake-ups with the most reliable alarm channel available."
-        static let notificationsModeTitle = "Wake-ups are using notifications"
-        static let notificationsModeMessage = "Suhoor is using notifications for wake-ups or reminders because AlarmKit is unavailable or not allowed."
-        static let blockedModeTitle = "Wake-ups are blocked"
+        static let alarmKitModeTitle = "AlarmKit active"
+        static let alarmKitModeMessage = "Wake-ups are using the most reliable alarm channel available on this device."
+        static let notificationsModeTitle = "Using notifications"
+        static let notificationsModeMessage = "Wake-ups or reminders are currently relying on notifications instead of AlarmKit."
+        static let blockedModeTitle = "Wake-ups blocked"
         static let blockedModeMessage = "Suhoor still needs permission before it can deliver reminders or wake you up reliably."
+        static let educationTitle = "Reliability basics"
+        static let educationBody = "AlarmKit is preferred when available. If alarms are unavailable or not allowed, Suhoor falls back to notifications. If alerts are too quiet, check your device's Ringtone & Alerts volume."
     }
 }

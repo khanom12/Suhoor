@@ -55,6 +55,14 @@ struct SettingsSummaryFormatter {
         ].joined(separator: " · ")
     }
 
+    static func hijriCorrectionsSummary(scheduleManager: ScheduleManager) -> String {
+        let changed = HijriMonth.allCases.filter { scheduleManager.hijriAdjustment(for: $0) != 0 }.count
+        if changed == 0 {
+            return Strings.Settings.hijriNoChanges
+        }
+        return Strings.Settings.hijriAdjustedMonths(changed)
+    }
+
     static func permissionsSummary(
         settings: AppSettings,
         schedulingMode: SchedulingMode,
@@ -118,6 +126,25 @@ struct SettingsSummaryFormatter {
 
         var items: [SettingsIssue] = []
 
+        if let notifications = presentations[.notifications] {
+            switch notifications.state {
+            case .authorized, .needsFollowUp, .unavailable:
+                break
+            case .notDetermined, .denied, .restricted:
+                items.append(
+                    SettingsIssue(
+                        id: "notifications-blocked",
+                        title: Strings.SettingsIssues.notificationsBlockedTitle,
+                        message: Strings.SettingsIssues.notificationsBlockedMessage,
+                        statusText: Strings.Settings.badgeNeedsAttention,
+                        destination: .permissionsReliability,
+                        systemImage: "bell.slash",
+                        tone: .critical
+                    )
+                )
+            }
+        }
+
         if settings.locationMode == .auto, let location = presentations[.location] {
             switch location.state {
             case .authorized:
@@ -148,25 +175,6 @@ struct SettingsSummaryFormatter {
                 )
             case .unavailable:
                 break
-            }
-        }
-
-        if let notifications = presentations[.notifications] {
-            switch notifications.state {
-            case .authorized, .needsFollowUp, .unavailable:
-                break
-            case .notDetermined, .denied, .restricted:
-                items.append(
-                    SettingsIssue(
-                        id: "notifications-blocked",
-                        title: Strings.SettingsIssues.notificationsBlockedTitle,
-                        message: Strings.SettingsIssues.notificationsBlockedMessage,
-                        statusText: Strings.Settings.badgeNeedsAttention,
-                        destination: .permissionsReliability,
-                        systemImage: "bell.slash",
-                        tone: .critical
-                    )
-                )
             }
         }
 
@@ -230,6 +238,7 @@ enum SettingsDestination: String, CaseIterable, Identifiable {
     case defaultAlarms
     case location
     case prayerTimes
+    case hijriCalendarCorrections
     case permissionsReliability
     case about
 
@@ -243,6 +252,8 @@ enum SettingsDestination: String, CaseIterable, Identifiable {
             return Strings.Settings.locationSection
         case .prayerTimes:
             return Strings.Settings.prayerTimesTitle
+        case .hijriCalendarCorrections:
+            return Strings.Settings.hijriCalendarTitle
         case .permissionsReliability:
             return Strings.Settings.permissionsReliabilityTitle
         case .about:
@@ -258,10 +269,58 @@ enum SettingsDestination: String, CaseIterable, Identifiable {
             return "location.circle"
         case .prayerTimes:
             return "moon.stars"
+        case .hijriCalendarCorrections:
+            return "calendar.badge.clock"
         case .permissionsReliability:
             return "checkmark.shield"
         case .about:
             return "info.circle"
+        }
+    }
+}
+
+enum SettingsDestinationGroup: CaseIterable, Identifiable {
+    case alerts
+    case calendarTimes
+    case appHealth
+    case about
+
+    var id: String {
+        switch self {
+        case .alerts:
+            return "alerts"
+        case .calendarTimes:
+            return "calendar-times"
+        case .appHealth:
+            return "app-health"
+        case .about:
+            return "about"
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .alerts:
+            return Strings.Settings.alertsGroup
+        case .calendarTimes:
+            return Strings.Settings.calendarTimesGroup
+        case .appHealth:
+            return Strings.Settings.appHealthGroup
+        case .about:
+            return Strings.Settings.aboutGroup
+        }
+    }
+
+    var destinations: [SettingsDestination] {
+        switch self {
+        case .alerts:
+            return [.defaultAlarms]
+        case .calendarTimes:
+            return [.location, .prayerTimes, .hijriCalendarCorrections]
+        case .appHealth:
+            return [.permissionsReliability]
+        case .about:
+            return [.about]
         }
     }
 }

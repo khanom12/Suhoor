@@ -26,7 +26,7 @@ struct SettingsSummaryRow: View {
                 Text(subtitle)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
-                    .lineLimit(2)
+                    .lineLimit(3)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
@@ -35,10 +35,6 @@ struct SettingsSummaryRow: View {
             if let badgeText {
                 SettingsStatusBadge(text: badgeText, tone: badgeTone)
             }
-
-            Image(systemName: "chevron.right")
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(.tertiary)
         }
         .frame(minHeight: 56)
         .contentShape(Rectangle())

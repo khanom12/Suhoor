@@ -1,5 +1,4 @@
 import SwiftUI
-import CoreLocation
 
 struct SettingsRootView: View {
     @EnvironmentObject private var settingsStore: SuhoorSettingsStore
@@ -10,7 +9,7 @@ struct SettingsRootView: View {
     var body: some View {
         Form {
             if !issues.isEmpty {
-                Section(Strings.Settings.needsAttentionSection) {
+                Section {
                     ForEach(issues) { issue in
                         NavigationLink {
                             destinationView(for: issue.destination)
@@ -24,22 +23,28 @@ struct SettingsRootView: View {
                             )
                         }
                     }
+                } header: {
+                    SettingsSectionHeader(title: Strings.Settings.needsAttentionSection)
                 }
             }
 
-            Section {
-                ForEach(SettingsDestination.allCases) { destination in
-                    NavigationLink {
-                        destinationView(for: destination)
-                    } label: {
-                        SettingsSummaryRow(
-                            title: destination.title,
-                            subtitle: summary(for: destination),
-                            systemImage: destination.systemImage,
-                            badgeText: badgeText(for: destination),
-                            badgeTone: badgeTone(for: destination)
-                        )
+            ForEach(SettingsDestinationGroup.allCases) { group in
+                Section {
+                    ForEach(group.destinations) { destination in
+                        NavigationLink {
+                            destinationView(for: destination)
+                        } label: {
+                            SettingsSummaryRow(
+                                title: destination.title,
+                                subtitle: summary(for: destination),
+                                systemImage: destination.systemImage,
+                                badgeText: badgeText(for: destination),
+                                badgeTone: badgeTone(for: destination)
+                            )
+                        }
                     }
+                } header: {
+                    SettingsSectionHeader(title: group.title)
                 }
             }
         }
@@ -64,6 +69,8 @@ struct SettingsRootView: View {
             return SettingsSummaryFormatter.locationSummary(settings: settingsStore.settings, locationService: locationService)
         case .prayerTimes:
             return SettingsSummaryFormatter.prayerTimesSummary(settings: settingsStore.settings)
+        case .hijriCalendarCorrections:
+            return SettingsSummaryFormatter.hijriCorrectionsSummary(scheduleManager: scheduleManager)
         case .permissionsReliability:
             return SettingsSummaryFormatter.permissionsSummary(
                 settings: settingsStore.settings,
@@ -77,7 +84,7 @@ struct SettingsRootView: View {
 
     private func badgeText(for destination: SettingsDestination) -> String? {
         switch destination {
-        case .defaultAlarms, .prayerTimes, .about:
+        case .defaultAlarms, .prayerTimes, .hijriCalendarCorrections, .about:
             return nil
         case .location:
             guard hasLoadedPermissions else { return nil }
@@ -88,7 +95,7 @@ struct SettingsRootView: View {
         case .permissionsReliability:
             guard hasLoadedPermissions else { return nil }
             if issues.contains(where: { $0.destination == .permissionsReliability }) {
-                return issues.first(where: { $0.destination == .permissionsReliability })?.statusText
+                return nil
             }
             if scheduleManager.schedulingMode == .notifications {
                 return Strings.Settings.badgeUsingFallback
@@ -115,7 +122,7 @@ struct SettingsRootView: View {
                 return badgeTone(for: issue.tone)
             }
             return .neutral
-        case .defaultAlarms, .prayerTimes, .about:
+        case .defaultAlarms, .prayerTimes, .hijriCalendarCorrections, .about:
             return .neutral
         }
     }
@@ -138,6 +145,8 @@ struct SettingsRootView: View {
             LocationSettingsView()
         case .prayerTimes:
             PrayerTimeSettingsView()
+        case .hijriCalendarCorrections:
+            HijriCalendarSettingsView()
         case .permissionsReliability:
             PermissionsReliabilityView()
         case .about:

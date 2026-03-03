@@ -16,34 +16,20 @@ struct PrayerTimeSettingsView: View {
                     )
                 }
 
-                Stepper(value: $settingsStore.settings.fajrAdjustmentMinutes, in: -30...30, step: 1) {
-                    valueRow(
-                        title: Strings.Settings.fajrAdjustment,
-                        value: SettingsSummaryFormatter.adjustmentText(settingsStore.settings.fajrAdjustmentMinutes)
-                    )
-                }
-                .onChange(of: settingsStore.settings.fajrAdjustmentMinutes) { _, _ in
-                    scheduleManager.requestRefresh(reason: .settingsChanged)
-                }
+                RelativeOffsetControl(
+                    label: Strings.Settings.fajrAdjustment,
+                    detail: Strings.Settings.fajrAdjustmentHelper,
+                    value: fajrAdjustmentBinding,
+                    range: -30...30,
+                    step: 1
+                )
             } header: {
-                Text(Strings.Settings.prayerTimeCalculationSection)
+                SettingsSectionHeader(
+                    title: Strings.Settings.prayerTimeCalculationSection,
+                    supportingText: Strings.Settings.prayerTimesHelper
+                )
             } footer: {
                 Text(Strings.Settings.fajrAdjustmentHelper)
-            }
-
-            Section {
-                NavigationLink {
-                    HijriCalendarSettingsView()
-                } label: {
-                    valueRow(
-                        title: Strings.Settings.hijriMonthCorrectionsTitle,
-                        value: hijriSummary
-                    )
-                }
-            } header: {
-                Text(Strings.Settings.hijriCalendarTitle)
-            } footer: {
-                Text(Strings.Settings.hijriCalendarHelper)
             }
         }
         .formStyle(.grouped)
@@ -60,13 +46,14 @@ struct PrayerTimeSettingsView: View {
         }
     }
 
-    private var hijriSummary: String {
-        let months: [HijriMonth] = HijriMonth.allCases
-        let changed = months.filter { scheduleManager.hijriAdjustment(for: $0) != 0 }.count
-        if changed == 0 {
-            return Strings.Settings.hijriNoChanges
-        }
-        return Strings.Settings.hijriAdjustedMonths(changed)
+    private var fajrAdjustmentBinding: Binding<Int> {
+        Binding(
+            get: { settingsStore.settings.fajrAdjustmentMinutes },
+            set: { newValue in
+                settingsStore.settings.fajrAdjustmentMinutes = newValue
+                scheduleManager.requestRefresh(reason: .settingsChanged)
+            }
+        )
     }
 }
 

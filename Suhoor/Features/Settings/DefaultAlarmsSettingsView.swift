@@ -5,6 +5,7 @@ struct DefaultAlarmsSettingsView: View {
     @EnvironmentObject private var scheduleManager: ScheduleManager
 
     @State private var reminderTimeClamped = false
+    @State private var expandedAlarm: DefaultAlarmSection? = .suhoor
 
     var body: some View {
         Form {
@@ -13,90 +14,64 @@ struct DefaultAlarmsSettingsView: View {
                 Toggle(Strings.Settings.reminderLabel, isOn: reminderDefaultBinding)
                 Toggle(Strings.Settings.fajrAdhanLabel, isOn: fajrDefaultBinding)
             } header: {
-                Text(Strings.Settings.alertsSection)
-            } footer: {
-                Text(Strings.Settings.defaultAlarmsHelper)
+                SettingsSectionHeader(
+                    title: Strings.Settings.alertsSection,
+                    supportingText: Strings.Settings.defaultAlarmsHelper
+                )
             }
 
             Section {
-                Picker(Strings.Settings.timeStyleLabel, selection: suhoorTimeModeBinding) {
-                    ForEach(SuhoorTimeMode.allCases) { mode in
-                        Text(mode.displayName).tag(mode)
-                    }
-                }
-                .pickerStyle(.segmented)
-
-                if alarmConfigStore.defaults.defaultSuhoorTimeMode == .fixedTime {
-                    DatePicker(
-                        Strings.Settings.wakeTimeLabel,
-                        selection: defaultSuhoorTimeBinding,
-                        displayedComponents: [.hourAndMinute]
+                VStack(spacing: DesignTokens.spacingM) {
+                    AlarmTimingEditor(
+                        title: Strings.Settings.wakeAlarmLabel,
+                        summary: wakeSummaryText,
+                        isEnabled: suhoorDefaultBinding,
+                        mode: suhoorEditorModeBinding,
+                        relativeValue: defaultSuhoorOffsetBinding,
+                        fixedTime: defaultSuhoorTimeBinding,
+                        relativeLabel: Strings.Settings.minutesBeforeFajr,
+                        relativeDetail: Strings.AlarmsTab.willRingAt(defaultSuhoorComputedTimeText),
+                        fixedLabel: Strings.Settings.wakeTimeLabel,
+                        fixedDetail: Strings.AlarmsTab.willRingAt(defaultSuhoorComputedTimeText),
+                        relativeRange: 5...240,
+                        relativeStep: 5,
+                        warningText: nil,
+                        isExpanded: expandedAlarm == .suhoor,
+                        onToggleExpanded: { toggleExpanded(.suhoor) }
                     )
-                } else {
-                    NavigationLink {
-                        OffsetSelectionView(
-                            title: Strings.Settings.wakeOffsetTitle,
-                            stepperLabel: Strings.Settings.minutesBeforeFajr,
-                            minutes: defaultSuhoorOffsetBinding,
-                            presets: [15, 30, 45, 60, 90],
-                            range: 5...240,
-                            step: 5
-                        )
-                    } label: {
-                        valueRow(
-                            title: Strings.Settings.minutesBeforeFajr,
-                            value: Strings.Settings.offsetValue(defaultSuhoorOffsetBinding.wrappedValue)
-                        )
-                    }
-                }
-            } header: {
-                Text(Strings.Settings.wakeAlarmSection)
-            } footer: {
-                Text(Strings.Settings.wakeAlarmHelper)
-            }
 
-            Section {
-                Picker(Strings.Settings.timeStyleLabel, selection: reminderTimeModeBinding) {
-                    ForEach(ReminderTimeMode.allCases) { mode in
-                        Text(mode.displayName).tag(mode)
-                    }
-                }
-                .pickerStyle(.segmented)
-
-                if alarmConfigStore.defaults.defaultReminderTimeMode == .fixedTime {
-                    DatePicker(
-                        Strings.Settings.reminderTime,
-                        selection: defaultReminderTimeBinding,
-                        displayedComponents: [.hourAndMinute]
+                    AlarmTimingEditor(
+                        title: Strings.Settings.reminderLabel,
+                        summary: reminderSummaryText,
+                        isEnabled: reminderDefaultBinding,
+                        mode: reminderEditorModeBinding,
+                        relativeValue: reminderDefaultOffsetBinding,
+                        fixedTime: defaultReminderTimeBinding,
+                        relativeLabel: Strings.Settings.minutesBeforeFajr,
+                        relativeDetail: defaultReminderFooterText,
+                        fixedLabel: Strings.Settings.reminderTime,
+                        fixedDetail: defaultReminderFooterText,
+                        relativeRange: reminderOffsetRange,
+                        relativeStep: 1,
+                        warningText: showsReminderBeforeSuhoorWarning ? Strings.Settings.reminderBeforeSuhoorWarning : nil,
+                        isExpanded: expandedAlarm == .reminder,
+                        onToggleExpanded: { toggleExpanded(.reminder) }
                     )
-                } else {
-                    NavigationLink {
-                        OffsetSelectionView(
-                            title: Strings.Settings.reminderOffsetTitle,
-                            stepperLabel: Strings.Settings.minutesBeforeFajr,
-                            minutes: reminderDefaultOffsetBinding,
-                            presets: [5, 10, 15, 20, 30],
-                            range: 5...maxReminderDefaultOffset,
-                            step: 1
+
+                    SettingsEditorCard(
+                        title: Strings.Settings.fajrAdhanLabel,
+                        subtitle: fajrSummaryText,
+                        trailing: AnyView(
+                            Toggle("", isOn: fajrDefaultBinding)
+                                .labelsHidden()
                         )
-                    } label: {
-                        valueRow(
-                            title: Strings.Settings.minutesBeforeFajr,
-                            value: Strings.Settings.offsetValue(reminderDefaultOffsetBinding.wrappedValue)
-                        )
+                    ) {
+                        EmptyView()
                     }
                 }
-
-                if showsReminderBeforeSuhoorWarning {
-                    Text(Strings.Settings.reminderBeforeSuhoorWarning)
-                        .font(.footnote)
-                        .foregroundStyle(.orange)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+                .padding(.vertical, 4)
             } header: {
-                Text(Strings.Settings.reminderSection)
-            } footer: {
-                Text(Strings.Settings.reminderScreenHelper)
+                SettingsSectionHeader(title: Strings.Settings.routineDefaultsSection)
             }
 
             Section {
@@ -127,9 +102,10 @@ struct DefaultAlarmsSettingsView: View {
                         .foregroundStyle(.secondary)
                 }
             } header: {
-                Text(Strings.Settings.previewSection)
-            } footer: {
-                Text(Strings.Settings.previewHelper)
+                SettingsSectionHeader(
+                    title: Strings.Settings.previewSection,
+                    supportingText: Strings.Settings.previewHelper
+                )
             }
         }
         .formStyle(.grouped)
@@ -137,13 +113,30 @@ struct DefaultAlarmsSettingsView: View {
         .navigationBarTitleDisplayMode(.inline)
     }
 
-    private func valueRow(title: String, value: String) -> some View {
-        HStack {
-            Text(title)
-            Spacer()
-            Text(value)
-                .foregroundStyle(.secondary)
+    private var wakeSummaryText: String {
+        guard alarmConfigStore.defaults.suhoorEnabledDefault else {
+            return Strings.AlarmsTab.alarmOffLabel
         }
+        if alarmConfigStore.defaults.defaultSuhoorTimeMode == .fixedTime {
+            return Strings.SettingsSummary.wakeFixed(defaultSuhoorComputedTimeText)
+        }
+        return Strings.SettingsSummary.wakeBeforeFajr(defaultSuhoorOffsetBinding.wrappedValue)
+    }
+
+    private var reminderSummaryText: String {
+        guard alarmConfigStore.defaults.reminderEnabledDefault else {
+            return Strings.AlarmsTab.alarmOffLabel
+        }
+        if alarmConfigStore.defaults.defaultReminderTimeMode == .fixedTime {
+            return Strings.SettingsSummary.reminderFixed(defaultReminderComputedTimeText)
+        }
+        return Strings.SettingsSummary.reminderBeforeFajr(reminderDefaultOffsetBinding.wrappedValue)
+    }
+
+    private var fajrSummaryText: String {
+        alarmConfigStore.defaults.fajrEnabledDefault
+            ? Strings.AlarmsTab.fajrHelper
+            : Strings.AlarmsTab.alarmOffLabel
     }
 
     private func previewRow(title: String, value: String) -> some View {
@@ -154,6 +147,10 @@ struct DefaultAlarmsSettingsView: View {
                 .monospacedDigit()
                 .foregroundStyle(.secondary)
         }
+    }
+
+    private func toggleExpanded(_ section: DefaultAlarmSection) {
+        expandedAlarm = expandedAlarm == section ? nil : section
     }
 
     private var suhoorDefaultBinding: Binding<Bool> {
@@ -184,6 +181,22 @@ struct DefaultAlarmsSettingsView: View {
         }, set: { newValue in
             alarmConfigStore.defaults.fajrEnabledDefault = newValue
             rescheduleFromDefaults()
+        })
+    }
+
+    private var suhoorEditorModeBinding: Binding<AlarmTimingEditorMode> {
+        Binding(get: {
+            alarmConfigStore.defaults.defaultSuhoorTimeMode == .fixedTime ? .fixedTime : .beforeFajr
+        }, set: { newValue in
+            suhoorTimeModeBinding.wrappedValue = newValue == .fixedTime ? .fixedTime : .relativeToFajrMinusMinutes
+        })
+    }
+
+    private var reminderEditorModeBinding: Binding<AlarmTimingEditorMode> {
+        Binding(get: {
+            alarmConfigStore.defaults.defaultReminderTimeMode == .fixedTime ? .fixedTime : .beforeFajr
+        }, set: { newValue in
+            reminderTimeModeBinding.wrappedValue = newValue == .fixedTime ? .fixedTime : .beforeFajr
         })
     }
 
@@ -272,6 +285,32 @@ struct DefaultAlarmsSettingsView: View {
         return max(5, min(180, minutesBetween))
     }
 
+    private var reminderOffsetRange: ClosedRange<Int> {
+        let lowerBound = min(5, maxReminderDefaultOffset)
+        return lowerBound...maxReminderDefaultOffset
+    }
+
+    private var defaultSuhoorComputedTimeText: String {
+        if alarmConfigStore.defaults.defaultSuhoorTimeMode == .fixedTime {
+            return TimeFormatters.timeFormatter.string(from: defaultSuhoorTimeBinding.wrappedValue)
+        }
+        return scheduleManager.schedules.first.map { TimeFormatters.timeFormatter.string(from: $0.wakeDate) } ?? "--"
+    }
+
+    private var defaultReminderComputedTimeText: String {
+        if alarmConfigStore.defaults.defaultReminderTimeMode == .fixedTime {
+            return TimeFormatters.timeFormatter.string(from: defaultReminderTimeBinding.wrappedValue)
+        }
+        return scheduleManager.schedules.first?.reminderDate.map { TimeFormatters.timeFormatter.string(from: $0) } ?? "--"
+    }
+
+    private var defaultReminderFooterText: String {
+        if !alarmConfigStore.defaults.reminderEnabledDefault {
+            return Strings.AlarmsTab.reminderOff
+        }
+        return Strings.AlarmsTab.willRingAt(defaultReminderComputedTimeText)
+    }
+
     private func rescheduleFromDefaults() {
         scheduleManager.requestRefresh(reason: .settingsChanged)
     }
@@ -312,4 +351,9 @@ struct DefaultAlarmsSettingsView: View {
         let start = calendar.startOfDay(for: day)
         return calendar.date(byAdding: .minute, value: minutes, to: start) ?? start
     }
+}
+
+private enum DefaultAlarmSection {
+    case suhoor
+    case reminder
 }

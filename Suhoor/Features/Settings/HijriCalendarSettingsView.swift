@@ -6,10 +6,11 @@ struct HijriCalendarSettingsView: View {
     var body: some View {
         Form {
             Section {
-                Text(Strings.Settings.hijriCalendarHelper)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                SettingsInfoBanner(
+                    title: Strings.Settings.hijriCalendarBannerTitle,
+                    message: Strings.Settings.hijriCalendarBannerBody,
+                    systemImage: "calendar.badge.clock"
+                )
             }
 
             Section {
@@ -33,7 +34,10 @@ struct HijriCalendarSettingsView: View {
                     }
                 }
             } header: {
-                Text(Strings.Settings.hijriMonthCorrectionsTitle)
+                SettingsSectionHeader(
+                    title: Strings.Settings.hijriMonthCorrectionsTitle,
+                    supportingText: Strings.Settings.hijriCalendarHelper
+                )
             }
         }
         .formStyle(.grouped)
