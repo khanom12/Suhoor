@@ -174,7 +174,7 @@ struct AlarmsHomeView: View {
                 }
             }
             .alert(
-                "Ramadan alarms can’t be deleted",
+                "Ramadan alarms can't be deleted",
                 isPresented: Binding(
                     get: { pendingRamadanEntry != nil },
                     set: { isPresented in
@@ -761,6 +761,8 @@ private struct AlarmRowView: View {
     @EnvironmentObject private var scheduleManager: ScheduleManager
     @Environment(\.editMode) private var editMode
 
+    private let editAccessoryWidth: CGFloat = 40
+
     let schedule: DaySchedule
     let config: EffectiveDailyConfig
     let primaryDisplay: PrimaryDisplay?
@@ -817,6 +819,19 @@ private struct AlarmRowView: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: DesignTokens.spacingM) {
+            if showsRamadanEditAccessory {
+                Button(action: onRequestRamadanDisable) {
+                    Image(systemName: "minus.circle.fill")
+                        .font(.system(size: 22, weight: .regular))
+                        .foregroundStyle(.gray)
+                        .frame(width: 44, height: 44)
+                }
+                .buttonStyle(.plain)
+                .frame(width: editAccessoryWidth)
+                .accessibilityLabel("Ramadan alarms can't be deleted")
+                .accessibilityHint("Turn this day off instead")
+            }
+
             VStack(alignment: .leading, spacing: 10) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(dateLabel)
@@ -870,22 +885,13 @@ private struct AlarmRowView: View {
                 .accessibilityLabel("\(primaryLabelText) alarm")
         }
         .padding(.vertical, 6)
-        .overlay(alignment: .leading) {
-            if editMode?.wrappedValue.isEditing == true, deleteCapability == .ramadan {
-                Button(action: onRequestRamadanDisable) {
-                    Rectangle()
-                        .fill(Color.clear)
-                        .frame(width: 44, height: 44)
-                }
-                .buttonStyle(.plain)
-                .contentShape(Rectangle())
-                .padding(.leading, -16)
-                .accessibilityLabel("Turn off Ramadan alarm")
-            }
-        }
         .onChange(of: config) { _, newValue in
             localIsOn = AlarmRowView.isEnabled(config: newValue)
         }
+    }
+
+    private var showsRamadanEditAccessory: Bool {
+        editMode?.wrappedValue.isEditing == true && deleteCapability == .ramadan
     }
 
     private var fajrTimeText: String {
