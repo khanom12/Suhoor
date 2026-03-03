@@ -222,6 +222,14 @@ struct AlarmsHomeView: View {
                 rebuildListSnapshot()
                 ensureExpandedSectionsLoaded()
             }
+            .onChange(of: fastTagStore.currentRevision) { _, _ in
+                rebuildListSnapshot()
+                ensureExpandedSectionsLoaded()
+            }
+            .onChange(of: scheduleManager.lastUpdated) { _, _ in
+                rebuildListSnapshot()
+                ensureExpandedSectionsLoaded()
+            }
             .onChange(of: tagFilter) { _, _ in
                 rebuildListSnapshot()
                 ensureExpandedSectionsLoaded()

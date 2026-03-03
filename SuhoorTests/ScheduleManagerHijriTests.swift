@@ -67,6 +67,55 @@ struct ScheduleManagerHijriTests {
 
     @Test
     @MainActor
+    func islamicQuickAddDefaultsToVoluntaryTagsWithoutStoredSelections() async {
+        let suiteName = "ScheduleManagerHijriTests.QuickAddTagFallback"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+
+        let settingsStore = SuhoorSettingsStore(defaults: defaults)
+        settingsStore.update { draft in
+            draft.locationMode = .fixed
+            draft.fixedLocation = FixedLocation(latitude: 43.6532, longitude: -79.3832)
+        }
+
+        let alarmConfigStore = AlarmConfigStore(defaultsStore: defaults)
+        let fastTagStore = FastTagStore(defaults: defaults)
+        let startDate = DateHelpers.startOfToday(in: timeZone)
+        let result = alarmConfigStore.addIslamicQuickAdd(
+            .nextMondayThursdayPair,
+            startDate: startDate,
+            timeZone: timeZone
+        )
+        #expect(result.addedDates.isEmpty == false)
+
+        let manager = ScheduleManager(
+            settingsStore: settingsStore,
+            locationService: LocationService(),
+            alarmConfigStore: alarmConfigStore,
+            fastTagStore: fastTagStore,
+            hijriAdjustmentStore: HijriMonthAdjustmentStore(defaults: defaults)
+        )
+
+        await manager.refreshSchedules(force: true)
+
+        guard let targetDate = result.addedDates.first else {
+            Issue.record("Expected at least one quick-add date.")
+            return
+        }
+        let key = DateHelpers.dayIdentifier(for: targetDate, timeZone: timeZone)
+        guard let activeDay = manager.activeWindowSnapshot.byDateKey[key] else {
+            Issue.record("Expected quick-add date to appear in the active window.")
+            return
+        }
+
+        #expect(fastTagStore.selection(for: targetDate, timeZone: timeZone) == nil)
+        #expect(activeDay.tagResult.computedPrimaryIntent == .voluntarySunnah)
+        #expect(activeDay.tagResult.computedSecondaryTags.contains(.mondayThursday))
+    }
+
+    @Test
+    @MainActor
     func previewGregorianRangeSkipsAlreadyActiveDatesAndStoresOnlyOpenSegments() {
         let suiteName = "ScheduleManagerHijriTests.RangeSkip"
         let defaults = UserDefaults(suiteName: suiteName)!
@@ -489,6 +538,143 @@ struct ScheduleManagerHijriTests {
         #expect(fastTagStore.selection(for: activeDay.date, timeZone: timeZone) == nil)
         #expect(activeDay.tagResult.computedPrimaryIntent == .voluntarySunnah)
         #expect(activeDay.tagResult.computedSecondaryTags.contains(.whiteDays))
+    }
+
+    @Test
+    @MainActor
+    func ensureScheduleWindowRetagsWhenSelectionRevisionChanges() async {
+        let suiteName = "ScheduleManagerHijriTests.TagRevisionRetag"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+
+        let settingsStore = SuhoorSettingsStore(defaults: defaults)
+        settingsStore.update { draft in
+            draft.locationMode = .fixed
+            draft.fixedLocation = FixedLocation(latitude: 43.6532, longitude: -79.3832)
+        }
+
+        guard let targetDate = Self.firstGregorianDate(
+            onOrAfter: DateHelpers.startOfToday(in: timeZone),
+            timeZone: timeZone,
+            matcher: { weekday in weekday == 2 || weekday == 5 }
+        ) else {
+            Issue.record("Expected to find a Monday or Thursday within the next two weeks.")
+            return
+        }
+
+        let alarmConfigStore = AlarmConfigStore(defaultsStore: defaults)
+        alarmConfigStore.addSingleDaySource(targetDate, timeZone: timeZone)
+
+        let manager = ScheduleManager(
+            settingsStore: settingsStore,
+            locationService: LocationService(),
+            alarmConfigStore: alarmConfigStore,
+            fastTagStore: FastTagStore(defaults: defaults),
+            hijriAdjustmentStore: HijriMonthAdjustmentStore(defaults: defaults)
+        )
+
+        await manager.refreshSchedules(force: true)
+        try? await Task.sleep(nanoseconds: 600_000_000)
+
+        let fastTagStore = FastTagStore(defaults: defaults)
+        fastTagStore.setSelection(
+            FastIntentSelection(primaryIntent: .voluntarySunnah, secondaryTags: []),
+            for: targetDate,
+            timeZone: timeZone
+        )
+
+        let freshSettingsStore = SuhoorSettingsStore(defaults: defaults)
+        freshSettingsStore.update { draft in
+            draft.locationMode = .fixed
+            draft.fixedLocation = FixedLocation(latitude: 43.6532, longitude: -79.3832)
+        }
+
+        let refreshedManager = ScheduleManager(
+            settingsStore: freshSettingsStore,
+            locationService: LocationService(),
+            alarmConfigStore: AlarmConfigStore(defaultsStore: defaults),
+            fastTagStore: fastTagStore,
+            hijriAdjustmentStore: HijriMonthAdjustmentStore(defaults: defaults)
+        )
+
+        await refreshedManager.ensureScheduleWindow(reason: .appLaunch)
+
+        let key = DateHelpers.dayIdentifier(for: targetDate, timeZone: timeZone)
+        guard let activeDay = refreshedManager.activeWindowSnapshot.byDateKey[key] else {
+            Issue.record("Expected cached date to remain in the active window.")
+            return
+        }
+
+        #expect(activeDay.tagResult.computedPrimaryIntent == .voluntarySunnah)
+        #expect(activeDay.tagResult.computedSecondaryTags.contains(.mondayThursday))
+    }
+
+    @Test
+    @MainActor
+    func monthEntriesRetagAfterSelectionRevisionChanges() async {
+        let suiteName = "ScheduleManagerHijriTests.MonthEntriesRetag"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+
+        let settingsStore = SuhoorSettingsStore(defaults: defaults)
+        settingsStore.update { draft in
+            draft.locationMode = .fixed
+            draft.fixedLocation = FixedLocation(latitude: 43.6532, longitude: -79.3832)
+        }
+
+        guard let targetDate = Self.firstGregorianDate(
+            onOrAfter: DateHelpers.startOfToday(in: timeZone),
+            timeZone: timeZone,
+            matcher: { weekday in weekday == 2 || weekday == 5 }
+        ) else {
+            Issue.record("Expected to find a Monday or Thursday within the next two weeks.")
+            return
+        }
+
+        let alarmConfigStore = AlarmConfigStore(defaultsStore: defaults)
+        alarmConfigStore.addSingleDaySource(targetDate, timeZone: timeZone)
+        let fastTagStore = FastTagStore(defaults: defaults)
+
+        let manager = ScheduleManager(
+            settingsStore: settingsStore,
+            locationService: LocationService(),
+            alarmConfigStore: alarmConfigStore,
+            fastTagStore: fastTagStore,
+            hijriAdjustmentStore: HijriMonthAdjustmentStore(defaults: defaults)
+        )
+
+        await manager.refreshSchedules(force: true)
+
+        guard let monthKey = FastIntentEngine.hijriMonthKey(for: targetDate, timeZone: timeZone) else {
+            Issue.record("Expected a hijri month key for the target date.")
+            return
+        }
+
+        let dateKey = DateHelpers.dayIdentifier(for: targetDate, timeZone: timeZone)
+        let initialEntries = await manager.monthEntries(for: monthKey, timeZone: timeZone)
+        guard let initial = initialEntries.first(where: { $0.dateKey == dateKey }) else {
+            Issue.record("Expected cached month entries to include the target date.")
+            return
+        }
+
+        #expect(initial.tagResult.computedPrimaryIntent == .other)
+
+        fastTagStore.setSelection(
+            FastIntentSelection(primaryIntent: .voluntarySunnah, secondaryTags: []),
+            for: targetDate,
+            timeZone: timeZone
+        )
+
+        let updatedEntries = await manager.monthEntries(for: monthKey, timeZone: timeZone)
+        guard let updated = updatedEntries.first(where: { $0.dateKey == dateKey }) else {
+            Issue.record("Expected updated month entries to include the target date.")
+            return
+        }
+
+        #expect(updated.tagResult.computedPrimaryIntent == .voluntarySunnah)
+        #expect(updated.tagResult.computedSecondaryTags.contains(.mondayThursday))
     }
 
     @Test

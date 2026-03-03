@@ -14,6 +14,7 @@ final class ScheduleCacheStore {
         var schedulingMode: SchedulingMode
         var schedules: [DaySchedule]
         var activeWindowSnapshot: ActiveAlarmWindowSnapshot?
+        var tagSelectionRevision: Int?
     }
 
     init(defaults: UserDefaults = .standard) {
@@ -30,7 +31,8 @@ final class ScheduleCacheStore {
             lastUpdated: nil,
             schedulingMode: .none,
             schedules: [],
-            activeWindowSnapshot: nil
+            activeWindowSnapshot: nil,
+            tagSelectionRevision: nil
         )
     }
 
