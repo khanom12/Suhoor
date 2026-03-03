@@ -174,6 +174,10 @@ private struct LocationStep: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
+            Text(Strings.Onboarding.locationPrivacyNote)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+
             if let message = statusMessage {
                 Text(message)
                     .font(.footnote)
@@ -280,6 +284,10 @@ private struct AlarmKitStep: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
+            Text(Strings.Onboarding.alarmKitFootnote)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+
             if let statusMessage {
                 Text(statusMessage)
                     .font(.footnote)
@@ -353,6 +361,12 @@ private struct NotificationsStep: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
+            if notificationState != .authorized {
+                Text(Strings.Onboarding.notificationsRequirement)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
             if showAlarmKitFallback {
                 InfoBanner(systemImage: "alarm", text: Strings.Onboarding.alarmKitFallbackBanner)
             }
@@ -418,9 +432,15 @@ private struct OffsetStep: View {
             Text(Strings.Onboarding.offsetTitle)
                 .font(.title2.weight(.bold))
 
-            OffsetPickerView(baseMinutes: $baseMinutes)
+            Text(Strings.Onboarding.offsetBody)
+                .font(.body)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
 
-            Text(Strings.Onboarding.offsetHelper(baseMinutes))
+            OffsetPickerView(
+                baseMinutes: $baseMinutes,
+                sentenceText: Strings.Onboarding.offsetSummary
+            )
                 .font(.footnote)
                 .foregroundStyle(.secondary)
 
@@ -461,21 +481,43 @@ private struct ConfirmationStep: View {
 }
 
 private struct HowItWorksView: View {
+    @EnvironmentObject private var settingsStore: SuhoorSettingsStore
+
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    Text("How it works")
-                        .font(.title2.weight(.bold))
-                    Text("Suhoor calculates Fajr time for your location and updates your wake alarm every day.")
+                    Text(Strings.Onboarding.HowItWorks.body)
                         .font(.body)
                         .foregroundStyle(.secondary)
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        OnboardingBulletRow(text: Strings.Onboarding.HowItWorks.bulletWakeDefault(settingsStore.settings.baseWakeOffsetMinutes))
+                        OnboardingBulletRow(text: Strings.Onboarding.HowItWorks.bulletReminders)
+                        OnboardingBulletRow(text: Strings.Onboarding.HowItWorks.bulletCustomize)
+                    }
                 }
                 .padding(24)
             }
-            .navigationTitle("How it works")
+            .navigationTitle(Strings.Onboarding.HowItWorks.title)
             .navigationBarTitleDisplayMode(.inline)
         }
+    }
+}
+
+private struct OnboardingBulletRow: View {
+    let text: String
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Text("•")
+                .foregroundStyle(.secondary)
+            Text(text)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
