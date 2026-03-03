@@ -455,12 +455,23 @@ struct AlarmsHomeView: View {
     private func adjustmentTag(for offsetDays: Int) -> String? {
         switch offsetDays {
         case -1:
-            return Strings.Settings.hijriMinusOneDay
+            return Strings.Settings.hijriAdjustedMinusOneDay
         case 1:
-            return Strings.Settings.hijriPlusOneDay
+            return Strings.Settings.hijriAdjustedPlusOneDay
         default:
             return nil
         }
+    }
+
+    private func monthStartLabel(for date: Date, currentDate: Date = Date(), timeZone: TimeZone = .current) -> String {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let startOfToday = calendar.startOfDay(for: currentDate)
+        let startOfMonth = calendar.startOfDay(for: date)
+        if startOfMonth < startOfToday {
+            return Strings.AlarmsTab.hijriMonthStarted(shortDate(date))
+        }
+        return Strings.AlarmsTab.hijriMonthStarts(shortDate(date))
     }
 
     private func dateFromDayIdentifier(_ identifier: String) -> Date? {
@@ -487,7 +498,7 @@ struct AlarmsHomeView: View {
                 }
                 if let preview = section.preview {
                     HStack(alignment: .firstTextBaseline, spacing: 4) {
-                        Text(Strings.AlarmsTab.hijriMonthStarts(shortDate(preview.startDate)))
+                        Text(monthStartLabel(for: preview.startDate))
                         if let adjustment = adjustmentTag(for: preview.offsetDays) {
                             Text("(\(adjustment))")
                         }

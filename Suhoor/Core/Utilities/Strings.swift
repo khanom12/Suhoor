@@ -124,6 +124,7 @@ enum Strings {
             "\(count) alarm\(count == 1 ? "" : "s") in this month"
         }
         static func hijriMonthStarts(_ date: String) -> String { "Starts \(date)" }
+        static func hijriMonthStarted(_ date: String) -> String { "Started \(date)" }
     }
 
     enum AddSchedule {
@@ -418,6 +419,8 @@ enum Strings {
         static let hijriMinusOneDay = "-1 day"
         static let hijriNoChange = "No change"
         static let hijriPlusOneDay = "+1 day"
+        static let hijriAdjustedMinusOneDay = "Adjusted -1 day"
+        static let hijriAdjustedPlusOneDay = "Adjusted +1 day"
         static let hijriPreviewUnavailable = "Preview will appear when calendar data for this month is available."
         static let hijriBuiltInStart = "Built-in start"
         static let hijriCorrectedStart = "Corrected start"
