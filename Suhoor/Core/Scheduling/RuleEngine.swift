@@ -34,6 +34,9 @@ struct RuleEngine: Sendable {
         if let override = overridesByDay[key]?.reminderEnabled {
             return override
         }
+        if overridesByDay[key]?.hasReminderCustomization == true {
+            return true
+        }
         return defaultsActive(on: date) ? defaultConfig.reminderEnabledDefault : false
     }
 
@@ -41,6 +44,9 @@ struct RuleEngine: Sendable {
         let key = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
         if let override = overridesByDay[key]?.fajrEnabled {
             return override
+        }
+        if overridesByDay[key]?.hasFajrCustomization == true {
+            return true
         }
         return defaultsActive(on: date) ? defaultConfig.fajrEnabledDefault : false
     }

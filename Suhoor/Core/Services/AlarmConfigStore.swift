@@ -659,10 +659,14 @@ final class AlarmConfigStore: ObservableObject {
         let baseFajrEnabled = defaultsActive ? defaults.fajrEnabledDefault : false
         let baseIftarEnabled = defaultsActive ? defaults.iftarEnabledDefault : false
 
-        var suhoorEnabled = override?.suhoorEnabled ?? baseSuhoorEnabled
-        var reminderEnabled = override?.reminderEnabled ?? baseReminderEnabled
-        var fajrEnabled = override?.fajrEnabled ?? baseFajrEnabled
-        var iftarEnabled = override?.iftarEnabled ?? baseIftarEnabled
+        var suhoorEnabled = override?.suhoorEnabled
+            ?? (override?.hasSuhoorCustomization == true ? true : baseSuhoorEnabled)
+        var reminderEnabled = override?.reminderEnabled
+            ?? (override?.hasReminderCustomization == true ? true : baseReminderEnabled)
+        var fajrEnabled = override?.fajrEnabled
+            ?? (override?.hasFajrCustomization == true ? true : baseFajrEnabled)
+        var iftarEnabled = override?.iftarEnabled
+            ?? (override?.hasIftarCustomization == true ? true : baseIftarEnabled)
 
         let reminderOffset = override?.reminderOffsetOverrideMinutes ?? defaults.defaultReminderMinutesBeforeFajr
         let reminderTimeMode: ReminderTimeMode

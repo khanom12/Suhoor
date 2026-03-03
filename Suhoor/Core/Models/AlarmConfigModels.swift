@@ -325,6 +325,25 @@ struct DailyAlarmOverride: Codable, Equatable, Identifiable, Sendable {
         if let notes, !notes.isEmpty { return true }
         return false
     }
+
+    var hasSuhoorCustomization: Bool {
+        suhoorOffsetOverrideMinutes != nil || suhoorTimeOverrideMinutesFromMidnight != nil
+    }
+
+    var hasReminderCustomization: Bool {
+        reminderOffsetOverrideMinutes != nil || reminderTimeOverrideMinutesFromMidnight != nil
+    }
+
+    var hasFajrCustomization: Bool {
+        fajrSoundOverride != nil
+    }
+
+    var hasIftarCustomization: Bool {
+        if let delivery = iftarDeliveryOverride?.normalized(), !delivery.isOff {
+            return true
+        }
+        return iftarSoundOverride != nil
+    }
 }
 
 struct EffectiveDailyConfig: Codable, Equatable, Sendable {

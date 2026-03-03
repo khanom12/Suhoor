@@ -386,7 +386,7 @@ final class ScheduleManager: ObservableObject {
     }
 
     func refreshedActiveDay(for date: Date, timeZone: TimeZone = .current) -> ActiveAlarmDay? {
-        buildActiveDayIfNeeded(for: date, timeZone: timeZone)
+        buildActiveDayIfNeeded(for: date, timeZone: timeZone, preferCached: false)
     }
 
     func duplicateStatus(for date: Date, timeZone: TimeZone = .current) -> DuplicateDateStatus {
@@ -2663,23 +2663,14 @@ private enum ScheduleComputationEngine {
             timeZone: timeZone
         )
 
-        var suhoorEnabled = defaultConfig.suhoorEnabledDefault
-        var reminderEnabled = defaultConfig.reminderEnabledDefault
-        var fajrEnabled = defaultConfig.fajrEnabledDefault
-        var iftarEnabled = defaultConfig.iftarEnabledDefault
-
-        if let overrideSuhoor = override?.suhoorEnabled {
-            suhoorEnabled = overrideSuhoor
-        }
-        if let overrideReminder = override?.reminderEnabled {
-            reminderEnabled = overrideReminder
-        }
-        if let overrideFajr = override?.fajrEnabled {
-            fajrEnabled = overrideFajr
-        }
-        if let overrideIftar = override?.iftarEnabled {
-            iftarEnabled = overrideIftar
-        }
+        var suhoorEnabled = override?.suhoorEnabled
+            ?? (override?.hasSuhoorCustomization == true ? true : defaultConfig.suhoorEnabledDefault)
+        var reminderEnabled = override?.reminderEnabled
+            ?? (override?.hasReminderCustomization == true ? true : defaultConfig.reminderEnabledDefault)
+        var fajrEnabled = override?.fajrEnabled
+            ?? (override?.hasFajrCustomization == true ? true : defaultConfig.fajrEnabledDefault)
+        var iftarEnabled = override?.iftarEnabled
+            ?? (override?.hasIftarCustomization == true ? true : defaultConfig.iftarEnabledDefault)
 
         if override?.skipDay == true || ruleSummary.disabledForDay {
             suhoorEnabled = false

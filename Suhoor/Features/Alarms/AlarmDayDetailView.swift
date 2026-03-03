@@ -255,7 +255,10 @@ struct AlarmDayDetailView: View {
             alarmConfigStore.override(for: schedule.date, timeZone: timeZone)?.suhoorOffsetOverrideMinutes
                 ?? ruleSummary.finalOffsetMinutes
         }, set: { newValue in
-            updateOverride { $0.suhoorOffsetOverrideMinutes = newValue }
+            updateOverride {
+                $0.suhoorOffsetOverrideMinutes = newValue
+                $0.suhoorEnabled = true
+            }
             clampReminderOffsetIfNeeded()
         })
     }
@@ -267,6 +270,7 @@ struct AlarmDayDetailView: View {
             updateOverride { override in
                 if newValue {
                     override.suhoorTimeOverrideMinutesFromMidnight = minutesFromMidnight(for: currentSchedule.wakeDate)
+                    override.suhoorEnabled = true
                 } else {
                     override.suhoorTimeOverrideMinutesFromMidnight = nil
                 }
@@ -288,6 +292,7 @@ struct AlarmDayDetailView: View {
         }, set: { newValue in
             updateOverride { override in
                 override.suhoorTimeOverrideMinutesFromMidnight = minutesFromMidnight(for: newValue)
+                override.suhoorEnabled = true
             }
             clampReminderOffsetIfNeeded()
         })
@@ -302,6 +307,7 @@ struct AlarmDayDetailView: View {
             updateOverride { override in
                 override.reminderOffsetOverrideMinutes = clamped
                 override.reminderTimeOverrideMinutesFromMidnight = nil
+                override.reminderEnabled = true
             }
             reminderTimeClamped = clamped != newValue
         })
@@ -318,6 +324,7 @@ struct AlarmDayDetailView: View {
             updateOverride { override in
                 override.reminderTimeOverrideMinutesFromMidnight = minutesFromMidnight(for: validation.reminderTime)
                 override.reminderOffsetOverrideMinutes = nil
+                override.reminderEnabled = true
             }
             reminderTimeClamped = validation.wasClampedToSuhoor
         })

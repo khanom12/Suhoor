@@ -595,6 +595,139 @@ struct SuhoorTests {
 
     @Test
     @MainActor
+    func perDayWakeCustomizationOverridesDisabledDefaultWakeAlarm() async {
+        let suiteName = "SuhoorTests.DayWakeOverrideBeatsDisabledDefault"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+
+        let settingsStore = SuhoorSettingsStore(defaults: defaults)
+        let alarmConfigStore = AlarmConfigStore(defaultsStore: defaults)
+        let locationService = LocationService()
+
+        settingsStore.update { draft in
+            draft.locationMode = .fixed
+            draft.fixedLocation = FixedLocation(latitude: 43.6532, longitude: -79.3832)
+        }
+
+        alarmConfigStore.defaults.suhoorEnabledDefault = false
+        alarmConfigStore.defaults.reminderEnabledDefault = true
+        alarmConfigStore.defaults.fajrEnabledDefault = false
+        alarmConfigStore.defaults.iftarEnabledDefault = false
+
+        let targetDate = DateHelpers.startOfTomorrow(in: .current)
+        alarmConfigStore.addSingleDaySource(targetDate)
+
+        let scheduleManager = ScheduleManager(
+            settingsStore: settingsStore,
+            locationService: locationService,
+            alarmConfigStore: alarmConfigStore
+        )
+
+        await scheduleManager.refreshSchedules(force: true)
+
+        let cached = scheduleManager.activeDay(for: targetDate)
+        #expect(cached?.effectiveConfig.suhoorEnabled == false)
+        #expect(cached?.effectiveConfig.reminderEnabled == true)
+        #expect(cached?.primaryDisplay?.kind == .reminder)
+
+        alarmConfigStore.updateOverride(for: targetDate) { draft in
+            draft.suhoorEnabled = true
+            draft.suhoorOffsetOverrideMinutes = 30
+        }
+
+        let refreshed = scheduleManager.refreshedActiveDay(for: targetDate)
+
+        #expect(refreshed?.effectiveConfig.suhoorEnabled == true)
+        #expect(refreshed?.effectiveConfig.reminderEnabled == true)
+        #expect(refreshed?.schedule.offsetMinutes == 30)
+        #expect(refreshed?.primaryDisplay?.kind == .suhoor)
+        #expect(refreshed?.primaryDisplay?.time == refreshed?.schedule.wakeDate)
+    }
+
+    @Test
+    @MainActor
+    func explicitDayDisableStillWinsOverWakeCustomization() {
+        let suiteName = "SuhoorTests.ExplicitWakeDisableWins"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+
+        let alarmConfigStore = AlarmConfigStore(defaultsStore: defaults)
+        let targetDate = DateHelpers.startOfTomorrow(in: .current)
+        alarmConfigStore.addSingleDaySource(targetDate)
+        alarmConfigStore.defaults.suhoorEnabledDefault = false
+
+        alarmConfigStore.updateOverride(for: targetDate) { draft in
+            draft.suhoorOffsetOverrideMinutes = 45
+            draft.suhoorEnabled = false
+        }
+
+        let summary = RuleEngine(
+            settings: .default,
+            defaultConfig: alarmConfigStore.defaults,
+            overridesByDay: alarmConfigStore.overridesByDay,
+            timeZone: .current
+        ).ruleSummary(for: targetDate)
+        let config = alarmConfigStore.effectiveConfig(
+            for: targetDate,
+            ruleSummary: summary,
+            settings: .default,
+            timeZone: .current
+        )
+
+        #expect(config.suhoorEnabled == false)
+        #expect(config.suhoorOffsetMinutes == 45)
+    }
+
+    @Test
+    @MainActor
+    func refreshedActiveDayBypassesCachedPrimaryDisplay() async {
+        let suiteName = "SuhoorTests.RefreshedActiveDayBypassesCachedPrimary"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+
+        let settingsStore = SuhoorSettingsStore(defaults: defaults)
+        let alarmConfigStore = AlarmConfigStore(defaultsStore: defaults)
+        let locationService = LocationService()
+
+        settingsStore.update { draft in
+            draft.locationMode = .fixed
+            draft.fixedLocation = FixedLocation(latitude: 43.6532, longitude: -79.3832)
+        }
+
+        alarmConfigStore.defaults.suhoorEnabledDefault = false
+        alarmConfigStore.defaults.reminderEnabledDefault = true
+        alarmConfigStore.defaults.fajrEnabledDefault = false
+        alarmConfigStore.defaults.iftarEnabledDefault = false
+
+        let targetDate = DateHelpers.startOfTomorrow(in: .current)
+        alarmConfigStore.addSingleDaySource(targetDate)
+
+        let scheduleManager = ScheduleManager(
+            settingsStore: settingsStore,
+            locationService: locationService,
+            alarmConfigStore: alarmConfigStore
+        )
+
+        await scheduleManager.refreshSchedules(force: true)
+
+        let cached = scheduleManager.activeDay(for: targetDate)
+        #expect(cached?.primaryDisplay?.kind == .reminder)
+
+        alarmConfigStore.updateOverride(for: targetDate) { draft in
+            draft.suhoorEnabled = true
+            draft.suhoorOffsetOverrideMinutes = 30
+        }
+
+        let stillCached = scheduleManager.activeDay(for: targetDate)
+        let refreshed = scheduleManager.refreshedActiveDay(for: targetDate)
+
+        #expect(stillCached?.primaryDisplay?.kind == .reminder)
+        #expect(refreshed?.primaryDisplay?.kind == .suhoor)
+        #expect(refreshed?.primaryDisplay?.time == refreshed?.schedule.wakeDate)
+    }
+
+    @Test
+    @MainActor
     func duplicateStatusReturnsExistingActiveDayFromSnapshot() async {
         let suiteName = "SuhoorTests.DuplicateStatus"
         let defaults = UserDefaults(suiteName: suiteName)!
