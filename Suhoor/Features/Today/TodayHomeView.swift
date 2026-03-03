@@ -32,16 +32,8 @@ struct TodayHomeView: View {
         )
         .navigationTitle("Today")
         .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
+            ToolbarItem(placement: .topBarLeading) {
                 Button("Edit") { isEditingCards = true }
-            }
-            ToolbarItem(placement: .navigationBarLeading) {
-                Button {
-                    NotificationCenter.default.post(name: .switchToSettingsTab, object: nil)
-                } label: {
-                    Image(systemName: "gearshape")
-                }
-                .accessibilityLabel("Settings")
             }
         }
         .sheet(isPresented: $isEditingCards) {

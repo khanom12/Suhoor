@@ -5,10 +5,31 @@ import Testing
 @Suite
 struct TodayCountdownEngineTests {
     @Test
-    func countdownTargetBeforeFajrIsFajr() {
+    func countdownTargetBeforeWakeUsesSuhoorWhenEnabled() {
         let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
         let dayStart = makeDate(year: 2026, month: 3, day: 3, hour: 0, minute: 0, timeZone: timeZone)
         let now = makeDate(year: 2026, month: 3, day: 3, hour: 4, minute: 0, timeZone: timeZone)
+
+        let snapshot = makeSnapshot(
+            todayStart: dayStart,
+            fajrHour: 5,
+            fajrMinute: 0,
+            maghribHour: 18,
+            maghribMinute: 0,
+            iftarOffsetMinutes: nil,
+            timeZone: timeZone
+        )
+
+        let target = TodayCountdownEngine.target(now: now, snapshot: snapshot, timeZone: timeZone)
+        #expect(target?.kind == .suhoor)
+        #expect(target?.targetDate == makeDate(year: 2026, month: 3, day: 3, hour: 4, minute: 30, timeZone: timeZone))
+    }
+
+    @Test
+    func countdownTargetBetweenWakeAndFajrIsFajr() {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let dayStart = makeDate(year: 2026, month: 3, day: 3, hour: 0, minute: 0, timeZone: timeZone)
+        let now = makeDate(year: 2026, month: 3, day: 3, hour: 4, minute: 40, timeZone: timeZone)
 
         let snapshot = makeSnapshot(
             todayStart: dayStart,
@@ -68,7 +89,7 @@ struct TodayCountdownEngineTests {
     }
 
     @Test
-    func countdownTargetAfterMaghribIsTomorrowFajr() {
+    func countdownTargetAfterMaghribUsesTomorrowSuhoorWhenEnabled() {
         let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
         let dayStart = makeDate(year: 2026, month: 3, day: 3, hour: 0, minute: 0, timeZone: timeZone)
         let now = makeDate(year: 2026, month: 3, day: 3, hour: 20, minute: 0, timeZone: timeZone)
@@ -84,8 +105,57 @@ struct TodayCountdownEngineTests {
         )
 
         let target = TodayCountdownEngine.target(now: now, snapshot: snapshot, timeZone: timeZone)
+        #expect(target?.kind == .suhoor)
+        #expect(target?.targetDate == makeDate(year: 2026, month: 3, day: 4, hour: 4, minute: 30, timeZone: timeZone))
+    }
+
+    @Test
+    func countdownTargetAfterMaghribFallsBackToTomorrowFajrWhenSuhoorDisabled() {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let dayStart = makeDate(year: 2026, month: 3, day: 3, hour: 0, minute: 0, timeZone: timeZone)
+        let now = makeDate(year: 2026, month: 3, day: 3, hour: 20, minute: 0, timeZone: timeZone)
+
+        let snapshot = makeSnapshot(
+            todayStart: dayStart,
+            fajrHour: 5,
+            fajrMinute: 0,
+            maghribHour: 18,
+            maghribMinute: 0,
+            iftarOffsetMinutes: nil,
+            timeZone: timeZone,
+            todayConfig: sampleEffectiveDailyConfig(date: dayStart),
+            tomorrowConfig: sampleEffectiveDailyConfig(
+                date: makeDate(year: 2026, month: 3, day: 4, hour: 0, minute: 0, timeZone: timeZone),
+                suhoorEnabled: false,
+                fajrEnabled: true
+            )
+        )
+
+        let target = TodayCountdownEngine.target(now: now, snapshot: snapshot, timeZone: timeZone)
         #expect(target?.kind == .fajr)
         #expect(target?.targetDate == makeDate(year: 2026, month: 3, day: 4, hour: 5, minute: 0, timeZone: timeZone))
+    }
+
+    @Test
+    func countdownTargetUsesNextVisibleScheduledDayWhenTodayIsMissing() {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let dayStart = makeDate(year: 2026, month: 3, day: 3, hour: 0, minute: 0, timeZone: timeZone)
+        let now = makeDate(year: 2026, month: 3, day: 3, hour: 12, minute: 0, timeZone: timeZone)
+
+        let snapshot = makeSnapshot(
+            todayStart: dayStart,
+            fajrHour: 5,
+            fajrMinute: 0,
+            maghribHour: 18,
+            maghribMinute: 0,
+            iftarOffsetMinutes: nil,
+            timeZone: timeZone,
+            includeToday: false
+        )
+
+        let target = TodayCountdownEngine.target(now: now, snapshot: snapshot, timeZone: timeZone)
+        #expect(target?.kind == .suhoor)
+        #expect(target?.targetDate == makeDate(year: 2026, month: 3, day: 4, hour: 4, minute: 30, timeZone: timeZone))
     }
 
     // MARK: - Helpers
@@ -110,7 +180,10 @@ struct TodayCountdownEngineTests {
         maghribHour: Int,
         maghribMinute: Int,
         iftarOffsetMinutes: Int?,
-        timeZone: TimeZone
+        timeZone: TimeZone,
+        todayConfig: EffectiveDailyConfig? = nil,
+        tomorrowConfig: EffectiveDailyConfig? = nil,
+        includeToday: Bool = true
     ) -> ActiveAlarmWindowSnapshot {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = timeZone
@@ -151,7 +224,7 @@ struct TodayCountdownEngineTests {
             date: todayStart,
             dateKey: todayKey,
             schedule: todaySchedule,
-            effectiveConfig: sampleEffectiveDailyConfig(date: todayStart),
+            effectiveConfig: todayConfig ?? sampleEffectiveDailyConfig(date: todayStart),
             provenances: [],
             isImplicitRamadan: false,
             isExplicitOneOff: false,
@@ -164,7 +237,7 @@ struct TodayCountdownEngineTests {
             date: tomorrowStart,
             dateKey: tomorrowKey,
             schedule: tomorrowSchedule,
-            effectiveConfig: sampleEffectiveDailyConfig(date: tomorrowStart),
+            effectiveConfig: tomorrowConfig ?? sampleEffectiveDailyConfig(date: tomorrowStart),
             provenances: [],
             isImplicitRamadan: false,
             isExplicitOneOff: false,
@@ -175,22 +248,27 @@ struct TodayCountdownEngineTests {
 
         return ActiveAlarmWindowSnapshot(
             generatedAt: Date(),
-            visibleDays: [todayDay, tomorrowDay],
-            scheduledDays: [todayDay, tomorrowDay],
+            visibleDays: includeToday ? [todayDay, tomorrowDay] : [tomorrowDay],
+            scheduledDays: includeToday ? [todayDay, tomorrowDay] : [tomorrowDay],
             visibleHorizonDays: 60,
             scheduledHorizonDays: 30
         )
     }
 
-    private func sampleEffectiveDailyConfig(date: Date) -> EffectiveDailyConfig {
+    private func sampleEffectiveDailyConfig(
+        date: Date,
+        suhoorEnabled: Bool = true,
+        fajrEnabled: Bool = false,
+        iftarEnabled: Bool = false
+    ) -> EffectiveDailyConfig {
         EffectiveDailyConfig(
             date: date,
             defaultsActive: true,
             skipDay: false,
-            suhoorEnabled: true,
+            suhoorEnabled: suhoorEnabled,
             reminderEnabled: false,
-            fajrEnabled: false,
-            iftarEnabled: false,
+            fajrEnabled: fajrEnabled,
+            iftarEnabled: iftarEnabled,
             suhoorTimeMode: .relativeToFajrMinusMinutes,
             suhoorOffsetMinutes: 30,
             reminderTimeMode: .beforeFajr,
@@ -205,4 +283,3 @@ struct TodayCountdownEngineTests {
         )
     }
 }
-
