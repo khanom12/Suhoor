@@ -11,7 +11,7 @@ struct ContentView: View {
 
             Group {
                 if scheduleManager.showsHome {
-                    AlarmsHomeView()
+                    RootTabView()
                 } else {
                     OnboardingView()
                 }

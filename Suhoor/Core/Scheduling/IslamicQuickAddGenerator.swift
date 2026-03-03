@@ -168,8 +168,7 @@ struct IslamicQuickAddGenerator {
         var dates: [Date] = []
         var current = DateHelpers.startOfDay(day, in: timeZone)
         while dates.count < 30,
-              let components = adjustedHijriCalendar.adjustedComponents(for: current, timeZone: timeZone),
-              components.month == .ramadan {
+              adjustedHijriCalendar.isRamadan(date: current, timeZone: timeZone) {
             dates.append(current)
             current = calendar.date(byAdding: .day, value: 1, to: current) ?? current
         }

@@ -35,9 +35,13 @@ struct ScheduledDateSourceResolverTests {
         )
         let entries = resolver.resolvedEntries(from: makeDate(year: 2026, month: 2, day: 1), limit: 60, timeZone: timeZone)
 
-        #expect(entries.count == 1)
-        #expect(entries.first?.date == date)
-        #expect(entries.first?.isExplicitOneOff == true)
+        let key = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
+        let entry = entries.first(where: { $0.dateKey == key })
+        #expect(entry != nil)
+        #expect(entry?.date == date)
+        #expect(entry?.provenances.contains(where: { $0.sourceOrigin == .manualSingleDay }) == true)
+        #expect(entry?.provenances.contains(where: { $0.sourceOrigin == .defaultRamadan }) == true)
+        #expect(entry?.provenances.contains(where: { $0.isExplicitOneOff }) == true)
     }
 
     @Test

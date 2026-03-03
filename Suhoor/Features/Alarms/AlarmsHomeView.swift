@@ -11,7 +11,6 @@ struct AlarmsHomeView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var selectedSchedule: DaySchedule?
-    @State private var showSettingsSheet = false
     @State private var showAddDaySheet = false
     @State private var showTagFilterSheet = false
     @State private var editMode: EditMode = .inactive
@@ -24,242 +23,232 @@ struct AlarmsHomeView: View {
     @State private var pendingRamadanEntry: AlarmRowEntry?
 
     var body: some View {
-        NavigationStack {
-            List {
-                if tagFilter.isActive {
-                    Section {
-                        activeFilterBar
-                            .listRowInsets(EdgeInsets(top: 6, leading: 0, bottom: 6, trailing: 0))
-                            .listRowBackground(Color.clear)
-                    }
+        List {
+            if tagFilter.isActive {
+                Section {
+                    activeFilterBar
+                        .listRowInsets(EdgeInsets(top: 6, leading: 0, bottom: 6, trailing: 0))
+                        .listRowBackground(Color.clear)
                 }
+            }
 
-                if listSnapshot.sections.isEmpty {
+            if listSnapshot.sections.isEmpty {
+                Section {
+                    emptyStateView
+                }
+            } else {
+                ForEach(listSnapshot.sections) { section in
                     Section {
-                        emptyStateView
-                    }
-                } else {
-                    ForEach(listSnapshot.sections) { section in
-                        Section {
-                            if !isSectionCollapsed(section) {
-                                Group {
-                                    if section.entries.isEmpty {
-                                        if loadingSectionIDs.contains(section.id) {
-                                            HStack {
-                                                ProgressView()
-                                                Text("Loading month")
-                                                    .foregroundStyle(.secondary)
-                                            }
-                                            .padding(.vertical, DesignTokens.spacingS)
-                                        } else {
-                                            Text(monthEmptyStateText)
-                                                .font(.footnote)
+                        if !isSectionCollapsed(section) {
+                            Group {
+                                if section.entries.isEmpty {
+                                    if loadingSectionIDs.contains(section.id) {
+                                        HStack {
+                                            ProgressView()
+                                            Text("Loading month")
                                                 .foregroundStyle(.secondary)
-                                                .padding(.vertical, DesignTokens.spacingS)
                                         }
+                                        .padding(.vertical, DesignTokens.spacingS)
                                     } else {
-                                        ForEach(section.entries) { entry in
-                                            AlarmRowView(
-                                                schedule: entry.schedule,
-                                                config: entry.config,
-                                                primaryDisplay: entry.primary,
-                                                primaryIntent: entry.primaryIntent,
-                                                secondaryTags: entry.secondaryTags,
-                                                warnings: entry.warnings,
-                                                showsTags: entry.showsTags,
-                                                deleteCapability: entry.deleteCapability,
-                                                onSelect: {
-                                                    selectedSchedule = entry.schedule
-                                                },
-                                                onRequestRamadanDisable: {
-                                                    pendingRamadanEntry = entry
-                                                }
-                                            )
-                                            .deleteDisabled(entry.deleteCapability == .ramadan)
-                                        }
-                                        .onDelete { offsets in
-                                            withAnimation(Motion.standard(reduceMotion: reduceMotion)) {
-                                                deleteEntries(in: section.entries, at: offsets)
+                                        Text(monthEmptyStateText)
+                                            .font(.footnote)
+                                            .foregroundStyle(.secondary)
+                                            .padding(.vertical, DesignTokens.spacingS)
+                                    }
+                                } else {
+                                    ForEach(section.entries) { entry in
+                                        AlarmRowView(
+                                            schedule: entry.schedule,
+                                            config: entry.config,
+                                            primaryDisplay: entry.primary,
+                                            primaryIntent: entry.primaryIntent,
+                                            secondaryTags: entry.secondaryTags,
+                                            warnings: entry.warnings,
+                                            showsTags: entry.showsTags,
+                                            deleteCapability: entry.deleteCapability,
+                                            onSelect: {
+                                                selectedSchedule = entry.schedule
+                                            },
+                                            onRequestRamadanDisable: {
+                                                pendingRamadanEntry = entry
                                             }
+                                        )
+                                        .deleteDisabled(entry.deleteCapability == .ramadan)
+                                    }
+                                    .onDelete { offsets in
+                                        withAnimation(Motion.standard(reduceMotion: reduceMotion)) {
+                                            deleteEntries(in: section.entries, at: offsets)
                                         }
                                     }
                                 }
-                                .transition(.opacity.combined(with: .move(edge: .top)))
                             }
-                } header: {
-                    Button {
-                        toggleSectionCollapse(section)
-                    } label: {
-                        headerLabel(for: section)
+                            .transition(.opacity.combined(with: .move(edge: .top)))
+                        }
+                    } header: {
+                        Button {
+                            toggleSectionCollapse(section)
+                        } label: {
+                            headerLabel(for: section)
+                        }
+                        .buttonStyle(.plain)
+                        .textCase(nil)
                     }
-                    .buttonStyle(.plain)
-                    .textCase(nil)
                 }
             }
         }
-            }
-            .listStyle(.insetGrouped)
-            .navigationTitle("Alarms")
-            .navigationBarTitleDisplayMode(.large)
-            .environment(\.editMode, $editMode)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button(editMode.isEditing ? "Done" : "Edit") {
-                        editMode = editMode.isEditing ? .inactive : .active
-                    }
-                }
-                ToolbarItemGroup(placement: .topBarTrailing) {
-                    if showsAddButton {
-                        Button {
-                            showAddDaySheet = true
-                        } label: {
-                            Image(systemName: "plus")
-                        }
-                    }
-                    Button {
-                        showTagFilterSheet = true
-                    } label: {
-                        Image(systemName: tagFilter.isActive ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
-                    }
-                    Button {
-                        showSettingsSheet = true
-                    } label: {
-                        Image(systemName: "gearshape")
-                    }
+        .listStyle(.insetGrouped)
+        .navigationTitle("Alarms")
+        .navigationBarTitleDisplayMode(.large)
+        .environment(\.editMode, $editMode)
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button(editMode.isEditing ? "Done" : "Edit") {
+                    editMode = editMode.isEditing ? .inactive : .active
                 }
             }
-            .confirmationDialog(
-                "Delete alarm",
-                isPresented: Binding(
-                    get: { pendingSeriesDeleteEntry != nil },
-                    set: { isPresented in
-                        if !isPresented {
-                            pendingSeriesDeleteEntry = nil
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                if showsAddButton {
+                    Button {
+                        showAddDaySheet = true
+                    } label: {
+                        Image(systemName: "plus")
+                    }
+                }
+                Button {
+                    showTagFilterSheet = true
+                } label: {
+                    Image(systemName: tagFilter.isActive ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
+                }
+                Button {
+                    NotificationCenter.default.post(name: .switchToSettingsTab, object: nil)
+                } label: {
+                    Image(systemName: "gearshape")
+                }
+            }
+        }
+        .confirmationDialog(
+            "Delete alarm",
+            isPresented: Binding(
+                get: { pendingSeriesDeleteEntry != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        pendingSeriesDeleteEntry = nil
+                    }
+                }
+            ),
+            titleVisibility: .visible
+        ) {
+            if let entry = pendingSeriesDeleteEntry {
+                let excludable = entry.excludableProvenances
+                if excludable.count == 1, let provenance = excludable.first {
+                    Button("Remove this day only") {
+                        Task {
+                            await deleteDayOnly(entry: entry, provenance: provenance)
+                            await MainActor.run { pendingSeriesDeleteEntry = nil }
                         }
                     }
-                ),
-                titleVisibility: .visible
-            ) {
-                if let entry = pendingSeriesDeleteEntry {
-                    let excludable = entry.excludableProvenances
-                    if excludable.count == 1, let provenance = excludable.first {
-                        Button("Remove this day only") {
+                } else {
+                    Button("Remove this day from all schedules", role: .destructive) {
+                        Task {
+                            await deleteDayFromAllSchedules(entry: entry, provenances: excludable)
+                            await MainActor.run { pendingSeriesDeleteEntry = nil }
+                        }
+                    }
+                    ForEach(excludable, id: \.id) { provenance in
+                        Button("Remove this day from \(provenance.label)") {
                             Task {
                                 await deleteDayOnly(entry: entry, provenance: provenance)
                                 await MainActor.run { pendingSeriesDeleteEntry = nil }
                             }
                         }
-                    } else {
-                        Button("Remove this day from all schedules", role: .destructive) {
-                            Task {
-                                await deleteDayFromAllSchedules(entry: entry, provenances: excludable)
-                                await MainActor.run { pendingSeriesDeleteEntry = nil }
-                            }
-                        }
-                        ForEach(excludable, id: \.id) { provenance in
-                            Button("Remove this day from \(provenance.label)") {
-                                Task {
-                                    await deleteDayOnly(entry: entry, provenance: provenance)
-                                    await MainActor.run { pendingSeriesDeleteEntry = nil }
-                                }
-                            }
-                        }
                     }
+                }
 
-                    ForEach(entry.stoppableProvenances, id: \.id) { provenance in
-                        let title = provenance.stopSeriesLabel ?? "Remove schedule"
-                        Button(title, role: .destructive) {
-                            Task {
-                                await scheduleManager.stopSeries(for: provenance)
-                                await MainActor.run { pendingSeriesDeleteEntry = nil }
-                            }
+                ForEach(entry.stoppableProvenances, id: \.id) { provenance in
+                    let title = provenance.stopSeriesLabel ?? "Remove schedule"
+                    Button(title, role: .destructive) {
+                        Task {
+                            await scheduleManager.stopSeries(for: provenance)
+                            await MainActor.run { pendingSeriesDeleteEntry = nil }
                         }
                     }
+                }
 
-                    Button(Strings.Settings.cancel, role: .cancel) {}
-                }
+                Button(Strings.Settings.cancel, role: .cancel) {}
             }
-            .alert(
-                "Ramadan alarms can't be deleted",
-                isPresented: Binding(
-                    get: { pendingRamadanEntry != nil },
-                    set: { isPresented in
-                        if !isPresented {
-                            pendingRamadanEntry = nil
-                        }
-                    }
-                )
-            ) {
-                Button("Turn off for this day") {
-                    if let entry = pendingRamadanEntry {
-                        alarmConfigStore.setDayEnabled(false, for: entry.schedule.date, timeZone: .current)
-                        scheduleManager.requestRescheduleDay(entry.schedule.date)
-                    }
-                    pendingRamadanEntry = nil
-                }
-                Button(Strings.Settings.cancel, role: .cancel) {
-                    pendingRamadanEntry = nil
-                }
-            } message: {
-                Text("This date is part of Ramadan. You can turn it off for the day instead.")
-            }
-            .navigationDestination(isPresented: navigationIsActiveBinding) {
-                if let schedule = selectedSchedule {
-                    AlarmDayDetailView(schedule: schedule)
-                }
-            }
-            .task {
-                refreshListSnapshot(animated: false)
-            }
-            .onAppear {
-                refreshListSnapshot(animated: false)
-            }
-            .onChange(of: scheduleManager.activeWindowSnapshot) { _, _ in
-                refreshListSnapshot(animated: false)
-            }
-            .onChange(of: alarmConfigStore.overridesByDay) { _, _ in
-                refreshListSnapshot(animated: false)
-            }
-            .onChange(of: alarmConfigStore.defaults) { _, _ in
-                refreshListSnapshot(animated: false)
-            }
-            .onChange(of: fastTagStore.currentRevision) { _, _ in
-                refreshListSnapshot(animated: false)
-            }
-            .onChange(of: scheduleManager.lastUpdated) { _, _ in
-                refreshListSnapshot(animated: false)
-            }
-            .onChange(of: tagFilter) { _, _ in
-                refreshListSnapshot(animated: true)
-            }
-            .sheet(isPresented: $showSettingsSheet) {
-                NavigationStack {
-                    SettingsRootView()
-                }
-            }
-            .sheet(isPresented: $showAddDaySheet) {
-                NavigationStack {
-                    AddScheduleSheet(isPresented: $showAddDaySheet) { date in
-                        pendingFocusDateKey = DateHelpers.dayIdentifier(for: date, timeZone: .current)
-                        showAddDaySheet = false
+        }
+        .alert(
+            "Ramadan alarms can't be deleted",
+            isPresented: Binding(
+                get: { pendingRamadanEntry != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        pendingRamadanEntry = nil
                     }
                 }
-            }
-            .sheet(isPresented: $showTagFilterSheet) {
-                AlarmTagFilterSheet(filter: $tagFilter)
-            }
-            .onChange(of: showAddDaySheet) { _, isPresented in
-                guard !isPresented, let pendingFocusDateKey else { return }
-                if let existing = scheduleManager.activeWindowSnapshot.byDateKey[pendingFocusDateKey] {
-                    selectedSchedule = existing.schedule
-                } else if let normalizedDate = dateFromDayIdentifier(pendingFocusDateKey) {
-                    selectedSchedule = scheduleManager.activeDay(for: normalizedDate)?.schedule
+            )
+        ) {
+            Button("Turn off for this day") {
+                if let entry = pendingRamadanEntry {
+                    alarmConfigStore.setDayEnabled(false, for: entry.schedule.date, timeZone: .current)
+                    scheduleManager.requestRescheduleDay(entry.schedule.date)
                 }
-                self.pendingFocusDateKey = nil
+                pendingRamadanEntry = nil
             }
-            .onReceive(NotificationCenter.default.publisher(for: .switchToSettingsTab)) { _ in
-                showSettingsSheet = true
+            Button(Strings.Settings.cancel, role: .cancel) {
+                pendingRamadanEntry = nil
             }
+        } message: {
+            Text("This date is part of Ramadan. You can turn it off for the day instead.")
+        }
+        .navigationDestination(isPresented: navigationIsActiveBinding) {
+            if let schedule = selectedSchedule {
+                AlarmDayDetailView(schedule: schedule)
+            }
+        }
+        .task {
+            refreshListSnapshot(animated: false)
+        }
+        .onAppear {
+            refreshListSnapshot(animated: false)
+        }
+        .onChange(of: scheduleManager.activeWindowSnapshot) { _, _ in
+            refreshListSnapshot(animated: false)
+        }
+        .onChange(of: alarmConfigStore.overridesByDay) { _, _ in
+            refreshListSnapshot(animated: false)
+        }
+        .onChange(of: alarmConfigStore.defaults) { _, _ in
+            refreshListSnapshot(animated: false)
+        }
+        .onChange(of: fastTagStore.currentRevision) { _, _ in
+            refreshListSnapshot(animated: false)
+        }
+        .onChange(of: scheduleManager.lastUpdated) { _, _ in
+            refreshListSnapshot(animated: false)
+        }
+        .onChange(of: tagFilter) { _, _ in
+            refreshListSnapshot(animated: true)
+        }
+        .sheet(isPresented: $showAddDaySheet) {
+            NavigationStack {
+                AddScheduleSheet(isPresented: $showAddDaySheet) { date in
+                    pendingFocusDateKey = DateHelpers.dayIdentifier(for: date, timeZone: .current)
+                    showAddDaySheet = false
+                }
+            }
+        }
+        .sheet(isPresented: $showTagFilterSheet) {
+            AlarmTagFilterSheet(filter: $tagFilter)
+        }
+        .onChange(of: showAddDaySheet) { _, isPresented in
+            guard !isPresented, let pendingFocusDateKey else { return }
+            if let existing = scheduleManager.activeWindowSnapshot.byDateKey[pendingFocusDateKey] {
+                selectedSchedule = existing.schedule
+            } else if let normalizedDate = dateFromDayIdentifier(pendingFocusDateKey) {
+                selectedSchedule = scheduleManager.activeDay(for: normalizedDate)?.schedule
+            }
+            self.pendingFocusDateKey = nil
         }
     }
 

@@ -364,17 +364,15 @@ struct ScheduledDateSourceResolver {
             hijriYear: startComponents.hijriYear,
             month: startComponents.month
         )
-        guard
-            let monthAfterWindow = startMonth.advanced(byMonths: 12),
-            let endExclusive = adjustedHijriCalendar.gregorianDate(
-                for: monthAfterWindow,
-                dayOfMonth: 1,
-                timeZone: calendar.timeZone
-            ),
-            let inclusiveEnd = calendar.date(byAdding: .day, value: -1, to: endExclusive)
-        else {
-            return nil
-        }
+        guard let monthAfterWindow = startMonth.advanced(byMonths: 12) else { return nil }
+        let endExclusive = adjustedHijriCalendar.gregorianDate(
+            for: monthAfterWindow,
+            dayOfMonth: 1,
+            timeZone: calendar.timeZone
+        )
+        ?? calendar.date(byAdding: .day, value: 366, to: normalizedStart) // DST-safe "about a year" fallback
+        guard let endExclusive else { return nil }
+        guard let inclusiveEnd = calendar.date(byAdding: .day, value: -1, to: endExclusive) else { return nil }
 
         return calendar.startOfDay(for: inclusiveEnd)
     }

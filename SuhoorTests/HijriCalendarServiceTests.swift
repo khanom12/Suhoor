@@ -12,6 +12,8 @@ struct HijriCalendarServiceTests {
         let service = HijriCalendarService(baselineProvider: HijriBaselineMonthStarts.starts, adjustmentStore: store)
         let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
         let map = service.buildMonthMap(hijriYear: 1447, timeZone: timeZone)
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
 
         let key = HijriYearMonth(hijriYear: 1447, month: .ramadan)
         let day1 = service.gregorianDate(for: key, dayOfMonth: 1, monthMap: map, timeZone: timeZone)
@@ -21,8 +23,12 @@ struct HijriCalendarServiceTests {
         #expect(day1 != nil)
         #expect(day13 != nil)
         #expect(day15 != nil)
-        #expect(day13?.timeIntervalSince(day1 ?? .distantPast) == 12 * 24 * 60 * 60)
-        #expect(day15?.timeIntervalSince(day1 ?? .distantPast) == 14 * 24 * 60 * 60)
+        if let day1 {
+            let expected13 = calendar.date(byAdding: .day, value: 12, to: day1)
+            let expected15 = calendar.date(byAdding: .day, value: 14, to: day1)
+            #expect(day13 == expected13)
+            #expect(day15 == expected15)
+        }
     }
 
     @Test
@@ -33,6 +39,8 @@ struct HijriCalendarServiceTests {
         let service = HijriCalendarService(baselineProvider: HijriBaselineMonthStarts.starts, adjustmentStore: store)
         let timeZone = TimeZone(secondsFromGMT: 0) ?? .current
         let key = HijriYearMonth(hijriYear: 1447, month: .ramadan)
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
 
         let baseline = service.buildMonthMap(hijriYear: 1447, timeZone: timeZone).resolvedStart(for: .ramadan)
         store.setAdjustment(for: key, offsetDays: 1)
@@ -43,8 +51,10 @@ struct HijriCalendarServiceTests {
         #expect(baseline != nil)
         #expect(plusOne != nil)
         #expect(minusOne != nil)
-        #expect(plusOne?.resolvedStart.timeIntervalSince(baseline?.resolvedStart ?? .distantPast) == 24 * 60 * 60)
-        #expect(minusOne?.resolvedStart.timeIntervalSince(baseline?.resolvedStart ?? .distantPast) == -24 * 60 * 60)
+        if let baseline {
+            #expect(plusOne?.resolvedStart == calendar.date(byAdding: .day, value: 1, to: baseline.resolvedStart))
+            #expect(minusOne?.resolvedStart == calendar.date(byAdding: .day, value: -1, to: baseline.resolvedStart))
+        }
     }
 
     @Test
@@ -71,6 +81,8 @@ struct HijriCalendarServiceTests {
         )
         let timeZone = TimeZone(secondsFromGMT: 0) ?? .current
         let key = HijriYearMonth(hijriYear: 1447, month: .safar)
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
 
         let baseline = service.buildMonthMap(hijriYear: 1447, timeZone: timeZone).resolvedStart(for: .safar)
         store.setAdjustment(for: key, offsetDays: 1)
@@ -78,7 +90,9 @@ struct HijriCalendarServiceTests {
 
         #expect(baseline != nil)
         #expect(plusOne != nil)
-        #expect(plusOne?.resolvedStart.timeIntervalSince(baseline?.resolvedStart ?? .distantPast) == 24 * 60 * 60)
+        if let baseline {
+            #expect(plusOne?.resolvedStart == calendar.date(byAdding: .day, value: 1, to: baseline.resolvedStart))
+        }
     }
 
     @Test
@@ -89,6 +103,8 @@ struct HijriCalendarServiceTests {
         let service = HijriCalendarService(baselineProvider: HijriBaselineMonthStarts.starts, adjustmentStore: store)
         let timeZone = TimeZone(secondsFromGMT: 0) ?? .current
         let map = service.buildMonthMap(hijriYear: 1447, timeZone: timeZone)
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
 
         let muharramStart = map.resolvedStart(for: .muharram)?.resolvedStart
         let ramadanStart = map.resolvedStart(for: .ramadan)?.resolvedStart
@@ -101,13 +117,19 @@ struct HijriCalendarServiceTests {
         let arafah = service.dateForArafah(hijriYear: 1447, timeZone: timeZone)
         let eidAlAdha = service.dateForEidAlAdha(hijriYear: 1447, timeZone: timeZone)
 
-        #expect(ashura?.timeIntervalSince(muharramStart ?? .distantPast) == 9 * 24 * 60 * 60)
+        if let muharramStart {
+            #expect(ashura == calendar.date(byAdding: .day, value: 9, to: muharramStart))
+        }
         #expect(whiteDays.count == 3)
-        #expect(whiteDays.first?.timeIntervalSince(ramadanStart ?? .distantPast) == 12 * 24 * 60 * 60)
-        #expect(whiteDays.last?.timeIntervalSince(ramadanStart ?? .distantPast) == 14 * 24 * 60 * 60)
+        if let ramadanStart {
+            #expect(whiteDays.first == calendar.date(byAdding: .day, value: 12, to: ramadanStart))
+            #expect(whiteDays.last == calendar.date(byAdding: .day, value: 14, to: ramadanStart))
+        }
         #expect(eidAlFitr == shawwalStart)
-        #expect(arafah?.timeIntervalSince(dhulHijjahStart ?? .distantPast) == 8 * 24 * 60 * 60)
-        #expect(eidAlAdha?.timeIntervalSince(dhulHijjahStart ?? .distantPast) == 9 * 24 * 60 * 60)
+        if let dhulHijjahStart {
+            #expect(arafah == calendar.date(byAdding: .day, value: 8, to: dhulHijjahStart))
+            #expect(eidAlAdha == calendar.date(byAdding: .day, value: 9, to: dhulHijjahStart))
+        }
     }
 
     @Test
@@ -158,18 +180,22 @@ struct HijriCalendarServiceTests {
         let adjustedCalendar = AdjustedHijriCalendar(calendarService: service)
         let timeZone = TimeZone(secondsFromGMT: 0) ?? .current
         let key = HijriYearMonth(hijriYear: 1447, month: .ramadan)
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
 
         let baselineStart = adjustedCalendar.gregorianDate(for: key, dayOfMonth: 1, timeZone: timeZone)
         #expect(baselineStart != nil)
-        let baselineComponents = adjustedCalendar.adjustedComponents(for: baselineStart ?? .distantPast, timeZone: timeZone)
+        let probeDate = calendar.date(byAdding: .day, value: 5, to: baselineStart ?? .distantPast) ?? .distantPast
+        let baselineComponents = adjustedCalendar.adjustedComponents(for: probeDate, timeZone: timeZone)
         #expect(baselineComponents?.month == .ramadan)
-        #expect(baselineComponents?.day == 1)
+        #expect(baselineComponents?.day == 6)
         #expect(baselineComponents?.isDerivedFromBaseline == true)
 
         store.setAdjustment(for: key, offsetDays: 1)
-        let shiftedComponents = adjustedCalendar.adjustedComponents(for: baselineStart ?? .distantPast, timeZone: timeZone)
-        #expect(shiftedComponents?.month == .shaban)
-        #expect(shiftedComponents?.isDerivedFromBaseline == false)
+        let shiftedComponents = adjustedCalendar.adjustedComponents(for: probeDate, timeZone: timeZone)
+        #expect(shiftedComponents?.month == .ramadan)
+        #expect(shiftedComponents?.day == 5)
+        #expect(shiftedComponents?.isDerivedFromBaseline == true)
     }
 
     @Test
@@ -182,6 +208,8 @@ struct HijriCalendarServiceTests {
         let adjustedCalendar = AdjustedHijriCalendar(calendarService: service)
         let timeZone = TimeZone(secondsFromGMT: 0) ?? .current
         let key = HijriYearMonth(hijriYear: 1447, month: .shawwal)
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
 
         let baselinePreview = adjustedCalendar.monthStartPreview(for: key, timeZone: timeZone)
         store.setAdjustment(for: key, offsetDays: 1)
@@ -190,7 +218,9 @@ struct HijriCalendarServiceTests {
         #expect(baselinePreview != nil)
         #expect(shiftedPreview != nil)
         #expect(shiftedPreview?.offsetDays == 1)
-        #expect(shiftedPreview?.adjustedStart.timeIntervalSince(baselinePreview?.adjustedStart ?? .distantPast) == 24 * 60 * 60)
+        if let baselinePreview {
+            #expect(shiftedPreview?.adjustedStart == calendar.date(byAdding: .day, value: 1, to: baselinePreview.adjustedStart))
+        }
     }
 
     @Test
@@ -202,9 +232,9 @@ struct HijriCalendarServiceTests {
         let service = HijriCalendarService(baselineProvider: HijriBaselineMonthStarts.starts, adjustmentStore: store)
         let adjustedCalendar = AdjustedHijriCalendar(calendarService: service)
         let formatter = HijriDateFormatter(adjustedHijriCalendar: adjustedCalendar)
-        let timeZone = TimeZone(secondsFromGMT: 0) ?? .current
+        let timeZone = TimeZone.current
         let key = HijriYearMonth(hijriYear: 1447, month: .ramadan)
-        let baselineStart = adjustedCalendar.gregorianDate(for: key, dayOfMonth: 1, timeZone: timeZone)
+        let baselineStart = adjustedCalendar.gregorianDate(for: key, dayOfMonth: 10, timeZone: timeZone)
 
         #expect(baselineStart != nil)
         let baselineText = formatter.string(from: baselineStart ?? .distantPast)

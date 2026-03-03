@@ -84,7 +84,15 @@ struct AdjustedHijriCalendar {
     }
 
     func isRamadan(date: Date, timeZone: TimeZone = .current) -> Bool {
-        adjustedComponents(for: date, timeZone: timeZone)?.month == .ramadan
+        if let isWithin = contains(
+            normalizedGregorianDate(for: date, timeZone: timeZone),
+            month: .ramadan,
+            endMonth: .shawwal,
+            timeZone: timeZone
+        ) {
+            return isWithin
+        }
+        return adjustedComponents(for: date, timeZone: timeZone)?.month == .ramadan
     }
 
     func isShawwal(date: Date, timeZone: TimeZone = .current) -> Bool {
@@ -213,6 +221,49 @@ struct AdjustedHijriCalendar {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = timeZone
         return calendar.startOfDay(for: gregorianDate)
+    }
+
+    /// Prefer baseline-backed month boundaries (including user adjustments) when we can.
+    ///
+    /// This avoids relying on system Hijri calendars around month boundaries, which can be
+    /// inconsistent across iOS releases. If we can't form a baseline-backed interval, we fall
+    /// back to `adjustedComponents`.
+    private func contains(
+        _ normalizedGregorianDate: Date,
+        month: HijriMonth,
+        endMonth: HijriMonth?,
+        timeZone: TimeZone
+    ) -> Bool? {
+        var hijriCalendar = Calendar(identifier: .islamicUmmAlQura)
+        hijriCalendar.timeZone = timeZone
+        let approxYear = hijriCalendar.component(.year, from: normalizedGregorianDate)
+        let candidateYears = [approxYear - 1, approxYear, approxYear + 1]
+
+        var gregorian = Calendar(identifier: .gregorian)
+        gregorian.timeZone = timeZone
+
+        var foundAnyInterval = false
+        for hijriYear in candidateYears {
+            let map = calendarService.buildMonthMap(hijriYear: hijriYear, timeZone: timeZone)
+            guard let start = map.resolvedStart(for: month)?.resolvedStart else { continue }
+            foundAnyInterval = true
+
+            let end: Date
+            if let endMonth, let endStart = map.resolvedStart(for: endMonth)?.resolvedStart {
+                end = endStart
+            } else {
+                // Fallback: assume a 30 day run when we don't have the next month boundary.
+                end = gregorian.date(byAdding: .day, value: 30, to: start) ?? start
+            }
+
+            let normalizedStart = gregorian.startOfDay(for: start)
+            let normalizedEnd = gregorian.startOfDay(for: end)
+            if normalizedStart <= normalizedGregorianDate && normalizedGregorianDate < normalizedEnd {
+                return true
+            }
+        }
+
+        return foundAnyInterval ? false : nil
     }
 
     private func formattedFallbackString(
