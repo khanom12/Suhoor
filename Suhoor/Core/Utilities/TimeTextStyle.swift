@@ -1,9 +1,11 @@
 import SwiftUI
 
 struct TimeTextStyle: ViewModifier {
+    @ScaledMetric(relativeTo: .largeTitle) private var timeFontSize: CGFloat = DesignTokens.dashboardTimeFontSize
+
     func body(content: Content) -> some View {
         content
-            .font(.system(size: DesignTokens.timeFontSize, weight: .semibold, design: .rounded))
+            .font(.system(size: timeFontSize, weight: .regular, design: .default))
             .monospacedDigit()
             .lineLimit(1)
             .minimumScaleFactor(0.8)

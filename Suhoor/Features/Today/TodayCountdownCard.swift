@@ -2,47 +2,58 @@ import SwiftUI
 
 struct TodayCountdownCard: View {
     @EnvironmentObject private var scheduleManager: ScheduleManager
+    private let headerSpacing = DesignTokens.dashboardCardHeaderSpacing
+    private let contentSpacing = DesignTokens.dashboardCardInternalSpacing
 
     var body: some View {
         GlassCard(style: .header) {
             let now = Date()
             if let target = TodayCountdownEngine.target(now: now, snapshot: scheduleManager.activeWindowSnapshot, timeZone: .current) {
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: contentSpacing) {
                     HStack(alignment: .firstTextBaseline) {
-                        VStack(alignment: .leading, spacing: 2) {
+                        VStack(alignment: .leading, spacing: headerSpacing) {
                             Text(title(for: target.kind))
-                                .font(.headline.weight(.semibold))
+                                .font(DesignTokens.cardTitleFont)
                             Text(subtitle(for: target.kind))
-                                .font(.footnote)
+                                .font(DesignTokens.cardSubtitleFont)
                                 .foregroundStyle(.secondary)
                         }
                         Spacer()
-                        Text(TimeFormatters.timeFormatter.string(from: target.targetDate))
-                            .font(.footnote.weight(.semibold))
-                            .foregroundStyle(.secondary)
+                        VStack(alignment: .trailing, spacing: headerSpacing) {
+                            Text("Target")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Text(TimeFormatters.timeFormatter.string(from: target.targetDate))
+                                .font(DesignTokens.cardMetaFont)
+                                .foregroundStyle(.secondary)
+                        }
                     }
 
-                    TimelineView(.periodic(from: now, by: 1.0)) { context in
-                        let remaining = max(0, target.targetDate.timeIntervalSince(context.date))
-                        Text(Self.formattedCountdown(remaining: remaining))
-                            .font(.system(size: 40, weight: .semibold, design: .rounded))
-                            .monospacedDigit()
-                            .foregroundStyle(.primary)
-                            .accessibilityLabel(accessibilityLabel(for: remaining, kind: target.kind))
+                    VStack(alignment: .leading, spacing: DesignTokens.spacingXS) {
+                        TimelineView(.periodic(from: now, by: 1.0)) { context in
+                            let remaining = max(0, target.targetDate.timeIntervalSince(context.date))
+                            Text(Self.formattedCountdown(remaining: remaining))
+                                .timeTextStyle()
+                                .foregroundStyle(.primary)
+                                .accessibilityLabel(accessibilityLabel(for: remaining, kind: target.kind))
+                        }
+
+                        Text(contextLine(for: target.kind))
+                            .font(DesignTokens.cardSubtitleFont)
+                            .foregroundStyle(.secondary)
                     }
                 }
             } else {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: DesignTokens.spacingS) {
                     Text("Next Countdown")
-                        .font(.headline.weight(.semibold))
+                        .font(DesignTokens.cardTitleFont)
                     Text("Enable location and permissions to calculate accurate prayer times.")
-                        .font(.footnote)
+                        .font(DesignTokens.cardSubtitleFont)
                         .foregroundStyle(.secondary)
                     Button("Open Settings") {
                         NotificationCenter.default.post(name: .switchToSettingsTab, object: nil)
                     }
-                    .font(.footnote.weight(.semibold))
-                    .tint(DawnColor.accent)
+                    .font(DesignTokens.cardMetaFont)
                 }
             }
         }
@@ -82,6 +93,15 @@ struct TodayCountdownCard: View {
             return "Next prayer time"
         case .iftar:
             return "Maghrib / Iftar"
+        }
+    }
+
+    private func contextLine(for kind: TodayCountdownEngine.Target.Kind) -> String {
+        switch kind {
+        case .fajr:
+            return "Your next fasting boundary is Fajr."
+        case .iftar:
+            return "Your next fasting boundary is Iftar."
         }
     }
 }

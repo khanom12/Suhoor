@@ -4,28 +4,37 @@ struct TodayRamadanProgressCard: View {
     var body: some View {
         if let model = RamadanProgressEngine.model(now: Date(), calendar: .shared, timeZone: .current) {
             GlassCard {
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: DesignTokens.dashboardCardInternalSpacing) {
                     HStack(alignment: .firstTextBaseline) {
-                        VStack(alignment: .leading, spacing: 2) {
+                        VStack(alignment: .leading, spacing: DesignTokens.dashboardCardHeaderSpacing) {
                             Text("Ramadan")
-                                .font(.headline.weight(.semibold))
+                                .font(DesignTokens.cardTitleFont)
                             Text("Day \(model.dayNumber) of \(model.totalDays)")
-                                .font(.footnote)
+                                .font(DesignTokens.cardSubtitleFont)
                                 .foregroundStyle(.secondary)
                         }
 
                         Spacer()
 
                         Text("\(model.daysUntilEid) days until Eid")
-                            .font(.footnote.weight(.semibold))
-                            .foregroundStyle(.secondary)
+                            .font(DesignTokens.cardMetaFont)
+                            .foregroundStyle(DawnColor.accent)
                     }
 
-                    ProgressView(value: model.progress)
-                        .tint(DawnColor.accent)
+                    VStack(alignment: .leading, spacing: DesignTokens.spacingXS) {
+                        ProgressView(value: model.progress)
+
+                        HStack {
+                            Text("1")
+                            Spacer()
+                            Text("\(model.totalDays)")
+                        }
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    }
 
                     Text(model.eidDateText.map { "Eid starts on \($0)." } ?? "Eid date unavailable for your current Hijri baseline.")
-                        .font(.footnote)
+                        .font(DesignTokens.cardSubtitleFont)
                         .foregroundStyle(.secondary)
                 }
             }

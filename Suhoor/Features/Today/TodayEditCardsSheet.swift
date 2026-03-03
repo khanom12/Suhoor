@@ -12,9 +12,9 @@ struct TodayEditCardsSheet: View {
                         HStack(spacing: 12) {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(card.title)
-                                    .font(.headline.weight(.semibold))
+                                    .font(DesignTokens.cardTitleFont)
                                 Text(subtitle(for: card))
-                                    .font(.footnote)
+                                    .font(DesignTokens.cardSubtitleFont)
                                     .foregroundStyle(.secondary)
                             }
 
@@ -70,4 +70,3 @@ struct TodayEditCardsSheet: View {
         }
     }
 }
-

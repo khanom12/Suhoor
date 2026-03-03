@@ -21,13 +21,13 @@ struct TodayFastCheckInCard: View {
         let intent = resolvedIntentSnapshot(for: dateKey) ?? .empty
 
         GlassCard {
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: DesignTokens.dashboardCardInternalSpacing) {
                 HStack {
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: DesignTokens.dashboardCardHeaderSpacing) {
                         Text("Fast Check-in")
-                            .font(.headline.weight(.semibold))
+                            .font(DesignTokens.cardTitleFont)
                         Text(GregorianDateFormatter.shared.headerString(for: todayStart))
-                            .font(.footnote)
+                            .font(DesignTokens.cardSubtitleFont)
                             .foregroundStyle(.secondary)
                     }
                     Spacer()
@@ -35,10 +35,11 @@ struct TodayFastCheckInCard: View {
                         FastHistoryView()
                     } label: {
                         Text("History")
-                            .font(.footnote.weight(.semibold))
+                            .font(DesignTokens.cardMetaFont)
                     }
-                    .tint(DawnColor.accent)
                 }
+
+                statusSummary(status)
 
                 intentSummary(intent)
 
@@ -51,7 +52,7 @@ struct TodayFastCheckInCard: View {
 
     @ViewBuilder
     private func intentSummary(_ snapshot: FastIntentSnapshot) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: DesignTokens.spacingS) {
             HStack(spacing: 10) {
                 let style = snapshot.primaryIntent.style
                 if let systemImage = style.systemImage {
@@ -59,16 +60,34 @@ struct TodayFastCheckInCard: View {
                         .foregroundStyle(style.color)
                 }
                 Text(style.title)
-                    .font(.subheadline.weight(.semibold))
+                    .font(DesignTokens.cardTitleFont)
             }
 
             if snapshot.secondaryTags.isEmpty == false {
                 FlexibleTagRow(tags: snapshot.secondaryTags.sorted(by: { $0.title < $1.title }).map(\.title))
             } else {
                 Text("No secondary tags.")
-                    .font(.footnote)
+                    .font(DesignTokens.cardSubtitleFont)
                     .foregroundStyle(.secondary)
             }
+        }
+    }
+
+    @ViewBuilder
+    private func statusSummary(_ status: FastLogStatus) -> some View {
+        switch status {
+        case .unknown:
+            Text("Log today once you know whether the fast was completed.")
+                .font(DesignTokens.cardSubtitleFont)
+                .foregroundStyle(.secondary)
+        case .completed:
+            Label("Completed for today", systemImage: "checkmark.seal.fill")
+                .font(DesignTokens.cardMetaFont)
+                .foregroundStyle(.green)
+        case .missed:
+            Label("Marked missed for today", systemImage: "xmark.seal.fill")
+                .font(DesignTokens.cardMetaFont)
+                .foregroundStyle(.red)
         }
     }
 
@@ -76,7 +95,7 @@ struct TodayFastCheckInCard: View {
     private func statusRow(status: FastLogStatus, dateKey: String, intent: FastIntentSnapshot) -> some View {
         switch status {
         case .unknown:
-            HStack(spacing: 12) {
+            HStack(spacing: DesignTokens.spacingS) {
                 Button {
                     fastLogStore.setStatus(.completed, for: dateKey, intentSnapshot: intent)
                 } label: {
@@ -97,14 +116,10 @@ struct TodayFastCheckInCard: View {
             }
 
         case .completed, .missed:
-            HStack {
-                Label(status.title, systemImage: status == .completed ? "checkmark.seal.fill" : "xmark.seal.fill")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(status == .completed ? .green : .red)
-
+            HStack(alignment: .center, spacing: DesignTokens.spacingS) {
                 Spacer()
 
-                Menu("Edit") {
+                Menu {
                     Button("Mark Completed") {
                         fastLogStore.setStatus(.completed, for: dateKey, intentSnapshot: intent)
                     }
@@ -114,8 +129,10 @@ struct TodayFastCheckInCard: View {
                     Button("Clear Log") {
                         fastLogStore.setStatus(.unknown, for: dateKey)
                     }
+                } label: {
+                    Label("Edit", systemImage: "ellipsis.circle")
+                        .font(DesignTokens.cardMetaFont)
                 }
-                .font(.footnote.weight(.semibold))
             }
         }
     }

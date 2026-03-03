@@ -57,14 +57,14 @@ struct FastHistoryView: View {
             HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(dateKey)
-                        .font(.subheadline.weight(.semibold))
+                        .font(DesignTokens.cardTitleFont)
                     if let intent {
                         Text(intent.primaryIntent.shortTitle)
-                            .font(.footnote)
+                            .font(DesignTokens.cardSubtitleFont)
                             .foregroundStyle(.secondary)
                     } else {
                         Text("—")
-                            .font(.footnote)
+                            .font(DesignTokens.cardSubtitleFont)
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -72,7 +72,7 @@ struct FastHistoryView: View {
                 Spacer()
 
                 Text(status.title)
-                    .font(.footnote.weight(.semibold))
+                    .font(DesignTokens.cardMetaFont)
                     .foregroundStyle(color(for: status))
 
                 Menu {

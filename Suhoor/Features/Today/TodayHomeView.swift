@@ -8,7 +8,7 @@ struct TodayHomeView: View {
     var body: some View {
         let isRamadan = AdjustedHijriCalendar.shared.isRamadan(date: Date(), timeZone: .current)
         ScrollView {
-            LazyVStack(spacing: DesignTokens.spacingL) {
+            LazyVStack(spacing: DesignTokens.dashboardStackSpacing) {
                 ForEach(visibleCards) { card in
                     switch card {
                     case .countdown:
@@ -23,15 +23,12 @@ struct TodayHomeView: View {
                 }
             }
             .padding(.horizontal, DesignTokens.spacingL)
-            .padding(.vertical, DesignTokens.spacingL)
+            .padding(.top, DesignTokens.spacingM)
+            .padding(.bottom, DesignTokens.spacingXL)
         }
         .background(
-            LinearGradient(
-                colors: [DawnColor.bgWarmTop, DawnColor.bgWarmBottom],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .ignoresSafeArea()
+            Color(.systemGroupedBackground)
+                .ignoresSafeArea()
         )
         .navigationTitle("Today")
         .toolbar {
@@ -61,9 +58,9 @@ struct TodayHomeView: View {
         GlassCard {
             VStack(alignment: .leading, spacing: 8) {
                 Text(title)
-                    .font(.headline.weight(.semibold))
+                    .font(DesignTokens.cardTitleFont)
                 Text(detail)
-                    .font(.footnote)
+                    .font(DesignTokens.cardSubtitleFont)
                     .foregroundStyle(.secondary)
             }
         }

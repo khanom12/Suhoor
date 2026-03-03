@@ -38,7 +38,7 @@ struct SuhoorApp: App {
         WindowGroup {
             ContentView()
                 // Avoid global button/control group styles here; toolbars auto-group and can add unwanted capsules.
-                .tint(.orange)
+                .tint(DawnColor.accent)
                 .environmentObject(settingsStore)
                 .environmentObject(alarmConfigStore)
                 .environmentObject(locationService)

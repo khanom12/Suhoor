@@ -528,7 +528,7 @@ private struct OnboardingProgressView: View {
 
     var body: some View {
         ProgressView(value: Double(stepIndex + 1), total: Double(max(stepCount, 1)))
-            .tint(.orange)
+            .tint(DawnColor.accent)
             .accessibilityLabel("Onboarding progress")
     }
 }

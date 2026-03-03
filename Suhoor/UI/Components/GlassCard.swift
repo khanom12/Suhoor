@@ -10,7 +10,7 @@ struct GlassCard<Content: View>: View {
     let padding: CGFloat
     @ViewBuilder let content: () -> Content
 
-    init(style: Style = .normal, padding: CGFloat = DesignTokens.spacingL, @ViewBuilder content: @escaping () -> Content) {
+    init(style: Style = .normal, padding: CGFloat = DesignTokens.dashboardCardPadding, @ViewBuilder content: @escaping () -> Content) {
         self.style = style
         self.padding = padding
         self.content = content
@@ -21,27 +21,39 @@ struct GlassCard<Content: View>: View {
             .padding(padding)
             .background(materialBackground)
             .overlay(strokeOverlay)
-            .clipShape(RoundedRectangle(cornerRadius: DesignTokens.glassCardRadius, style: .continuous))
-            .shadow(color: Color.black.opacity(DesignTokens.shadowAmbient.opacity), radius: DesignTokens.shadowAmbient.blur, x: 0, y: DesignTokens.shadowAmbient.y)
-            .shadow(color: Color.black.opacity(DesignTokens.shadowContact.opacity), radius: DesignTokens.shadowContact.blur, x: 0, y: DesignTokens.shadowContact.y)
+            .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+            .shadow(color: Color.black.opacity(ambientShadow.opacity), radius: ambientShadow.blur, x: 0, y: ambientShadow.y)
+            .shadow(color: Color.black.opacity(contactShadow.opacity), radius: contactShadow.blur, x: 0, y: contactShadow.y)
     }
 
     private var materialBackground: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: DesignTokens.glassCardRadius, style: .continuous)
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                 .fill(style == .header ? .regularMaterial : .thinMaterial)
-            RoundedRectangle(cornerRadius: DesignTokens.glassCardRadius, style: .continuous)
-                .fill(DawnColor.glassWarmOverlay.opacity(style == .header ? 0.10 : 0.08))
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .fill(DawnColor.glassWarmOverlay.opacity(style == .header ? 0.10 : 0.06))
         }
     }
 
     private var strokeOverlay: some View {
-        RoundedRectangle(cornerRadius: DesignTokens.glassCardRadius, style: .continuous)
+        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
             .stroke(strokeColor, lineWidth: 1)
     }
 
+    private var cornerRadius: CGFloat {
+        DesignTokens.dashboardCardRadius
+    }
+
     private var strokeColor: Color {
-        Color.white.opacity(colorScheme == .dark ? 0.12 : 0.25)
+        Color.white.opacity(colorScheme == .dark ? 0.10 : 0.18)
+    }
+
+    private var ambientShadow: ShadowStyle {
+        style == .header ? ShadowStyle(y: 4, blur: 14, opacity: 0.06) : ShadowStyle(y: 0, blur: 0, opacity: 0)
+    }
+
+    private var contactShadow: ShadowStyle {
+        style == .header ? ShadowStyle(y: 1, blur: 4, opacity: 0.04) : ShadowStyle(y: 0, blur: 0, opacity: 0)
     }
 
     @Environment(\.colorScheme) private var colorScheme

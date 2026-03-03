@@ -64,6 +64,11 @@ enum DesignTokens {
 
     static let cardCornerRadius: CGFloat = glassCardRadius
     static let cardPadding: CGFloat = spacingL
+    static let dashboardCardRadius: CGFloat = innerCardRadius
+    static let dashboardCardPadding: CGFloat = spacingM
+    static let dashboardStackSpacing: CGFloat = spacingL
+    static let dashboardCardInternalSpacing: CGFloat = spacingM
+    static let dashboardCardHeaderSpacing: CGFloat = spacingXS
 
     static let chipCornerRadius: CGFloat = 18
     static let chipHorizontalPadding: CGFloat = 16
@@ -83,6 +88,10 @@ enum DesignTokens {
     static let primaryTimeFont: Font = .title3.weight(.semibold)
     static let rowSubtitleFont: Font = .subheadline
     static let badgeFont: Font = .caption.weight(.semibold)
+    static let cardTitleFont: Font = .body.weight(.semibold)
+    static let cardSubtitleFont: Font = .footnote
+    static let cardMetaFont: Font = .footnote.weight(.semibold)
+    static let dashboardTimeFontSize: CGFloat = 46
 }
 
 struct ShadowStyle {
