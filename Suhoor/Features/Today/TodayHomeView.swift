@@ -6,6 +6,7 @@ struct TodayHomeView: View {
     @State private var isEditingCards = false
 
     var body: some View {
+        let isRamadan = AdjustedHijriCalendar.shared.isRamadan(date: Date(), timeZone: .current)
         ScrollView {
             LazyVStack(spacing: DesignTokens.spacingL) {
                 ForEach(visibleCards) { card in
@@ -13,7 +14,9 @@ struct TodayHomeView: View {
                     case .countdown:
                         TodayCountdownCard()
                     case .ramadanProgress:
-                        placeholderCard(title: "Ramadan Progress", detail: "Coming next: day/progress until Eid.")
+                        if isRamadan {
+                            TodayRamadanProgressCard()
+                        }
                     case .fastCheckIn:
                         placeholderCard(title: "Fast Check-in", detail: "Coming next: Completed/Missed logging and history.")
                     }
