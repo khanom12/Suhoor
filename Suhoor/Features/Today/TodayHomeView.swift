@@ -18,7 +18,7 @@ struct TodayHomeView: View {
                             TodayRamadanProgressCard()
                         }
                     case .fastCheckIn:
-                        placeholderCard(title: "Fast Check-in", detail: "Coming next: Completed/Missed logging and history.")
+                        TodayFastCheckInCard()
                     }
                 }
             }

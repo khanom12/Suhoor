@@ -9,6 +9,7 @@ struct SuhoorApp: App {
     @StateObject private var locationService: LocationService
     @StateObject private var scheduleManager: ScheduleManager
     @StateObject private var fastTagStore: FastTagStore
+    @StateObject private var fastLogStore: FastLogStore
 
     @Environment(\.scenePhase) private var scenePhase
 
@@ -17,6 +18,7 @@ struct SuhoorApp: App {
         let alarmConfigStore = AlarmConfigStore(legacySettings: settingsStore.settings)
         let locationService = LocationService()
         let fastTagStore = FastTagStore()
+        let fastLogStore = FastLogStore()
         let scheduleManager = ScheduleManager(
             settingsStore: settingsStore,
             locationService: locationService,
@@ -28,6 +30,7 @@ struct SuhoorApp: App {
         _locationService = StateObject(wrappedValue: locationService)
         _scheduleManager = StateObject(wrappedValue: scheduleManager)
         _fastTagStore = StateObject(wrappedValue: fastTagStore)
+        _fastLogStore = StateObject(wrappedValue: fastLogStore)
         UNUserNotificationCenter.current().delegate = NotificationEventDelegate.shared
     }
 
@@ -41,6 +44,7 @@ struct SuhoorApp: App {
                 .environmentObject(locationService)
                 .environmentObject(scheduleManager)
                 .environmentObject(fastTagStore)
+                .environmentObject(fastLogStore)
                 .task {
                     scheduleManager.requestRefresh(reason: .appLaunch)
                 }
