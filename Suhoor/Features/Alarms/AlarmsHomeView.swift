@@ -12,10 +12,12 @@ struct AlarmsHomeView: View {
     @State private var selectedSchedule: DaySchedule?
     @State private var showSettingsSheet = false
     @State private var showAddDaySheet = false
+    @State private var showTagFilterSheet = false
     @State private var editMode: EditMode = .inactive
     @State private var sectionCollapseOverrides: [String: Bool] = [:]
     @State private var loadingSectionIDs: Set<String> = []
     @State private var listSnapshot: AlarmListSnapshot = .empty
+    @State private var tagFilter = AlarmTagFilter()
     @State private var pendingFocusDateKey: String?
     @State private var pendingSeriesDeleteEntry: AlarmRowEntry?
     @State private var pendingRamadanEntry: AlarmRowEntry?
@@ -23,6 +25,14 @@ struct AlarmsHomeView: View {
     var body: some View {
         NavigationStack {
             List {
+                if tagFilter.isActive {
+                    Section {
+                        activeFilterBar
+                            .listRowInsets(EdgeInsets(top: 6, leading: 0, bottom: 6, trailing: 0))
+                            .listRowBackground(Color.clear)
+                    }
+                }
+
                 if listSnapshot.sections.isEmpty {
                     Section {
                         emptyStateView
@@ -40,7 +50,7 @@ struct AlarmsHomeView: View {
                                         }
                                         .padding(.vertical, DesignTokens.spacingS)
                                     } else {
-                                        Text("No alarms in this month yet.")
+                                        Text(monthEmptyStateText)
                                             .font(.footnote)
                                             .foregroundStyle(.secondary)
                                             .padding(.vertical, DesignTokens.spacingS)
@@ -84,7 +94,7 @@ struct AlarmsHomeView: View {
             }
             .listStyle(.insetGrouped)
             .navigationTitle("Alarms")
-            .navigationBarTitleDisplayMode(.inline)
+            .navigationBarTitleDisplayMode(.large)
             .environment(\.editMode, $editMode)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -99,6 +109,11 @@ struct AlarmsHomeView: View {
                         } label: {
                             Image(systemName: "plus")
                         }
+                    }
+                    Button {
+                        showTagFilterSheet = true
+                    } label: {
+                        Image(systemName: tagFilter.isActive ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
                     }
                     Button {
                         showSettingsSheet = true
@@ -207,6 +222,10 @@ struct AlarmsHomeView: View {
                 rebuildListSnapshot()
                 ensureExpandedSectionsLoaded()
             }
+            .onChange(of: tagFilter) { _, _ in
+                rebuildListSnapshot()
+                ensureExpandedSectionsLoaded()
+            }
             .sheet(isPresented: $showSettingsSheet) {
                 NavigationStack {
                     SettingsRootView()
@@ -219,6 +238,9 @@ struct AlarmsHomeView: View {
                         showAddDaySheet = false
                     }
                 }
+            }
+            .sheet(isPresented: $showTagFilterSheet) {
+                AlarmTagFilterSheet(filter: $tagFilter)
             }
             .onChange(of: showAddDaySheet) { _, isPresented in
                 guard !isPresented, let pendingFocusDateKey else { return }
@@ -271,6 +293,10 @@ struct AlarmsHomeView: View {
         "\(locationService.authorizationStatus.rawValue)-\(locationService.lastLocation != nil)-\(scheduleManager.alarmAuthorizationText)-\(scheduleManager.notificationAuthorizationText)"
     }
 
+    private var monthEmptyStateText: String {
+        tagFilter.isActive ? Strings.AlarmsTab.emptyFilteredMonth : Strings.AlarmsTab.emptyMonth
+    }
+
     private func rebuildListSnapshot() {
         let token = PerformanceTrace.begin("alarms.home.snapshot", metadata: "visible=\(scheduleManager.activeWindowSnapshot.visibleDays.count)")
         defer { PerformanceTrace.end(token) }
@@ -287,10 +313,7 @@ struct AlarmsHomeView: View {
             nearTermGrouped[key, default: []].append(entry)
         }
 
-        let previewMonths = scheduleManager.rollingHijriMonths(
-            count: scheduleManager.hasRecurringIslamicSchedules() ? 12 : 4,
-            timeZone: timeZone
-        )
+        let previewMonths = scheduleManager.rollingHijriMonths(count: 12, timeZone: timeZone)
         var sections: [HijriMonthSection] = []
         let defaultExpandedSectionID = previewMonths.first.map { "\( $0.hijriYear)-\($0.month.rawValue)" }
 
@@ -308,14 +331,18 @@ struct AlarmsHomeView: View {
             let previewInfo = HijriMonthPreview(key: key, startDate: preview.adjustedStart, offsetDays: preview.offsetDays)
 
             let cachedEntries = scheduleManager.cachedMonthEntries(for: key)?.map(AlarmRowEntry.init)
-            let entries = cachedEntries ?? nearTermGrouped[key] ?? []
-            let isLoaded = cachedEntries != nil || !entries.isEmpty
+            let unfilteredEntries = cachedEntries ?? nearTermGrouped[key] ?? []
+            let entries = unfilteredEntries.filter { entry in
+                entry.matches(filter: tagFilter)
+            }
+            let isLoaded = cachedEntries != nil || !unfilteredEntries.isEmpty
             sections.append(
                 HijriMonthSection(
                     key: key,
                     entries: entries,
                     preview: previewInfo,
-                    isLoaded: isLoaded
+                    isLoaded: isLoaded,
+                    visibleAlarmCount: entries.count
                 )
             )
         }
@@ -330,9 +357,14 @@ struct AlarmsHomeView: View {
             .map { key in
                 HijriMonthSection(
                     key: key,
-                    entries: nearTermGrouped[key] ?? [],
+                    entries: (nearTermGrouped[key] ?? []).filter { entry in
+                        entry.matches(filter: tagFilter)
+                    },
                     preview: nil,
-                    isLoaded: true
+                    isLoaded: true,
+                    visibleAlarmCount: (nearTermGrouped[key] ?? []).filter { entry in
+                        entry.matches(filter: tagFilter)
+                    }.count
                 )
             }
 
@@ -416,35 +448,18 @@ struct AlarmsHomeView: View {
         "\(key.year)-\(key.month)"
     }
 
-    private func previewHeader(_ preview: HijriMonthPreview) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                Text(preview.key.title)
-                    .foregroundStyle(.primary)
-                Spacer()
-                Text(adjustmentTag(for: preview.offsetDays))
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-            Text(Strings.AlarmsTab.hijriMonthStarts(shortDate(preview.startDate)))
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-        }
-        .textCase(nil)
-    }
-
     private func shortDate(_ date: Date) -> String {
         DateFormatter.localizedString(from: date, dateStyle: .medium, timeStyle: .none)
     }
 
-    private func adjustmentTag(for offsetDays: Int) -> String {
+    private func adjustmentTag(for offsetDays: Int) -> String? {
         switch offsetDays {
         case -1:
             return Strings.Settings.hijriMinusOneDay
         case 1:
             return Strings.Settings.hijriPlusOneDay
         default:
-            return Strings.Settings.hijriNoChange
+            return nil
         }
     }
 
@@ -460,26 +475,54 @@ struct AlarmsHomeView: View {
     private func headerLabel(for section: HijriMonthSection) -> some View {
         HStack(alignment: .center, spacing: DesignTokens.spacingS) {
             VStack(alignment: .leading, spacing: 4) {
-                HStack {
+                HStack(alignment: .center, spacing: DesignTokens.spacingS) {
                     Text(section.key.title)
                         .foregroundStyle(.primary)
-                    Spacer()
-                    if let preview = section.preview {
-                        Text(adjustmentTag(for: preview.offsetDays))
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
+                    Spacer(minLength: DesignTokens.spacingS)
+                    MonthAlarmCountBadge(count: section.visibleAlarmCount)
+                    Image(systemName: "chevron.right")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .rotationEffect(.degrees(isSectionCollapsed(section) ? 0 : 90))
                 }
                 if let preview = section.preview {
-                    Text(Strings.AlarmsTab.hijriMonthStarts(shortDate(preview.startDate)))
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
+                    HStack(alignment: .firstTextBaseline, spacing: 4) {
+                        Text(Strings.AlarmsTab.hijriMonthStarts(shortDate(preview.startDate)))
+                        if let adjustment = adjustmentTag(for: preview.offsetDays) {
+                            Text("(\(adjustment))")
+                        }
+                    }
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
                 }
             }
-            Image(systemName: "chevron.right")
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var activeFilterBar: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: DesignTokens.spacingS) {
+                Text(Strings.AlarmsTab.filteringLabel)
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.secondary)
+
+                ForEach(tagFilter.selectedItems) { item in
+                    HomeTagCapsule(
+                        style: item.style,
+                        prominence: item.isPrimary ? .strong : .subtle,
+                        isDisabled: false
+                    )
+                }
+
+                Button(Strings.AlarmsTab.filterClear) {
+                    tagFilter.clear()
+                }
                 .font(.footnote.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .rotationEffect(.degrees(isSectionCollapsed(section) ? 0 : 90))
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, DesignTokens.spacingL)
+            .padding(.vertical, 4)
         }
     }
 
@@ -551,6 +594,28 @@ enum AlarmRowPresentation {
         return parts.joined(separator: separator)
     }
 
+    static func accessibilityDateLabel(
+        for date: Date,
+        currentDate: Date = Date(),
+        timeZone: TimeZone = .current,
+        separator: String = ", "
+    ) -> String {
+        var parts: [String] = []
+        let isTodayValue = isToday(date, currentDate: currentDate, timeZone: timeZone)
+        let isTomorrowValue = isTomorrow(date, currentDate: currentDate, timeZone: timeZone)
+        if isTodayValue {
+            parts.append(Strings.AlarmsTab.todayLabel)
+        } else if isTomorrowValue {
+            parts.append(Strings.AlarmsTab.tomorrowLabel)
+        }
+        let gregorianLabel = (isTodayValue || isTomorrowValue)
+            ? accessibilityShortDateLabelFormatter.string(from: date)
+            : accessibilityDateLabelFormatter.string(from: date)
+        parts.append(gregorianLabel)
+        parts.append(HijriDateFormatter.shared.shortString(from: date))
+        return parts.joined(separator: separator)
+    }
+
     private static func isToday(_ date: Date, currentDate: Date, timeZone: TimeZone) -> Bool {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = timeZone
@@ -567,13 +632,29 @@ enum AlarmRowPresentation {
 
     private static let dateLabelFormatter: DateFormatter = {
         let formatter = DateFormatter()
-        formatter.dateFormat = "EEEE, MMMM d"
+        formatter.dateFormat = "EEE, MMM d"
         formatter.timeZone = .current
         formatter.locale = .current
         return formatter
     }()
 
     private static let dateShortLabelFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM d"
+        formatter.timeZone = .current
+        formatter.locale = .current
+        return formatter
+    }()
+
+    private static let accessibilityDateLabelFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "EEEE, MMMM d"
+        formatter.timeZone = .current
+        formatter.locale = .current
+        return formatter
+    }()
+
+    private static let accessibilityShortDateLabelFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateFormat = "MMMM d"
         formatter.timeZone = .current
@@ -628,6 +709,14 @@ private struct AlarmRowEntry: Identifiable {
     var primaryIntent: FastPrimaryIntent { activeDay.tagResult.computedPrimaryIntent }
     var id: String { activeDay.dateKey }
 
+    func matches(filter: AlarmTagFilter) -> Bool {
+        guard filter.isActive else { return true }
+        return filter.matches(
+            entryPrimaryIntent: primaryIntent,
+            entrySecondaryTags: secondaryTags
+        )
+    }
+
     private static func uniqueStoppableProvenances(
         from provenances: [ResolvedScheduledDateProvenance]
     ) -> [ResolvedScheduledDateProvenance] {
@@ -656,6 +745,7 @@ private struct HijriMonthSection: Identifiable {
     let entries: [AlarmRowEntry]
     let preview: HijriMonthPreview?
     let isLoaded: Bool
+    let visibleAlarmCount: Int
 
     var id: String { "\(key.year)-\(key.month)" }
 }
@@ -727,53 +817,52 @@ private struct AlarmRowView: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: DesignTokens.spacingM) {
-            Button {
-                onSelect()
-            } label: {
-                VStack(alignment: .leading, spacing: 10) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(dateLabel)
-                            .font(.footnote)
-                            .foregroundStyle(isDisabled ? .tertiary : .secondary)
+            VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(dateLabel)
+                        .font(.footnote)
+                        .foregroundStyle(isDisabled ? .tertiary : .secondary)
 
-                        HStack(alignment: .firstTextBaseline, spacing: 6) {
-                            Text(primaryTimeMain)
-                                .font(.system(size: timeFontSize, weight: .regular, design: .default))
-                                .monospacedDigit()
-                                .foregroundStyle(isDisabled ? .tertiary : .primary)
-                                .minimumScaleFactor(0.8)
-
-                            if let primaryTimeSuffix {
-                                Text(primaryTimeSuffix)
-                                    .font(.system(size: timeFontSize * 0.55, weight: .regular, design: .default))
-                                    .monospacedDigit()
-                                    .foregroundStyle(isDisabled ? .tertiary : .secondary)
-                                    .baselineOffset(1)
-                            }
-                        }
-
-                        Text(fajrLineText)
-                            .font(.callout)
-                            .foregroundStyle(isDisabled ? .tertiary : .secondary)
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text(primaryTimeMain)
+                            .font(.system(size: timeFontSize, weight: .regular, design: .default))
                             .monospacedDigit()
+                            .foregroundStyle(isDisabled ? .tertiary : .primary)
+                            .minimumScaleFactor(0.8)
+
+                        if let primaryTimeSuffix {
+                            Text(primaryTimeSuffix)
+                                .font(.system(size: timeFontSize * 0.55, weight: .regular, design: .default))
+                                .monospacedDigit()
+                                .foregroundStyle(isDisabled ? .tertiary : .secondary)
+                                .baselineOffset(1)
+                        }
                     }
 
-                    if showsTags {
-                        HomeTagCapsuleRow(
-                            primaryIntent: primaryIntent,
-                            secondaryTags: secondaryTags,
-                            warnings: warnings,
-                            showPrimaryIntent: showPrimaryIntent,
-                            isDisabled: isDisabled
-                        )
-                    }
+                    Text(fajrLineText)
+                        .font(.callout)
+                        .foregroundStyle(isDisabled ? .tertiary : .secondary)
+                        .monospacedDigit()
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel(accessibilitySummary)
+
+                if showsTags {
+                    HomeTagCapsuleRow(
+                        primaryIntent: primaryIntent,
+                        secondaryTags: secondaryTags,
+                        warnings: warnings,
+                        showPrimaryIntent: showPrimaryIntent,
+                        isDisabled: isDisabled
+                    )
+                }
             }
-            .buttonStyle(.plain)
-            .disabled(editMode?.wrappedValue.isEditing == true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(accessibilitySummary)
+            .onTapGesture {
+                guard editMode?.wrappedValue.isEditing != true else { return }
+                onSelect()
+            }
 
             Toggle("", isOn: dayActiveBinding)
                 .labelsHidden()
@@ -824,8 +913,8 @@ private struct AlarmRowView: View {
 
     private var fajrLineText: String {
         if config.iftarEnabled {
-            let iftarTime = TimeFormatters.timeFormatter.string(from: schedule.iftarDate ?? schedule.maghribDate)
-            return "Fajr \(fajrTimeText) • Iftar \(iftarTime)"
+            let maghribTime = TimeFormatters.timeFormatter.string(from: schedule.maghribDate)
+            return "Fajr \(fajrTimeText) • Maghrib \(maghribTime)"
         }
         return "Fajr \(fajrTimeText)"
     }
@@ -848,8 +937,8 @@ private struct AlarmRowView: View {
     private var accessibilitySummary: String {
         var summary = "\(dateLabelWithPrefix). \(primaryLabelText) alarm. \(primaryTimeText). Fajr \(fajrTimeText)."
         if config.iftarEnabled {
-            let iftarTime = TimeFormatters.timeFormatter.string(from: schedule.iftarDate ?? schedule.maghribDate)
-            summary += " Iftar \(iftarTime)."
+            let maghribTime = TimeFormatters.timeFormatter.string(from: schedule.maghribDate)
+            summary += " Maghrib \(maghribTime)."
         }
         if let tagAccessibilityText {
             summary += " \(tagAccessibilityText)"
@@ -875,7 +964,7 @@ private struct AlarmRowView: View {
     }
 
     private var dateLabelWithPrefix: String {
-        AlarmRowPresentation.dateLabel(for: schedule.date, separator: ", ")
+        AlarmRowPresentation.accessibilityDateLabel(for: schedule.date)
     }
 
     private var tagAccessibilityText: String? {
@@ -976,6 +1065,23 @@ private struct HomeTagCapsule: View {
             )
             .opacity(isDisabled ? 0.5 : 1.0)
             .accessibilityHidden(true)
+    }
+}
+
+private struct MonthAlarmCountBadge: View {
+    let count: Int
+
+    var body: some View {
+        Text("\(count)")
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(count == 0 ? .secondary : DawnColor.accent)
+            .padding(.vertical, 4)
+            .padding(.horizontal, 8)
+            .background(
+                Capsule()
+                    .fill(count == 0 ? Color.secondary.opacity(0.12) : DawnColor.accent.opacity(0.14))
+            )
+            .accessibilityLabel(Strings.AlarmsTab.alarmCountAccessibility(count))
     }
 }
 

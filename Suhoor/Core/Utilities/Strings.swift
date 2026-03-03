@@ -106,6 +106,23 @@ enum Strings {
         static let activationMode = "Activation mode"
         static let activeStartDate = "Start date"
         static let activeEndDate = "End date"
+        static let emptyMonth = "No alarms in this month yet."
+        static let emptyFilteredMonth = "No alarms match the selected tags yet."
+        static let filterTitle = "Filter Tags"
+        static let filterApply = "Apply"
+        static let filterClear = "Clear"
+        static let filteringLabel = "Filtered by"
+        static let filterPurposeSection = "Purpose"
+        static let filterAnyPurpose = "Any purpose"
+        static let filterObservancesSection = "Observances"
+        static let filterMatchAllFooter = "Shows only alarms that match all selected tags."
+        static let filterVoluntaryOnlyHelper = "Only available with Voluntary (Sunnah) purpose."
+        static func filterIncompatibleTagHelper(_ titles: String) -> String {
+            "Can’t combine with \(titles)."
+        }
+        static func alarmCountAccessibility(_ count: Int) -> String {
+            "\(count) alarm\(count == 1 ? "" : "s") in this month"
+        }
         static func hijriMonthStarts(_ date: String) -> String { "Starts \(date)" }
     }
 
