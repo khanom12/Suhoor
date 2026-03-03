@@ -29,7 +29,7 @@ final class ScheduleManager: ObservableObject {
     private let alarmConfigStore: AlarmConfigStore
     private let locationService: LocationService
     private let fastTagStore: FastTagStore
-    private let cacheStore = ScheduleCacheStore()
+    private let cacheStore: ScheduleCacheStore
     private let calculator = PrayerTimeCalculator()
     private let hijriAdjustmentStore: HijriMonthAdjustmentStore
     private let adjustedHijriCalendar: AdjustedHijriCalendar
@@ -64,7 +64,8 @@ final class ScheduleManager: ObservableObject {
         alarmConfigStore: AlarmConfigStore,
         fastTagStore: FastTagStore = FastTagStore(),
         hijriAdjustmentStore: HijriMonthAdjustmentStore = HijriMonthAdjustmentStore(),
-        hijriAdjustmentChangeStore: HijriAdjustmentChangeStore = HijriAdjustmentChangeStore()
+        hijriAdjustmentChangeStore: HijriAdjustmentChangeStore = HijriAdjustmentChangeStore(),
+        cacheStore: ScheduleCacheStore = ScheduleCacheStore()
     ) {
         self.settingsStore = settingsStore
         self.alarmConfigStore = alarmConfigStore
@@ -72,6 +73,7 @@ final class ScheduleManager: ObservableObject {
         self.fastTagStore = fastTagStore
         self.hijriAdjustmentStore = hijriAdjustmentStore
         self.hijriAdjustmentChangeStore = hijriAdjustmentChangeStore
+        self.cacheStore = cacheStore
         let hijriCalendarService = HijriCalendarService(adjustmentStore: hijriAdjustmentStore)
         let adjustedHijriCalendar = AdjustedHijriCalendar(calendarService: hijriCalendarService)
         self.adjustedHijriCalendar = adjustedHijriCalendar

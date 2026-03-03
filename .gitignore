@@ -1,0 +1,23 @@
+.DS_Store
+
+# Xcode / SwiftPM
+DerivedData/
+*.xcuserstate
+*.xccheckout
+*.xcscmblueprint
+*.moved-aside
+*.pbxuser
+*.mode1v3
+*.mode2v3
+*.perspectivev3
+xcuserdata/
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# Local build/test artifacts in this repo
+.cache/
+.deriveddata/
+output/
+

@@ -40,85 +40,93 @@ struct SuhoorTests {
     }
 
     @Test
-    func ramadanRangeComputesFor2026() {
-        let engine = RamadanProfileEngine()
-        let range = engine.computeRamadanRange(
-            forGregorianYear: 2026,
-            startAdjustmentDays: 0,
-            endAdjustmentDays: 0,
-            timeZone: .current
-        )
-        #expect(range != nil)
-        #expect((range?.dayCount ?? 0) >= 29)
-    }
+    func ramadanStartAndEidAreResolvableForKnownHijriYear() {
+        let suiteName = "SuhoorTests.RamadanDates"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
 
-    @Test
-    func ramadanAdjustmentsShiftRange() {
-        let engine = RamadanProfileEngine()
-        let base = engine.computeRamadanRange(
-            forGregorianYear: 2026,
-            startAdjustmentDays: 0,
-            endAdjustmentDays: 0,
-            timeZone: .current
-        )
-        let shifted = engine.computeRamadanRange(
-            forGregorianYear: 2026,
-            startAdjustmentDays: 1,
-            endAdjustmentDays: -1,
-            timeZone: .current
-        )
-        #expect(base != nil)
-        #expect(shifted != nil)
-        #expect(base?.startDate != shifted?.startDate)
-        #expect(base?.endDate != shifted?.endDate)
-    }
+        let adjustmentStore = HijriMonthAdjustmentStore(defaults: defaults)
+        let service = HijriCalendarService(adjustmentStore: adjustmentStore)
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let hijriYear = 1447
 
-    @Test
-    func dayNumberWithinRange() {
-        let engine = RamadanProfileEngine()
-        guard let range = engine.computeRamadanRange(
-            forGregorianYear: 2026,
-            startAdjustmentDays: 0,
-            endAdjustmentDays: 0,
-            timeZone: .current
-        ) else {
-            #expect(false)
-            return
+        let start = service.dateForRamadanStart(hijriYear: hijriYear, timeZone: timeZone)
+        let eid = service.dateForEidAlFitr(hijriYear: hijriYear, timeZone: timeZone)
+        #expect(start != nil)
+        #expect(eid != nil)
+
+        if let start, let eid {
+            var calendar = Calendar(identifier: .gregorian)
+            calendar.timeZone = timeZone
+            let deltaDays = calendar.dateComponents([.day], from: start, to: eid).day ?? 0
+            #expect(deltaDays == 29 || deltaDays == 30)
         }
-
-        let startDay = engine.computeRamadanDayNumber(for: range.startDate, range: range, timeZone: .current)
-        let endDay = engine.computeRamadanDayNumber(for: range.endDate, range: range, timeZone: .current)
-        #expect(startDay == 1)
-        #expect(endDay == range.dayCount)
     }
 
     @Test
-    func precedenceWinsWhenMultipleApply() {
-        var settings = AppSettings.default
-        settings.ramadanModeEnabled = true
-        settings.last10Enabled = true
-        settings.last10BoostMinutes = 50
-        settings.lqEnabled = true
-        settings.lqBoostMinutes = 40
-        settings.baseWakeOffsetMinutes = 30
+    func hijriAdjustmentsShiftRamadanAndEidDates() {
+        let suiteName = "SuhoorTests.RamadanAdjustments"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
 
-        let profileEngine = RamadanProfileEngine()
-        guard let range = profileEngine.computeRamadanRange(
-            forGregorianYear: 2026,
-            startAdjustmentDays: 0,
-            endAdjustmentDays: 0,
-            timeZone: .current
-        ) else {
-            #expect(false)
-            return
+        let adjustmentStore = HijriMonthAdjustmentStore(defaults: defaults)
+        let service = HijriCalendarService(adjustmentStore: adjustmentStore)
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let hijriYear = 1447
+
+        let baselineStart = service.dateForRamadanStart(hijriYear: hijriYear, timeZone: timeZone)
+        let baselineEid = service.dateForEidAlFitr(hijriYear: hijriYear, timeZone: timeZone)
+        #expect(baselineStart != nil)
+        #expect(baselineEid != nil)
+
+        adjustmentStore.setAdjustment(for: HijriYearMonth(hijriYear: hijriYear, month: .ramadan), offsetDays: 1)
+        adjustmentStore.setAdjustment(for: HijriYearMonth(hijriYear: hijriYear, month: .shawwal), offsetDays: -1)
+
+        let adjustedStart = service.dateForRamadanStart(hijriYear: hijriYear, timeZone: timeZone)
+        let adjustedEid = service.dateForEidAlFitr(hijriYear: hijriYear, timeZone: timeZone)
+        #expect(adjustedStart != nil)
+        #expect(adjustedEid != nil)
+
+        if let baselineStart, let baselineEid, let adjustedStart, let adjustedEid {
+            var calendar = Calendar(identifier: .gregorian)
+            calendar.timeZone = timeZone
+            let startShift = calendar.dateComponents([.day], from: baselineStart, to: adjustedStart).day ?? 0
+            let eidShift = calendar.dateComponents([.day], from: baselineEid, to: adjustedEid).day ?? 0
+            #expect(startShift == 1)
+            #expect(eidShift == -1)
         }
+    }
 
-        let date = range.endDate
-        let dayNumber = profileEngine.computeRamadanDayNumber(for: date, range: range, timeZone: .current) ?? 1
-        settings.lqNightNumbers = [dayNumber]
+    @Test
+    func ruleEngineUsesOffsetOverridesAndSkipDay() {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let date = Date(timeIntervalSince1970: 1_772_409_600) // March 3, 2026 seed
+        let key = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
 
-        let ruleEngine = RuleEngine(settings: settings, timeZone: .current)
-        #expect(ruleEngine.effectiveWakeOffsetMinutes(for: date) == 70)
+        var overrideEnabled = DailyAlarmOverride(date: date, timeZone: timeZone)
+        overrideEnabled.suhoorOffsetOverrideMinutes = 42
+
+        let engineWithOverride = RuleEngine(
+            settings: .default,
+            defaultConfig: .default,
+            overridesByDay: [key: overrideEnabled],
+            timeZone: timeZone
+        )
+        #expect(engineWithOverride.effectiveWakeOffsetMinutes(for: date) == 42)
+        #expect(engineWithOverride.ruleSummary(for: date).disabledForDay == false)
+
+        var overrideSkipped = DailyAlarmOverride(date: date, timeZone: timeZone)
+        overrideSkipped.skipDay = true
+        overrideSkipped.suhoorOffsetOverrideMinutes = 15
+
+        let engineWithSkip = RuleEngine(
+            settings: .default,
+            defaultConfig: .default,
+            overridesByDay: [key: overrideSkipped],
+            timeZone: timeZone
+        )
+        #expect(engineWithSkip.ruleSummary(for: date).disabledForDay == true)
+        #expect(engineWithSkip.effectiveWakeOffsetMinutes(for: date) == DefaultAlarmConfig.default.defaultSuhoorOffsetMinutes)
     }
 
     @Test
@@ -155,7 +163,8 @@ struct SuhoorTests {
         let scheduleManager = ScheduleManager(
             settingsStore: settingsStore,
             locationService: locationService,
-            alarmConfigStore: alarmConfigStore
+            alarmConfigStore: alarmConfigStore,
+            cacheStore: ScheduleCacheStore(defaults: defaults)
         )
 
         await scheduleManager.refreshSchedules(force: true)
@@ -175,7 +184,8 @@ struct SuhoorTests {
         let scheduleManager = ScheduleManager(
             settingsStore: settingsStore,
             locationService: locationService,
-            alarmConfigStore: alarmConfigStore
+            alarmConfigStore: alarmConfigStore,
+            cacheStore: ScheduleCacheStore(defaults: defaults)
         )
 
         let permissions = await scheduleManager.requiredOnboardingPermissions()
@@ -198,7 +208,8 @@ struct SuhoorTests {
         let scheduleManager = ScheduleManager(
             settingsStore: settingsStore,
             locationService: locationService,
-            alarmConfigStore: alarmConfigStore
+            alarmConfigStore: alarmConfigStore,
+            cacheStore: ScheduleCacheStore(defaults: defaults)
         )
 
         let presentation = await scheduleManager.permissionPresentation(for: .location)
@@ -248,7 +259,8 @@ struct SuhoorTests {
         let scheduleManager = ScheduleManager(
             settingsStore: settingsStore,
             locationService: locationService,
-            alarmConfigStore: alarmConfigStore
+            alarmConfigStore: alarmConfigStore,
+            cacheStore: ScheduleCacheStore(defaults: defaults)
         )
 
         await scheduleManager.refreshSchedules(force: true)
@@ -459,7 +471,8 @@ struct SuhoorTests {
         let scheduleManager = ScheduleManager(
             settingsStore: settingsStore,
             locationService: locationService,
-            alarmConfigStore: alarmConfigStore
+            alarmConfigStore: alarmConfigStore,
+            cacheStore: ScheduleCacheStore(defaults: defaults)
         )
 
         await scheduleManager.refreshSchedules(force: true)
@@ -504,7 +517,8 @@ struct SuhoorTests {
         let scheduleManager = ScheduleManager(
             settingsStore: settingsStore,
             locationService: locationService,
-            alarmConfigStore: alarmConfigStore
+            alarmConfigStore: alarmConfigStore,
+            cacheStore: ScheduleCacheStore(defaults: defaults)
         )
 
         await scheduleManager.refreshSchedules(force: true)
@@ -549,7 +563,8 @@ struct SuhoorTests {
         let scheduleManager = ScheduleManager(
             settingsStore: settingsStore,
             locationService: locationService,
-            alarmConfigStore: alarmConfigStore
+            alarmConfigStore: alarmConfigStore,
+            cacheStore: ScheduleCacheStore(defaults: defaults)
         )
 
         await scheduleManager.refreshSchedules(force: true)
@@ -634,7 +649,8 @@ struct SuhoorTests {
         let scheduleManager = ScheduleManager(
             settingsStore: settingsStore,
             locationService: locationService,
-            alarmConfigStore: alarmConfigStore
+            alarmConfigStore: alarmConfigStore,
+            cacheStore: ScheduleCacheStore(defaults: defaults)
         )
 
         await scheduleManager.refreshSchedules(force: true)
@@ -677,7 +693,8 @@ struct SuhoorTests {
         let scheduleManager = ScheduleManager(
             settingsStore: settingsStore,
             locationService: locationService,
-            alarmConfigStore: alarmConfigStore
+            alarmConfigStore: alarmConfigStore,
+            cacheStore: ScheduleCacheStore(defaults: defaults)
         )
 
         await scheduleManager.refreshSchedules(force: true)
@@ -718,7 +735,8 @@ struct SuhoorTests {
         let scheduleManager = ScheduleManager(
             settingsStore: settingsStore,
             locationService: locationService,
-            alarmConfigStore: alarmConfigStore
+            alarmConfigStore: alarmConfigStore,
+            cacheStore: ScheduleCacheStore(defaults: defaults)
         )
 
         await scheduleManager.refreshSchedules(force: true)
@@ -731,30 +749,30 @@ struct SuhoorTests {
     }
 
     @Test
-    func laylatulQadrSpecificDateOverridesNightSelection() {
-        var settings = AppSettings.default
-        settings.ramadanModeEnabled = true
-        settings.lqEnabled = true
-        settings.lqBoostMinutes = 60
-        settings.lqNightNumbers = [27]
+    func fastIntentEngineWarnsAndSuppressesDerivedTagsOnEid() {
+        let suiteName = "SuhoorTests.FastIntentEid"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
 
-        let engine = RamadanProfileEngine()
-        guard let range = engine.computeRamadanRange(
-            forGregorianYear: 2026,
-            startAdjustmentDays: 0,
-            endAdjustmentDays: 0,
-            timeZone: .current
-        ) else {
-            #expect(false)
-            return
-        }
+        let adjustmentStore = HijriMonthAdjustmentStore(defaults: defaults)
+        let service = HijriCalendarService(adjustmentStore: adjustmentStore)
+        let calendar = AdjustedHijriCalendar(calendarService: service)
 
-        let date = range.startDate
-        let key = DateHelpers.dayIdentifier(for: date, timeZone: .current)
-        settings.lqSpecificDateKey = key
+        let originalCalendar = FastIntentEngine.adjustedHijriCalendar
+        FastIntentEngine.adjustedHijriCalendar = calendar
+        defer { FastIntentEngine.adjustedHijriCalendar = originalCalendar }
 
-        let ruleEngine = RuleEngine(settings: settings, timeZone: .current)
-        #expect(ruleEngine.appliedLayer(for: date)?.kind == .laylatulQadr)
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let hijriYear = 1447
+        let eid = service.dateForEidAlFitr(hijriYear: hijriYear, timeZone: timeZone)
+        #expect(eid != nil)
+        guard let eid else { return }
+
+        let warnings = FastIntentEngine.warnings(for: eid, timeZone: timeZone)
+        #expect(warnings.contains(.eidAlFitr))
+
+        let derived = FastIntentEngine.dateDerivedObservanceTags(for: eid, timeZone: timeZone, includeShawwalPotential: true)
+        #expect(derived.isEmpty)
     }
 
     @Test

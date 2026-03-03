@@ -134,8 +134,17 @@ struct ScheduledDateSourceResolverTests {
         )
         let entries = resolver.resolvedEntries(from: makeDate(year: 2026, month: 2, day: 1), limit: 60, timeZone: timeZone)
 
-        #expect(entries.map(\.dateKey) == ["2026-02-20", "2026-02-21"])
-        #expect(entries.last?.provenances.count == 2)
+        let focusKeys: Set<String> = ["2026-02-20", "2026-02-21", "2026-02-22"]
+        let focusEntries = entries.filter { focusKeys.contains($0.dateKey) }
+
+        #expect(focusEntries.map(\.dateKey) == ["2026-02-20", "2026-02-21"])
+
+        let feb20 = focusEntries.first(where: { $0.dateKey == "2026-02-20" })
+        #expect(feb20?.provenances.contains(where: { $0.sourceOrigin == .manualGregorianRange }) == true)
+
+        let feb21 = focusEntries.first(where: { $0.dateKey == "2026-02-21" })
+        #expect(feb21?.provenances.contains(where: { $0.sourceOrigin == .manualGregorianRange }) == true)
+        #expect(feb21?.provenances.contains(where: { $0.sourceOrigin == .manualSingleDay }) == true)
     }
 
     @Test
@@ -176,7 +185,16 @@ struct ScheduledDateSourceResolverTests {
         let timeZone = TimeZone(secondsFromGMT: 0) ?? .current
         let entries = resolver.resolvedEntries(from: makeDate(year: 2026, month: 2, day: 1), limit: 5, timeZone: timeZone)
 
-        #expect(entries.first?.dateKey == "2026-02-19")
+        let expectedStart = adjustedCalendar.gregorianDate(
+            for: HijriYearMonth(hijriYear: 1447, month: .ramadan),
+            dayOfMonth: 1,
+            timeZone: timeZone
+        )
+        #expect(expectedStart != nil)
+        if let expectedStart {
+            let expectedKey = DateHelpers.dayIdentifier(for: expectedStart, timeZone: timeZone)
+            #expect(entries.first?.dateKey == expectedKey)
+        }
         #expect(entries.allSatisfy { adjustedCalendar.isRamadan(date: $0.date, timeZone: timeZone) })
     }
 

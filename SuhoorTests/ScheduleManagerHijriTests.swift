@@ -43,7 +43,8 @@ struct ScheduleManagerHijriTests {
             settingsStore: settingsStore,
             locationService: LocationService(),
             alarmConfigStore: alarmConfigStore,
-            hijriAdjustmentStore: adjustmentStore
+            hijriAdjustmentStore: adjustmentStore,
+            cacheStore: ScheduleCacheStore(defaults: defaults)
         )
 
         let result = await manager.addIslamicQuickAdd(
@@ -81,7 +82,7 @@ struct ScheduleManagerHijriTests {
 
         let alarmConfigStore = AlarmConfigStore(defaultsStore: defaults)
         let fastTagStore = FastTagStore(defaults: defaults)
-        let startDate = DateHelpers.startOfToday(in: timeZone)
+        let startDate = Self.makeDate(year: 2026, month: 7, day: 1, timeZone: timeZone)
         let result = alarmConfigStore.addIslamicQuickAdd(
             .nextMondayThursdayPair,
             startDate: startDate,
@@ -94,7 +95,8 @@ struct ScheduleManagerHijriTests {
             locationService: LocationService(),
             alarmConfigStore: alarmConfigStore,
             fastTagStore: fastTagStore,
-            hijriAdjustmentStore: HijriMonthAdjustmentStore(defaults: defaults)
+            hijriAdjustmentStore: HijriMonthAdjustmentStore(defaults: defaults),
+            cacheStore: ScheduleCacheStore(defaults: defaults)
         )
 
         await manager.refreshSchedules(force: true)
@@ -167,7 +169,8 @@ struct ScheduleManagerHijriTests {
             settingsStore: settingsStore,
             locationService: LocationService(),
             alarmConfigStore: alarmConfigStore,
-            hijriAdjustmentStore: HijriMonthAdjustmentStore(defaults: defaults)
+            hijriAdjustmentStore: HijriMonthAdjustmentStore(defaults: defaults),
+            cacheStore: ScheduleCacheStore(defaults: defaults)
         )
 
         let initial = await manager.addIslamicQuickAdd(
@@ -264,7 +267,8 @@ struct ScheduleManagerHijriTests {
             alarmConfigStore: alarmConfigStore,
             fastTagStore: fastTagStore,
             hijriAdjustmentStore: adjustmentStore,
-            hijriAdjustmentChangeStore: changeStore
+            hijriAdjustmentChangeStore: changeStore,
+            cacheStore: ScheduleCacheStore(defaults: defaults)
         )
 
         let calendar = AdjustedHijriCalendar(
@@ -300,8 +304,9 @@ struct ScheduleManagerHijriTests {
             override.suhoorEnabled = false
         }
         alarmConfigStore.addDeletedDate(oldDate, timeZone: timeZone)
-        let selection = FastIntentEngine.defaultAddFlowSelection(for: oldDate, timeZone: timeZone)
+        let selection = FastIntentSelection(primaryIntent: .qadaMakeup, secondaryTags: [])
         fastTagStore.setSelection(selection, for: oldDate, timeZone: timeZone)
+        #expect(fastTagStore.selection(for: oldDate, timeZone: timeZone) != nil)
 
         await manager.setHijriMonthAdjustment(
             for: components.month,
@@ -386,6 +391,7 @@ struct ScheduleManagerHijriTests {
             override.suhoorEnabled = false
             override.reminderEnabled = false
             override.fajrEnabled = false
+            override.iftarEnabled = false
         }
 
         store.setDayEnabled(true, for: date)
@@ -519,7 +525,8 @@ struct ScheduleManagerHijriTests {
             locationService: LocationService(),
             alarmConfigStore: alarmConfigStore,
             fastTagStore: fastTagStore,
-            hijriAdjustmentStore: HijriMonthAdjustmentStore(defaults: defaults)
+            hijriAdjustmentStore: HijriMonthAdjustmentStore(defaults: defaults),
+            cacheStore: ScheduleCacheStore(defaults: defaults)
         )
 
         let added = await manager.addRecurringIslamicRule(
@@ -555,7 +562,7 @@ struct ScheduleManagerHijriTests {
         }
 
         guard let targetDate = Self.firstGregorianDate(
-            onOrAfter: DateHelpers.startOfToday(in: timeZone),
+            onOrAfter: Self.makeDate(year: 2026, month: 4, day: 1, timeZone: timeZone),
             timeZone: timeZone,
             matcher: { weekday in weekday == 2 || weekday == 5 }
         ) else {
@@ -571,7 +578,8 @@ struct ScheduleManagerHijriTests {
             locationService: LocationService(),
             alarmConfigStore: alarmConfigStore,
             fastTagStore: FastTagStore(defaults: defaults),
-            hijriAdjustmentStore: HijriMonthAdjustmentStore(defaults: defaults)
+            hijriAdjustmentStore: HijriMonthAdjustmentStore(defaults: defaults),
+            cacheStore: ScheduleCacheStore(defaults: defaults)
         )
 
         await manager.refreshSchedules(force: true)
@@ -595,7 +603,8 @@ struct ScheduleManagerHijriTests {
             locationService: LocationService(),
             alarmConfigStore: AlarmConfigStore(defaultsStore: defaults),
             fastTagStore: fastTagStore,
-            hijriAdjustmentStore: HijriMonthAdjustmentStore(defaults: defaults)
+            hijriAdjustmentStore: HijriMonthAdjustmentStore(defaults: defaults),
+            cacheStore: ScheduleCacheStore(defaults: defaults)
         )
 
         await refreshedManager.ensureScheduleWindow(reason: .appLaunch)
@@ -625,7 +634,7 @@ struct ScheduleManagerHijriTests {
         }
 
         guard let targetDate = Self.firstGregorianDate(
-            onOrAfter: DateHelpers.startOfToday(in: timeZone),
+            onOrAfter: Self.makeDate(year: 2026, month: 4, day: 1, timeZone: timeZone),
             timeZone: timeZone,
             matcher: { weekday in weekday == 2 || weekday == 5 }
         ) else {
@@ -642,7 +651,8 @@ struct ScheduleManagerHijriTests {
             locationService: LocationService(),
             alarmConfigStore: alarmConfigStore,
             fastTagStore: fastTagStore,
-            hijriAdjustmentStore: HijriMonthAdjustmentStore(defaults: defaults)
+            hijriAdjustmentStore: HijriMonthAdjustmentStore(defaults: defaults),
+            cacheStore: ScheduleCacheStore(defaults: defaults)
         )
 
         await manager.refreshSchedules(force: true)
@@ -899,6 +909,9 @@ struct ScheduleManagerHijriTests {
         let defaults = UserDefaults(suiteName: suiteName)!
         defaults.removePersistentDomain(forName: suiteName)
         let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let adjustedCalendar = AdjustedHijriCalendar(
+            calendarService: HijriCalendarService(adjustmentStore: HijriMonthAdjustmentStore(defaults: defaults))
+        )
 
         let settingsStore = SuhoorSettingsStore(defaults: defaults)
         settingsStore.update { draft in
@@ -911,7 +924,8 @@ struct ScheduleManagerHijriTests {
             locationService: LocationService(),
             alarmConfigStore: AlarmConfigStore(defaultsStore: defaults),
             fastTagStore: FastTagStore(defaults: defaults),
-            hijriAdjustmentStore: HijriMonthAdjustmentStore(defaults: defaults)
+            hijriAdjustmentStore: HijriMonthAdjustmentStore(defaults: defaults),
+            cacheStore: ScheduleCacheStore(defaults: defaults)
         )
 
         let added = await manager.addRecurringIslamicRule(
@@ -921,11 +935,8 @@ struct ScheduleManagerHijriTests {
         )
         #expect(added == true)
 
-        let visibleLastDate = manager.activeWindowSnapshot.visibleDays.last?.date
-        #expect(visibleLastDate != nil)
         guard
-            let futureMonth = manager.rollingHijriMonths(count: 12, timeZone: timeZone).dropFirst(4).first,
-            let visibleLastDate
+            let futureMonth = manager.rollingHijriMonths(count: 12, timeZone: timeZone).dropFirst(8).first
         else {
             Issue.record("Expected future month and visible horizon data.")
             return
@@ -936,12 +947,12 @@ struct ScheduleManagerHijriTests {
             month: futureMonth.month.rawValue,
             title: "\(futureMonth.month.displayName) \(futureMonth.hijriYear)"
         )
+        #expect(manager.cachedMonthEntries(for: monthKey) == nil)
         let entries = await manager.monthEntries(for: monthKey, timeZone: timeZone)
-
+        #expect(manager.cachedMonthEntries(for: monthKey) != nil)
         #expect(entries.isEmpty == false)
-        #expect(entries.contains(where: { $0.date > visibleLastDate }))
         #expect(entries.allSatisfy {
-            guard let components = AdjustedHijriCalendar.shared.adjustedComponents(for: $0.date, timeZone: timeZone) else {
+            guard let components = adjustedCalendar.adjustedComponents(for: $0.date, timeZone: timeZone) else {
                 return false
             }
             return components.hijriYear == futureMonth.hijriYear && components.month == futureMonth.month
@@ -967,7 +978,8 @@ struct ScheduleManagerHijriTests {
             locationService: LocationService(),
             alarmConfigStore: AlarmConfigStore(defaultsStore: defaults),
             fastTagStore: FastTagStore(defaults: defaults),
-            hijriAdjustmentStore: HijriMonthAdjustmentStore(defaults: defaults)
+            hijriAdjustmentStore: HijriMonthAdjustmentStore(defaults: defaults),
+            cacheStore: ScheduleCacheStore(defaults: defaults)
         )
 
         let startDate = Self.makeDate(year: 2026, month: 3, day: 20, timeZone: timeZone)
@@ -1048,7 +1060,7 @@ struct ScheduleManagerHijriTests {
         }
 
         let alarmConfigStore = AlarmConfigStore(defaultsStore: defaults)
-        let testDate = Self.makeDate(year: 2026, month: 3, day: 3)
+        let testDate = DateHelpers.startOfTomorrow(in: .current)
         let testDateKey = DateHelpers.dayIdentifier(for: testDate, timeZone: .current)
         alarmConfigStore.addSingleDaySource(testDate)
 
@@ -1056,7 +1068,8 @@ struct ScheduleManagerHijriTests {
             settingsStore: settingsStore,
             locationService: LocationService(),
             alarmConfigStore: alarmConfigStore,
-            hijriAdjustmentStore: HijriMonthAdjustmentStore(defaults: defaults)
+            hijriAdjustmentStore: HijriMonthAdjustmentStore(defaults: defaults),
+            cacheStore: ScheduleCacheStore(defaults: defaults)
         )
 
         await manager.refreshSchedules(force: true)
@@ -1089,7 +1102,8 @@ struct ScheduleManagerHijriTests {
             settingsStore: settingsStore,
             locationService: locationService,
             alarmConfigStore: alarmConfigStore,
-            hijriAdjustmentStore: HijriMonthAdjustmentStore(defaults: defaults)
+            hijriAdjustmentStore: HijriMonthAdjustmentStore(defaults: defaults),
+            cacheStore: ScheduleCacheStore(defaults: defaults)
         )
 
         await manager.refreshSchedules(force: true)

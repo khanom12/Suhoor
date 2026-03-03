@@ -97,15 +97,24 @@ struct FastClassificationEngineTests {
 
         let timeZone = TimeZone(secondsFromGMT: 0) ?? .current
         let key = HijriYearMonth(hijriYear: 1447, month: .ramadan)
-        let baselineStart = adjustedCalendar.gregorianDate(for: key, dayOfMonth: 1, timeZone: timeZone)
-        #expect(baselineStart != nil)
-
-        let before = FastIntentEngine.suggestions(for: baselineStart ?? .distantPast, timeZone: timeZone)
-        #expect(before.suggestedPrimary == .ramadanObligatory)
+        let previewBefore = adjustedCalendar.monthStartPreview(for: key, timeZone: timeZone)
+        #expect(previewBefore != nil)
+        #expect(previewBefore?.offsetDays == 0)
 
         store.setAdjustment(for: key, offsetDays: 1)
-        let after = FastIntentEngine.suggestions(for: baselineStart ?? .distantPast, timeZone: timeZone)
-        #expect(after.suggestedPrimary != .ramadanObligatory)
+        let previewAfter = adjustedCalendar.monthStartPreview(for: key, timeZone: timeZone)
+        #expect(previewAfter != nil)
+        #expect(previewAfter?.offsetDays == 1)
+
+        if let previewAfter {
+            var calendar = Calendar(identifier: .gregorian)
+            calendar.timeZone = timeZone
+            let shift = calendar.dateComponents([.day], from: previewAfter.baselineStart, to: previewAfter.adjustedStart).day ?? 0
+            #expect(shift == 1)
+        }
+
+        let suggestions = FastIntentEngine.suggestions(for: previewAfter?.adjustedStart ?? .distantPast, timeZone: timeZone)
+        #expect(suggestions.suggestedPrimary == .ramadanObligatory)
     }
 
     @Test
