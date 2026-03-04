@@ -9,6 +9,7 @@ struct TodayHomeView: View {
         let hijriChangeCount = scheduleManager.hijriAdjustmentChanges.count
         let now = Date()
         let components = AdjustedHijriCalendar.shared.adjustedComponents(for: now, timeZone: .current)
+        let liveObservanceContext = TodayObservanceEngine.liveContext(now: now)
         ScrollView {
             LazyVStack(spacing: DesignTokens.dashboardStackSpacing) {
                 VStack(alignment: .leading, spacing: 2) {
@@ -23,7 +24,7 @@ struct TodayHomeView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
 
                 ForEach(layoutStore.layout.ordered) { card in
-                    todayCardView(for: card, components: components)
+                    todayCardView(for: card, components: components, observanceContext: liveObservanceContext)
                 }
             }
             .padding(.horizontal, DesignTokens.spacingL)
@@ -50,7 +51,8 @@ struct TodayHomeView: View {
     @ViewBuilder
     private func todayCardView(
         for card: TodayCardKind,
-        components: AdjustedHijriDateComponents?
+        components: AdjustedHijriDateComponents?,
+        observanceContext: TodayObservanceContext?
     ) -> some View {
         switch card {
         case .countdown:
@@ -61,13 +63,29 @@ struct TodayHomeView: View {
             if layoutStore.isVisible(card), components?.month == .ramadan {
                 TodayRamadanProgressCard()
             }
+        case .specialFastSpotlight:
+            if layoutStore.isVisible(card) {
+                TodaySpecialFastSpotlightCard(mode: specialFastMode(observanceContext))
+            }
         case .shawwalSixProgress:
-            if layoutStore.isVisible(card), isLiveShawwalDay(components) {
-                TodayShawwalSixProgressCard()
+            if layoutStore.isVisible(card) {
+                TodayShawwalSixProgressCard(mode: isLiveShawwalDay(components) ? .live : .preview)
             }
         case .shawwalPlan:
-            if layoutStore.isVisible(card), isLiveShawwalDay(components) {
-                TodayShawwalPlanCard()
+            if layoutStore.isVisible(card) {
+                TodayShawwalPlanCard(mode: isLiveShawwalDay(components) ? .live : .preview)
+            }
+        case .dhulHijjahNineProgress:
+            if layoutStore.isVisible(card) {
+                TodayDhulHijjahProgressCard(mode: isLiveDhulHijjahDay(components) ? .live : .preview)
+            }
+        case .ashuraProgress:
+            if layoutStore.isVisible(card) {
+                TodayAshuraProgressCard(mode: isLiveAshuraDay(components) ? .live : .preview)
+            }
+        case .whiteDaysProgress:
+            if layoutStore.isVisible(card) {
+                TodayWhiteDaysProgressCard(mode: isLiveWhiteDaysDay(components) ? .live : .preview)
             }
         case .fastCheckIn:
             if layoutStore.isVisible(card) {
@@ -75,15 +93,24 @@ struct TodayHomeView: View {
             }
         case .eidAlFitrNotice:
             if layoutStore.isVisible(card) || warningIsActive(.eidAlFitr, components: components) {
-                TodayForbiddenFastDayCard(kind: .eidAlFitr, isPreview: !warningIsActive(.eidAlFitr, components: components))
+                TodayForbiddenFastDayCard(
+                    kind: .eidAlFitr,
+                    mode: warningIsActive(.eidAlFitr, components: components) ? .live : .preview
+                )
             }
         case .eidAlAdhaNotice:
             if layoutStore.isVisible(card) || warningIsActive(.eidAlAdha, components: components) {
-                TodayForbiddenFastDayCard(kind: .eidAlAdha, isPreview: !warningIsActive(.eidAlAdha, components: components))
+                TodayForbiddenFastDayCard(
+                    kind: .eidAlAdha,
+                    mode: warningIsActive(.eidAlAdha, components: components) ? .live : .preview
+                )
             }
         case .tashreeqNotice:
             if layoutStore.isVisible(card) || warningIsActive(.tashreeq, components: components) {
-                TodayForbiddenFastDayCard(kind: .tashreeq, isPreview: !warningIsActive(.tashreeq, components: components))
+                TodayForbiddenFastDayCard(
+                    kind: .tashreeq,
+                    mode: warningIsActive(.tashreeq, components: components) ? .live : .preview
+                )
             }
         }
     }
@@ -91,6 +118,31 @@ struct TodayHomeView: View {
     private func isLiveShawwalDay(_ components: AdjustedHijriDateComponents?) -> Bool {
         guard let components else { return false }
         return components.month == .shawwal && components.day >= 2
+    }
+
+    private func isLiveDhulHijjahDay(_ components: AdjustedHijriDateComponents?) -> Bool {
+        guard let components else { return false }
+        return components.month == .dhulHijjah && (1...9).contains(components.day)
+    }
+
+    private func isLiveAshuraDay(_ components: AdjustedHijriDateComponents?) -> Bool {
+        guard let components else { return false }
+        return components.month == .muharram && (9...11).contains(components.day)
+    }
+
+    private func isLiveWhiteDaysDay(_ components: AdjustedHijriDateComponents?) -> Bool {
+        guard let components else { return false }
+        return [13, 14, 15].contains(components.day) && components.month != .ramadan
+    }
+
+    private func specialFastMode(_ context: TodayObservanceContext?) -> TodaySeasonalCardMode {
+        guard let context,
+              context.isRamadan == false,
+              context.warnings.isEmpty,
+              context.secondaryTags.isEmpty == false else {
+            return .preview
+        }
+        return .live
     }
 
     private func warningIsActive(_ warning: FastWarning, components: AdjustedHijriDateComponents?) -> Bool {

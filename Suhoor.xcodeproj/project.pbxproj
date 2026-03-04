@@ -16,6 +16,7 @@
 		A1B000001234567890000006 /* ScheduleManagerHijriTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B000001234567890000104 /* ScheduleManagerHijriTests.swift */; };
 		A1B000001234567890000007 /* ScheduledDateSourceStoreHijriTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B000001234567890000105 /* ScheduledDateSourceStoreHijriTests.swift */; };
 		A1B000001234567890000008 /* ShawwalTodayEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B000001234567890000106 /* ShawwalTodayEngineTests.swift */; };
+		A1B000001234567890000009 /* TodayObservanceEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B000001234567890000108 /* TodayObservanceEngineTests.swift */; };
 		A1B000001234567890000401 /* Suhoor/Resources/adhan.caf in Resources */ = {isa = PBXBuildFile; fileRef = A1B000001234567890000301 /* Suhoor/Resources/adhan.caf */; };
 		A1B000001234567890000402 /* Suhoor/Resources/adhan_fajr.caf in Resources */ = {isa = PBXBuildFile; fileRef = A1B000001234567890000302 /* Suhoor/Resources/adhan_fajr.caf */; };
 /* End PBXBuildFile section */
@@ -43,6 +44,7 @@
 		A1B000001234567890000104 /* ScheduleManagerHijriTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScheduleManagerHijriTests.swift; sourceTree = "<group>"; };
 		A1B000001234567890000105 /* ScheduledDateSourceStoreHijriTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScheduledDateSourceStoreHijriTests.swift; sourceTree = "<group>"; };
 		A1B000001234567890000106 /* ShawwalTodayEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShawwalTodayEngineTests.swift; sourceTree = "<group>"; };
+		A1B000001234567890000108 /* TodayObservanceEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodayObservanceEngineTests.swift; sourceTree = "<group>"; };
 		A1B000001234567890000107 /* SuhoorTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SuhoorTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A1B000001234567890000301 /* Suhoor/Resources/adhan.caf */ = {isa = PBXFileReference; lastKnownFileType = audio.caf; path = Suhoor/Resources/adhan.caf; sourceTree = "<group>"; };
 		A1B000001234567890000302 /* Suhoor/Resources/adhan_fajr.caf */ = {isa = PBXFileReference; lastKnownFileType = audio.caf; path = Suhoor/Resources/adhan_fajr.caf; sourceTree = "<group>"; };
@@ -116,6 +118,7 @@
 				A1B000001234567890000104 /* ScheduleManagerHijriTests.swift */,
 				A1B000001234567890000105 /* ScheduledDateSourceStoreHijriTests.swift */,
 				A1B000001234567890000106 /* ShawwalTodayEngineTests.swift */,
+				A1B000001234567890000108 /* TodayObservanceEngineTests.swift */,
 			);
 			path = SuhoorTests;
 			sourceTree = "<group>";
@@ -244,6 +247,7 @@
 				A1B000001234567890000006 /* ScheduleManagerHijriTests.swift in Sources */,
 				A1B000001234567890000007 /* ScheduledDateSourceStoreHijriTests.swift in Sources */,
 				A1B000001234567890000008 /* ShawwalTodayEngineTests.swift in Sources */,
+				A1B000001234567890000009 /* TodayObservanceEngineTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

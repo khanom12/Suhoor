@@ -21,13 +21,14 @@ struct ShawwalSixProgressEngine {
 
     static func model(
         now: Date,
+        mode: TodaySeasonalCardMode,
         scheduledEntries: [ResolvedScheduledDateEntry],
         selections: [String: FastIntentSelection],
         logEntries: [String: FastLogEntry],
         calendar: AdjustedHijriCalendar = .shared,
         timeZone: TimeZone = .current
     ) -> Model? {
-        guard let context = ShawwalMonthContext.resolve(now: now, calendar: calendar, timeZone: timeZone) else {
+        guard let context = ShawwalMonthContext.resolve(now: now, mode: mode, calendar: calendar, timeZone: timeZone) else {
             return nil
         }
 
@@ -59,7 +60,9 @@ struct ShawwalSixProgressEngine {
                 count += 1
             }
         }
-        let hasPendingToday = taggedDays.contains(where: { $0.dateKey == todayKey }) && logEntries[todayKey]?.status == .inProgress
+        let hasPendingToday = mode == .live
+            && taggedDays.contains(where: { $0.dateKey == todayKey })
+            && logEntries[todayKey]?.status == .inProgress
 
         return Model(
             hijriYear: context.hijriYear,
@@ -71,10 +74,11 @@ struct ShawwalSixProgressEngine {
 
     static func monthDates(
         now: Date,
+        mode: TodaySeasonalCardMode,
         calendar: AdjustedHijriCalendar = .shared,
         timeZone: TimeZone = .current
     ) -> [Date] {
-        guard let context = ShawwalMonthContext.resolve(now: now, calendar: calendar, timeZone: timeZone) else {
+        guard let context = ShawwalMonthContext.resolve(now: now, mode: mode, calendar: calendar, timeZone: timeZone) else {
             return []
         }
 
@@ -82,10 +86,8 @@ struct ShawwalSixProgressEngine {
         gregorian.timeZone = timeZone
 
         var dates: [Date] = []
-        var cursor = max(context.monthStart, context.todayStart)
-        if let shawwalDayOne = gregorian.date(byAdding: .day, value: 1, to: context.monthStart) {
-            cursor = max(cursor, shawwalDayOne)
-        }
+        let startDay = gregorian.date(byAdding: .day, value: 1, to: context.monthStart) ?? context.monthStart
+        var cursor = mode == .live ? max(startDay, context.todayStart) : startDay
 
         while cursor < context.nextMonthStart {
             dates.append(cursor)
@@ -153,6 +155,7 @@ struct ShawwalPlanEngine {
 
     static func model(
         now: Date,
+        mode: TodaySeasonalCardMode,
         scheduledEntries: [ResolvedScheduledDateEntry],
         selections: [String: FastIntentSelection],
         logEntries: [String: FastLogEntry],
@@ -161,6 +164,7 @@ struct ShawwalPlanEngine {
     ) -> Model? {
         guard let progress = ShawwalSixProgressEngine.model(
             now: now,
+            mode: mode,
             scheduledEntries: scheduledEntries,
             selections: selections,
             logEntries: logEntries,
@@ -170,7 +174,7 @@ struct ShawwalPlanEngine {
             return nil
         }
 
-        let recommendations = ShawwalSixProgressEngine.monthDates(now: now, calendar: calendar, timeZone: timeZone)
+        let recommendations = ShawwalSixProgressEngine.monthDates(now: now, mode: mode, calendar: calendar, timeZone: timeZone)
             .compactMap { date -> Recommendation? in
                 let key = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
                 let status = logEntries[key]?.status ?? .unknown
@@ -227,7 +231,7 @@ struct ForbiddenFastDayEngine {
 
     static func model(
         kind: FastWarning,
-        isPreview: Bool,
+        mode: TodaySeasonalCardMode,
         now: Date,
         calendar: AdjustedHijriCalendar = .shared,
         timeZone: TimeZone = .current
@@ -244,7 +248,7 @@ struct ForbiddenFastDayEngine {
             isLive = components?.month == .dhulHijjah && (11...13).contains(components?.day ?? 0)
         }
 
-        guard isLive || isPreview else { return nil }
+        guard isLive || mode == .preview else { return nil }
 
         switch kind {
         case .eidAlFitr:
@@ -283,16 +287,28 @@ private struct ShawwalMonthContext {
 
     static func resolve(
         now: Date,
+        mode: TodaySeasonalCardMode,
         calendar: AdjustedHijriCalendar,
         timeZone: TimeZone
     ) -> ShawwalMonthContext? {
-        guard let components = calendar.adjustedComponents(for: now, timeZone: timeZone),
-              components.month == .shawwal,
-              components.day >= 2 else {
+        guard let components = calendar.adjustedComponents(for: now, timeZone: timeZone) else {
             return nil
         }
 
-        let monthKey = HijriYearMonth(hijriYear: components.hijriYear, month: .shawwal)
+        let monthKey: HijriYearMonth
+        switch mode {
+        case .live:
+            guard components.month == .shawwal, components.day >= 2 else {
+                return nil
+            }
+            monthKey = HijriYearMonth(hijriYear: components.hijriYear, month: .shawwal)
+        case .preview:
+            let previewYear = components.month.rawValue <= HijriMonth.shawwal.rawValue
+                ? components.hijriYear
+                : components.hijriYear + 1
+            monthKey = HijriYearMonth(hijriYear: previewYear, month: .shawwal)
+        }
+
         let monthStart = calendar.gregorianDate(for: monthKey, dayOfMonth: 1, timeZone: timeZone) ?? now
         let nextMonthKey = monthKey.advanced(byMonths: 1)
         var gregorian = Calendar(identifier: .gregorian)
@@ -302,7 +318,7 @@ private struct ShawwalMonthContext {
         } ?? gregorian.date(byAdding: .day, value: 30, to: monthStart) ?? monthStart
 
         return ShawwalMonthContext(
-            hijriYear: components.hijriYear,
+            hijriYear: monthKey.hijriYear,
             todayStart: DateHelpers.startOfDay(now, in: timeZone),
             monthStart: DateHelpers.startOfDay(monthStart, in: timeZone),
             nextMonthStart: DateHelpers.startOfDay(nextMonthStart, in: timeZone)

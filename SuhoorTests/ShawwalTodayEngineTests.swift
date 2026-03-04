@@ -12,6 +12,7 @@ struct ShawwalTodayEngineTests {
 
         let model = ShawwalSixProgressEngine.model(
             now: now,
+            mode: .live,
             scheduledEntries: [],
             selections: [:],
             logEntries: [:],
@@ -55,6 +56,7 @@ struct ShawwalTodayEngineTests {
 
         let model = ShawwalSixProgressEngine.model(
             now: now,
+            mode: .live,
             scheduledEntries: [],
             selections: [:],
             logEntries: logEntries,
@@ -75,6 +77,7 @@ struct ShawwalTodayEngineTests {
 
         let model = ShawwalPlanEngine.model(
             now: now,
+            mode: .live,
             scheduledEntries: [],
             selections: [:],
             logEntries: [:],
@@ -95,14 +98,14 @@ struct ShawwalTodayEngineTests {
 
         let liveModel = ForbiddenFastDayEngine.model(
             kind: .eidAlFitr,
-            isPreview: false,
+            mode: .live,
             now: eidAlFitr,
             calendar: calendar,
             timeZone: timeZone
         )
         let previewModel = ForbiddenFastDayEngine.model(
             kind: .eidAlFitr,
-            isPreview: true,
+            mode: .preview,
             now: regularShawwalDay,
             calendar: calendar,
             timeZone: timeZone
@@ -111,6 +114,37 @@ struct ShawwalTodayEngineTests {
         #expect(liveModel?.isLive == true)
         #expect(previewModel?.isLive == false)
         #expect(previewModel?.badgeText == "Preview")
+    }
+
+    @Test
+    func previewModelExistsOutsideShawwalWithoutPendingState() {
+        let timeZone = TimeZone(secondsFromGMT: 0) ?? .current
+        let calendar = makeAdjustedCalendar()
+        let now = makeAdjustedHijriDate(year: 1447, month: .ramadan, day: 15, calendar: calendar, timeZone: timeZone)
+
+        let shawwalDate = makeAdjustedHijriDate(year: 1447, month: .shawwal, day: 2, calendar: calendar, timeZone: timeZone)
+        let key = DateHelpers.dayIdentifier(for: shawwalDate, timeZone: timeZone)
+        let logEntries = [
+            key: FastLogEntry(
+                dateKey: key,
+                status: .inProgress,
+                updatedAt: now,
+                intentSnapshot: FastIntentSnapshot(primaryIntent: .voluntarySunnah, secondaryTags: [])
+            )
+        ]
+
+        let model = ShawwalSixProgressEngine.model(
+            now: now,
+            mode: .preview,
+            scheduledEntries: [],
+            selections: [:],
+            logEntries: logEntries,
+            calendar: calendar,
+            timeZone: timeZone
+        )
+
+        #expect(model?.hijriYear == 1447)
+        #expect(model?.hasPendingToday == false)
     }
 
     private func makeAdjustedCalendar() -> AdjustedHijriCalendar {

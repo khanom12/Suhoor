@@ -65,10 +65,18 @@ struct TodayEditCardsSheet: View {
             return "Countdown to Fajr or Iftar"
         case .ramadanProgress:
             return "Shows only during Ramadan"
+        case .specialFastSpotlight:
+            return "Dynamic spotlight for today's Hijri observance"
         case .shawwalSixProgress:
             return "Six-bar Shawwal tracker"
         case .shawwalPlan:
             return "Plans remaining Shawwal fasts"
+        case .dhulHijjahNineProgress:
+            return "Tracks 1-9 Dhul Hijjah outside Ramadan"
+        case .ashuraProgress:
+            return "Tracks 9-11 Muharram outside Ramadan"
+        case .whiteDaysProgress:
+            return "Tracks 13-15 of the Hijri month outside Ramadan"
         case .fastCheckIn:
             return "Log your fast for today"
         case .eidAlFitrNotice:

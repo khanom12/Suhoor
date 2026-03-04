@@ -1,6 +1,8 @@
 import SwiftUI
 
 struct TodayShawwalSixProgressCard: View {
+    let mode: TodaySeasonalCardMode
+
     @EnvironmentObject private var alarmConfigStore: AlarmConfigStore
     @EnvironmentObject private var fastTagStore: FastTagStore
     @EnvironmentObject private var fastLogStore: FastLogStore
@@ -19,6 +21,7 @@ struct TodayShawwalSixProgressCard: View {
 
         if let model = ShawwalSixProgressEngine.model(
             now: Date(),
+            mode: mode,
             scheduledEntries: currentMonthEntries,
             selections: fastTagStore.selections,
             logEntries: fastLogStore.entriesByDateKey
@@ -32,6 +35,10 @@ struct TodayShawwalSixProgressCard: View {
                         completionRow
                     } else if model.hasPendingToday {
                         Text("Today's Shawwal fast is in progress.")
+                            .font(DesignTokens.cardSubtitleFont)
+                            .foregroundStyle(.secondary)
+                    } else if mode == .preview {
+                        Text("Previewing the Shawwal six tracker for Shawwal \(model.hijriYear).")
                             .font(DesignTokens.cardSubtitleFont)
                             .foregroundStyle(.secondary)
                     } else if model.hasTrackedDays == false {
@@ -54,12 +61,12 @@ struct TodayShawwalSixProgressCard: View {
 
     private var currentMonthEntries: [ResolvedScheduledDateEntry] {
         guard let components = AdjustedHijriCalendar.shared.adjustedComponents(for: Date(), timeZone: .current),
-              components.month == .shawwal else {
+              let targetMonth = targetMonthKey(currentComponents: components) else {
             return []
         }
 
         return alarmConfigStore.resolvedScheduledEntries(
-            forHijriMonth: HijriYearMonth(hijriYear: components.hijriYear, month: .shawwal),
+            forHijriMonth: targetMonth,
             timeZone: .current
         )
     }
@@ -67,41 +74,41 @@ struct TodayShawwalSixProgressCard: View {
     @ViewBuilder
     private func header(model: ShawwalSixProgressEngine.Model) -> some View {
         HStack(alignment: .center, spacing: DesignTokens.spacingS) {
-            Text("Shawwal \(model.hijriYear)")
-                .font(DesignTokens.cardTitleFont)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Shawwal \(model.hijriYear)")
+                    .font(DesignTokens.cardTitleFont)
+                if mode == .preview {
+                    Text("Next Shawwal window")
+                        .font(DesignTokens.cardSubtitleFont)
+                        .foregroundStyle(.secondary)
+                }
+            }
 
             Spacer()
 
             historyButton
 
-            Text("\(model.completedCount)/6")
-                .font(DesignTokens.cardMetaFont)
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, DesignTokens.spacingS)
-                .padding(.vertical, 6)
-                .background(
-                    Capsule(style: .continuous)
-                        .fill(Color(.secondarySystemGroupedBackground))
-                )
+            TodaySeasonalBadge(
+                text: mode == .live ? "\(model.completedCount)/6" : "Preview",
+                accent: nil
+            )
         }
     }
 
     @ViewBuilder
     private func bars(model: ShawwalSixProgressEngine.Model) -> some View {
-        HStack(spacing: DesignTokens.spacingXS) {
-            ForEach(0..<6, id: \.self) { index in
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(fillColor(for: index, model: model))
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 18)
-                    .scaleEffect(x: 1.0, y: model.isComplete && hasCelebratedCompletion ? 1.05 : 1.0)
-                    .opacity(barOpacity(for: index, model: model))
-                    .animation(Motion.spring(reduceMotion: reduceMotion), value: model.displayFilledCount)
-            }
-        }
+        TodayDiscreteProgressBars(
+            totalCount: 6,
+            completedCount: model.completedCount,
+            hasPending: model.hasPendingToday,
+            color: shawwalColor,
+            pulsePending: pulsePendingBar,
+            celebrate: model.isComplete && hasCelebratedCompletion
+        )
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Shawwal six progress")
         .accessibilityValue(accessibilityValue(for: model))
+        .animation(Motion.spring(reduceMotion: reduceMotion), value: model.displayFilledCount)
     }
 
     private var completionRow: some View {
@@ -150,24 +157,10 @@ struct TodayShawwalSixProgressCard: View {
         .accessibilityLabel("Open fast history")
     }
 
-    private func fillColor(for index: Int, model: ShawwalSixProgressEngine.Model) -> Color {
-        if index < model.completedCount {
-            return shawwalColor
-        }
-        if model.hasPendingToday && index == model.completedCount {
-            return shawwalColor.opacity(0.5)
-        }
-        return Color(.secondarySystemGroupedBackground)
-    }
-
-    private func barOpacity(for index: Int, model: ShawwalSixProgressEngine.Model) -> Double {
-        if model.hasPendingToday && index == model.completedCount {
-            return pulsePendingBar ? 1.0 : 0.65
-        }
-        return 1.0
-    }
-
     private func accessibilityValue(for model: ShawwalSixProgressEngine.Model) -> String {
+        if mode == .preview {
+            return "\(model.completedCount) of 6 completed in preview"
+        }
         if model.isComplete {
             return "6 of 6 completed"
         }
@@ -200,6 +193,18 @@ struct TodayShawwalSixProgressCard: View {
         pulsePendingBar = false
         withAnimation(.easeInOut(duration: 1.1).repeatForever(autoreverses: true)) {
             pulsePendingBar = true
+        }
+    }
+
+    private func targetMonthKey(currentComponents: AdjustedHijriDateComponents) -> HijriYearMonth? {
+        switch mode {
+        case .live:
+            return HijriYearMonth(hijriYear: currentComponents.hijriYear, month: .shawwal)
+        case .preview:
+            let previewYear = currentComponents.month.rawValue <= HijriMonth.shawwal.rawValue
+                ? currentComponents.hijriYear
+                : currentComponents.hijriYear + 1
+            return HijriYearMonth(hijriYear: previewYear, month: .shawwal)
         }
     }
 }

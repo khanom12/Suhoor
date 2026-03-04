@@ -2,12 +2,12 @@ import SwiftUI
 
 struct TodayForbiddenFastDayCard: View {
     let kind: FastWarning
-    let isPreview: Bool
+    let mode: TodaySeasonalCardMode
 
     private let accentColor = DawnColor.danger
 
     var body: some View {
-        if let model = ForbiddenFastDayEngine.model(kind: kind, isPreview: isPreview, now: Date()) {
+        if let model = ForbiddenFastDayEngine.model(kind: kind, mode: mode, now: Date()) {
             GlassCard(style: .header) {
                 VStack(alignment: .leading, spacing: DesignTokens.dashboardCardInternalSpacing) {
                     HStack(alignment: .center, spacing: DesignTokens.spacingS) {
@@ -44,7 +44,7 @@ struct TodayForbiddenFastDayCard: View {
 
                         Spacer(minLength: 0)
 
-                        if isPreview {
+                        if mode == .preview {
                             Text("Shown automatically on the day.")
                                 .font(DesignTokens.cardSubtitleFont)
                                 .foregroundStyle(.secondary)

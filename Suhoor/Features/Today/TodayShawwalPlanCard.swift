@@ -1,6 +1,8 @@
 import SwiftUI
 
 struct TodayShawwalPlanCard: View {
+    let mode: TodaySeasonalCardMode
+
     @EnvironmentObject private var alarmConfigStore: AlarmConfigStore
     @EnvironmentObject private var fastTagStore: FastTagStore
     @EnvironmentObject private var fastLogStore: FastLogStore
@@ -15,6 +17,7 @@ struct TodayShawwalPlanCard: View {
 
         if let model = ShawwalPlanEngine.model(
             now: Date(),
+            mode: mode,
             scheduledEntries: currentMonthEntries,
             selections: fastTagStore.selections,
             logEntries: fastLogStore.entriesByDateKey
@@ -43,12 +46,12 @@ struct TodayShawwalPlanCard: View {
 
     private var currentMonthEntries: [ResolvedScheduledDateEntry] {
         guard let components = AdjustedHijriCalendar.shared.adjustedComponents(for: Date(), timeZone: .current),
-              components.month == .shawwal else {
+              let targetMonth = targetMonthKey(currentComponents: components) else {
             return []
         }
 
         return alarmConfigStore.resolvedScheduledEntries(
-            forHijriMonth: HijriYearMonth(hijriYear: components.hijriYear, month: .shawwal),
+            forHijriMonth: targetMonth,
             timeZone: .current
         )
     }
@@ -61,19 +64,19 @@ struct TodayShawwalPlanCard: View {
                 Text("Shawwal \(model.hijriYear)")
                     .font(DesignTokens.cardSubtitleFont)
                     .foregroundStyle(.secondary)
+                if mode == .preview {
+                    Text("Previewing the next Shawwal window")
+                        .font(DesignTokens.cardSubtitleFont)
+                        .foregroundStyle(.secondary)
+                }
             }
 
             Spacer()
 
-            Text(model.isComplete ? "Done" : "\(model.remainingCount) left")
-                .font(DesignTokens.cardMetaFont)
-                .foregroundStyle(model.isComplete ? shawwalColor : .secondary)
-                .padding(.horizontal, DesignTokens.spacingS)
-                .padding(.vertical, 6)
-                .background(
-                    Capsule(style: .continuous)
-                        .fill(Color(.secondarySystemGroupedBackground))
-                )
+            TodaySeasonalBadge(
+                text: mode == .live ? (model.isComplete ? "Done" : "\(model.remainingCount) left") : "Preview",
+                accent: mode == .live && model.isComplete ? shawwalColor : nil
+            )
         }
     }
 
@@ -117,6 +120,9 @@ struct TodayShawwalPlanCard: View {
     }
 
     private func summaryText(for model: ShawwalPlanEngine.Model) -> String {
+        if mode == .preview {
+            return "Previewing the next Shawwal window. Monday, Thursday, and White Days stay at the top of the list."
+        }
         if model.isComplete {
             return "All six are done. Keep building on Shawwal with Monday, Thursday, and White Day fasts when they line up."
         }
@@ -124,5 +130,17 @@ struct TodayShawwalPlanCard: View {
             return "No highlighted Shawwal windows remain. Any eligible voluntary day in Shawwal can still count toward the six."
         }
         return "Use the strongest remaining Shawwal windows first. Monday, Thursday, and White Days stay at the top of the list."
+    }
+
+    private func targetMonthKey(currentComponents: AdjustedHijriDateComponents) -> HijriYearMonth? {
+        switch mode {
+        case .live:
+            return HijriYearMonth(hijriYear: currentComponents.hijriYear, month: .shawwal)
+        case .preview:
+            let previewYear = currentComponents.month.rawValue <= HijriMonth.shawwal.rawValue
+                ? currentComponents.hijriYear
+                : currentComponents.hijriYear + 1
+            return HijriYearMonth(hijriYear: previewYear, month: .shawwal)
+        }
     }
 }

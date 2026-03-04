@@ -1,10 +1,23 @@
 import Foundation
 
+enum TodaySeasonalCardMode: Equatable, Sendable {
+    case live
+    case preview
+
+    var isPreview: Bool {
+        self == .preview
+    }
+}
+
 enum TodayCardKind: String, Codable, CaseIterable, Identifiable, Hashable, Sendable {
     case countdown
     case ramadanProgress
+    case specialFastSpotlight
     case shawwalSixProgress
     case shawwalPlan
+    case dhulHijjahNineProgress
+    case ashuraProgress
+    case whiteDaysProgress
     case fastCheckIn
     case eidAlFitrNotice
     case eidAlAdhaNotice
@@ -18,10 +31,18 @@ enum TodayCardKind: String, Codable, CaseIterable, Identifiable, Hashable, Senda
             return "Next Countdown"
         case .ramadanProgress:
             return "Ramadan Progress"
+        case .specialFastSpotlight:
+            return "Special Fast Today"
         case .shawwalSixProgress:
             return "Shawwal 6"
         case .shawwalPlan:
             return "Shawwal Planner"
+        case .dhulHijjahNineProgress:
+            return "Dhul Hijjah Progress"
+        case .ashuraProgress:
+            return "Ashura Progress"
+        case .whiteDaysProgress:
+            return "White Days Progress"
         case .fastCheckIn:
             return "Fast Check-in"
         case .eidAlFitrNotice:
@@ -42,12 +63,16 @@ struct TodayCardLayout: Codable, Equatable, Hashable, Sendable {
         ordered: [
             .countdown,
             .ramadanProgress,
-            .shawwalSixProgress,
-            .shawwalPlan,
-            .fastCheckIn,
             .eidAlFitrNotice,
             .eidAlAdhaNotice,
-            .tashreeqNotice
+            .tashreeqNotice,
+            .specialFastSpotlight,
+            .shawwalSixProgress,
+            .shawwalPlan,
+            .dhulHijjahNineProgress,
+            .ashuraProgress,
+            .whiteDaysProgress,
+            .fastCheckIn,
         ],
         hidden: [.eidAlFitrNotice, .eidAlAdhaNotice, .tashreeqNotice]
     )
