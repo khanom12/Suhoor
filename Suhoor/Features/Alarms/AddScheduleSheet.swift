@@ -626,7 +626,7 @@ struct AddScheduleSheet: View {
     }
 }
 
-private struct AshuraQuickAddSheet: View {
+struct AshuraQuickAddSheet: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var scheduleManager: ScheduleManager
 

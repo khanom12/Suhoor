@@ -10,6 +10,7 @@ struct SuhoorApp: App {
     @StateObject private var scheduleManager: ScheduleManager
     @StateObject private var fastTagStore: FastTagStore
     @StateObject private var fastLogStore: FastLogStore
+    @StateObject private var qadaBacklogStore: QadaBacklogStore
 
     @Environment(\.scenePhase) private var scenePhase
 
@@ -19,6 +20,7 @@ struct SuhoorApp: App {
         let locationService = LocationService()
         let fastTagStore = FastTagStore()
         let fastLogStore = FastLogStore()
+        let qadaBacklogStore = QadaBacklogStore()
         let scheduleManager = ScheduleManager(
             settingsStore: settingsStore,
             locationService: locationService,
@@ -31,6 +33,7 @@ struct SuhoorApp: App {
         _scheduleManager = StateObject(wrappedValue: scheduleManager)
         _fastTagStore = StateObject(wrappedValue: fastTagStore)
         _fastLogStore = StateObject(wrappedValue: fastLogStore)
+        _qadaBacklogStore = StateObject(wrappedValue: qadaBacklogStore)
         fastLogStore.normalizeStaleInProgress(todayKey: DateHelpers.dayIdentifier(for: Date(), timeZone: .current))
         UNUserNotificationCenter.current().delegate = NotificationEventDelegate.shared
     }
@@ -46,6 +49,7 @@ struct SuhoorApp: App {
                 .environmentObject(scheduleManager)
                 .environmentObject(fastTagStore)
                 .environmentObject(fastLogStore)
+                .environmentObject(qadaBacklogStore)
                 .task {
                     scheduleManager.requestRefresh(reason: .appLaunch)
                 }

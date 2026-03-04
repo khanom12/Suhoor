@@ -38,6 +38,7 @@ enum RecurringIslamicRule: String, Codable, CaseIterable, Identifiable, Hashable
 enum IslamicQuickAddKind: String, Codable, CaseIterable, Identifiable, Hashable, Sendable {
     case nextAshura
     case nextArafah
+    case nextDhulHijjahFirstNine
     case nextEidAlFitr
     case nextEidAlAdha
     case nextWhiteDays
@@ -52,6 +53,8 @@ enum IslamicQuickAddKind: String, Codable, CaseIterable, Identifiable, Hashable,
             return "Next Ashura"
         case .nextArafah:
             return "Next Arafah"
+        case .nextDhulHijjahFirstNine:
+            return "First 9 of Dhul Hijjah"
         case .nextEidAlFitr:
             return "Next Eid al-Fitr"
         case .nextEidAlAdha:
@@ -71,6 +74,8 @@ enum IslamicQuickAddKind: String, Codable, CaseIterable, Identifiable, Hashable,
             return "Recommended Ashura pairing, or add all three dates."
         case .nextArafah:
             return "Next corrected 9 Dhul Hijjah."
+        case .nextDhulHijjahFirstNine:
+            return "First nine days of Dhul Hijjah."
         case .nextEidAlFitr:
             return "Next corrected 1 Shawwal."
         case .nextEidAlAdha:
@@ -87,6 +92,7 @@ enum IslamicQuickAddKind: String, Codable, CaseIterable, Identifiable, Hashable,
     static let addFlowVisibleCases: [IslamicQuickAddKind] = [
         .nextAshura,
         .nextArafah,
+        .nextDhulHijjahFirstNine,
         .nextWhiteDays,
         .nextMondayThursdayPair
     ]
@@ -356,6 +362,8 @@ private extension IslamicQuickAddKind {
             return "Ashura"
         case .nextArafah:
             return "Arafah"
+        case .nextDhulHijjahFirstNine:
+            return "Dhul Hijjah"
         case .nextEidAlFitr:
             return "Eid al-Fitr"
         case .nextEidAlAdha:

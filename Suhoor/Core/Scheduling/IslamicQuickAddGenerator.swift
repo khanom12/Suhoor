@@ -105,6 +105,8 @@ struct IslamicQuickAddGenerator {
             return nextMatchingDates(start: start, timeZone: timeZone) { components in
                 components.month == .dhulHijjah && components.day == 9
             }
+        case .nextDhulHijjahFirstNine:
+            return nextDhulHijjahFirstNine(start: start, timeZone: timeZone)
         case .nextEidAlFitr:
             return nextMatchingDates(start: start, timeZone: timeZone) { components in
                 components.month == .shawwal && components.day == 1
@@ -160,6 +162,30 @@ struct IslamicQuickAddGenerator {
         }
 
         return ramadanRun(containing: firstDay, timeZone: timeZone)
+    }
+
+    private func nextDhulHijjahFirstNine(start: Date, timeZone: TimeZone) -> [Date] {
+        let normalizedStart = DateHelpers.startOfDay(start, in: timeZone)
+        if let components = adjustedHijriCalendar.adjustedComponents(for: normalizedStart, timeZone: timeZone),
+           components.month == .dhulHijjah,
+           (1...9).contains(components.day) {
+            let key = HijriYearMonth(hijriYear: components.hijriYear, month: .dhulHijjah)
+            return (components.day...9).compactMap {
+                adjustedHijriCalendar.gregorianDate(for: key, dayOfMonth: $0, timeZone: timeZone)
+            }
+        }
+
+        guard let firstDay = firstMatchingDate(start: normalizedStart, timeZone: timeZone, matcher: {
+            $0.month == .dhulHijjah && $0.day == 1
+        }),
+        let components = adjustedHijriCalendar.adjustedComponents(for: firstDay, timeZone: timeZone) else {
+            return []
+        }
+
+        let key = HijriYearMonth(hijriYear: components.hijriYear, month: .dhulHijjah)
+        return (1...9).compactMap {
+            adjustedHijriCalendar.gregorianDate(for: key, dayOfMonth: $0, timeZone: timeZone)
+        }
     }
 
     private func ramadanRun(containing day: Date, timeZone: TimeZone) -> [Date] {

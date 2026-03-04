@@ -322,6 +322,19 @@ final class SuppressedScheduledDateStore {
         persist()
     }
 
+    func clearGroupID(_ groupID: UUID) {
+        guard !suppressedDateEntries.isEmpty else { return }
+        var updated: [String: SuppressedDateEntry] = [:]
+        for (key, var entry) in suppressedDateEntries {
+            entry.scopedToGroupIDs.remove(groupID)
+            if !entry.isEmpty {
+                updated[key] = entry
+            }
+        }
+        suppressedDateEntries = updated
+        persist()
+    }
+
     func hasAnySuppression(_ dateKey: String) -> Bool {
         suppressedDateEntries[dateKey] != nil
     }

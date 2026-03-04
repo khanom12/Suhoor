@@ -57,7 +57,7 @@ enum Strings {
         static let listRangeTitle = "Alarms list range"
         static let listRangeHelper = "Controls how many days are shown in the Alarms tab list."
         static let emptyTitle = "No schedule yet"
-        static let emptySubtitle = "Use the + button to add a day, date range, or Islamic-date schedule."
+        static let emptySubtitle = "Use the Plan tab to add Qada, Shawwal, or other fasting days."
         static let customizedBadge = "Customized"
         static let skippedBadge = "Skipped"
         static let todayLabel = "Today"

@@ -603,6 +603,12 @@ final class AlarmConfigStore: ObservableObject {
         suppressedScheduledDateStore.clearScopes(for: provenance)
     }
 
+    func deleteScheduledGroup(_ groupID: UUID) {
+        objectWillChange.send()
+        scheduledDateSourceStore.remove(groupID: groupID)
+        suppressedScheduledDateStore.clearGroupID(groupID)
+    }
+
     func clearSuppressionScopes(for provenance: ResolvedScheduledDateProvenance) {
         objectWillChange.send()
         suppressedScheduledDateStore.clearScopes(for: provenance)

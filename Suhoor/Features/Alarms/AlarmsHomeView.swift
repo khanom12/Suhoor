@@ -11,14 +11,12 @@ struct AlarmsHomeView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var selectedSchedule: DaySchedule?
-    @State private var showAddDaySheet = false
     @State private var showTagFilterSheet = false
     @State private var editMode: EditMode = .inactive
     @State private var sectionCollapseOverrides: [String: Bool] = [:]
     @State private var loadingSectionIDs: Set<String> = []
     @State private var listSnapshot: AlarmListSnapshot = .empty
     @State private var tagFilter = AlarmTagFilter()
-    @State private var pendingFocusDateKey: String?
     @State private var pendingSeriesDeleteEntry: AlarmRowEntry?
     @State private var pendingRamadanEntry: AlarmRowEntry?
     @State private var pinnedNextAlarmEntryIDs: [String] = []
@@ -120,7 +118,7 @@ struct AlarmsHomeView: View {
             ToolbarItemGroup(placement: .topBarTrailing) {
                 if showsAddButton {
                     Button {
-                        showAddDaySheet = true
+                        NotificationCenter.default.post(name: .openPlanHome, object: nil)
                     } label: {
                         Image(systemName: "plus")
                     }
@@ -238,25 +236,8 @@ struct AlarmsHomeView: View {
         .onChange(of: tagFilter) { _, _ in
             refreshListSnapshot(animated: true)
         }
-        .sheet(isPresented: $showAddDaySheet) {
-            NavigationStack {
-                AddScheduleSheet(isPresented: $showAddDaySheet) { date in
-                    pendingFocusDateKey = DateHelpers.dayIdentifier(for: date, timeZone: .current)
-                    showAddDaySheet = false
-                }
-            }
-        }
         .sheet(isPresented: $showTagFilterSheet) {
             AlarmTagFilterSheet(filter: $tagFilter)
-        }
-        .onChange(of: showAddDaySheet) { _, isPresented in
-            guard !isPresented, let pendingFocusDateKey else { return }
-            if let existing = scheduleManager.activeWindowSnapshot.byDateKey[pendingFocusDateKey] {
-                selectedSchedule = existing.schedule
-            } else if let normalizedDate = dateFromDayIdentifier(pendingFocusDateKey) {
-                selectedSchedule = scheduleManager.activeDay(for: normalizedDate)?.schedule
-            }
-            self.pendingFocusDateKey = nil
         }
     }
 

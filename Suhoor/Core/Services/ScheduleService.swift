@@ -682,6 +682,37 @@ final class ScheduleManager: ObservableObject {
     }
 
     @discardableResult
+    func planDates(
+        _ dates: [Date],
+        selection: FastIntentSelection,
+        groupID: UUID?
+    ) async -> AddScheduledDatesResult {
+        guard !dates.isEmpty else { return .empty }
+
+        let normalized = dates.map { DateHelpers.startOfDay($0, in: .current) }
+        let provenanceByKey = alarmConfigStore.provenanceByDate(for: normalized, timeZone: .current)
+
+        var addedDates: [Date] = []
+        var skippedDates: [Date] = []
+        for date in normalized {
+            let key = DateHelpers.dayIdentifier(for: date, timeZone: .current)
+            if (provenanceByKey[key] ?? []).isEmpty {
+                alarmConfigStore.addSingleDaySource(date, origin: .manualSingleDay, groupID: groupID, timeZone: .current)
+                addedDates.append(date)
+            } else {
+                skippedDates.append(date)
+            }
+            applyAddFlowSelection(selection, for: date)
+        }
+
+        if !addedDates.isEmpty {
+            await refreshSchedules(force: true)
+        }
+
+        return AddScheduledDatesResult(addedDates: addedDates, skippedActiveDates: skippedDates)
+    }
+
+    @discardableResult
     func addGregorianRange(
         startDate: Date,
         endDate: Date,
@@ -773,6 +804,11 @@ final class ScheduleManager: ObservableObject {
 
     func stopSeries(for provenance: ResolvedScheduledDateProvenance) async {
         alarmConfigStore.stopSeries(for: provenance)
+        await refreshSchedules(force: true)
+    }
+
+    func deleteScheduledGroup(_ groupID: UUID) async {
+        alarmConfigStore.deleteScheduledGroup(groupID)
         await refreshSchedules(force: true)
     }
 
