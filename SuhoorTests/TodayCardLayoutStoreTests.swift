@@ -12,15 +12,18 @@ struct TodayCardLayoutStoreTests {
 
         let store = TodayCardLayoutStore(defaults: defaults)
         #expect(store.layout == .default)
-        #expect(store.layout.hidden == [.eidAlFitrNotice, .eidAlAdhaNotice, .tashreeqNotice])
+        #expect(store.layout.hidden == [
+            .shawwalSixProgress,
+            .dhulHijjahNineProgress,
+            .ashuraProgress,
+            .eidAlFitrNotice,
+            .eidAlAdhaNotice,
+            .tashreeqNotice,
+        ])
         #expect(store.layout.visibleOrderedCards() == [
             .countdown,
             .ramadanProgress,
-            .specialFastSpotlight,
-            .shawwalSixProgress,
-            .shawwalPlan,
-            .dhulHijjahNineProgress,
-            .ashuraProgress,
+            .eidMubarak,
             .whiteDaysProgress,
             .fastCheckIn
         ])
@@ -42,14 +45,32 @@ struct TodayCardLayoutStoreTests {
         #expect(reloaded.layout.hidden.contains(.ramadanProgress))
         #expect(reloaded.layout.ordered.count == TodayCardKind.allCases.count)
         #expect(reloaded.layout.visibleOrderedCards() == [
-            .specialFastSpotlight,
+            .eidMubarak,
             .countdown,
-            .shawwalSixProgress,
-            .shawwalPlan,
-            .dhulHijjahNineProgress,
-            .ashuraProgress,
             .whiteDaysProgress,
             .fastCheckIn
         ])
+    }
+
+    @Test
+    func persistedUnknownCardsAreIgnoredDuringDecode() {
+        let suiteName = "SuhoorTests.TodayCardLayout.LegacyDecode"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+
+        let legacyPayload = """
+        {
+          "ordered": ["countdown", "specialFastSpotlight", "shawwalPlan", "fastCheckIn"],
+          "hidden": ["shawwalPlan", "eidAlFitrNotice"]
+        }
+        """.data(using: .utf8)
+        defaults.set(legacyPayload, forKey: "Suhoor.TodayCardLayout")
+
+        let store = TodayCardLayoutStore(defaults: defaults)
+
+        #expect(store.layout.ordered.contains(.countdown))
+        #expect(store.layout.ordered.contains(.fastCheckIn))
+        #expect(store.layout.ordered.contains(where: { $0.rawValue == "specialFastSpotlight" }) == false)
+        #expect(store.layout.hidden.contains(.eidAlFitrNotice))
     }
 }

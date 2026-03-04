@@ -70,27 +70,7 @@ struct ShawwalTodayEngineTests {
     }
 
     @Test
-    func planModelReturnsRemainingRecommendationsDuringShawwal() {
-        let timeZone = TimeZone(secondsFromGMT: 0) ?? .current
-        let calendar = makeAdjustedCalendar()
-        let now = makeAdjustedHijriDate(year: 1447, month: .shawwal, day: 2, calendar: calendar, timeZone: timeZone)
-
-        let model = ShawwalPlanEngine.model(
-            now: now,
-            mode: .live,
-            scheduledEntries: [],
-            selections: [:],
-            logEntries: [:],
-            calendar: calendar,
-            timeZone: timeZone
-        )
-
-        #expect(model?.remainingCount == 6)
-        #expect(model?.recommendations.isEmpty == false)
-    }
-
-    @Test
-    func forbiddenDayEngineSupportsLiveAndPreviewStates() {
+    func forbiddenDayEngineSupportsLiveAndReferenceStates() {
         let timeZone = TimeZone(secondsFromGMT: 0) ?? .current
         let calendar = makeAdjustedCalendar()
         let eidAlFitr = makeAdjustedHijriDate(year: 1447, month: .shawwal, day: 1, calendar: calendar, timeZone: timeZone)
@@ -105,7 +85,7 @@ struct ShawwalTodayEngineTests {
         )
         let previewModel = ForbiddenFastDayEngine.model(
             kind: .eidAlFitr,
-            mode: .preview,
+            mode: .reference,
             now: regularShawwalDay,
             calendar: calendar,
             timeZone: timeZone
@@ -113,11 +93,13 @@ struct ShawwalTodayEngineTests {
 
         #expect(liveModel?.isLive == true)
         #expect(previewModel?.isLive == false)
-        #expect(previewModel?.badgeText == "Preview")
+        #expect(previewModel?.badgeText == "Do Not Fast")
+        #expect(liveModel?.message == "It is not allowed to fast today.")
+        #expect(previewModel?.message == "It is not allowed to fast on this day.")
     }
 
     @Test
-    func previewModelExistsOutsideShawwalWithoutPendingState() {
+    func referenceModelExistsOutsideShawwalWithoutPendingState() {
         let timeZone = TimeZone(secondsFromGMT: 0) ?? .current
         let calendar = makeAdjustedCalendar()
         let now = makeAdjustedHijriDate(year: 1447, month: .ramadan, day: 15, calendar: calendar, timeZone: timeZone)
@@ -135,7 +117,7 @@ struct ShawwalTodayEngineTests {
 
         let model = ShawwalSixProgressEngine.model(
             now: now,
-            mode: .preview,
+            mode: .reference,
             scheduledEntries: [],
             selections: [:],
             logEntries: logEntries,

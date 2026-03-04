@@ -19,19 +19,14 @@ struct TodayDhulHijjahProgressCard: View {
                 VStack(alignment: .leading, spacing: DesignTokens.dashboardCardInternalSpacing) {
                     HStack(alignment: .center, spacing: DesignTokens.spacingS) {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("Dhul Hijjah \(model.hijriYear)")
+                            Text("Dhul Hijjah \(String(model.hijriYear))")
                                 .font(DesignTokens.cardTitleFont)
-                            if mode == .preview {
-                                Text("Previewing the next 1-9 Dhul Hijjah window")
-                                    .font(DesignTokens.cardSubtitleFont)
-                                    .foregroundStyle(.secondary)
-                            }
                         }
 
                         Spacer()
 
                         TodaySeasonalBadge(
-                            text: mode == .live ? "\(model.completedCount)/9" : "Preview",
+                            text: "\(model.completedCount)/9",
                             accent: mode == .live && model.isComplete ? accent : nil
                         )
                     }
@@ -74,15 +69,13 @@ struct TodayDhulHijjahProgressCard: View {
     }
 
     private func summaryText(for model: TodayTrackerProgressModel) -> String {
-        if mode == .preview {
-            return "Previewing the next Dhul Hijjah run. Arafah is highlighted on day 9."
-        }
         if let todayComponents = AdjustedHijriCalendar.shared.adjustedComponents(for: Date(), timeZone: .current),
+           mode == .live,
            todayComponents.month == .dhulHijjah,
            todayComponents.day == 9 {
             return "Arafah is today."
         }
-        if model.hasPendingToday {
+        if mode == .live, model.hasPendingToday {
             return "Today's Dhul Hijjah fast is in progress."
         }
         return "Track voluntary fasting across the first nine days of Dhul Hijjah."

@@ -1,11 +1,13 @@
 import SwiftUI
 
 struct TodayRamadanProgressCard: View {
+    let mode: TodaySeasonalCardMode
+
     @EnvironmentObject private var scheduleManager: ScheduleManager
 
     var body: some View {
         let hijriChangeCount = scheduleManager.hijriAdjustmentChanges.count
-        if let model = RamadanProgressEngine.model(now: Date(), calendar: .shared, timeZone: .current) {
+        if let model = RamadanProgressEngine.model(now: Date(), mode: mode, calendar: .shared, timeZone: .current) {
             GlassCard(style: .header) {
                 VStack(alignment: .leading, spacing: DesignTokens.dashboardCardInternalSpacing) {
                     VStack(alignment: .leading, spacing: DesignTokens.spacingS) {
@@ -15,15 +17,10 @@ struct TodayRamadanProgressCard: View {
 
                             Spacer()
 
-                            Text("Day \(model.dayNumber)")
-                                .font(DesignTokens.cardMetaFont)
-                                .foregroundStyle(.secondary)
-                                .padding(.horizontal, DesignTokens.spacingS)
-                                .padding(.vertical, 6)
-                                .background(
-                                    Capsule(style: .continuous)
-                                        .fill(Color(.secondarySystemGroupedBackground))
-                                )
+                            TodaySeasonalBadge(
+                                text: "Day \(model.dayNumber)",
+                                accent: nil
+                            )
                         }
 
                         progressRow(progress: model.progress)
@@ -36,106 +33,24 @@ struct TodayRamadanProgressCard: View {
         }
     }
 
-    private func ramadanAdjustmentMenu() -> some View {
-        Menu {
-            Button {
-                Task {
-                    await scheduleManager.setHijriMonthAdjustment(for: .ramadan, hijriYear: scheduleManager.currentHijriAdjustmentYear, offsetDays: -1)
-                }
-            } label: {
-                Label("Start Ramadan one day earlier", systemImage: "minus")
-            }
-
-            Button {
-                Task {
-                    await scheduleManager.setHijriMonthAdjustment(for: .ramadan, hijriYear: scheduleManager.currentHijriAdjustmentYear, offsetDays: 0)
-                }
-            } label: {
-                Label("Use built-in start", systemImage: currentRamadanAdjustment == 0 ? "checkmark" : "arrow.uturn.backward")
-            }
-
-            Button {
-                Task {
-                    await scheduleManager.setHijriMonthAdjustment(for: .ramadan, hijriYear: scheduleManager.currentHijriAdjustmentYear, offsetDays: 1)
-                }
-            } label: {
-                Label("Start Ramadan one day later", systemImage: "plus")
-            }
-
-            Divider()
-
-            Button("Open Hijri Calendar Settings") {
-                NotificationCenter.default.post(name: .switchToHijriCorrections, object: nil)
-            }
-        } label: {
-            Image(systemName: "moonphase.new.moon")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(DawnColor.accent)
-                .frame(width: 28, height: 28)
-                .background(
-                    Circle()
-                        .fill(Color(.secondarySystemGroupedBackground))
-                )
-        }
-        .accessibilityLabel("Adjust Ramadan start")
-        .accessibilityValue(currentAdjustmentAccessibilityValue)
-    }
-
-    private func shawwalAdjustmentMenu() -> some View {
-        Menu {
-            Button {
-                Task {
-                    await scheduleManager.setHijriMonthAdjustment(for: .shawwal, hijriYear: scheduleManager.currentHijriAdjustmentYear, offsetDays: -1)
-                }
-            } label: {
-                Label("Start Shawwal one day earlier", systemImage: "minus")
-            }
-
-            Button {
-                Task {
-                    await scheduleManager.setHijriMonthAdjustment(for: .shawwal, hijriYear: scheduleManager.currentHijriAdjustmentYear, offsetDays: 0)
-                }
-            } label: {
-                Label("Use built-in start", systemImage: currentShawwalAdjustment == 0 ? "checkmark" : "arrow.uturn.backward")
-            }
-
-            Button {
-                Task {
-                    await scheduleManager.setHijriMonthAdjustment(for: .shawwal, hijriYear: scheduleManager.currentHijriAdjustmentYear, offsetDays: 1)
-                }
-            } label: {
-                Label("Start Shawwal one day later", systemImage: "plus")
-            }
-
-            Divider()
-
-            Button("Open Hijri Calendar Settings") {
-                NotificationCenter.default.post(name: .switchToHijriCorrections, object: nil)
-            }
-        } label: {
-            Image(systemName: "moon.stars.fill")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(DawnColor.accent)
-                .frame(width: 28, height: 28)
-                .background(
-                    Circle()
-                        .fill(Color(.secondarySystemGroupedBackground))
-                )
-        }
-        .accessibilityLabel("Adjust Shawwal start")
-        .accessibilityValue(currentShawwalAdjustmentAccessibilityValue)
-    }
-
     private func progressRow(progress: Double) -> some View {
         HStack(alignment: .center, spacing: DesignTokens.spacingS) {
-            ramadanAdjustmentMenu()
+            HijriMonthAdjustmentMenu(
+                month: .ramadan,
+                iconSystemName: "moonphase.new.moon",
+                accent: DawnColor.accent
+            )
 
             ProgressView(value: progress)
                 .tint(DawnColor.accent)
                 .accessibilityLabel("Ramadan progress")
                 .accessibilityValue(progressAccessibilityValue)
 
-            shawwalAdjustmentMenu()
+            HijriMonthAdjustmentMenu(
+                month: .shawwal,
+                iconSystemName: "moon.stars.fill",
+                accent: DawnColor.accent
+            )
         }
     }
 
@@ -152,34 +67,12 @@ struct TodayRamadanProgressCard: View {
     }
 
     private var progressAccessibilityValue: String {
-        guard let model = RamadanProgressEngine.model(now: Date(), calendar: .shared, timeZone: .current) else {
+        guard let model = RamadanProgressEngine.model(now: Date(), mode: mode, calendar: .shared, timeZone: .current) else {
             return "Progress unavailable"
         }
-        guard shouldShowTotalDays else {
+        guard shouldShowTotalDays, mode == .live else {
             return "Day \(model.dayNumber)"
         }
         return "Day \(model.dayNumber) of \(model.totalDays)"
-    }
-
-    private var currentAdjustmentAccessibilityValue: String {
-        switch currentRamadanAdjustment {
-        case -1:
-            return "Ramadan starts one day earlier"
-        case 1:
-            return "Ramadan starts one day later"
-        default:
-            return "Using built-in Ramadan start"
-        }
-    }
-
-    private var currentShawwalAdjustmentAccessibilityValue: String {
-        switch currentShawwalAdjustment {
-        case -1:
-            return "Shawwal starts one day earlier"
-        case 1:
-            return "Shawwal starts one day later"
-        default:
-            return "Using built-in Shawwal start"
-        }
     }
 }

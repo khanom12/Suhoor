@@ -135,97 +135,11 @@ struct ShawwalSixProgressEngine {
     }
 }
 
-struct ShawwalPlanEngine {
-    struct Recommendation: Equatable, Sendable {
-        let date: Date
-        let dateKey: String
-        let tags: [FastSecondaryVirtueTag]
-
-        var tagLabels: [String] {
-            tags.map(\.shortTitle)
-        }
-    }
-
-    struct Model: Equatable, Sendable {
-        let hijriYear: Int
-        let remainingCount: Int
-        let isComplete: Bool
-        let recommendations: [Recommendation]
-    }
-
-    static func model(
-        now: Date,
-        mode: TodaySeasonalCardMode,
-        scheduledEntries: [ResolvedScheduledDateEntry],
-        selections: [String: FastIntentSelection],
-        logEntries: [String: FastLogEntry],
-        calendar: AdjustedHijriCalendar = .shared,
-        timeZone: TimeZone = .current
-    ) -> Model? {
-        guard let progress = ShawwalSixProgressEngine.model(
-            now: now,
-            mode: mode,
-            scheduledEntries: scheduledEntries,
-            selections: selections,
-            logEntries: logEntries,
-            calendar: calendar,
-            timeZone: timeZone
-        ) else {
-            return nil
-        }
-
-        let recommendations = ShawwalSixProgressEngine.monthDates(now: now, mode: mode, calendar: calendar, timeZone: timeZone)
-            .compactMap { date -> Recommendation? in
-                let key = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
-                let status = logEntries[key]?.status ?? .unknown
-                guard status == .unknown else { return nil }
-
-                let tags = FastIntentEngine.displaySecondaryTags(
-                    FastIntentEngine.dateDerivedObservanceTags(
-                        for: date,
-                        timeZone: timeZone,
-                        includeShawwalPotential: true
-                    )
-                )
-                let highlightTags = tags.filter { $0 == .mondayThursday || $0 == .whiteDays }
-
-                return Recommendation(date: date, dateKey: key, tags: highlightTags)
-            }
-            .sorted { lhs, rhs in
-                recommendationPriority(for: lhs) < recommendationPriority(for: rhs)
-            }
-            .prefix(3)
-
-        return Model(
-            hijriYear: progress.hijriYear,
-            remainingCount: progress.remainingCount,
-            isComplete: progress.isComplete,
-            recommendations: Array(recommendations)
-        )
-    }
-
-    private static func recommendationPriority(for recommendation: Recommendation) -> (Int, Date) {
-        let score: Int
-        switch Set(recommendation.tags) {
-        case let tags where tags.contains(.whiteDays) && tags.contains(.mondayThursday):
-            score = 0
-        case let tags where tags.contains(.whiteDays):
-            score = 1
-        case let tags where tags.contains(.mondayThursday):
-            score = 2
-        default:
-            score = 3
-        }
-        return (score, recommendation.date)
-    }
-}
-
 struct ForbiddenFastDayEngine {
     struct Model: Equatable, Sendable {
         let title: String
         let badgeText: String
         let message: String
-        let detail: String
         let isLive: Bool
     }
 
@@ -248,31 +162,28 @@ struct ForbiddenFastDayEngine {
             isLive = components?.month == .dhulHijjah && (11...13).contains(components?.day ?? 0)
         }
 
-        guard isLive || mode == .preview else { return nil }
+        guard isLive || mode == .reference else { return nil }
 
         switch kind {
         case .eidAlFitr:
             return Model(
                 title: "Eid al-Fitr",
-                badgeText: isLive ? "Do Not Fast" : "Preview",
-                message: "It is not allowed to fast today.",
-                detail: "1 Shawwal is Eid al-Fitr. Fasting is prohibited on this day.",
+                badgeText: "Do Not Fast",
+                message: isLive ? "It is not allowed to fast today." : "It is not allowed to fast on this day.",
                 isLive: isLive
             )
         case .eidAlAdha:
             return Model(
                 title: "Eid al-Adha",
-                badgeText: isLive ? "Do Not Fast" : "Preview",
-                message: "It is not allowed to fast today.",
-                detail: "10 Dhul Hijjah is Eid al-Adha. Fasting is prohibited on this day.",
+                badgeText: "Do Not Fast",
+                message: isLive ? "It is not allowed to fast today." : "It is not allowed to fast on this day.",
                 isLive: isLive
             )
         case .tashreeq:
             return Model(
                 title: "Days of Tashreeq",
-                badgeText: isLive ? "Do Not Fast" : "Preview",
-                message: "It is not allowed to fast today.",
-                detail: "The 11th, 12th, and 13th of Dhul Hijjah are the Days of Tashreeq, and fasting is prohibited on these days.",
+                badgeText: "Do Not Fast",
+                message: isLive ? "It is not allowed to fast today." : "It is not allowed to fast on this day.",
                 isLive: isLive
             )
         }
@@ -302,11 +213,11 @@ private struct ShawwalMonthContext {
                 return nil
             }
             monthKey = HijriYearMonth(hijriYear: components.hijriYear, month: .shawwal)
-        case .preview:
-            let previewYear = components.month.rawValue <= HijriMonth.shawwal.rawValue
+        case .reference:
+            let referenceYear = components.month.rawValue <= HijriMonth.shawwal.rawValue
                 ? components.hijriYear
                 : components.hijriYear + 1
-            monthKey = HijriYearMonth(hijriYear: previewYear, month: .shawwal)
+            monthKey = HijriYearMonth(hijriYear: referenceYear, month: .shawwal)
         }
 
         let monthStart = calendar.gregorianDate(for: monthKey, dayOfMonth: 1, timeZone: timeZone) ?? now

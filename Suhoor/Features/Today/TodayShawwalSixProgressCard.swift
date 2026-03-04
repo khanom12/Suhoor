@@ -33,12 +33,8 @@ struct TodayShawwalSixProgressCard: View {
 
                     if model.isComplete {
                         completionRow
-                    } else if model.hasPendingToday {
+                    } else if mode == .live, model.hasPendingToday {
                         Text("Today's Shawwal fast is in progress.")
-                            .font(DesignTokens.cardSubtitleFont)
-                            .foregroundStyle(.secondary)
-                    } else if mode == .preview {
-                        Text("Previewing the Shawwal six tracker for Shawwal \(model.hijriYear).")
                             .font(DesignTokens.cardSubtitleFont)
                             .foregroundStyle(.secondary)
                     } else if model.hasTrackedDays == false {
@@ -75,13 +71,8 @@ struct TodayShawwalSixProgressCard: View {
     private func header(model: ShawwalSixProgressEngine.Model) -> some View {
         HStack(alignment: .center, spacing: DesignTokens.spacingS) {
             VStack(alignment: .leading, spacing: 2) {
-                Text("Shawwal \(model.hijriYear)")
+                Text("Shawwal \(String(model.hijriYear))")
                     .font(DesignTokens.cardTitleFont)
-                if mode == .preview {
-                    Text("Next Shawwal window")
-                        .font(DesignTokens.cardSubtitleFont)
-                        .foregroundStyle(.secondary)
-                }
             }
 
             Spacer()
@@ -89,7 +80,7 @@ struct TodayShawwalSixProgressCard: View {
             historyButton
 
             TodaySeasonalBadge(
-                text: mode == .live ? "\(model.completedCount)/6" : "Preview",
+                text: "\(model.completedCount)/6",
                 accent: nil
             )
         }
@@ -158,13 +149,10 @@ struct TodayShawwalSixProgressCard: View {
     }
 
     private func accessibilityValue(for model: ShawwalSixProgressEngine.Model) -> String {
-        if mode == .preview {
-            return "\(model.completedCount) of 6 completed in preview"
-        }
         if model.isComplete {
             return "6 of 6 completed"
         }
-        if model.hasPendingToday {
+        if mode == .live, model.hasPendingToday {
             return "\(model.completedCount) of 6 completed, 1 in progress"
         }
         return "\(model.completedCount) of 6 completed"
@@ -200,11 +188,11 @@ struct TodayShawwalSixProgressCard: View {
         switch mode {
         case .live:
             return HijriYearMonth(hijriYear: currentComponents.hijriYear, month: .shawwal)
-        case .preview:
-            let previewYear = currentComponents.month.rawValue <= HijriMonth.shawwal.rawValue
+        case .reference:
+            let referenceYear = currentComponents.month.rawValue <= HijriMonth.shawwal.rawValue
                 ? currentComponents.hijriYear
                 : currentComponents.hijriYear + 1
-            return HijriYearMonth(hijriYear: previewYear, month: .shawwal)
+            return HijriYearMonth(hijriYear: referenceYear, month: .shawwal)
         }
     }
 }

@@ -61,7 +61,7 @@ struct TodayTrackerProgressModel: Equatable, Sendable {
     }
 }
 
-struct TodayObservancePreview: Equatable, Sendable {
+struct TodayObservanceReference: Equatable, Sendable {
     let date: Date
     let context: TodayObservanceContext
     let primaryTag: FastSecondaryVirtueTag
@@ -82,11 +82,11 @@ enum TodayObservanceEngine {
             .first(where: { context.secondaryTags.contains($0) })
     }
 
-    static func previewSample(
+    static func referenceSample(
         now: Date,
         calendar: AdjustedHijriCalendar = .shared,
         timeZone: TimeZone = .current
-    ) -> TodayObservancePreview? {
+    ) -> TodayObservanceReference? {
         var gregorian = Calendar(identifier: .gregorian)
         gregorian.timeZone = timeZone
         let start = DateHelpers.startOfDay(now, in: timeZone)
@@ -100,7 +100,7 @@ enum TodayObservanceEngine {
                 continue
             }
 
-            return TodayObservancePreview(date: candidate, context: context, primaryTag: primaryTag)
+            return TodayObservanceReference(date: candidate, context: context, primaryTag: primaryTag)
         }
 
         return nil
@@ -152,7 +152,7 @@ enum TodayObservanceEngine {
         switch mode {
         case .live:
             return currentKey
-        case .preview:
+        case .reference:
             if components.day < 13 {
                 return currentKey
             }
@@ -267,7 +267,7 @@ enum TodayObservanceEngine {
         switch mode {
         case .live:
             return HijriYearMonth(hijriYear: components.hijriYear, month: targetMonth)
-        case .preview:
+        case .reference:
             let currentKey = HijriYearMonth(hijriYear: components.hijriYear, month: components.month)
             if components.month == targetMonth, components.day < liveDayRange.lowerBound {
                 return HijriYearMonth(hijriYear: components.hijriYear, month: targetMonth)

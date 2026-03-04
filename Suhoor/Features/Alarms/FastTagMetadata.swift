@@ -50,7 +50,7 @@ extension FastPrimaryIntent {
                 aboutText: "On dates such as Eid and the Days of Tashreeq, fasting is forbidden. This state is calendar-forced and cannot be overridden in the app.",
                 bullets: [
                     "The specific warning chips explain why the date is locked.",
-                    "Sunnah observence tags are hidden on forbidden dates."
+                    "Sunnah observance tags are hidden on forbidden dates."
                 ],
                 showsScheduleNote: false
             )
@@ -80,7 +80,7 @@ extension FastPrimaryIntent {
                 id: "voluntary",
                 title: "Voluntary",
                 subtitle: "Optional fast for extra reward.",
-                aboutText: "Use this for voluntary fasting. When a date matches a recognized Sunnah observence, the app derives those Sunnah observence tags automatically under the strict rules."
+                aboutText: "Use this for voluntary fasting. When a date matches a recognized Sunnah observance, the app derives those Sunnah observance tags automatically under the strict rules."
             )
         case .other:
             return FastTagAbout(
@@ -116,7 +116,7 @@ extension FastSecondaryVirtueTag {
                 aboutText: "A voluntary fast on the 9th of Dhul Hijjah (for those not performing Hajj).",
                 bullets: [
                     "Appears automatically only on 9 Dhul Hijjah.",
-                    "Can appear alongside the broader ‘First 9 Days of Dhul Hijjah’ Sunnah observence."
+                    "Can appear alongside the broader ‘First 9 Days of Dhul Hijjah’ Sunnah observance."
                 ]
             )
         case .ashura:
@@ -127,7 +127,7 @@ extension FastSecondaryVirtueTag {
                 aboutText: "A voluntary fast associated with the 10th of Muharram, often paired with the 9th (or the 11th) to be distinct.",
                 bullets: [
                     "Appears automatically only on 9, 10, or 11 Muharram.",
-                    "Does not overlap with Dhul Hijjah Sunnah observences or Shawwāl counting."
+                    "Does not overlap with Dhul Hijjah Sunnah observances or Shawwāl counting."
                 ]
             )
         case .whiteDays:
@@ -175,21 +175,21 @@ extension FastWarning {
             return FastTagAbout(
                 id: "warning-eid-al-fitr",
                 title: "Eid al-Fitr",
-                aboutText: "Fasting on Eid al-Fitr is generally not practiced. This day marks the end of Ramadan.",
+                aboutText: "Fasting is prohibited on Eid al-Fitr. This day marks the end of Ramadan.",
                 showsScheduleNote: false
             )
         case .eidAlAdha:
             return FastTagAbout(
                 id: "warning-eid-al-adha",
                 title: "Eid al-Adha",
-                aboutText: "Fasting on Eid al-Adha is generally not practiced. This app shows a warning and suppresses derived Sunnah observence tags on that date.",
+                aboutText: "Fasting is prohibited on Eid al-Adha. The app shows a warning and suppresses derived Sunnah observance tags on that date.",
                 showsScheduleNote: false
             )
         case .tashreeq:
             return FastTagAbout(
                 id: "warning-tashreeq",
                 title: "Days of Tashreeq",
-                aboutText: "The days of Tashreeq (11–13 Dhul Hijjah) are generally not fasted. This app does not model every pilgrimage-specific exception, so it shows a warning and suppresses derived Sunnah observence tags by default.",
+                aboutText: "Fasting is prohibited on the Days of Tashreeq (11–13 Dhul Hijjah). This app does not model every pilgrimage-specific exception, so it shows a warning and suppresses derived Sunnah observance tags by default.",
                 showsScheduleNote: false
             )
         }

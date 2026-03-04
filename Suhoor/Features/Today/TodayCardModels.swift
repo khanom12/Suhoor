@@ -2,19 +2,14 @@ import Foundation
 
 enum TodaySeasonalCardMode: Equatable, Sendable {
     case live
-    case preview
-
-    var isPreview: Bool {
-        self == .preview
-    }
+    case reference
 }
 
-enum TodayCardKind: String, Codable, CaseIterable, Identifiable, Hashable, Sendable {
+enum TodayCardKind: String, CaseIterable, Identifiable, Hashable, Sendable {
     case countdown
     case ramadanProgress
-    case specialFastSpotlight
+    case eidMubarak
     case shawwalSixProgress
-    case shawwalPlan
     case dhulHijjahNineProgress
     case ashuraProgress
     case whiteDaysProgress
@@ -31,12 +26,10 @@ enum TodayCardKind: String, Codable, CaseIterable, Identifiable, Hashable, Senda
             return "Next Countdown"
         case .ramadanProgress:
             return "Ramadan Progress"
-        case .specialFastSpotlight:
-            return "Sunnah Observances"
+        case .eidMubarak:
+            return "Eid Mubarak"
         case .shawwalSixProgress:
             return "Shawwal 6"
-        case .shawwalPlan:
-            return "Shawwal Planner"
         case .dhulHijjahNineProgress:
             return "Dhul Hijjah Progress"
         case .ashuraProgress:
@@ -63,18 +56,24 @@ struct TodayCardLayout: Codable, Equatable, Hashable, Sendable {
         ordered: [
             .countdown,
             .ramadanProgress,
+            .eidMubarak,
             .eidAlFitrNotice,
             .eidAlAdhaNotice,
             .tashreeqNotice,
-            .specialFastSpotlight,
             .shawwalSixProgress,
-            .shawwalPlan,
             .dhulHijjahNineProgress,
             .ashuraProgress,
             .whiteDaysProgress,
             .fastCheckIn,
         ],
-        hidden: [.eidAlFitrNotice, .eidAlAdhaNotice, .tashreeqNotice]
+        hidden: [
+            .shawwalSixProgress,
+            .dhulHijjahNineProgress,
+            .ashuraProgress,
+            .eidAlFitrNotice,
+            .eidAlAdhaNotice,
+            .tashreeqNotice,
+        ]
     )
 
     func isVisible(_ card: TodayCardKind) -> Bool {
@@ -83,5 +82,30 @@ struct TodayCardLayout: Codable, Equatable, Hashable, Sendable {
 
     func visibleOrderedCards() -> [TodayCardKind] {
         ordered.filter(isVisible)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case ordered
+        case hidden
+    }
+
+    init(ordered: [TodayCardKind], hidden: Set<TodayCardKind>) {
+        self.ordered = ordered
+        self.hidden = hidden
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let orderedRaw = try container.decodeIfPresent([String].self, forKey: .ordered) ?? []
+        let hiddenRaw = try container.decodeIfPresent([String].self, forKey: .hidden) ?? []
+
+        self.ordered = orderedRaw.compactMap(TodayCardKind.init(rawValue:))
+        self.hidden = Set(hiddenRaw.compactMap(TodayCardKind.init(rawValue:)))
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(ordered.map(\.rawValue), forKey: .ordered)
+        try container.encode(Array(hidden).map(\.rawValue), forKey: .hidden)
     }
 }

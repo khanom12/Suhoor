@@ -2,14 +2,17 @@ import SwiftUI
 
 struct TodayHomeView: View {
     @EnvironmentObject private var scheduleManager: ScheduleManager
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @StateObject private var layoutStore = TodayCardLayoutStore()
+    @StateObject private var dismissalStore = TodayCardDismissalStore()
     @State private var isEditingCards = false
+    private let autoEnableStore = TodaySeasonalAutoEnableStore()
 
     var body: some View {
         let hijriChangeCount = scheduleManager.hijriAdjustmentChanges.count
         let now = Date()
         let components = AdjustedHijriCalendar.shared.adjustedComponents(for: now, timeZone: .current)
-        let liveObservanceContext = TodayObservanceEngine.liveContext(now: now)
+        let hijriDateKey = seasonalAutoEnableDateKey(for: components)
         ScrollView {
             LazyVStack(spacing: DesignTokens.dashboardStackSpacing) {
                 VStack(alignment: .leading, spacing: 2) {
@@ -24,7 +27,11 @@ struct TodayHomeView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
 
                 ForEach(layoutStore.layout.ordered) { card in
-                    todayCardView(for: card, components: components, observanceContext: liveObservanceContext)
+                    todayCardView(
+                        for: card,
+                        now: now,
+                        components: components
+                    )
                 }
             }
             .padding(.horizontal, DesignTokens.spacingL)
@@ -46,13 +53,16 @@ struct TodayHomeView: View {
         }
         .onAppear { _ = scheduleManager.lastUpdated }
         .onAppear { _ = hijriChangeCount }
+        .task(id: hijriDateKey) {
+            autoEnableSeasonalCards(for: components)
+        }
     }
 
     @ViewBuilder
     private func todayCardView(
         for card: TodayCardKind,
-        components: AdjustedHijriDateComponents?,
-        observanceContext: TodayObservanceContext?
+        now: Date,
+        components: AdjustedHijriDateComponents?
     ) -> some View {
         switch card {
         case .countdown:
@@ -60,58 +70,83 @@ struct TodayHomeView: View {
                 TodayCountdownCard()
             }
         case .ramadanProgress:
-            if layoutStore.isVisible(card), components?.month == .ramadan {
-                TodayRamadanProgressCard()
+            if let mode = seasonalMode(for: card, isLive: isLiveRamadanDay(components)) {
+                TodayRamadanProgressCard(mode: mode)
             }
-        case .specialFastSpotlight:
-            if layoutStore.isVisible(card) {
-                TodaySpecialFastSpotlightCard(mode: specialFastMode(observanceContext))
+        case .eidMubarak:
+            if let mode = seasonalMode(for: card, isLive: isLiveEidMubarakDay(components)) {
+                TodayEidMubarakCard(mode: mode)
             }
         case .shawwalSixProgress:
-            if layoutStore.isVisible(card) {
-                TodayShawwalSixProgressCard(mode: isLiveShawwalDay(components) ? .live : .preview)
-            }
-        case .shawwalPlan:
-            if layoutStore.isVisible(card) {
-                TodayShawwalPlanCard(mode: isLiveShawwalDay(components) ? .live : .preview)
+            if let mode = seasonalMode(for: card, isLive: isLiveShawwalDay(components)) {
+                TodayShawwalSixProgressCard(mode: mode)
             }
         case .dhulHijjahNineProgress:
-            if layoutStore.isVisible(card) {
-                TodayDhulHijjahProgressCard(mode: isLiveDhulHijjahDay(components) ? .live : .preview)
+            if let mode = seasonalMode(for: card, isLive: isLiveDhulHijjahDay(components)) {
+                TodayDhulHijjahProgressCard(mode: mode)
             }
         case .ashuraProgress:
-            if layoutStore.isVisible(card) {
-                TodayAshuraProgressCard(mode: isLiveAshuraDay(components) ? .live : .preview)
+            if let mode = seasonalMode(for: card, isLive: isLiveAshuraDay(components)) {
+                TodayAshuraProgressCard(mode: mode)
             }
         case .whiteDaysProgress:
-            if layoutStore.isVisible(card) {
-                TodayWhiteDaysProgressCard(mode: isLiveWhiteDaysDay(components) ? .live : .preview)
+            if let mode = whiteDaysMode(for: card, components: components) {
+                TodayWhiteDaysProgressCard(mode: mode)
             }
         case .fastCheckIn:
             if layoutStore.isVisible(card) {
                 TodayFastCheckInCard()
             }
         case .eidAlFitrNotice:
-            if layoutStore.isVisible(card) || warningIsActive(.eidAlFitr, components: components) {
+            if shouldRenderForbiddenCard(.eidAlFitr, card: card, components: components, now: now) {
                 TodayForbiddenFastDayCard(
                     kind: .eidAlFitr,
-                    mode: warningIsActive(.eidAlFitr, components: components) ? .live : .preview
+                    mode: forbiddenCardMode(.eidAlFitr, components: components),
+                    onDismiss: {
+                        dismissForbiddenCard(.eidAlFitr, card: card, now: now)
+                    }
                 )
+                .transition(.opacity)
             }
         case .eidAlAdhaNotice:
-            if layoutStore.isVisible(card) || warningIsActive(.eidAlAdha, components: components) {
+            if shouldRenderForbiddenCard(.eidAlAdha, card: card, components: components, now: now) {
                 TodayForbiddenFastDayCard(
                     kind: .eidAlAdha,
-                    mode: warningIsActive(.eidAlAdha, components: components) ? .live : .preview
+                    mode: forbiddenCardMode(.eidAlAdha, components: components),
+                    onDismiss: {
+                        dismissForbiddenCard(.eidAlAdha, card: card, now: now)
+                    }
                 )
+                .transition(.opacity)
             }
         case .tashreeqNotice:
-            if layoutStore.isVisible(card) || warningIsActive(.tashreeq, components: components) {
+            if shouldRenderForbiddenCard(.tashreeq, card: card, components: components, now: now) {
                 TodayForbiddenFastDayCard(
                     kind: .tashreeq,
-                    mode: warningIsActive(.tashreeq, components: components) ? .live : .preview
+                    mode: forbiddenCardMode(.tashreeq, components: components),
+                    onDismiss: {
+                        dismissForbiddenCard(.tashreeq, card: card, now: now)
+                    }
                 )
+                .transition(.opacity)
             }
+        }
+    }
+
+    private func seasonalMode(for card: TodayCardKind, isLive: Bool) -> TodaySeasonalCardMode? {
+        guard layoutStore.isVisible(card) else {
+            return nil
+        }
+        if isLive {
+            return .live
+        }
+        return .reference
+    }
+
+    private func dismissForbiddenCard(_ warning: FastWarning, card: TodayCardKind, now: Date) {
+        withAnimation(Motion.fade(reduceMotion: reduceMotion)) {
+            dismissalStore.dismiss(warning, on: now)
+            layoutStore.setVisible(false, for: card)
         }
     }
 
@@ -132,17 +167,81 @@ struct TodayHomeView: View {
 
     private func isLiveWhiteDaysDay(_ components: AdjustedHijriDateComponents?) -> Bool {
         guard let components else { return false }
-        return [13, 14, 15].contains(components.day) && components.month != .ramadan
+        return components.month != .ramadan
     }
 
-    private func specialFastMode(_ context: TodayObservanceContext?) -> TodaySeasonalCardMode {
-        guard let context,
-              context.isRamadan == false,
-              context.warnings.isEmpty,
-              context.secondaryTags.isEmpty == false else {
-            return .preview
+    private func isLiveRamadanDay(_ components: AdjustedHijriDateComponents?) -> Bool {
+        components?.month == .ramadan
+    }
+
+    private func whiteDaysMode(
+        for card: TodayCardKind,
+        components: AdjustedHijriDateComponents?
+    ) -> TodaySeasonalCardMode? {
+        guard components?.month != .ramadan else { return nil }
+        return seasonalMode(for: card, isLive: isLiveWhiteDaysDay(components))
+    }
+
+    private func isLiveEidMubarakDay(_ components: AdjustedHijriDateComponents?) -> Bool {
+        guard let components else { return false }
+        if components.month == .shawwal, components.day == 1 {
+            return true
         }
-        return .live
+        return components.month == .dhulHijjah && components.day == 10
+    }
+
+    private func forbiddenCardMode(
+        _ warning: FastWarning,
+        components: AdjustedHijriDateComponents?
+    ) -> TodaySeasonalCardMode {
+        warningIsActive(warning, components: components) ? .live : .reference
+    }
+
+    private func shouldRenderForbiddenCard(
+        _ warning: FastWarning,
+        card: TodayCardKind,
+        components: AdjustedHijriDateComponents?,
+        now: Date
+    ) -> Bool {
+        if layoutStore.isVisible(card) {
+            return true
+        }
+        if dismissalStore.isDismissed(warning, on: now) {
+            return false
+        }
+        let live = warningIsActive(warning, components: components)
+        return live || layoutStore.isVisible(card)
+    }
+
+    private func seasonalAutoEnableDateKey(for components: AdjustedHijriDateComponents?) -> String {
+        guard let components else { return "unknown" }
+        return "\(components.hijriYear)-\(components.month.persistenceValue)-\(components.day)"
+    }
+
+    private func autoEnableSeasonalCards(for components: AdjustedHijriDateComponents?) {
+        guard let components else { return }
+
+        switch (components.month, components.day) {
+        case (.shawwal, 2):
+            autoEnable(.shawwalSixProgress, components: components)
+        case (.dhulHijjah, 1):
+            autoEnable(.dhulHijjahNineProgress, components: components)
+        case (.muharram, 9):
+            autoEnable(.ashuraProgress, components: components)
+        default:
+            break
+        }
+    }
+
+    private func autoEnable(_ card: TodayCardKind, components: AdjustedHijriDateComponents) {
+        let key = seasonalAutoEnableDateKey(for: components)
+        guard layoutStore.isVisible(card) == false,
+              autoEnableStore.hasAutoEnabled(card, for: key) == false else {
+            return
+        }
+
+        layoutStore.setVisible(true, for: card)
+        autoEnableStore.markAutoEnabled(card, for: key)
     }
 
     private func warningIsActive(_ warning: FastWarning, components: AdjustedHijriDateComponents?) -> Bool {

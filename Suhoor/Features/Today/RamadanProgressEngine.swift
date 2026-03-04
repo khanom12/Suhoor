@@ -12,17 +12,32 @@ struct RamadanProgressEngine {
 
     static func model(
         now: Date,
+        mode: TodaySeasonalCardMode = .live,
         calendar: AdjustedHijriCalendar = .shared,
         timeZone: TimeZone = .current
     ) -> Model? {
-        guard calendar.isRamadan(date: now, timeZone: timeZone) else { return nil }
-        guard let components = calendar.adjustedComponents(for: now, timeZone: timeZone), components.month == .ramadan else { return nil }
+        guard let components = calendar.adjustedComponents(for: now, timeZone: timeZone) else {
+            return nil
+        }
+
+        let targetYear: Int
+        switch mode {
+        case .live:
+            guard calendar.isRamadan(date: now, timeZone: timeZone), components.month == .ramadan else {
+                return nil
+            }
+            targetYear = components.hijriYear
+        case .reference:
+            targetYear = components.month.rawValue <= HijriMonth.ramadan.rawValue
+                ? components.hijriYear
+                : components.hijriYear + 1
+        }
 
         var gregorian = Calendar(identifier: .gregorian)
         gregorian.timeZone = timeZone
         let todayStart = gregorian.startOfDay(for: now)
 
-        let year = components.hijriYear
+        let year = targetYear
         let ramadanKey = HijriYearMonth(hijriYear: year, month: .ramadan)
         let shawwalKey = HijriYearMonth(hijriYear: year, month: .shawwal)
         let ramadanStart = calendar.gregorianDate(for: ramadanKey, dayOfMonth: 1, timeZone: timeZone)
@@ -36,7 +51,13 @@ struct RamadanProgressEngine {
             totalDays = 30
         }
 
-        let dayNumber = max(1, min(totalDays, components.day))
+        let dayNumber: Int
+        switch mode {
+        case .live:
+            dayNumber = max(1, min(totalDays, components.day))
+        case .reference:
+            dayNumber = 1
+        }
         let progress = Double(dayNumber) / Double(totalDays)
 
         let daysUntilEid: Int

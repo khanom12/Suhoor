@@ -3,6 +3,10 @@ import SwiftUI
 struct TodayForbiddenFastDayCard: View {
     let kind: FastWarning
     let mode: TodaySeasonalCardMode
+    let onDismiss: () -> Void
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var selectedAbout: FastTagAbout?
 
     private let accentColor = DawnColor.danger
 
@@ -11,46 +15,56 @@ struct TodayForbiddenFastDayCard: View {
             GlassCard(style: .header) {
                 VStack(alignment: .leading, spacing: DesignTokens.dashboardCardInternalSpacing) {
                     HStack(alignment: .center, spacing: DesignTokens.spacingS) {
-                        VStack(alignment: .leading, spacing: 2) {
+                        VStack(alignment: .leading, spacing: DesignTokens.spacingXS) {
                             Text(model.title)
                                 .font(DesignTokens.cardTitleFont)
                             Text(model.message)
-                                .font(DesignTokens.cardSubtitleFont)
+                                .font(DesignTokens.cardSubtitleFont.weight(.semibold))
                                 .foregroundStyle(accentColor)
                         }
 
                         Spacer()
 
-                        Text(model.badgeText)
-                            .font(DesignTokens.cardMetaFont)
-                            .foregroundStyle(model.isLive ? accentColor : .secondary)
-                            .padding(.horizontal, DesignTokens.spacingS)
-                            .padding(.vertical, 6)
-                            .background(
-                                Capsule(style: .continuous)
-                                    .fill(Color(.secondarySystemGroupedBackground))
+                        HStack(spacing: DesignTokens.spacingXS) {
+                            if kind == .eidAlFitr {
+                                HijriMonthAdjustmentMenu(
+                                    month: .shawwal,
+                                    iconSystemName: "moon.stars.fill",
+                                    accent: DawnColor.accent
+                                )
+                            }
+
+                            Button {
+                                withAnimation(Motion.fade(reduceMotion: reduceMotion)) {
+                                    onDismiss()
+                                }
+                            } label: {
+                                Image(systemName: "checkmark")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.secondary)
+                                    .frame(width: 28, height: 28)
+                                    .background(
+                                        Circle()
+                                            .fill(Color(.secondarySystemGroupedBackground))
+                                    )
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("Dismiss card")
+
+                            TodaySeasonalBadge(
+                                text: model.badgeText,
+                                accent: model.isLive ? accentColor : nil
                             )
-                    }
-
-                    Text(model.detail)
-                        .font(DesignTokens.cardSubtitleFont)
-                        .foregroundStyle(.secondary)
-
-                    HStack(alignment: .center, spacing: DesignTokens.spacingS) {
-                        Button("Hijri Calendar Settings") {
-                            NotificationCenter.default.post(name: .switchToHijriCorrections, object: nil)
-                        }
-                        .font(DesignTokens.cardMetaFont)
-
-                        Spacer(minLength: 0)
-
-                        if mode == .preview {
-                            Text("Shown automatically on the day.")
-                                .font(DesignTokens.cardSubtitleFont)
-                                .foregroundStyle(.secondary)
                         }
                     }
                 }
+            }
+            .contentShape(RoundedRectangle(cornerRadius: DesignTokens.dashboardCardRadius, style: .continuous))
+            .onTapGesture {
+                selectedAbout = kind.about
+            }
+            .sheet(item: $selectedAbout) { about in
+                AboutTagSheet(about: about)
             }
             .accessibilityElement(children: .combine)
         }

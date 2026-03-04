@@ -18,9 +18,9 @@ struct TodayWhiteDaysProgressCard: View {
                 VStack(alignment: .leading, spacing: DesignTokens.dashboardCardInternalSpacing) {
                     HStack(alignment: .center, spacing: DesignTokens.spacingS) {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("\(model.month.displayName) \(model.hijriYear)")
+                            Text("\(model.month.displayName) \(String(model.hijriYear))")
                                 .font(DesignTokens.cardTitleFont)
-                            Text(mode == .preview ? "Previewing White Days 13-15" : "White Days 13, 14, and 15")
+                            Text("White Days 13, 14, and 15")
                                 .font(DesignTokens.cardSubtitleFont)
                                 .foregroundStyle(.secondary)
                         }
@@ -28,7 +28,7 @@ struct TodayWhiteDaysProgressCard: View {
                         Spacer()
 
                         TodaySeasonalBadge(
-                            text: mode == .live ? "\(model.completedCount)/3" : "Preview",
+                            text: "\(model.completedCount)/3",
                             accent: nil
                         )
                     }
@@ -43,9 +43,7 @@ struct TodayWhiteDaysProgressCard: View {
                     )
                     .animation(Motion.spring(reduceMotion: reduceMotion), value: model.displayFilledCount)
 
-                    Text(mode == .preview
-                         ? "Previewing the next White Days window."
-                         : "Track the 13th, 14th, and 15th of the current Hijri month.")
+                    Text("Track the 13th, 14th, and 15th of the current Hijri month.")
                         .font(DesignTokens.cardSubtitleFont)
                         .foregroundStyle(.secondary)
                 }

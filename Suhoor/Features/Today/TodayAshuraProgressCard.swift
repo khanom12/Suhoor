@@ -18,9 +18,9 @@ struct TodayAshuraProgressCard: View {
                 VStack(alignment: .leading, spacing: DesignTokens.dashboardCardInternalSpacing) {
                     HStack(alignment: .center, spacing: DesignTokens.spacingS) {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("Ashura \(model.hijriYear)")
+                            Text("Ashura \(String(model.hijriYear))")
                                 .font(DesignTokens.cardTitleFont)
-                            Text(mode == .preview ? "Previewing Muharram 9-11" : "Muharram 9, 10, and 11")
+                            Text("Muharram 9, 10, and 11")
                                 .font(DesignTokens.cardSubtitleFont)
                                 .foregroundStyle(.secondary)
                         }
@@ -28,7 +28,7 @@ struct TodayAshuraProgressCard: View {
                         Spacer()
 
                         TodaySeasonalBadge(
-                            text: mode == .live ? "\(model.completedCount)/3" : "Preview",
+                            text: "\(model.completedCount)/3",
                             accent: nil
                         )
                     }
@@ -43,9 +43,7 @@ struct TodayAshuraProgressCard: View {
                     )
                     .animation(Motion.spring(reduceMotion: reduceMotion), value: model.displayFilledCount)
 
-                    Text(mode == .preview
-                         ? "Previewing the next Ashura sequence."
-                         : "Track the Muharram 9, 10, and 11 sequence.")
+                    Text("Track the Muharram 9, 10, and 11 sequence.")
                         .font(DesignTokens.cardSubtitleFont)
                         .foregroundStyle(.secondary)
                 }

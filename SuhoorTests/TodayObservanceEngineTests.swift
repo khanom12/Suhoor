@@ -28,14 +28,14 @@ struct TodayObservanceEngineTests {
     }
 
     @Test
-    func whiteDaysPreviewAdvancesAfterFifteenth() {
+    func whiteDaysReferenceAdvancesAfterFifteenth() {
         let timeZone = TimeZone(secondsFromGMT: 0) ?? .current
         let calendar = makeAdjustedCalendar()
         let now = makeAdjustedHijriDate(year: 1447, month: .shawwal, day: 20, calendar: calendar, timeZone: timeZone)
 
         let key = TodayObservanceEngine.whiteDaysTargetMonthKey(
             now: now,
-            mode: .preview,
+            mode: .reference,
             calendar: calendar,
             timeZone: timeZone
         )
