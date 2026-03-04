@@ -91,9 +91,8 @@ struct ShawwalTodayEngineTests {
             timeZone: timeZone
         )
 
-        #expect(liveModel?.isLive == true)
-        #expect(previewModel?.isLive == false)
-        #expect(previewModel?.badgeText == "Do Not Fast")
+        #expect(liveModel?.title == "Eid al-Fitr")
+        #expect(previewModel?.title == "Eid al-Fitr")
         #expect(liveModel?.message == "It is not allowed to fast today.")
         #expect(previewModel?.message == "It is not allowed to fast on this day.")
     }

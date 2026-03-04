@@ -27,6 +27,8 @@ struct TodayAshuraProgressCard: View {
 
                         Spacer()
 
+                        TodayOpenScheduleButton(accent: accent)
+
                         TodaySeasonalBadge(
                             text: "\(model.completedCount)/3",
                             accent: nil

@@ -45,16 +45,7 @@ struct TodayEidMubarakCard: View {
                             }
 
                             Spacer()
-
-                            TodaySeasonalBadge(
-                                text: "Celebrate",
-                                accent: mode == .live ? DawnColor.highlight : DawnColor.highlight
-                            )
                         }
-
-                        Text(model.message)
-                            .font(DesignTokens.cardSubtitleFont)
-                            .foregroundStyle(.secondary)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(DesignTokens.dashboardCardPadding)
@@ -84,7 +75,6 @@ struct TodayEidMubarakCard: View {
 struct EidMubarakEngine {
     struct Model: Equatable, Sendable {
         let subtitle: String
-        let message: String
     }
 
     static func model(
@@ -100,18 +90,18 @@ struct EidMubarakEngine {
         switch mode {
         case .live:
             if components.month == .shawwal, components.day == 1 {
-                return Model(subtitle: "Eid al-Fitr", message: "Celebrate the close of Ramadan. Tap the card for a fireworks burst.")
+                return Model(subtitle: "Eid al-Fitr")
             }
             if components.month == .dhulHijjah, components.day == 10 {
-                return Model(subtitle: "Eid al-Adha", message: "Celebrate Eid al-Adha. Tap the card for a fireworks burst.")
+                return Model(subtitle: "Eid al-Adha")
             }
             return nil
         case .reference:
             if components.month.rawValue < HijriMonth.shawwal.rawValue
                 || (components.month == .shawwal && components.day <= 1) {
-                return Model(subtitle: "Eid al-Fitr", message: "Celebrate the close of Ramadan. Tap the card for a fireworks burst.")
+                return Model(subtitle: "Eid al-Fitr")
             }
-            return Model(subtitle: "Eid al-Adha", message: "Celebrate Eid al-Adha. Tap the card for a fireworks burst.")
+            return Model(subtitle: "Eid al-Adha")
         }
     }
 }

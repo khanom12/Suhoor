@@ -138,9 +138,7 @@ struct ShawwalSixProgressEngine {
 struct ForbiddenFastDayEngine {
     struct Model: Equatable, Sendable {
         let title: String
-        let badgeText: String
         let message: String
-        let isLive: Bool
     }
 
     static func model(
@@ -168,23 +166,17 @@ struct ForbiddenFastDayEngine {
         case .eidAlFitr:
             return Model(
                 title: "Eid al-Fitr",
-                badgeText: "Do Not Fast",
-                message: isLive ? "It is not allowed to fast today." : "It is not allowed to fast on this day.",
-                isLive: isLive
+                message: isLive ? "It is not allowed to fast today." : "It is not allowed to fast on this day."
             )
         case .eidAlAdha:
             return Model(
                 title: "Eid al-Adha",
-                badgeText: "Do Not Fast",
-                message: isLive ? "It is not allowed to fast today." : "It is not allowed to fast on this day.",
-                isLive: isLive
+                message: isLive ? "It is not allowed to fast today." : "It is not allowed to fast on this day."
             )
         case .tashreeq:
             return Model(
                 title: "Days of Tashreeq",
-                badgeText: "Do Not Fast",
-                message: isLive ? "It is not allowed to fast today." : "It is not allowed to fast on this day.",
-                isLive: isLive
+                message: isLive ? "It is not allowed to fast today." : "It is not allowed to fast on this day."
             )
         }
     }

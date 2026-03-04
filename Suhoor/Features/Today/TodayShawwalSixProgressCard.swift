@@ -78,6 +78,7 @@ struct TodayShawwalSixProgressCard: View {
             Spacer()
 
             historyButton
+            TodayOpenScheduleButton(accent: shawwalColor)
 
             TodaySeasonalBadge(
                 text: "\(model.completedCount)/6",
@@ -121,13 +122,6 @@ struct TodayShawwalSixProgressCard: View {
             Text("Mark Shawwal days as Voluntary to start tracking.")
                 .font(DesignTokens.cardSubtitleFont)
                 .foregroundStyle(.secondary)
-
-            Spacer(minLength: 0)
-
-            Button("Open Schedule") {
-                NotificationCenter.default.post(name: .switchToAlarmTab, object: nil)
-            }
-            .font(DesignTokens.cardMetaFont)
         }
     }
 

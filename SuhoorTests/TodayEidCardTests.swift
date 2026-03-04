@@ -46,7 +46,7 @@ struct TodayEidCardTests {
         let model = EidMubarakEngine.model(now: now, mode: .reference, calendar: calendar, timeZone: timeZone)
 
         #expect(model?.subtitle == "Eid al-Fitr")
-        #expect(model?.message.contains("Preview") == false)
+        #expect(model != nil)
     }
 
     private func makeAdjustedCalendar() -> AdjustedHijriCalendar {

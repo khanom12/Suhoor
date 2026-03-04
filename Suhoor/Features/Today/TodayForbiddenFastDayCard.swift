@@ -50,11 +50,6 @@ struct TodayForbiddenFastDayCard: View {
                             }
                             .buttonStyle(.plain)
                             .accessibilityLabel("Dismiss card")
-
-                            TodaySeasonalBadge(
-                                text: model.badgeText,
-                                accent: model.isLive ? accentColor : nil
-                            )
                         }
                     }
                 }

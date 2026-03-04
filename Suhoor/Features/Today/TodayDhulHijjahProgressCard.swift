@@ -25,6 +25,8 @@ struct TodayDhulHijjahProgressCard: View {
 
                         Spacer()
 
+                        TodayOpenScheduleButton(accent: accent)
+
                         TodaySeasonalBadge(
                             text: "\(model.completedCount)/9",
                             accent: mode == .live && model.isComplete ? accent : nil

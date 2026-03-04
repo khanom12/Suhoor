@@ -55,3 +55,24 @@ struct TodayDiscreteProgressBars: View {
         return 1.0
     }
 }
+
+struct TodayOpenScheduleButton: View {
+    let accent: Color?
+
+    var body: some View {
+        Button {
+            NotificationCenter.default.post(name: .switchToAlarmTab, object: nil)
+        } label: {
+            Image(systemName: "calendar.badge.clock")
+                .font(DesignTokens.cardMetaFont.weight(.semibold))
+                .foregroundStyle(accent ?? DawnColor.accent)
+                .frame(width: 30, height: 30)
+                .background(
+                    Circle()
+                        .fill(Color(.secondarySystemGroupedBackground))
+                )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Open schedule")
+    }
+}
