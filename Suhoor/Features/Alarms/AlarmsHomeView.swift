@@ -626,7 +626,8 @@ struct AlarmsHomeView: View {
                         style: item.style,
                         prominence: item.isPrimary ? .strong : .subtle,
                         isDisabled: false,
-                        showsTitle: true
+                        showsTitle: true,
+                        isCompact: false
                     )
                 }
 
@@ -969,43 +970,32 @@ private struct AlarmRowView: View {
                 .accessibilityHint("Turn this day off instead")
             }
 
-            VStack(alignment: .leading, spacing: 10) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(dateLabel)
-                        .font(.footnote)
-                        .foregroundStyle(isDisabled ? .tertiary : .secondary)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(dateLabel)
+                    .font(.footnote)
+                    .foregroundStyle(isDisabled ? .tertiary : .secondary)
 
-                    HStack(alignment: .firstTextBaseline, spacing: 6) {
-                        Text(primaryTimeMain)
-                            .font(.system(size: timeFontSize, weight: .regular, design: .default))
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(primaryTimeMain)
+                        .font(.system(size: timeFontSize, weight: .regular, design: .default))
+                        .monospacedDigit()
+                        .foregroundStyle(isDisabled ? .tertiary : .primary)
+                        .minimumScaleFactor(0.8)
+
+                    if let primaryTimeSuffix {
+                        Text(primaryTimeSuffix)
+                            .font(.system(size: timeFontSize * 0.55, weight: .regular, design: .default))
                             .monospacedDigit()
-                            .foregroundStyle(isDisabled ? .tertiary : .primary)
-                            .minimumScaleFactor(0.8)
-
-                        if let primaryTimeSuffix {
-                            Text(primaryTimeSuffix)
-                                .font(.system(size: timeFontSize * 0.55, weight: .regular, design: .default))
-                                .monospacedDigit()
-                                .foregroundStyle(isDisabled ? .tertiary : .secondary)
-                                .baselineOffset(1)
-                        }
+                            .foregroundStyle(isDisabled ? .tertiary : .secondary)
+                            .baselineOffset(1)
                     }
+                }
 
+                HStack(alignment: .center, spacing: 10) {
                     Text(fajrLineText)
                         .font(.callout)
                         .foregroundStyle(isDisabled ? .tertiary : .secondary)
                         .monospacedDigit()
-                }
-
-                if showsTags {
-                    HomeTagCapsuleRow(
-                        primaryIntent: primaryIntent,
-                        secondaryTags: secondaryTags,
-                        warnings: warnings,
-                        showPrimaryIntent: showPrimaryIntent,
-                        isDisabled: isDisabled,
-                        showsTitle: false
-                    )
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -1017,10 +1007,26 @@ private struct AlarmRowView: View {
                 onSelect()
             }
 
-            Toggle("", isOn: dayActiveBinding)
-                .labelsHidden()
-                .tint(DawnColor.accent)
-                .accessibilityLabel("\(primaryLabelText) alarm")
+            ZStack(alignment: .bottomTrailing) {
+                Toggle("", isOn: dayActiveBinding)
+                    .labelsHidden()
+                    .tint(DawnColor.accent)
+                    .accessibilityLabel("\(primaryLabelText) alarm")
+                    .frame(maxHeight: .infinity, alignment: .center)
+
+                if showsTags {
+                    HomeTagCapsuleRow(
+                        primaryIntent: primaryIntent,
+                        secondaryTags: secondaryTags,
+                        warnings: warnings,
+                        showPrimaryIntent: showPrimaryIntent,
+                        isDisabled: isDisabled,
+                        showsTitle: false,
+                        isCompact: true
+                    )
+                }
+            }
+            .frame(minWidth: 51, maxHeight: .infinity, alignment: .trailing)
         }
         .padding(.vertical, 6)
         .onChange(of: config) { _, newValue in
@@ -1150,17 +1156,35 @@ private struct HomeTagCapsuleRow: View {
     let showPrimaryIntent: Bool
     let isDisabled: Bool
     let showsTitle: Bool
+    let isCompact: Bool
 
     var body: some View {
-        FlowLayout(spacing: 6) {
+        HStack(spacing: isCompact ? 4 : 6) {
             ForEach(warnings, id: \.self) { warning in
-                HomeWarningCapsule(warning: warning, isDisabled: isDisabled, showsTitle: showsTitle)
+                HomeWarningCapsule(
+                    warning: warning,
+                    isDisabled: isDisabled,
+                    showsTitle: showsTitle,
+                    isCompact: isCompact
+                )
             }
             if showPrimaryIntent {
-                HomeTagCapsule(style: primaryIntent.style, prominence: .strong, isDisabled: isDisabled, showsTitle: showsTitle)
+                HomeTagCapsule(
+                    style: primaryIntent.style,
+                    prominence: .strong,
+                    isDisabled: isDisabled,
+                    showsTitle: showsTitle,
+                    isCompact: isCompact
+                )
             }
             ForEach(secondaryTags, id: \.self) { tag in
-                HomeTagCapsule(style: tag.style, prominence: .subtle, isDisabled: isDisabled, showsTitle: showsTitle)
+                HomeTagCapsule(
+                    style: tag.style,
+                    prominence: .subtle,
+                    isDisabled: isDisabled,
+                    showsTitle: showsTitle,
+                    isCompact: isCompact
+                )
             }
         }
         .accessibilityHidden(true)
@@ -1177,13 +1201,14 @@ private struct HomeTagCapsule: View {
     let prominence: Prominence
     let isDisabled: Bool
     let showsTitle: Bool
+    let isCompact: Bool
 
     var body: some View {
         let base = style.color
         let fillOpacity = prominence == .strong ? 0.18 : 0.10
         let strokeOpacity = prominence == .strong ? 0.35 : 0.22
 
-        HStack(spacing: 5) {
+        HStack(spacing: isCompact ? 4 : 5) {
             if let systemImage = style.systemImage {
                 Image(systemName: systemImage)
             }
@@ -1192,10 +1217,10 @@ private struct HomeTagCapsule: View {
                     .lineLimit(1)
             }
         }
-            .font(.caption.weight(.semibold))
+            .font((isCompact ? Font.caption2 : Font.caption).weight(.semibold))
             .foregroundStyle(base)
-            .padding(.vertical, 4)
-            .padding(.horizontal, 8)
+            .padding(.vertical, isCompact ? 3 : 4)
+            .padding(.horizontal, isCompact ? 6 : 8)
             .background(
                 Capsule()
                     .fill(base.opacity(fillOpacity))
@@ -1230,23 +1255,24 @@ private struct HomeWarningCapsule: View {
     let warning: FastWarning
     let isDisabled: Bool
     let showsTitle: Bool
+    let isCompact: Bool
 
     var body: some View {
         let base = Color.red
         let fillOpacity: Double = 0.08
         let strokeOpacity: Double = 0.35
 
-        HStack(spacing: 5) {
+        HStack(spacing: isCompact ? 4 : 5) {
             Image(systemName: warning.systemImage)
             if showsTitle {
                 Text(warning.title)
                     .lineLimit(1)
             }
         }
-            .font(.caption.weight(.semibold))
+            .font((isCompact ? Font.caption2 : Font.caption).weight(.semibold))
             .foregroundStyle(base)
-            .padding(.vertical, 4)
-            .padding(.horizontal, 8)
+            .padding(.vertical, isCompact ? 3 : 4)
+            .padding(.horizontal, isCompact ? 6 : 8)
             .background(
                 Capsule()
                     .fill(base.opacity(fillOpacity))
