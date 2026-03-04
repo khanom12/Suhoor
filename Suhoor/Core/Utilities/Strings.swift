@@ -108,6 +108,7 @@ enum Strings {
         static let activeEndDate = "End date"
         static let emptyMonth = "No alarms in this month yet."
         static let emptyFilteredMonth = "No alarms match the selected tags yet."
+        static let nextAlarmSectionTitle = "Next alarm"
         static let filterTitle = "Filter Tags"
         static let filterApply = "Apply"
         static let filterClear = "Clear"

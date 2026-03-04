@@ -1094,7 +1094,7 @@ struct ScheduleManagerHijriTests {
         locationService.lastLocation = CLLocation(latitude: 43.6532, longitude: -79.3832)
 
         let alarmConfigStore = AlarmConfigStore(defaultsStore: defaults)
-        let testDate = Self.makeDate(year: 2026, month: 3, day: 4)
+        let testDate = DateHelpers.startOfTomorrow(in: .current)
         let testDateKey = DateHelpers.dayIdentifier(for: testDate, timeZone: .current)
         alarmConfigStore.addSingleDaySource(testDate)
 

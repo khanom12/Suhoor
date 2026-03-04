@@ -410,18 +410,104 @@ struct SuhoorTests {
     }
 
     @Test
-    func alarmRowDateLabelIncludesHijriDateAndNoRamadanDayCounter() {
+    func alarmRowDateLabelUsesRelativeLabelsForTodayAndTomorrow() {
         let timeZone = TimeZone(secondsFromGMT: 0) ?? .current
         let currentDate = makeDate(year: 2026, month: 2, day: 18)
-        let label = AlarmRowPresentation.dateLabel(
+        let todayLabel = AlarmRowPresentation.dateLabel(
             for: currentDate,
             currentDate: currentDate,
             timeZone: timeZone
         )
+        let tomorrow = makeDate(year: 2026, month: 2, day: 19)
+        let tomorrowLabel = AlarmRowPresentation.dateLabel(
+            for: tomorrow,
+            currentDate: currentDate,
+            timeZone: timeZone
+        )
 
-        #expect(label.contains("Today"))
-        #expect(label.contains(HijriDateFormatter.shared.string(from: currentDate)))
-        #expect(label.localizedCaseInsensitiveContains("fasting day") == false)
+        #expect(todayLabel == "Today")
+        #expect(tomorrowLabel == "Tomorrow")
+    }
+
+    @Test
+    func alarmRowDateLabelUsesRamadanWeekdayAndHijriDayOnly() {
+        let timeZone = TimeZone(secondsFromGMT: 0) ?? .current
+        let ramadanStart = HijriCalendarService().dateForRamadanStart(hijriYear: 1447, timeZone: timeZone)
+
+        #expect(ramadanStart != nil)
+        guard let ramadanStart else { return }
+
+        let label = AlarmRowPresentation.dateLabel(
+            for: ramadanStart,
+            currentDate: makeDate(year: 2026, month: 1, day: 1),
+            timeZone: timeZone
+        )
+
+        #expect(label.contains("Ramadan"))
+        #expect(label.contains(","))
+        #expect(label.contains("1447") == false)
+        #expect(label.contains("Jan") == false)
+        #expect(label.contains("Feb") == false)
+    }
+
+    @Test
+    func alarmRowDateLabelUsesGregorianOnlyOutsideRamadan() {
+        let timeZone = TimeZone(secondsFromGMT: 0) ?? .current
+        let ashura = HijriCalendarService().dateForAshura(hijriYear: 1447, timeZone: timeZone)
+
+        #expect(ashura != nil)
+        guard let ashura else { return }
+
+        let label = AlarmRowPresentation.dateLabel(
+            for: ashura,
+            currentDate: makeDate(year: 2026, month: 1, day: 1),
+            timeZone: timeZone
+        )
+
+        #expect(label.contains("Ramadan") == false)
+        #expect(label.contains("Muharram") == false)
+        #expect(label.contains(","))
+        #expect(label.range(of: #"[A-Z][a-z]{2}, [A-Z][a-z]{2} \d{1,2}"#, options: .regularExpression) != nil)
+    }
+
+    @Test
+    func nextAlarmSelectionSkipsPastEnabledEntryAndChoosesUpcomingOne() {
+        let calendar = Calendar(identifier: .gregorian)
+        let now = makeDate(year: 2026, month: 3, day: 2).addingTimeInterval(12 * 60 * 60)
+        let pastDate = calendar.date(byAdding: .hour, value: -2, to: now) ?? now
+        let upcomingDate = calendar.date(byAdding: .hour, value: 10, to: now) ?? now
+        let pastEntry = AlarmRowEntry(
+            activeDay: ActiveAlarmDay(
+                date: makeDate(year: 2026, month: 3, day: 2),
+                dateKey: DateHelpers.dayIdentifier(for: makeDate(year: 2026, month: 3, day: 2), timeZone: .current),
+                schedule: sampleDaySchedule(date: makeDate(year: 2026, month: 3, day: 2), wakeDate: pastDate),
+                effectiveConfig: sampleEffectiveDailyConfig(date: makeDate(year: 2026, month: 3, day: 2)),
+                provenances: [],
+                isImplicitRamadan: false,
+                isExplicitOneOff: false,
+                tagResult: .empty,
+                primaryDisplay: PrimaryDisplay(time: pastDate, kind: .suhoor),
+                sourceSummaryText: ""
+            )
+        )
+        let upcomingEntry = AlarmRowEntry(
+            activeDay: ActiveAlarmDay(
+                date: makeDate(year: 2026, month: 3, day: 3),
+                dateKey: DateHelpers.dayIdentifier(for: makeDate(year: 2026, month: 3, day: 3), timeZone: .current),
+                schedule: sampleDaySchedule(date: makeDate(year: 2026, month: 3, day: 3), wakeDate: upcomingDate),
+                effectiveConfig: sampleEffectiveDailyConfig(date: makeDate(year: 2026, month: 3, day: 3)),
+                provenances: [],
+                isImplicitRamadan: false,
+                isExplicitOneOff: false,
+                tagResult: .empty,
+                primaryDisplay: PrimaryDisplay(time: upcomingDate, kind: .suhoor),
+                sourceSummaryText: ""
+            )
+        )
+
+        let selected = AlarmListSelection.nextAlarmEntry(from: [pastEntry, upcomingEntry], now: now)
+
+        #expect(selected?.id == upcomingEntry.id)
     }
 
     @Test
@@ -1441,17 +1527,18 @@ struct SuhoorTests {
         return calendar.date(from: DateComponents(year: year, month: month, day: day)) ?? Date()
     }
 
-    private func sampleDaySchedule(date: Date) -> DaySchedule {
+    private func sampleDaySchedule(date: Date, wakeDate: Date? = nil) -> DaySchedule {
         DaySchedule(
             date: date,
             fajrDate: date.addingTimeInterval(120),
             maghribDate: date.addingTimeInterval(3600),
-            wakeDate: date.addingTimeInterval(60),
+            wakeDate: wakeDate ?? date.addingTimeInterval(60),
             reminderDate: nil,
             boundaryDate: date.addingTimeInterval(120),
             iftarDate: nil,
             fajrSoundChoice: .systemDefault,
             iftarSoundChoice: nil,
+            locationDescription: "",
             offsetMinutes: 30,
             calculationMethodName: "",
             timeZone: TimeZone(secondsFromGMT: 0) ?? .current
