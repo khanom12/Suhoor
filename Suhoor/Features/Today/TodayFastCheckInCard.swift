@@ -121,7 +121,7 @@ struct TodayFastCheckInCard: View {
         } label: {
             Image(systemName: "clock.arrow.circlepath")
                 .font(DesignTokens.cardMetaFont.weight(.semibold))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(DawnColor.accent)
                 .frame(width: 30, height: 30)
                 .background(
                     Circle()
@@ -141,7 +141,7 @@ struct TodayFastCheckInCard: View {
         } label: {
             Image(systemName: "arrow.uturn.backward")
                 .font(DesignTokens.cardMetaFont.weight(.semibold))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(DawnColor.accent)
                 .frame(width: 30, height: 30)
                 .background(
                     Circle()
@@ -169,7 +169,13 @@ struct TodayFastCheckInCard: View {
 
     private func phase(now: Date, scheduleDay: ActiveAlarmDay?) -> FastCheckInPhase {
         guard let scheduleDay else { return .timeUnknown }
-        return now < scheduleDay.schedule.maghribDate ? .preMaghrib : .postMaghrib
+        if now < scheduleDay.schedule.fajrDate {
+            return .postMaghrib
+        }
+        if now < scheduleDay.schedule.maghribDate {
+            return .preMaghrib
+        }
+        return .postMaghrib
     }
 
     private func normalizedStatus(

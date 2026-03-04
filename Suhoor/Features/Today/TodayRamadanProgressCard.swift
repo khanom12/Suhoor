@@ -70,9 +70,12 @@ struct TodayRamadanProgressCard: View {
         } label: {
             Image(systemName: "moonphase.new.moon")
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(DawnColor.accent)
                 .frame(width: 28, height: 28)
-                .contentShape(Circle())
+                .background(
+                    Circle()
+                        .fill(Color(.secondarySystemGroupedBackground))
+                )
         }
         .accessibilityLabel("Adjust Ramadan start")
         .accessibilityValue(currentAdjustmentAccessibilityValue)
@@ -112,9 +115,12 @@ struct TodayRamadanProgressCard: View {
         } label: {
             Image(systemName: "moon.stars.fill")
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(DawnColor.accent)
                 .frame(width: 28, height: 28)
-                .contentShape(Circle())
+                .background(
+                    Circle()
+                        .fill(Color(.secondarySystemGroupedBackground))
+                )
         }
         .accessibilityLabel("Adjust Shawwal start")
         .accessibilityValue(currentShawwalAdjustmentAccessibilityValue)

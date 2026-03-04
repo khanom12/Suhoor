@@ -111,7 +111,11 @@ struct TodayCountdownCard: View {
                 Image(systemName: adhanEnabled(for: target) ? "bell.fill" : "bell")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(adhanEnabled(for: target) ? iconTint(for: target.kind) : .secondary)
-                    .frame(width: 16, height: 16)
+                    .frame(width: 30, height: 30)
+                    .background(
+                        Circle()
+                            .fill(Color(.secondarySystemGroupedBackground))
+                    )
             }
             .buttonStyle(.plain)
             .accessibilityLabel(adhanControlTitle(for: target.kind))
