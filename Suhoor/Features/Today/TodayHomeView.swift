@@ -10,10 +10,16 @@ struct TodayHomeView: View {
         let isRamadan = AdjustedHijriCalendar.shared.isRamadan(date: Date(), timeZone: .current)
         ScrollView {
             LazyVStack(spacing: DesignTokens.dashboardStackSpacing) {
-                Text(GregorianDateFormatter.shared.headerString(for: Date()))
-                    .font(DesignTokens.cardSubtitleFont)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(GregorianDateFormatter.shared.headerString(for: Date()))
+                        .font(DesignTokens.cardSubtitleFont)
+                        .foregroundStyle(.secondary)
+
+                    Text(HijriDateFormatter.shared.string(from: Date()))
+                        .font(DesignTokens.cardMetaFont)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
 
                 ForEach(visibleCards) { card in
                     switch card {
@@ -29,7 +35,7 @@ struct TodayHomeView: View {
                 }
             }
             .padding(.horizontal, DesignTokens.spacingL)
-            .padding(.top, DesignTokens.spacingM)
+            .padding(.top, DesignTokens.spacingXS)
             .padding(.bottom, DesignTokens.spacingXL)
         }
         .background(

@@ -10,7 +10,7 @@ struct TodayRamadanProgressCard: View {
                 VStack(alignment: .leading, spacing: DesignTokens.dashboardCardInternalSpacing) {
                     VStack(alignment: .leading, spacing: DesignTokens.spacingS) {
                         HStack(alignment: .center, spacing: DesignTokens.spacingS) {
-                            Text("Ramadan \(model.hijriYear)")
+                            Text("Ramadan \(String(model.hijriYear))")
                                 .font(DesignTokens.cardTitleFont)
 
                             Spacer()
@@ -27,10 +27,6 @@ struct TodayRamadanProgressCard: View {
                         }
 
                         progressRow(progress: model.progress)
-
-                        Text(progressSummary(for: model))
-                            .font(DesignTokens.cardSubtitleFont)
-                            .foregroundStyle(.secondary)
                     }
                 }
             }
@@ -130,16 +126,11 @@ struct TodayRamadanProgressCard: View {
 
             ProgressView(value: progress)
                 .tint(DawnColor.accent)
+                .accessibilityLabel("Ramadan progress")
+                .accessibilityValue(progressAccessibilityValue)
 
             shawwalAdjustmentMenu()
         }
-    }
-
-    private func progressSummary(for model: RamadanProgressEngine.Model) -> String {
-        guard shouldShowTotalDays else {
-            return "\(model.dayNumber) days completed"
-        }
-        return "\(model.dayNumber) of \(model.totalDays) days completed"
     }
 
     private var currentRamadanAdjustment: Int {
@@ -152,6 +143,16 @@ struct TodayRamadanProgressCard: View {
 
     private var shouldShowTotalDays: Bool {
         currentRamadanAdjustment == 0 && currentShawwalAdjustment == 0
+    }
+
+    private var progressAccessibilityValue: String {
+        guard let model = RamadanProgressEngine.model(now: Date(), calendar: .shared, timeZone: .current) else {
+            return "Progress unavailable"
+        }
+        guard shouldShowTotalDays else {
+            return "Day \(model.dayNumber)"
+        }
+        return "Day \(model.dayNumber) of \(model.totalDays)"
     }
 
     private var currentAdjustmentAccessibilityValue: String {

@@ -24,10 +24,11 @@ struct TodayCountdownCard: View {
     @ViewBuilder
     private func countdownContent(target: TodayCountdownEngine.Target, now: Date) -> some View {
         let remaining = max(0, target.targetDate.timeIntervalSince(now))
-        VStack(alignment: .leading, spacing: contentSpacing) {
-            VStack(alignment: .leading, spacing: DesignTokens.spacingS) {
+        VStack(alignment: .leading, spacing: DesignTokens.spacingL) {
+            VStack(alignment: .leading, spacing: DesignTokens.spacingXS) {
                 Text(title(for: target.kind))
-                    .font(DesignTokens.cardTitleFont)
+                    .font(DesignTokens.cardMetaFont)
+                    .foregroundStyle(.secondary)
 
                 Text(Self.formattedCountdown(remaining: remaining))
                     .timeTextStyle()
@@ -108,16 +109,16 @@ struct TodayCountdownCard: View {
                 toggleAdhan(for: target)
             } label: {
                 Image(systemName: adhanEnabled(for: target) ? "bell.fill" : "bell")
-                    .font(DesignTokens.cardMetaFont.weight(.semibold))
+                    .font(.caption.weight(.semibold))
                     .foregroundStyle(adhanEnabled(for: target) ? iconTint(for: target.kind) : .secondary)
-                    .frame(width: 20, height: 20)
+                    .frame(width: 16, height: 16)
             }
             .buttonStyle(.plain)
             .accessibilityLabel(adhanControlTitle(for: target.kind))
             .accessibilityValue(adhanEnabled(for: target) ? "On" : "Off")
 
             Text("\(eventName(for: target.kind)) at \(TimeFormatters.timeFormatter.string(from: target.targetDate))")
-                .font(DesignTokens.cardMetaFont)
+                .font(DesignTokens.cardSubtitleFont)
                 .foregroundStyle(.secondary)
 
             Spacer(minLength: 0)
