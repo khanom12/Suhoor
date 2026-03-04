@@ -31,7 +31,7 @@ struct TodayObservanceEngineTests {
     func whiteDaysPreviewAdvancesAfterFifteenth() {
         let timeZone = TimeZone(secondsFromGMT: 0) ?? .current
         let calendar = makeAdjustedCalendar()
-        let now = makeAdjustedHijriDate(year: 1447, month: .rajab, day: 20, calendar: calendar, timeZone: timeZone)
+        let now = makeAdjustedHijriDate(year: 1447, month: .shawwal, day: 20, calendar: calendar, timeZone: timeZone)
 
         let key = TodayObservanceEngine.whiteDaysTargetMonthKey(
             now: now,
@@ -40,7 +40,7 @@ struct TodayObservanceEngineTests {
             timeZone: timeZone
         )
 
-        #expect(key?.month == .shaban)
+        #expect(key?.month == .dhulQadah)
     }
 
     @Test
@@ -67,7 +67,7 @@ struct TodayObservanceEngineTests {
                     dateKey: key,
                     status: status,
                     updatedAt: now,
-                    intentSnapshot: FastIntentSnapshot(primaryIntent: .voluntarySunnah, secondaryTags: [])
+                    intentSnapshot: FastIntentSnapshot(primaryIntent: .voluntary, secondaryTags: [])
                 )
             )
         })

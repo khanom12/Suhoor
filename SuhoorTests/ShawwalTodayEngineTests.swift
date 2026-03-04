@@ -49,7 +49,7 @@ struct ShawwalTodayEngineTests {
                     dateKey: key,
                     status: status,
                     updatedAt: now,
-                    intentSnapshot: FastIntentSnapshot(primaryIntent: .voluntarySunnah, secondaryTags: [])
+                    intentSnapshot: FastIntentSnapshot(primaryIntent: .voluntary, secondaryTags: [])
                 )
             )
         })
@@ -129,7 +129,7 @@ struct ShawwalTodayEngineTests {
                 dateKey: key,
                 status: .inProgress,
                 updatedAt: now,
-                intentSnapshot: FastIntentSnapshot(primaryIntent: .voluntarySunnah, secondaryTags: [])
+                intentSnapshot: FastIntentSnapshot(primaryIntent: .voluntary, secondaryTags: [])
             )
         ]
 

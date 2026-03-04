@@ -53,7 +53,7 @@ enum RangePurposeSelection: String, CaseIterable, Identifiable, Hashable, Sendab
     var detailText: String {
         switch self {
         case .auto:
-            return "Adds Voluntary automatically only on dates that already match a Sunnah observance."
+            return "Defaults to Voluntary on eligible days and locks Ramadan or forbidden dates automatically."
         case .voluntary:
             return "Marks every added day as Voluntary and derives matching observances per date."
         case .qada:

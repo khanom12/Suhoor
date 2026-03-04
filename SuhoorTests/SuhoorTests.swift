@@ -556,7 +556,7 @@ struct SuhoorTests {
     @Test
     func alarmRowSecondaryTagsAreLimitedToFive() {
         let result = TagComputationResult(
-            computedPrimaryIntent: .voluntarySunnah,
+            computedPrimaryIntent: .voluntary,
             computedSecondaryTags: Set(FastSecondaryVirtueTag.allCases),
             secondaryDetails: [:],
             suppressedSecondaryTags: []

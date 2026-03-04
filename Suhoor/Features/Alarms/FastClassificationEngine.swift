@@ -20,10 +20,11 @@ enum FiqhRuleset: String, CaseIterable, Identifiable, Codable, Sendable {
 
 enum FastPrimaryIntent: String, CaseIterable, Codable, Identifiable, Hashable, Sendable {
     case ramadanObligatory
+    case forbidden
     case qadaMakeup
     case kaffarahExpiation
     case vowNadhr
-    case voluntarySunnah
+    case voluntary = "voluntarySunnah"
     case other
 
     var id: String { rawValue }
@@ -32,14 +33,16 @@ enum FastPrimaryIntent: String, CaseIterable, Codable, Identifiable, Hashable, S
         switch self {
         case .ramadanObligatory:
             return "Ramadan (Obligatory)"
+        case .forbidden:
+            return "Forbidden"
         case .qadaMakeup:
             return "Qada (Makeup)"
         case .kaffarahExpiation:
             return "Kaffarah (Expiation)"
         case .vowNadhr:
             return "Vow (Nadhr)"
-        case .voluntarySunnah:
-            return "Voluntary (Sunnah)"
+        case .voluntary:
+            return "Voluntary"
         case .other:
             return "Other"
         }
@@ -49,14 +52,16 @@ enum FastPrimaryIntent: String, CaseIterable, Codable, Identifiable, Hashable, S
         switch self {
         case .ramadanObligatory:
             return "Ramadan"
+        case .forbidden:
+            return "Forbidden"
         case .qadaMakeup:
             return "Qada"
         case .kaffarahExpiation:
             return "Kaffarah"
         case .vowNadhr:
             return "Vow"
-        case .voluntarySunnah:
-            return "Sunnah"
+        case .voluntary:
+            return "Voluntary"
         case .other:
             return "Other"
         }
@@ -66,13 +71,15 @@ enum FastPrimaryIntent: String, CaseIterable, Codable, Identifiable, Hashable, S
         switch self {
         case .ramadanObligatory:
             return FastTagStyle(title: title, shortTitle: shortTitle, systemImage: "moon.stars", color: .green)
+        case .forbidden:
+            return FastTagStyle(title: title, shortTitle: shortTitle, systemImage: "exclamationmark.triangle.fill", color: .red)
         case .qadaMakeup:
             return FastTagStyle(title: title, shortTitle: shortTitle, systemImage: "arrow.counterclockwise", color: .indigo)
         case .kaffarahExpiation:
             return FastTagStyle(title: title, shortTitle: shortTitle, systemImage: "flame", color: .red)
         case .vowNadhr:
             return FastTagStyle(title: title, shortTitle: shortTitle, systemImage: "checkmark.seal", color: .purple)
-        case .voluntarySunnah:
+        case .voluntary:
             return FastTagStyle(title: title, shortTitle: shortTitle, systemImage: "sparkles", color: .orange)
         case .other:
             return FastTagStyle(title: title, shortTitle: shortTitle, systemImage: "tag", color: .secondary)
@@ -83,7 +90,7 @@ enum FastPrimaryIntent: String, CaseIterable, Codable, Identifiable, Hashable, S
         switch self {
         case .ramadanObligatory, .qadaMakeup, .kaffarahExpiation, .vowNadhr:
             return true
-        case .voluntarySunnah, .other:
+        case .forbidden, .voluntary, .other:
             return false
         }
     }
@@ -259,14 +266,26 @@ enum FastIntentEngine {
         return warnings
     }
 
+    static func isForbiddenToFast(_ date: Date, timeZone: TimeZone) -> Bool {
+        !warnings(for: date, timeZone: timeZone).isEmpty
+    }
+
     static func suggestions(for date: Date, timeZone: TimeZone) -> FastIntentSuggestions {
         var suggestedPrimary: FastPrimaryIntent?
         var suggestedSecondary: [FastSecondaryVirtueTag] = []
         var note: String?
 
+        if isForbiddenToFast(date, timeZone: timeZone) {
+            return FastIntentSuggestions(
+                suggestedPrimary: .forbidden,
+                suggestedSecondary: [],
+                note: "Fasting is forbidden on this date."
+            )
+        }
+
         if isRamadan(date, timeZone: timeZone) {
             suggestedPrimary = .ramadanObligatory
-            note = "Ramadan takes precedence over other Sunnah patterns."
+            note = "Ramadan takes precedence over other voluntary patterns."
             return FastIntentSuggestions(
                 suggestedPrimary: suggestedPrimary,
                 suggestedSecondary: suggestedSecondary,
@@ -278,7 +297,7 @@ enum FastIntentEngine {
             .sorted { $0.title < $1.title }
 
         if !suggestedSecondary.isEmpty {
-            suggestedPrimary = .voluntarySunnah
+            suggestedPrimary = .voluntary
         }
 
         return FastIntentSuggestions(
@@ -289,26 +308,21 @@ enum FastIntentEngine {
     }
 
     static func defaultAddFlowSelection(for date: Date, timeZone: TimeZone) -> FastIntentSelection {
+        if isForbiddenToFast(date, timeZone: timeZone) {
+            return FastIntentSelection(primaryIntent: .forbidden, secondaryTags: [])
+        }
+
         if isRamadan(date, timeZone: timeZone) {
             return FastIntentSelection(primaryIntent: .ramadanObligatory, secondaryTags: [])
         }
 
-        let derived = dateDerivedObservanceTags(
-            for: date,
-            timeZone: timeZone,
-            includeShawwalPotential: true
-        )
-        if derived.isEmpty {
-            return .default
-        }
-
-        return FastIntentSelection(primaryIntent: .voluntarySunnah, secondaryTags: [])
+        return FastIntentSelection(primaryIntent: .voluntary, secondaryTags: [])
     }
 
     static func allowsSecondaryTags(primary: FastPrimaryIntent, ruleset: FiqhRuleset) -> Bool {
         switch ruleset {
         case .strict:
-            return primary == .voluntarySunnah
+            return primary == .voluntary
         case .permissive:
             return true
         }
@@ -327,6 +341,10 @@ enum FastIntentEngine {
         ruleset: FiqhRuleset,
         timeZone: TimeZone
     ) -> FastIntentSelection {
+        if isForbiddenToFast(date, timeZone: timeZone) {
+            return FastIntentSelection(primaryIntent: .forbidden, secondaryTags: [])
+        }
+
         if isRamadan(date, timeZone: timeZone) {
             return FastIntentSelection(primaryIntent: .ramadanObligatory, secondaryTags: [])
         }
@@ -337,21 +355,25 @@ enum FastIntentEngine {
 
         let normalizedPrimary = normalizedPrimaryIntent(selection.primaryIntent, on: date, timeZone: timeZone)
 
-        guard normalizedPrimary == .voluntarySunnah else {
+        guard normalizedPrimary == .voluntary else {
             return FastIntentSelection(primaryIntent: normalizedPrimary, secondaryTags: [])
         }
 
         let applicable = selection.secondaryTags.filter { isCalendarApplicable(tag: $0, on: date, timeZone: timeZone) }
         let compatible = compatibleObservanceTags(from: Set(applicable))
-        return FastIntentSelection(primaryIntent: .voluntarySunnah, secondaryTags: compatible)
+        return FastIntentSelection(primaryIntent: .voluntary, secondaryTags: compatible)
     }
 
     static func normalizedPrimaryIntent(_ primary: FastPrimaryIntent, on date: Date, timeZone: TimeZone) -> FastPrimaryIntent {
+        if isForbiddenToFast(date, timeZone: timeZone) {
+            return .forbidden
+        }
+
         if isRamadan(date, timeZone: timeZone) {
             return .ramadanObligatory
         }
 
-        if primary == .ramadanObligatory {
+        if primary == .ramadanObligatory || primary == .forbidden {
             return .other
         }
 
@@ -359,6 +381,9 @@ enum FastIntentEngine {
     }
 
     static func isPrimarySelectable(_ primary: FastPrimaryIntent, on date: Date, timeZone: TimeZone) -> Bool {
+        if primary == .forbidden {
+            return isForbiddenToFast(date, timeZone: timeZone)
+        }
         if primary == .ramadanObligatory {
             return isRamadan(date, timeZone: timeZone)
         }
@@ -371,6 +396,9 @@ enum FastIntentEngine {
         timeZone: TimeZone,
         isSuggested: Bool
     ) -> String? {
+        if primary == .forbidden, !isForbiddenToFast(date, timeZone: timeZone) {
+            return "Only available on dates when fasting is forbidden"
+        }
         if primary == .ramadanObligatory, !isRamadan(date, timeZone: timeZone) {
             return "Only available during Ramadan"
         }
@@ -480,6 +508,9 @@ enum FastIntentEngine {
         for tag: FastSecondaryVirtueTag,
         primary: FastPrimaryIntent
     ) -> String {
+        if primary == .forbidden {
+            return "Hidden on dates when fasting is forbidden."
+        }
         if primary.isObligatory {
             return "Suppressed by obligatory intent."
         }
@@ -529,7 +560,7 @@ extension RangePurposeSelection {
             let selection = FastIntentEngine.defaultAddFlowSelection(for: date, timeZone: timeZone)
             return selection.hasMeaningfulTags ? selection : nil
         case .voluntary:
-            return FastIntentSelection(primaryIntent: .voluntarySunnah, secondaryTags: [])
+            return FastIntentSelection(primaryIntent: .voluntary, secondaryTags: [])
         case .qada:
             return FastIntentSelection(primaryIntent: .qadaMakeup, secondaryTags: [])
         case .kaffarah:

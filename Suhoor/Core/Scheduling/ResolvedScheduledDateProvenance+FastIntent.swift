@@ -12,7 +12,7 @@ extension Collection where Element == ResolvedScheduledDateProvenance {
                 return false
             }
         }) {
-            return .voluntarySunnah
+            return .voluntary
         }
         return nil
     }

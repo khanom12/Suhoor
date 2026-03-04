@@ -74,9 +74,9 @@ struct FastTagPickerSheet: View {
                             subtitle: intent.about.subtitle,
                             systemImage: intent.style.systemImage,
                             color: intent.style.color,
-                            isSelected: policy.isPurposeLocked ? intent == .ramadanObligatory : computedResult.computedPrimaryIntent == intent,
+                            isSelected: policy.isPurposeLocked ? intent == policy.lockedPrimaryIntent : computedResult.computedPrimaryIntent == intent,
                             isPrimary: true,
-                            isDisabled: (policy.isPurposeLocked && intent != .ramadanObligatory) || !isCalendarSelectable,
+                            isDisabled: (policy.isPurposeLocked && intent != policy.lockedPrimaryIntent) || !isCalendarSelectable,
                             statusText: FastIntentEngine.primaryStatusText(
                                 for: intent,
                                 on: date,
@@ -89,7 +89,7 @@ struct FastTagPickerSheet: View {
                     }
                 }
 
-                Text("Also matches")
+                Text("Also matches Sunnah observences")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
                 if let secondaryHelper = policy.secondaryHelperText {
@@ -170,7 +170,7 @@ struct FastTagPickerSheet: View {
             ).computedPrimaryIntent,
             timeZone: TimeZone.current
         )
-        if policy.isPurposeLocked, intent != .ramadanObligatory {
+        if policy.isPurposeLocked, intent != policy.lockedPrimaryIntent {
             Haptics.medium()
             return
         }
@@ -413,7 +413,9 @@ private struct WarningChipWithInfo: View {
 
 private struct TagEditPolicy {
     let isRamadanDate: Bool
+    let isForbiddenDate: Bool
     let isObligatoryPrimarySelected: Bool
+    let lockedPrimaryIntent: FastPrimaryIntent?
     let isPurposeLocked: Bool
     let areSecondaryTagsLocked: Bool
     let purposeHelperText: String?
@@ -421,21 +423,35 @@ private struct TagEditPolicy {
 
     init(date: Date, effectivePrimary: FastPrimaryIntent, timeZone: TimeZone) {
         let isRamadan = TagEditPolicy.isRamadan(date: date, timeZone: timeZone)
+        let isForbidden = FastIntentEngine.isForbiddenToFast(date, timeZone: timeZone)
         let isObligatoryPrimary = effectivePrimary.isObligatory
+        let lockedPrimaryIntent: FastPrimaryIntent?
+        if isForbidden {
+            lockedPrimaryIntent = .forbidden
+        } else if isRamadan {
+            lockedPrimaryIntent = .ramadanObligatory
+        } else {
+            lockedPrimaryIntent = nil
+        }
         self.isRamadanDate = isRamadan
+        self.isForbiddenDate = isForbidden
         self.isObligatoryPrimarySelected = isObligatoryPrimary
-        self.isPurposeLocked = isRamadan
-        self.areSecondaryTagsLocked = isRamadan || isObligatoryPrimary
+        self.lockedPrimaryIntent = lockedPrimaryIntent
+        self.isPurposeLocked = lockedPrimaryIntent != nil
+        self.areSecondaryTagsLocked = lockedPrimaryIntent != nil || isObligatoryPrimary
 
-        if isRamadan {
+        if isForbidden {
+            self.purposeHelperText = "Locked: fasting is forbidden on this date."
+            self.secondaryHelperText = "Sunnah observence tags are hidden on forbidden dates."
+        } else if isRamadan {
             self.purposeHelperText = "Locked for Ramadan: this fast is obligatory."
-            self.secondaryHelperText = "Observance tags are hidden during Ramadan."
+            self.secondaryHelperText = "Sunnah observence tags are hidden during Ramadan."
         } else if isObligatoryPrimary {
             self.purposeHelperText = nil
-            self.secondaryHelperText = "Observance tags are suppressed when the purpose is obligatory."
+            self.secondaryHelperText = "Sunnah observence tags are suppressed when the purpose is obligatory."
         } else if effectivePrimary == .other {
             self.purposeHelperText = nil
-            self.secondaryHelperText = "Choose Voluntary to see date-derived observances."
+            self.secondaryHelperText = "Choose Voluntary to see date-derived Sunnah observences."
         } else {
             self.purposeHelperText = nil
             self.secondaryHelperText = nil

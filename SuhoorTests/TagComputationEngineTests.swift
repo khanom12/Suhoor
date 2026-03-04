@@ -24,6 +24,27 @@ struct TagComputationEngineTests {
     }
 
     @Test
+    func forbiddenForcesPrimaryAndClearsSecondary() {
+        let timeZone = TimeZone(secondsFromGMT: 0) ?? .current
+        let forbiddenDate = makeAdjustedHijriDate(year: 1447, month: .dhulHijjah, day: 11, timeZone: timeZone)
+        let schedule = makeSchedule(date: forbiddenDate, timeZone: timeZone)
+        let selection = FastIntentSelection(primaryIntent: .qadaMakeup, secondaryTags: [.whiteDays])
+
+        let results = TagComputationEngine.results(
+            schedules: [schedule],
+            selections: [DateHelpers.dayIdentifier(for: forbiddenDate, timeZone: timeZone): selection],
+            ruleset: .strict,
+            timeZone: timeZone
+        )
+
+        let key = DateHelpers.dayIdentifier(for: forbiddenDate, timeZone: timeZone)
+        let result = results[key]
+        #expect(result?.computedPrimaryIntent == .forbidden)
+        #expect(result?.computedSecondaryTags.isEmpty == true)
+        #expect(result?.suppressedSecondaryTags.isEmpty == true)
+    }
+
+    @Test
     func otherDoesNotCarryObservanceTags() {
         let timeZone = TimeZone(secondsFromGMT: 0) ?? .current
         let date = findDate(hijriDay: 13, weekday: 2, timeZone: timeZone)
@@ -49,7 +70,7 @@ struct TagComputationEngineTests {
         let timeZone = TimeZone(secondsFromGMT: 0) ?? .current
         let date = findDate(hijriDay: 13, weekday: 2, timeZone: timeZone)
         let schedule = makeSchedule(date: date, timeZone: timeZone)
-        let selection = FastIntentSelection(primaryIntent: .voluntarySunnah, secondaryTags: [])
+        let selection = FastIntentSelection(primaryIntent: .voluntary, secondaryTags: [])
 
         let results = TagComputationEngine.results(
             schedules: [schedule],
@@ -73,7 +94,7 @@ struct TagComputationEngineTests {
                 ActiveTagComputationSeed(
                     date: date,
                     dateKey: DateHelpers.dayIdentifier(for: date, timeZone: timeZone),
-                    defaultPrimaryIntent: .voluntarySunnah
+                    defaultPrimaryIntent: .voluntary
                 )
             ],
             selections: [:],
@@ -83,7 +104,7 @@ struct TagComputationEngineTests {
 
         let key = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
         let result = results[key]
-        #expect(result?.computedPrimaryIntent == .voluntarySunnah)
+        #expect(result?.computedPrimaryIntent == .voluntary)
         #expect(result?.computedSecondaryTags.contains(.mondayThursday) == true)
         #expect(result?.computedSecondaryTags.contains(.whiteDays) == true)
     }
@@ -93,7 +114,7 @@ struct TagComputationEngineTests {
         let timeZone = TimeZone(secondsFromGMT: 0) ?? .current
         let date = makeAdjustedHijriDate(year: 1447, month: .dhulHijjah, day: 9, timeZone: timeZone)
         let schedule = makeSchedule(date: date, timeZone: timeZone)
-        let selection = FastIntentSelection(primaryIntent: .voluntarySunnah, secondaryTags: [])
+        let selection = FastIntentSelection(primaryIntent: .voluntary, secondaryTags: [])
 
         let results = TagComputationEngine.results(
             schedules: [schedule],
@@ -138,7 +159,7 @@ struct TagComputationEngineTests {
     func storedInvalidSecondaryTagsAreNormalizedAway() {
         let timeZone = TimeZone(secondsFromGMT: 0) ?? .current
         let date = makeAdjustedHijriDate(year: 1447, month: .dhulHijjah, day: 9, timeZone: timeZone)
-        let selection = FastIntentSelection(primaryIntent: .voluntarySunnah, secondaryTags: [.whiteDays, .dhulHijjahFirstNine, .arafah])
+        let selection = FastIntentSelection(primaryIntent: .voluntary, secondaryTags: [.whiteDays, .dhulHijjahFirstNine, .arafah])
 
         let normalized = FastIntentEngine.normalizedSelection(
             selection,
@@ -160,7 +181,7 @@ struct TagComputationEngineTests {
             return makeSchedule(date: date, timeZone: timeZone)
         }
         let selections = Dictionary(uniqueKeysWithValues: schedules.map {
-            (DateHelpers.dayIdentifier(for: $0.date, timeZone: timeZone), FastIntentSelection(primaryIntent: .voluntarySunnah, secondaryTags: []))
+            (DateHelpers.dayIdentifier(for: $0.date, timeZone: timeZone), FastIntentSelection(primaryIntent: .voluntary, secondaryTags: []))
         })
 
         let results = TagComputationEngine.results(
@@ -186,7 +207,7 @@ struct TagComputationEngineTests {
             return makeSchedule(date: date, timeZone: timeZone)
         }
         var selections = Dictionary(uniqueKeysWithValues: schedules.map {
-            (DateHelpers.dayIdentifier(for: $0.date, timeZone: timeZone), FastIntentSelection(primaryIntent: .voluntarySunnah, secondaryTags: []))
+            (DateHelpers.dayIdentifier(for: $0.date, timeZone: timeZone), FastIntentSelection(primaryIntent: .voluntary, secondaryTags: []))
         })
         let blockedKey = DateHelpers.dayIdentifier(for: schedules[1].date, timeZone: timeZone)
         selections[blockedKey] = FastIntentSelection(primaryIntent: .qadaMakeup, secondaryTags: [])
@@ -211,7 +232,7 @@ struct TagComputationEngineTests {
             return makeSchedule(date: date, timeZone: timeZone)
         }
         let baseSelections = Dictionary(uniqueKeysWithValues: schedules.map {
-            (DateHelpers.dayIdentifier(for: $0.date, timeZone: timeZone), FastIntentSelection(primaryIntent: .voluntarySunnah, secondaryTags: []))
+            (DateHelpers.dayIdentifier(for: $0.date, timeZone: timeZone), FastIntentSelection(primaryIntent: .voluntary, secondaryTags: []))
         })
 
         let baseResults = TagComputationEngine.results(
@@ -244,7 +265,7 @@ struct TagComputationEngineTests {
         let timeZone = TimeZone(secondsFromGMT: 0) ?? .current
         let date = makeAdjustedHijriDate(year: 1447, month: .shawwal, day: 13, timeZone: timeZone)
         let schedule = makeSchedule(date: date, timeZone: timeZone)
-        let selection = FastIntentSelection(primaryIntent: .voluntarySunnah, secondaryTags: [])
+        let selection = FastIntentSelection(primaryIntent: .voluntary, secondaryTags: [])
 
         let results = TagComputationEngine.results(
             schedules: [schedule],
@@ -263,7 +284,7 @@ struct TagComputationEngineTests {
     func singleDateResultAllocatesShawwalForEligibleVoluntaryDate() {
         let timeZone = TimeZone(secondsFromGMT: 0) ?? .current
         let date = makeAdjustedHijriDate(year: 1447, month: .shawwal, day: 2, timeZone: timeZone)
-        let selection = FastIntentSelection(primaryIntent: .voluntarySunnah, secondaryTags: [])
+        let selection = FastIntentSelection(primaryIntent: .voluntary, secondaryTags: [])
 
         let result = TagComputationEngine.result(
             for: date,
@@ -274,7 +295,7 @@ struct TagComputationEngineTests {
             overrideSelection: selection
         )
 
-        #expect(result.computedPrimaryIntent == .voluntarySunnah)
+        #expect(result.computedPrimaryIntent == .voluntary)
         #expect(result.computedSecondaryTags.contains(.shawwalSix))
     }
 
@@ -302,7 +323,7 @@ struct TagComputationEngineTests {
         let timeZone = TimeZone(secondsFromGMT: 0) ?? .current
         let date = makeAdjustedHijriDate(year: 1447, month: .ramadan, day: 13, timeZone: timeZone)
         let schedule = makeSchedule(date: date, timeZone: timeZone)
-        let selection = FastIntentSelection(primaryIntent: .voluntarySunnah, secondaryTags: [.whiteDays, .mondayThursday])
+        let selection = FastIntentSelection(primaryIntent: .voluntary, secondaryTags: [.whiteDays, .mondayThursday])
 
         let results = TagComputationEngine.results(
             schedules: [schedule],
@@ -322,7 +343,7 @@ struct TagComputationEngineTests {
         let timeZone = TimeZone(secondsFromGMT: 0) ?? .current
         let date = makeAdjustedHijriDate(year: 1447, month: .dhulHijjah, day: 13, timeZone: timeZone)
         let schedule = makeSchedule(date: date, timeZone: timeZone)
-        let selection = FastIntentSelection(primaryIntent: .voluntarySunnah, secondaryTags: [])
+        let selection = FastIntentSelection(primaryIntent: .voluntary, secondaryTags: [])
 
         let results = TagComputationEngine.results(
             schedules: [schedule],
@@ -334,6 +355,7 @@ struct TagComputationEngineTests {
         let key = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
         let result = results[key]
         #expect(FastIntentEngine.warnings(for: date, timeZone: timeZone).contains(.tashreeq))
+        #expect(result?.computedPrimaryIntent == .forbidden)
         #expect(result?.computedSecondaryTags.isEmpty == true)
     }
 

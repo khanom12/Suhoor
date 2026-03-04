@@ -115,9 +115,9 @@ enum Strings {
         static let filteringLabel = "Filtered by"
         static let filterPurposeSection = "Purpose"
         static let filterAnyPurpose = "Any purpose"
-        static let filterObservancesSection = "Observances"
+        static let filterObservancesSection = "Sunnah Observances"
         static let filterMatchAllFooter = "Shows only alarms that match all selected tags."
-        static let filterVoluntaryOnlyHelper = "Only available with Voluntary (Sunnah) purpose."
+        static let filterVoluntaryOnlyHelper = "Only available with Voluntary purpose."
         static func filterIncompatibleTagHelper(_ titles: String) -> String {
             "Can’t combine with \(titles)."
         }

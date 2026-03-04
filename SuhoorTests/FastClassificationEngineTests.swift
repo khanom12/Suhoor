@@ -14,6 +14,16 @@ struct FastClassificationEngineTests {
     }
 
     @Test
+    func forbiddenSuggestionPrecedenceOverOtherPatterns() {
+        let timeZone = TimeZone(secondsFromGMT: 0) ?? .current
+        let forbiddenDate = makeAdjustedHijriDate(year: 1447, month: .shawwal, day: 1, timeZone: timeZone)
+        let suggestions = FastIntentEngine.suggestions(for: forbiddenDate, timeZone: timeZone)
+
+        #expect(suggestions.suggestedPrimary == .forbidden)
+        #expect(suggestions.suggestedSecondary.isEmpty)
+    }
+
+    @Test
     func strictRulesetBlocksSecondaryForObligatory() {
         let selection = FastIntentSelection(primaryIntent: .qadaMakeup, secondaryTags: [.whiteDays])
         let normalized = FastIntentEngine.normalizedSelection(selection, ruleset: .strict)
@@ -30,7 +40,7 @@ struct FastClassificationEngineTests {
 
     @Test
     func changingPrimaryClearsSecondaryInStrict() {
-        let selection = FastIntentSelection(primaryIntent: .voluntarySunnah, secondaryTags: [.mondayThursday])
+        let selection = FastIntentSelection(primaryIntent: .voluntary, secondaryTags: [.mondayThursday])
         let newSelection = FastIntentSelection(primaryIntent: .ramadanObligatory, secondaryTags: selection.secondaryTags)
         let normalized = FastIntentEngine.normalizedSelection(newSelection, ruleset: .strict)
         #expect(normalized.secondaryTags.isEmpty)
@@ -60,8 +70,20 @@ struct FastClassificationEngineTests {
         let date = makeAdjustedHijriDate(year: 1447, month: .shawwal, day: 2, timeZone: timeZone)
         let suggestions = FastIntentEngine.suggestions(for: date, timeZone: timeZone)
 
-        #expect(suggestions.suggestedPrimary == .voluntarySunnah)
+        #expect(suggestions.suggestedPrimary == .voluntary)
         #expect(suggestions.suggestedSecondary.contains(.shawwalSix))
+    }
+
+    @Test
+    func defaultAddFlowSelectionDefaultsToVoluntaryWhenNoObservance() {
+        let timeZone = TimeZone(secondsFromGMT: 0) ?? .current
+        let date = findEligibleDateWithoutObservance(timeZone: timeZone)
+        let selection = FastIntentEngine.defaultAddFlowSelection(for: date, timeZone: timeZone)
+
+        #expect(FastIntentEngine.isForbiddenToFast(date, timeZone: timeZone) == false)
+        #expect(FastIntentEngine.isRamadan(date, timeZone: timeZone) == false)
+        #expect(FastIntentEngine.dateDerivedObservanceTags(for: date, timeZone: timeZone, includeShawwalPotential: true).isEmpty)
+        #expect(selection.primaryIntent == .voluntary)
     }
 
     @Test
@@ -135,7 +157,7 @@ struct FastClassificationEngineTests {
     @Test
     func strictOnlyUiContractRemainsInPlace() {
         #expect(FastIntentEngine.allowsSecondaryTags(primary: .other, ruleset: .strict) == false)
-        #expect(FastIntentEngine.allowsSecondaryTags(primary: .voluntarySunnah, ruleset: .strict))
+        #expect(FastIntentEngine.allowsSecondaryTags(primary: .voluntary, ruleset: .strict))
     }
 
     private func makeHijriDate(year: Int, month: Int, day: Int, timeZone: TimeZone) -> Date {
@@ -160,5 +182,22 @@ struct FastClassificationEngineTests {
         let date = service.gregorianDate(for: HijriYearMonth(hijriYear: year, month: month), dayOfMonth: day, timeZone: timeZone)
         #expect(date != nil)
         return date ?? Date()
+    }
+
+    private func findEligibleDateWithoutObservance(timeZone: TimeZone) -> Date {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        var date = makeAdjustedHijriDate(year: 1447, month: .shawwal, day: 20, timeZone: timeZone)
+        for _ in 0..<400 {
+            let isForbidden = FastIntentEngine.isForbiddenToFast(date, timeZone: timeZone)
+            let isRamadan = FastIntentEngine.isRamadan(date, timeZone: timeZone)
+            let derived = FastIntentEngine.dateDerivedObservanceTags(for: date, timeZone: timeZone, includeShawwalPotential: true)
+            if !isForbidden && !isRamadan && derived.isEmpty {
+                return date
+            }
+            date = calendar.date(byAdding: .day, value: 1, to: date) ?? date
+        }
+        Issue.record("Unable to find an eligible non-observance date")
+        return Date()
     }
 }

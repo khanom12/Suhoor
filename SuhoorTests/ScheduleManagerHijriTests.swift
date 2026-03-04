@@ -112,7 +112,7 @@ struct ScheduleManagerHijriTests {
         }
 
         #expect(fastTagStore.selection(for: targetDate, timeZone: timeZone) == nil)
-        #expect(activeDay.tagResult.computedPrimaryIntent == .voluntarySunnah)
+        #expect(activeDay.tagResult.computedPrimaryIntent == .voluntary)
         #expect(activeDay.tagResult.computedSecondaryTags.contains(.mondayThursday))
     }
 
@@ -543,7 +543,7 @@ struct ScheduleManagerHijriTests {
         }
 
         #expect(fastTagStore.selection(for: activeDay.date, timeZone: timeZone) == nil)
-        #expect(activeDay.tagResult.computedPrimaryIntent == .voluntarySunnah)
+        #expect(activeDay.tagResult.computedPrimaryIntent == .voluntary)
         #expect(activeDay.tagResult.computedSecondaryTags.contains(.whiteDays))
     }
 
@@ -587,7 +587,7 @@ struct ScheduleManagerHijriTests {
 
         let fastTagStore = FastTagStore(defaults: defaults)
         fastTagStore.setSelection(
-            FastIntentSelection(primaryIntent: .voluntarySunnah, secondaryTags: []),
+            FastIntentSelection(primaryIntent: .voluntary, secondaryTags: []),
             for: targetDate,
             timeZone: timeZone
         )
@@ -615,7 +615,7 @@ struct ScheduleManagerHijriTests {
             return
         }
 
-        #expect(activeDay.tagResult.computedPrimaryIntent == .voluntarySunnah)
+        #expect(activeDay.tagResult.computedPrimaryIntent == .voluntary)
         #expect(activeDay.tagResult.computedSecondaryTags.contains(.mondayThursday))
     }
 
@@ -672,7 +672,7 @@ struct ScheduleManagerHijriTests {
         #expect(initial.tagResult.computedPrimaryIntent == .other)
 
         fastTagStore.setSelection(
-            FastIntentSelection(primaryIntent: .voluntarySunnah, secondaryTags: []),
+            FastIntentSelection(primaryIntent: .voluntary, secondaryTags: []),
             for: targetDate,
             timeZone: timeZone
         )
@@ -683,7 +683,7 @@ struct ScheduleManagerHijriTests {
             return
         }
 
-        #expect(updated.tagResult.computedPrimaryIntent == .voluntarySunnah)
+        #expect(updated.tagResult.computedPrimaryIntent == .voluntary)
         #expect(updated.tagResult.computedSecondaryTags.contains(.mondayThursday))
     }
 

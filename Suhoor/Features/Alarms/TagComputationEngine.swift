@@ -74,7 +74,7 @@ enum TagComputationEngine {
                 includeShawwalPotential: false
             )
 
-            if ruleset == .strict, basePrimary != .voluntarySunnah {
+            if ruleset == .strict, basePrimary != .voluntary {
                 suppressedByKey[seed.dateKey] = dateDerived
                 compatibleByKey[seed.dateKey] = []
             } else {
@@ -104,7 +104,7 @@ enum TagComputationEngine {
             var secondaryDetails: [FastSecondaryVirtueTag: TagEvaluationDetail] = [:]
 
             if potentialShawwal {
-                if ruleset == .strict, primary != .voluntarySunnah {
+                if ruleset == .strict, primary != .voluntary {
                     suppressedSecondary.insert(.shawwalSix)
                 } else if shawwalFirstSix.contains(seed.dateKey) {
                     computedSecondary.insert(.shawwalSix)
@@ -205,7 +205,7 @@ enum TagComputationEngine {
 
         var computedSecondary: Set<FastSecondaryVirtueTag> = []
         var suppressedSecondary: Set<FastSecondaryVirtueTag> = []
-        if ruleset == .strict, primary != .voluntarySunnah {
+        if ruleset == .strict, primary != .voluntary {
             suppressedSecondary = dateDerived
             if FastIntentEngine.isCalendarApplicable(tag: .shawwalSix, on: date, timeZone: timeZone) {
                 suppressedSecondary.insert(.shawwalSix)
@@ -243,6 +243,9 @@ enum TagComputationEngine {
         selection: FastIntentSelection,
         timeZone: TimeZone
     ) -> FastPrimaryIntent {
+        if FastIntentEngine.isForbiddenToFast(date, timeZone: timeZone) {
+            return .forbidden
+        }
         if isRamadan(date: date, timeZone: timeZone) {
             return .ramadanObligatory
         }
@@ -254,7 +257,7 @@ enum TagComputationEngine {
         primary: FastPrimaryIntent,
         timeZone: TimeZone
     ) -> Bool {
-        guard primary == .voluntarySunnah else { return false }
+        guard primary == .voluntary else { return false }
         return FastIntentEngine.isCalendarApplicable(tag: .shawwalSix, on: date, timeZone: timeZone)
     }
 
