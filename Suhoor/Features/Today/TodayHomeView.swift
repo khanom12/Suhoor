@@ -6,9 +6,15 @@ struct TodayHomeView: View {
     @State private var isEditingCards = false
 
     var body: some View {
+        let hijriChangeCount = scheduleManager.hijriAdjustmentChanges.count
         let isRamadan = AdjustedHijriCalendar.shared.isRamadan(date: Date(), timeZone: .current)
         ScrollView {
             LazyVStack(spacing: DesignTokens.dashboardStackSpacing) {
+                Text(GregorianDateFormatter.shared.headerString(for: Date()))
+                    .font(DesignTokens.cardSubtitleFont)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
                 ForEach(visibleCards) { card in
                     switch card {
                     case .countdown:
@@ -40,6 +46,7 @@ struct TodayHomeView: View {
             TodayEditCardsSheet(layoutStore: layoutStore)
         }
         .onAppear { _ = scheduleManager.lastUpdated }
+        .onAppear { _ = hijriChangeCount }
     }
 
     private var visibleCards: [TodayCardKind] {

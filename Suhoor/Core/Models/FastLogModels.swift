@@ -2,6 +2,7 @@ import Foundation
 
 enum FastLogStatus: String, Codable, CaseIterable, Identifiable, Hashable, Sendable {
     case unknown
+    case inProgress
     case completed
     case missed
 
@@ -11,11 +12,19 @@ enum FastLogStatus: String, Codable, CaseIterable, Identifiable, Hashable, Senda
         switch self {
         case .unknown:
             return "Not logged"
+        case .inProgress:
+            return "In progress"
         case .completed:
             return "Completed"
         case .missed:
             return "Missed"
         }
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        let rawValue = try container.decode(String.self)
+        self = FastLogStatus(rawValue: rawValue) ?? .unknown
     }
 }
 
@@ -32,4 +41,3 @@ struct FastLogEntry: Codable, Equatable, Hashable, Sendable {
     var updatedAt: Date
     var intentSnapshot: FastIntentSnapshot?
 }
-

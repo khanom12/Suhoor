@@ -3,9 +3,8 @@ import Foundation
 struct TodayCountdownEngine {
     struct Target: Equatable, Sendable {
         enum Kind: String, Equatable, Sendable {
-            case suhoor
             case fajr
-            case iftar
+            case maghrib
         }
 
         let kind: Kind
@@ -22,19 +21,12 @@ struct TodayCountdownEngine {
 
         for activeDay in snapshot.visibleDays {
             let schedule = activeDay.schedule
-            let iftarOrMaghrib = schedule.iftarDate ?? schedule.maghribDate
-
-            guard now < iftarOrMaghrib else { continue }
-
-            if now < schedule.wakeDate, activeDay.effectiveConfig.suhoorEnabled {
-                return Target(kind: .suhoor, targetDate: schedule.wakeDate, day: activeDay)
-            }
-
             if now < schedule.fajrDate {
                 return Target(kind: .fajr, targetDate: schedule.fajrDate, day: activeDay)
             }
-
-            return Target(kind: .iftar, targetDate: iftarOrMaghrib, day: activeDay)
+            if now < schedule.maghribDate {
+                return Target(kind: .maghrib, targetDate: schedule.maghribDate, day: activeDay)
+            }
         }
 
         return nil

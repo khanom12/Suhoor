@@ -41,14 +41,72 @@ struct RamadanProgressEngineTests {
         }
     }
 
-    // MARK: - Helpers
-
-    private func makeCalendar() -> AdjustedHijriCalendar {
-        let suiteName = "SuhoorTests.RamadanProgressEngine"
+    @Test
+    func ramadanAdjustmentShiftsDayOne() {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let suiteName = "SuhoorTests.RamadanProgressEngine.ShiftedRamadan"
         let defaults = UserDefaults(suiteName: suiteName)!
         defaults.removePersistentDomain(forName: suiteName)
 
         let adjustmentStore = HijriMonthAdjustmentStore(defaults: defaults)
+        adjustmentStore.setAdjustment(
+            for: HijriYearMonth(hijriYear: 1447, month: .ramadan),
+            offsetDays: 1
+        )
+        let calendar = makeCalendar(defaults: defaults)
+
+        let feb18 = makeDate(year: 2026, month: 2, day: 18, hour: 12, minute: 0, timeZone: timeZone)
+        let feb19 = makeDate(year: 2026, month: 2, day: 19, hour: 12, minute: 0, timeZone: timeZone)
+
+        let modelBeforeShift = RamadanProgressEngine.model(now: feb18, calendar: calendar, timeZone: timeZone)
+        let modelOnShiftedStart = RamadanProgressEngine.model(now: feb19, calendar: calendar, timeZone: timeZone)
+
+        #expect(modelBeforeShift == nil)
+        #expect(modelOnShiftedStart?.dayNumber == 1)
+    }
+
+    @Test
+    func shawwalAdjustmentChangesTotalDaysAndEidDate() {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let suiteName = "SuhoorTests.RamadanProgressEngine.ShawwalShift"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+
+        let baselineCalendar = makeCalendar(defaults: defaults)
+        let checkDate = makeDate(year: 2026, month: 3, day: 10, hour: 12, minute: 0, timeZone: timeZone)
+        let baselineModel = RamadanProgressEngine.model(now: checkDate, calendar: baselineCalendar, timeZone: timeZone)
+
+        let adjustmentStore = HijriMonthAdjustmentStore(defaults: defaults)
+        adjustmentStore.setAdjustment(
+            for: HijriYearMonth(hijriYear: 1447, month: .shawwal),
+            offsetDays: 1
+        )
+        let shiftedCalendar = makeCalendar(defaults: defaults)
+        let shiftedModel = RamadanProgressEngine.model(now: checkDate, calendar: shiftedCalendar, timeZone: timeZone)
+
+        #expect(baselineModel != nil)
+        #expect(shiftedModel != nil)
+
+        if let baselineModel, let shiftedModel {
+            #expect(shiftedModel.totalDays == baselineModel.totalDays + 1)
+            #expect(shiftedModel.eidDateText != baselineModel.eidDateText)
+        }
+    }
+
+    // MARK: - Helpers
+
+    private func makeCalendar(defaults: UserDefaults? = nil) -> AdjustedHijriCalendar {
+        let resolvedDefaults: UserDefaults
+        if let defaults {
+            resolvedDefaults = defaults
+        } else {
+            let suiteName = "SuhoorTests.RamadanProgressEngine"
+            let freshDefaults = UserDefaults(suiteName: suiteName)!
+            freshDefaults.removePersistentDomain(forName: suiteName)
+            resolvedDefaults = freshDefaults
+        }
+
+        let adjustmentStore = HijriMonthAdjustmentStore(defaults: resolvedDefaults)
         let service = HijriCalendarService(
             baselineProvider: HijriBaselineMonthStarts.starts,
             adjustmentStore: adjustmentStore
@@ -69,4 +127,3 @@ struct RamadanProgressEngineTests {
         return calendar.date(from: DateComponents(year: year, month: month, day: day, hour: hour, minute: minute))!
     }
 }
-

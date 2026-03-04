@@ -31,6 +31,7 @@ struct SuhoorApp: App {
         _scheduleManager = StateObject(wrappedValue: scheduleManager)
         _fastTagStore = StateObject(wrappedValue: fastTagStore)
         _fastLogStore = StateObject(wrappedValue: fastLogStore)
+        fastLogStore.normalizeStaleInProgress(todayKey: DateHelpers.dayIdentifier(for: Date(), timeZone: .current))
         UNUserNotificationCenter.current().delegate = NotificationEventDelegate.shared
     }
 

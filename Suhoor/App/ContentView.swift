@@ -28,6 +28,7 @@ extension Notification.Name {
     static let switchToAlarmTab = Notification.Name("SwitchToAlarmTab")
     static let switchToPlanTab = Notification.Name("SwitchToPlanTab")
     static let switchToSettingsTab = Notification.Name("SwitchToSettingsTab")
+    static let switchToHijriCorrections = Notification.Name("SwitchToHijriCorrections")
 }
 
 #if DEBUG

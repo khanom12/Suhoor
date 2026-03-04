@@ -9,6 +9,7 @@ enum RootTab: Hashable {
 
 enum ProfileDestination: Hashable {
     case settings
+    case hijriCorrections
 }
 
 struct RootTabView: View {
@@ -47,6 +48,8 @@ struct RootTabView: View {
                         switch destination {
                         case .settings:
                             SettingsRootView()
+                        case .hijriCorrections:
+                            HijriCalendarSettingsView()
                         }
                     }
             }
@@ -65,6 +68,12 @@ struct RootTabView: View {
             selectedTab = .profile
             profilePath.removeLast(profilePath.count)
             profilePath.append(ProfileDestination.settings)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .switchToHijriCorrections)) { _ in
+            selectedTab = .profile
+            profilePath.removeLast(profilePath.count)
+            profilePath.append(ProfileDestination.settings)
+            profilePath.append(ProfileDestination.hijriCorrections)
         }
     }
 }

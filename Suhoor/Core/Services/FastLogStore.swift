@@ -61,6 +61,23 @@ final class FastLogStore: ObservableObject {
         updateEntry(nil, for: dateKey)
     }
 
+    func normalizeStaleInProgress(todayKey: String, now: Date = Date()) {
+        let staleKeys = entriesByDateKey.keys.filter { key in
+            guard let entry = entriesByDateKey[key] else { return false }
+            return entry.status == .inProgress && key < todayKey
+        }
+
+        guard !staleKeys.isEmpty else { return }
+
+        for key in staleKeys {
+            guard var entry = entriesByDateKey[key] else { continue }
+            entry.status = .completed
+            entry.updatedAt = now
+            entriesByDateKey[key] = entry
+        }
+        bumpRevision()
+    }
+
     func reset() {
         persistence.cancelPending()
         entriesByDateKey = [:]

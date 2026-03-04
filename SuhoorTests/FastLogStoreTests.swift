@@ -58,5 +58,36 @@ struct FastLogStoreTests {
         #expect(reloaded.status(for: dateKey) == .completed)
         #expect(reloaded.entry(for: dateKey) != nil)
     }
-}
 
+    @Test
+    func inProgressPersistsRoundTrip() {
+        let suiteName = "SuhoorTests.FastLog.InProgressRoundTrip"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+
+        let store = FastLogStore(defaults: defaults)
+        let dateKey = "2026-03-03"
+        store.setStatus(.inProgress, for: dateKey, now: Date(timeIntervalSince1970: 100))
+        store.flushPersistenceForTesting()
+
+        let reloaded = FastLogStore(defaults: defaults)
+        #expect(reloaded.status(for: dateKey) == .inProgress)
+    }
+
+    @Test
+    func normalizeStaleInProgressCompletesPriorDays() {
+        let suiteName = "SuhoorTests.FastLog.NormalizeInProgress"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+
+        let store = FastLogStore(defaults: defaults)
+        store.setStatus(.inProgress, for: "2026-03-02", now: Date(timeIntervalSince1970: 10))
+        store.setStatus(.inProgress, for: "2026-03-03", now: Date(timeIntervalSince1970: 20))
+
+        store.normalizeStaleInProgress(todayKey: "2026-03-03", now: Date(timeIntervalSince1970: 30))
+
+        #expect(store.status(for: "2026-03-02") == .completed)
+        #expect(store.status(for: "2026-03-03") == .inProgress)
+        #expect(store.entry(for: "2026-03-02")?.updatedAt == Date(timeIntervalSince1970: 30))
+    }
+}

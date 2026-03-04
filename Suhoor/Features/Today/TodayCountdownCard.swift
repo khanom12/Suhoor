@@ -24,44 +24,39 @@ struct TodayCountdownCard: View {
 
     @ViewBuilder
     private func countdownContent(target: TodayCountdownEngine.Target, now: Date) -> some View {
+        let remaining = max(0, target.targetDate.timeIntervalSince(now))
         VStack(alignment: .leading, spacing: contentSpacing) {
-            HStack(alignment: .firstTextBaseline) {
-                VStack(alignment: .leading, spacing: headerSpacing) {
+            VStack(alignment: .leading, spacing: DesignTokens.spacingS) {
+                HStack(alignment: .center, spacing: DesignTokens.spacingS) {
                     Text(title(for: target.kind))
                         .font(DesignTokens.cardTitleFont)
-                    Text(subtitle(for: target.kind))
-                        .font(DesignTokens.cardSubtitleFont)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-                VStack(alignment: .trailing, spacing: headerSpacing) {
-                    Text("Target")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Text(TimeFormatters.timeFormatter.string(from: target.targetDate))
-                        .font(DesignTokens.cardMetaFont)
-                        .foregroundStyle(.secondary)
                     if let dayContext = dayContext(for: target.day.schedule.date) {
                         Text(dayContext)
-                            .font(.caption)
+                            .font(DesignTokens.cardMetaFont)
                             .foregroundStyle(.secondary)
+                            .padding(.horizontal, DesignTokens.spacingS)
+                            .padding(.vertical, 6)
+                            .background(
+                                Capsule(style: .continuous)
+                                    .fill(Color(.secondarySystemGroupedBackground))
+                            )
                     }
                 }
-            }
-
-            VStack(alignment: .leading, spacing: DesignTokens.spacingXS) {
-                let remaining = max(0, target.targetDate.timeIntervalSince(now))
                 Text(Self.formattedCountdown(remaining: remaining))
                     .timeTextStyle()
                     .foregroundStyle(.primary)
                     .accessibilityLabel(accessibilityLabel(for: remaining, kind: target.kind))
 
-                Text(contextLine(for: target.kind))
-                    .font(DesignTokens.cardSubtitleFont)
+                Label(TimeFormatters.timeFormatter.string(from: target.targetDate), systemImage: "clock")
+                    .font(DesignTokens.cardMetaFont)
                     .foregroundStyle(.secondary)
+
+                ProgressView(value: countdownProgress(for: target, now: now))
+                    .tint(progressTint(for: target.kind))
+                    .progressViewStyle(.linear)
             }
 
-            alarmToggleRow(for: target, now: now)
+            alarmToggleRow(for: target)
         }
     }
 
@@ -100,20 +95,14 @@ struct TodayCountdownCard: View {
     }
 
     @ViewBuilder
-    private func alarmToggleRow(for target: TodayCountdownEngine.Target, now: Date) -> some View {
-        let controlKind = controlKind(for: target, now: now)
+    private func alarmToggleRow(for target: TodayCountdownEngine.Target) -> some View {
         HStack(alignment: .center, spacing: DesignTokens.spacingM) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(controlTitle(for: controlKind))
-                    .font(DesignTokens.cardMetaFont)
-                Text(controlSubtitle(for: controlKind, isOn: isControlEnabled(controlKind, for: target.day)))
-                    .font(DesignTokens.cardSubtitleFont)
-                    .foregroundStyle(.secondary)
-            }
+            Text(controlTitle(for: target.kind))
+                .font(DesignTokens.cardMetaFont)
 
             Spacer()
 
-            Toggle("", isOn: controlBinding(for: controlKind, day: target.day))
+            Toggle("", isOn: controlBinding(for: target))
                 .labelsHidden()
         }
         .padding(.horizontal, DesignTokens.spacingM)
@@ -145,34 +134,10 @@ struct TodayCountdownCard: View {
 
     private func title(for kind: TodayCountdownEngine.Target.Kind) -> String {
         switch kind {
-        case .suhoor:
-            return "Time to Suhoor"
         case .fajr:
-            return "Time to Fajr"
-        case .iftar:
-            return "Time to Iftar"
-        }
-    }
-
-    private func subtitle(for kind: TodayCountdownEngine.Target.Kind) -> String {
-        switch kind {
-        case .suhoor:
-            return "Wake up for Suhoor"
-        case .fajr:
-            return "Fasting begins"
-        case .iftar:
-            return "Maghrib / Iftar"
-        }
-    }
-
-    private func contextLine(for kind: TodayCountdownEngine.Target.Kind) -> String {
-        switch kind {
-        case .suhoor:
-            return "Suhoor ends at Fajr."
-        case .fajr:
-            return "Your next fasting boundary is Fajr."
-        case .iftar:
-            return "Your next fasting boundary is Iftar."
+            return "Time Until Fajr"
+        case .maghrib:
+            return "Time Until Maghrib"
         }
     }
 
@@ -188,62 +153,36 @@ struct TodayCountdownCard: View {
         return locationPermission.state != .authorized
     }
 
-    private func controlKind(for target: TodayCountdownEngine.Target, now: Date) -> CountdownAlarmControlKind {
-        switch target.kind {
-        case .suhoor:
-            return .suhoor
-        case .fajr:
-            return now < target.day.schedule.wakeDate ? .suhoor : .fajr
-        case .iftar:
-            return .iftar
-        }
-    }
-
-    private func controlTitle(for kind: CountdownAlarmControlKind) -> String {
+    private func controlTitle(for kind: TodayCountdownEngine.Target.Kind) -> String {
         switch kind {
-        case .suhoor:
-            return "Suhoor Alarm"
         case .fajr:
             return "Fajr Adhan"
-        case .iftar:
-            return "Iftar Alert"
+        case .maghrib:
+            return "Maghrib Adhan"
         }
     }
 
-    private func controlSubtitle(for kind: CountdownAlarmControlKind, isOn: Bool) -> String {
-        switch kind {
-        case .suhoor:
-            return isOn ? "On for this day. Turn off to count down to Fajr instead." : "Off for this day. Turn on for an earlier wake-up."
-        case .fajr:
-            return isOn ? "On for this day." : "Off for this day."
-        case .iftar:
-            return isOn ? "On for this day." : "Off for this day."
-        }
-    }
-
-    private func isControlEnabled(_ kind: CountdownAlarmControlKind, for day: ActiveAlarmDay) -> Bool {
+    private func isControlEnabled(for target: TodayCountdownEngine.Target) -> Bool {
+        let day = target.day
         let override = alarmConfigStore.override(for: day.schedule.date, timeZone: .current)
-        switch kind {
-        case .suhoor:
-            return override?.suhoorEnabled ?? day.effectiveConfig.suhoorEnabled
+        switch target.kind {
         case .fajr:
             return override?.fajrEnabled ?? day.effectiveConfig.fajrEnabled
-        case .iftar:
+        case .maghrib:
             return override?.iftarEnabled ?? day.effectiveConfig.iftarEnabled
         }
     }
 
-    private func controlBinding(for kind: CountdownAlarmControlKind, day: ActiveAlarmDay) -> Binding<Bool> {
+    private func controlBinding(for target: TodayCountdownEngine.Target) -> Binding<Bool> {
         Binding(
-            get: { isControlEnabled(kind, for: day) },
+            get: { isControlEnabled(for: target) },
             set: { newValue in
+                let day = target.day
                 alarmConfigStore.updateOverride(for: day.schedule.date, timeZone: .current) { override in
-                    switch kind {
-                    case .suhoor:
-                        override.suhoorEnabled = newValue
+                    switch target.kind {
                     case .fajr:
                         override.fajrEnabled = newValue
-                    case .iftar:
+                    case .maghrib:
                         override.iftarEnabled = newValue
                     }
                     if newValue {
@@ -254,10 +193,27 @@ struct TodayCountdownCard: View {
             }
         )
     }
-}
 
-private enum CountdownAlarmControlKind {
-    case suhoor
-    case fajr
-    case iftar
+    private func countdownProgress(for target: TodayCountdownEngine.Target, now: Date) -> Double {
+        let intervalStart: Date
+        switch target.kind {
+        case .fajr:
+            intervalStart = target.targetDate.addingTimeInterval(-24 * 60 * 60)
+        case .maghrib:
+            intervalStart = target.day.schedule.fajrDate
+        }
+        let total = target.targetDate.timeIntervalSince(intervalStart)
+        guard total > 0 else { return 0 }
+        let elapsed = now.timeIntervalSince(intervalStart)
+        return min(max(elapsed / total, 0), 1)
+    }
+
+    private func progressTint(for kind: TodayCountdownEngine.Target.Kind) -> Color {
+        switch kind {
+        case .fajr:
+            return .orange
+        case .maghrib:
+            return .green
+        }
+    }
 }

@@ -5,31 +5,10 @@ import Testing
 @Suite
 struct TodayCountdownEngineTests {
     @Test
-    func countdownTargetBeforeWakeUsesSuhoorWhenEnabled() {
+    func countdownTargetBeforeWakeUsesFajr() {
         let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
         let dayStart = makeDate(year: 2026, month: 3, day: 3, hour: 0, minute: 0, timeZone: timeZone)
         let now = makeDate(year: 2026, month: 3, day: 3, hour: 4, minute: 0, timeZone: timeZone)
-
-        let snapshot = makeSnapshot(
-            todayStart: dayStart,
-            fajrHour: 5,
-            fajrMinute: 0,
-            maghribHour: 18,
-            maghribMinute: 0,
-            iftarOffsetMinutes: nil,
-            timeZone: timeZone
-        )
-
-        let target = TodayCountdownEngine.target(now: now, snapshot: snapshot, timeZone: timeZone)
-        #expect(target?.kind == .suhoor)
-        #expect(target?.targetDate == makeDate(year: 2026, month: 3, day: 3, hour: 4, minute: 30, timeZone: timeZone))
-    }
-
-    @Test
-    func countdownTargetBetweenWakeAndFajrIsFajr() {
-        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
-        let dayStart = makeDate(year: 2026, month: 3, day: 3, hour: 0, minute: 0, timeZone: timeZone)
-        let now = makeDate(year: 2026, month: 3, day: 3, hour: 4, minute: 40, timeZone: timeZone)
 
         let snapshot = makeSnapshot(
             todayStart: dayStart,
@@ -47,7 +26,7 @@ struct TodayCountdownEngineTests {
     }
 
     @Test
-    func countdownTargetBetweenFajrAndMaghribIsIftar() {
+    func countdownTargetBetweenFajrAndMaghribUsesMaghrib() {
         let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
         let dayStart = makeDate(year: 2026, month: 3, day: 3, hour: 0, minute: 0, timeZone: timeZone)
         let now = makeDate(year: 2026, month: 3, day: 3, hour: 12, minute: 0, timeZone: timeZone)
@@ -63,33 +42,12 @@ struct TodayCountdownEngineTests {
         )
 
         let target = TodayCountdownEngine.target(now: now, snapshot: snapshot, timeZone: timeZone)
-        #expect(target?.kind == .iftar)
+        #expect(target?.kind == .maghrib)
         #expect(target?.targetDate == makeDate(year: 2026, month: 3, day: 3, hour: 18, minute: 0, timeZone: timeZone))
     }
 
     @Test
-    func countdownTargetUsesIftarDateWhenPresent() {
-        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
-        let dayStart = makeDate(year: 2026, month: 3, day: 3, hour: 0, minute: 0, timeZone: timeZone)
-        let now = makeDate(year: 2026, month: 3, day: 3, hour: 17, minute: 50, timeZone: timeZone)
-
-        let snapshot = makeSnapshot(
-            todayStart: dayStart,
-            fajrHour: 5,
-            fajrMinute: 0,
-            maghribHour: 18,
-            maghribMinute: 0,
-            iftarOffsetMinutes: 5,
-            timeZone: timeZone
-        )
-
-        let target = TodayCountdownEngine.target(now: now, snapshot: snapshot, timeZone: timeZone)
-        #expect(target?.kind == .iftar)
-        #expect(target?.targetDate == makeDate(year: 2026, month: 3, day: 3, hour: 18, minute: 5, timeZone: timeZone))
-    }
-
-    @Test
-    func countdownTargetAfterMaghribUsesTomorrowSuhoorWhenEnabled() {
+    func countdownTargetAfterMaghribUsesTomorrowFajr() {
         let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
         let dayStart = makeDate(year: 2026, month: 3, day: 3, hour: 0, minute: 0, timeZone: timeZone)
         let now = makeDate(year: 2026, month: 3, day: 3, hour: 20, minute: 0, timeZone: timeZone)
@@ -102,33 +60,6 @@ struct TodayCountdownEngineTests {
             maghribMinute: 0,
             iftarOffsetMinutes: nil,
             timeZone: timeZone
-        )
-
-        let target = TodayCountdownEngine.target(now: now, snapshot: snapshot, timeZone: timeZone)
-        #expect(target?.kind == .suhoor)
-        #expect(target?.targetDate == makeDate(year: 2026, month: 3, day: 4, hour: 4, minute: 30, timeZone: timeZone))
-    }
-
-    @Test
-    func countdownTargetAfterMaghribFallsBackToTomorrowFajrWhenSuhoorDisabled() {
-        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
-        let dayStart = makeDate(year: 2026, month: 3, day: 3, hour: 0, minute: 0, timeZone: timeZone)
-        let now = makeDate(year: 2026, month: 3, day: 3, hour: 20, minute: 0, timeZone: timeZone)
-
-        let snapshot = makeSnapshot(
-            todayStart: dayStart,
-            fajrHour: 5,
-            fajrMinute: 0,
-            maghribHour: 18,
-            maghribMinute: 0,
-            iftarOffsetMinutes: nil,
-            timeZone: timeZone,
-            todayConfig: sampleEffectiveDailyConfig(date: dayStart),
-            tomorrowConfig: sampleEffectiveDailyConfig(
-                date: makeDate(year: 2026, month: 3, day: 4, hour: 0, minute: 0, timeZone: timeZone),
-                suhoorEnabled: false,
-                fajrEnabled: true
-            )
         )
 
         let target = TodayCountdownEngine.target(now: now, snapshot: snapshot, timeZone: timeZone)
@@ -154,8 +85,8 @@ struct TodayCountdownEngineTests {
         )
 
         let target = TodayCountdownEngine.target(now: now, snapshot: snapshot, timeZone: timeZone)
-        #expect(target?.kind == .suhoor)
-        #expect(target?.targetDate == makeDate(year: 2026, month: 3, day: 4, hour: 4, minute: 30, timeZone: timeZone))
+        #expect(target?.kind == .fajr)
+        #expect(target?.targetDate == makeDate(year: 2026, month: 3, day: 4, hour: 5, minute: 0, timeZone: timeZone))
     }
 
     // MARK: - Helpers
