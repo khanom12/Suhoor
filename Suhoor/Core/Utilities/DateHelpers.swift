@@ -29,6 +29,14 @@ enum DateHelpers {
         return formatter.string(from: date)
     }
 
+    static func date(fromDayIdentifier dayIdentifier: String, timeZone: TimeZone = .current) -> Date? {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.timeZone = timeZone
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.date(from: dayIdentifier)
+    }
+
     static func stableUUID(from string: String) -> UUID {
         let data = Data(string.utf8)
         let digest = SHA256.hash(data: data)

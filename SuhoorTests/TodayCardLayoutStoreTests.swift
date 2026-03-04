@@ -12,7 +12,8 @@ struct TodayCardLayoutStoreTests {
 
         let store = TodayCardLayoutStore(defaults: defaults)
         #expect(store.layout == .default)
-        #expect(store.layout.visibleOrderedCards() == [.countdown, .ramadanProgress, .fastCheckIn])
+        #expect(store.layout.hidden == [.eidAlFitrNotice, .eidAlAdhaNotice, .tashreeqNotice])
+        #expect(store.layout.visibleOrderedCards() == [.countdown, .ramadanProgress, .shawwalSixProgress, .shawwalPlan, .fastCheckIn])
     }
 
     @Test
@@ -30,7 +31,6 @@ struct TodayCardLayoutStoreTests {
         let reloaded = TodayCardLayoutStore(defaults: defaults)
         #expect(reloaded.layout.hidden.contains(.ramadanProgress))
         #expect(reloaded.layout.ordered.count == TodayCardKind.allCases.count)
-        #expect(reloaded.layout.visibleOrderedCards() == [.fastCheckIn, .countdown])
+        #expect(reloaded.layout.visibleOrderedCards() == [.shawwalSixProgress, .countdown, .shawwalPlan, .fastCheckIn])
     }
 }
-

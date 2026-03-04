@@ -464,7 +464,7 @@ final class ScheduleManager: ObservableObject {
             ActiveTagComputationSeed(
                 date: $0.date,
                 dateKey: $0.dateKey,
-                defaultPrimaryIntent: defaultPrimaryIntent(for: $0.provenances)
+                defaultPrimaryIntent: $0.provenances.defaultFastPrimaryIntent()
             )
         }
         let results = TagComputationEngine.results(
@@ -645,7 +645,7 @@ final class ScheduleManager: ObservableObject {
         let tagResult = tagPreviewResult(
             for: date,
             overrideSelection: overrideSelection,
-            defaultPrimaryIntent: defaultPrimaryIntent(for: provenances),
+            defaultPrimaryIntent: provenances.defaultFastPrimaryIntent(),
             timeZone: timeZone
         )
         let sourceSummary = summaryText(for: provenances)
@@ -2224,13 +2224,13 @@ final class ScheduleManager: ObservableObject {
             let results = monthTagResults(for: shawwalKey, timeZone: timeZone)
             tagResult = results[key] ?? tagPreviewResult(
                 for: normalizedDate,
-                defaultPrimaryIntent: defaultPrimaryIntent(for: provenances),
+                defaultPrimaryIntent: provenances.defaultFastPrimaryIntent(),
                 timeZone: timeZone
             )
         } else {
             tagResult = tagPreviewResult(
                 for: normalizedDate,
-                defaultPrimaryIntent: defaultPrimaryIntent(for: provenances),
+                defaultPrimaryIntent: provenances.defaultFastPrimaryIntent(),
                 timeZone: timeZone
             )
         }
@@ -2679,25 +2679,9 @@ struct ActiveAlarmDay: Codable, Equatable, Identifiable, Sendable {
         ActiveTagComputationSeed(
             date: date,
             dateKey: dateKey,
-            defaultPrimaryIntent: defaultPrimaryIntent(for: provenances)
+            defaultPrimaryIntent: provenances.defaultFastPrimaryIntent()
         )
     }
-}
-
-private func defaultPrimaryIntent(for provenances: [ResolvedScheduledDateProvenance]) -> FastPrimaryIntent? {
-    if provenances.contains(where: {
-        switch $0.sourceOrigin {
-        case .recurringIslamic(let rule):
-            return rule == .whiteDays || rule == .mondayThursday
-        case .islamicQuickAdd:
-            return true
-        default:
-            return false
-        }
-    }) {
-        return .voluntarySunnah
-    }
-    return nil
 }
 
 struct ActiveAlarmWindowSnapshot: Codable, Equatable, Sendable {
@@ -2793,7 +2777,7 @@ private enum ScheduleComputationEngine {
             ActiveTagComputationSeed(
                 date: $0.date,
                 dateKey: $0.dateKey,
-                defaultPrimaryIntent: defaultPrimaryIntent(for: $0.provenances)
+                defaultPrimaryIntent: $0.provenances.defaultFastPrimaryIntent()
             )
         }
         let tagResults = TagComputationEngine.results(
@@ -3101,7 +3085,7 @@ private extension ScheduleManager {
             ActiveTagComputationSeed(
                 date: $0.date,
                 dateKey: DateHelpers.dayIdentifier(for: $0.date, timeZone: timeZone),
-                defaultPrimaryIntent: defaultPrimaryIntent(for: provenanceProvider($0.date, timeZone))
+                defaultPrimaryIntent: provenanceProvider($0.date, timeZone).defaultFastPrimaryIntent()
             )
         }
         let tagResults = TagComputationEngine.results(

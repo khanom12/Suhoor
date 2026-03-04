@@ -65,8 +65,18 @@ struct TodayEditCardsSheet: View {
             return "Countdown to Fajr or Iftar"
         case .ramadanProgress:
             return "Shows only during Ramadan"
+        case .shawwalSixProgress:
+            return "Six-bar Shawwal tracker"
+        case .shawwalPlan:
+            return "Plans remaining Shawwal fasts"
         case .fastCheckIn:
             return "Log your fast for today"
+        case .eidAlFitrNotice:
+            return "Hidden by default, auto-shows on 1 Shawwal"
+        case .eidAlAdhaNotice:
+            return "Hidden by default, auto-shows on 10 Dhul Hijjah"
+        case .tashreeqNotice:
+            return "Hidden by default, auto-shows on 11-13 Dhul Hijjah"
         }
     }
 }
