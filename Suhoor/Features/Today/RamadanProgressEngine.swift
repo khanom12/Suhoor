@@ -2,6 +2,7 @@ import Foundation
 
 struct RamadanProgressEngine {
     struct Model: Equatable, Sendable {
+        let hijriYear: Int
         let dayNumber: Int
         let totalDays: Int
         let daysUntilEid: Int
@@ -49,6 +50,7 @@ struct RamadanProgressEngine {
         let eidDateText = shawwalStart.map { TimeFormatters.shortDate.string(from: $0) }
 
         return Model(
+            hijriYear: year,
             dayNumber: dayNumber,
             totalDays: totalDays,
             daysUntilEid: daysUntilEid,
@@ -57,4 +59,3 @@ struct RamadanProgressEngine {
         )
     }
 }
-

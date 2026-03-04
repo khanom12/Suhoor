@@ -5,7 +5,7 @@ struct TodayFastCheckInCard: View {
     @EnvironmentObject private var fastLogStore: FastLogStore
 
     var body: some View {
-        GlassCard {
+        GlassCard(style: .header) {
             TimelineView(.periodic(from: Date(), by: 60)) { context in
                 content(now: context.date)
             }
@@ -30,29 +30,10 @@ struct TodayFastCheckInCard: View {
 
                 Spacer()
 
-                tagSummary(intent)
+                historyButton
             }
 
             statusRow(status: status, phase: phase, dateKey: dateKey, intent: intent)
-        }
-    }
-
-    @ViewBuilder
-    private func tagSummary(_ snapshot: FastIntentSnapshot) -> some View {
-        let tags = visibleTagItems(for: snapshot)
-        if !tags.isEmpty {
-            HStack(spacing: 6) {
-                ForEach(tags) { tag in
-                    switch tag.kind {
-                    case .primary(let intent):
-                        TodayPrimaryIntentCapsule(intent: intent, iconOnly: true)
-                    case .secondary(let secondary):
-                        TodaySecondaryTagCapsule(tag: secondary, iconOnly: true)
-                    case .overflow(let count):
-                        TodayOverflowCapsule(count: count)
-                    }
-                }
-            }
         }
     }
 
@@ -85,30 +66,31 @@ struct TodayFastCheckInCard: View {
                     .buttonStyle(.bordered)
                     .tint(.red)
                 }
-
-                footerRow()
             }
 
         case .inProgress, .completed, .missed:
             VStack(alignment: .leading, spacing: DesignTokens.spacingS) {
                 statusSelectorRow(status: status, phase: phase, dateKey: dateKey, intent: intent)
-                footerRow()
             }
         }
     }
 
     @ViewBuilder
-    private func footerRow() -> some View {
-        HStack(alignment: .center, spacing: DesignTokens.spacingM) {
-            NavigationLink {
-                FastHistoryView()
-            } label: {
-                Text("History")
-                    .font(DesignTokens.cardMetaFont)
-            }
-
-            Spacer()
+    private var historyButton: some View {
+        NavigationLink {
+            FastHistoryView()
+        } label: {
+            Image(systemName: "clock.arrow.circlepath")
+                .font(DesignTokens.cardMetaFont.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: 30, height: 30)
+                .background(
+                    Circle()
+                        .fill(Color(.secondarySystemGroupedBackground))
+                )
         }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Open fast history")
     }
 
     @ViewBuilder
@@ -163,24 +145,6 @@ struct TodayFastCheckInCard: View {
         )
     }
 
-    private func visibleTagItems(for snapshot: FastIntentSnapshot) -> [TodayIntentTagItem] {
-        let allItems = tagItems(for: snapshot)
-        guard allItems.count > 4 else { return allItems }
-        let head = Array(allItems.prefix(4))
-        return head + [TodayIntentTagItem(kind: .overflow(allItems.count - head.count))]
-    }
-
-    private func tagItems(for snapshot: FastIntentSnapshot) -> [TodayIntentTagItem] {
-        var items: [TodayIntentTagItem] = []
-        if snapshot.primaryIntent != .other {
-            items.append(TodayIntentTagItem(kind: .primary(snapshot.primaryIntent)))
-        }
-        items.append(contentsOf: FastIntentEngine.displaySecondaryTags(snapshot.secondaryTags).map {
-            TodayIntentTagItem(kind: .secondary($0))
-        })
-        return items
-    }
-
     private func phase(now: Date, scheduleDay: ActiveAlarmDay?) -> FastCheckInPhase {
         guard let scheduleDay else { return .timeUnknown }
         return now < scheduleDay.schedule.maghribDate ? .preMaghrib : .postMaghrib
@@ -231,150 +195,6 @@ struct TodayFastCheckInCard: View {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = timeZone
         return calendar
-    }
-}
-
-private struct TodayIntentTagItem: Identifiable {
-    enum Kind {
-        case primary(FastPrimaryIntent)
-        case secondary(FastSecondaryVirtueTag)
-        case overflow(Int)
-    }
-
-    let kind: Kind
-
-    var id: String {
-        switch kind {
-        case .primary(let intent):
-            return "primary-\(intent.rawValue)"
-        case .secondary(let tag):
-            return "secondary-\(tag.rawValue)"
-        case .overflow(let count):
-            return "overflow-\(count)"
-        }
-    }
-}
-
-private struct TodayPrimaryIntentCapsule: View {
-    let intent: FastPrimaryIntent
-    let iconOnly: Bool
-
-    var body: some View {
-        let style = intent.style
-        TodayCapsuleLabel(
-            title: style.title,
-            shortTitle: style.shortTitle,
-            systemImage: style.systemImage,
-            color: style.color,
-            prominence: .strong,
-            useIconOnly: iconOnly
-        )
-    }
-}
-
-private struct TodaySecondaryTagCapsule: View {
-    let tag: FastSecondaryVirtueTag
-    let iconOnly: Bool
-
-    var body: some View {
-        let style = tag.style
-        TodayCapsuleLabel(
-            title: style.title,
-            shortTitle: style.shortTitle,
-            systemImage: style.systemImage,
-            color: style.color,
-            prominence: .subtle,
-            useIconOnly: iconOnly
-        )
-    }
-}
-
-private struct TodayOverflowCapsule: View {
-    let count: Int
-
-    var body: some View {
-        Text("+\(count)")
-            .font(.caption2.weight(.semibold))
-            .foregroundStyle(.secondary)
-            .padding(.vertical, 4)
-            .padding(.horizontal, 8)
-            .background(Color.secondary.opacity(0.12))
-            .clipShape(Capsule())
-            .overlay(
-                Capsule()
-                    .stroke(Color.secondary.opacity(0.25), lineWidth: 0.6)
-            )
-            .accessibilityLabel("\(count) more tags")
-    }
-}
-
-private struct TodayCapsuleLabel: View {
-    enum Prominence {
-        case strong
-        case subtle
-    }
-
-    let title: String
-    let shortTitle: String
-    let systemImage: String?
-    let color: Color
-    let prominence: Prominence
-    let useIconOnly: Bool
-
-    var body: some View {
-        HStack(spacing: 4) {
-            if let systemImage {
-                Image(systemName: systemImage)
-                    .font(.caption2.weight(.semibold))
-            }
-            if !useIconOnly {
-                Text(displayText)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-            }
-        }
-        .font(font)
-        .foregroundStyle(color)
-        .padding(.vertical, 4)
-        .padding(.horizontal, 8)
-        .background(color.opacity(backgroundOpacity))
-        .clipShape(Capsule())
-        .overlay(
-            Capsule()
-                .stroke(color.opacity(borderOpacity), lineWidth: 0.6)
-        )
-        .accessibilityLabel(title)
-    }
-
-    private var displayText: String {
-        shortTitle.isEmpty ? title : shortTitle
-    }
-
-    private var font: Font {
-        switch prominence {
-        case .strong:
-            return .caption.weight(.semibold)
-        case .subtle:
-            return .caption2.weight(.semibold)
-        }
-    }
-
-    private var backgroundOpacity: Double {
-        switch prominence {
-        case .strong:
-            return 0.22
-        case .subtle:
-            return 0.14
-        }
-    }
-
-    private var borderOpacity: Double {
-        switch prominence {
-        case .strong:
-            return 0.4
-        case .subtle:
-            return 0.25
-        }
     }
 }
 
