@@ -1,6 +1,10 @@
 import SwiftUI
 
 enum Motion {
+    static func onboarding(reduceMotion: Bool) -> Animation? {
+        reduceMotion ? nil : .easeInOut(duration: 0.28)
+    }
+
     static func standard(reduceMotion: Bool) -> Animation? {
         reduceMotion ? nil : .easeInOut(duration: 0.2)
     }

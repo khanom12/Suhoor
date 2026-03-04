@@ -5,7 +5,7 @@ struct OffsetPickerView: View {
     let presetMinutes: [Int]
     let range: ClosedRange<Int>
     let step: Int
-    let sentenceText: (Int) -> String
+    let sentenceText: ((Int) -> String)?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var isCustomSelected: Bool = false
@@ -15,7 +15,7 @@ struct OffsetPickerView: View {
         presetMinutes: [Int] = [15, 30, 45, 60, 90],
         range: ClosedRange<Int> = 5...240,
         step: Int = 5,
-        sentenceText: @escaping (Int) -> String = { "Wake me \($0) min before Fajr." }
+        sentenceText: ((Int) -> String)? = { "Wake me \($0) min before Fajr." }
     ) {
         _baseMinutes = baseMinutes
         self.presetMinutes = presetMinutes
@@ -55,10 +55,12 @@ struct OffsetPickerView: View {
                 .accessibilityLabel("Custom minutes")
             }
 
-            Text(sentenceText(baseMinutes))
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            if let sentenceText {
+                Text(sentenceText(baseMinutes))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
             if isCustomSelected || !presetMinutes.contains(baseMinutes) {
                 Stepper(value: $baseMinutes, in: range, step: step) {

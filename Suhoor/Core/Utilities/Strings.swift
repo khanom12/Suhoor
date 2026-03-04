@@ -163,9 +163,9 @@ enum Strings {
         static let allowLocation = "Allow Location"
         static let openSettings = "Open Settings"
         static let tryAgain = "Try Again"
-        static let autoExplanation = "Allow location so Fajr stays correct for where you are, especially when you travel."
+        static let autoExplanation = "Allow location so Suhoor can calculate Fajr times for your area."
         static let deniedExplanation = "Location is off, so Suhoor can’t calculate local Fajr times automatically."
-        static let waitingForLocation = "Waiting for your current location..."
+        static let waitingForLocation = "Getting your location..."
         static let simulatorHint = "In Simulator, also set a location from Xcode's Debug > Location menu."
         static func fixedExplanation(_ name: String) -> String { "Using \(name) for Fajr times." }
         static let fixedExplanationFallback = "Using your chosen city for Fajr times."
@@ -184,7 +184,7 @@ enum Strings {
     enum NotificationAccess {
         static let title = "Notifications"
         static let allowNotifications = "Allow Notifications"
-        static let explanation = "Used for your reminder before Fajr and as a fallback alert."
+        static let explanation = "Used for reminders before Fajr and backup alerts."
         static let deniedExplanation = "Notifications are off, so reminders and fallback alerts can’t be delivered."
     }
 
@@ -197,13 +197,13 @@ enum Strings {
 
     enum Onboarding {
         static let welcomeTitle = "Wake before Fajr, reliably"
-        static let welcomeBody = "Set your routine once. Suhoor keeps your wake-up aligned with tomorrow’s Fajr."
+        static let welcomeBody = "Pick your wake-up once. Suhoor updates it each day based on Fajr in your area."
         static let welcomePrimaryAction = "Get started"
         static let welcomeSecondaryAction = "How it works"
 
-        static let locationTitle = "Accurate Fajr times"
-        static let locationBody = "Allow location so Fajr stays correct for where you are, especially when you travel."
-        static let locationPrivacyNote = "Used only to calculate times."
+        static let locationTitle = "Allow location"
+        static let locationBody = "Tap \"Use my location.\" On the next popup, choose \"Allow While Using App.\""
+        static let locationPrivacyNote = "Used to calculate times."
         static let locationPrimaryAction = "Use my location"
         static let locationSecondaryAction = "Choose a city"
         static let locationReady = "Location is ready."
@@ -219,14 +219,13 @@ enum Strings {
         static let alarmKitReady = "Alarms are ready."
 
         static let notificationsTitle = "Allow notifications"
-        static let notificationsBody = "Used for your reminder before Fajr and as a fallback alert."
-        static let notificationsRequirement = "Notifications are required to finish setup."
+        static let notificationsBody = "On the next popup, tap \"Allow\" for reminders and backup alerts."
+        static let notificationsRequirement = "Required to finish setup."
         static let notificationsPrimaryAction = "Enable notifications"
         static let notificationsReady = "Notifications are ready."
 
         static let offsetTitle = "Choose your wake-up"
-        static let offsetBody = "Set your default wake-up time before Fajr. You can fine-tune any day later."
-        static func offsetSummary(_ minutes: Int) -> String { "Default: \(minutes) minutes before Fajr." }
+        static let offsetBody = "How many minutes before Fajr should we wake you?"
         static let offsetCustomHelper = "You can customize specific days later in Schedule."
 
         static let confirmationTitle = "You’re set"
@@ -237,10 +236,10 @@ enum Strings {
 
         enum HowItWorks {
             static let title = "How Suhoor works"
-            static let body = "Suhoor calculates Fajr for your area, then updates your schedule each day."
-            static func bulletWakeDefault(_ minutes: Int) -> String { "Choose a default: \(minutes) minutes before Fajr." }
-            static let bulletReminders = "Get reminders and a Fajr Adhan alert (if enabled)."
-            static let bulletCustomize = "Customize any day later in Schedule."
+            static let body = "Suhoor calculates Fajr for your area, then keeps tomorrow’s wake-up up to date."
+            static func bulletWakeDefault(_ minutes: Int) -> String { "Choose a default, for example \(minutes) minutes before Fajr." }
+            static let bulletReminders = "Get a reminder and an optional Fajr Adhan alert."
+            static let bulletCustomize = "Adjust any day later in Schedule."
         }
     }
 

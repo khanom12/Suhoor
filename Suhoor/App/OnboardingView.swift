@@ -13,14 +13,16 @@ struct OnboardingView: View {
     var body: some View {
         NavigationStack {
             VStack(alignment: .leading, spacing: 24) {
-                OnboardingProgressView(
+                OnboardingHeaderView(
                     stepIndex: viewModel.progressIndex,
-                    stepCount: viewModel.progressCount
+                    stepCount: viewModel.progressCount,
+                    canGoBack: viewModel.canGoBack,
+                    onBack: { viewModel.goBack(animation: Motion.onboarding(reduceMotion: reduceMotion)) }
                 )
-                .padding(.top, 4)
-                Spacer(minLength: 0)
-                stepView
-                Spacer(minLength: 0)
+                ScrollView(showsIndicators: false) {
+                    stepView
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
             }
             .padding(24)
             .navigationTitle("")
@@ -60,6 +62,12 @@ struct OnboardingView: View {
             .onChange(of: locationService.locationName) { _, _ in
                 viewModel.syncSettings()
             }
+            .onChange(of: locationService.authorizationStatus) { _, _ in
+                viewModel.refreshPermissionsInBackground()
+            }
+            .onChange(of: locationService.lastLocation) { _, _ in
+                viewModel.refreshPermissionsInBackground()
+            }
         }
     }
 
@@ -69,7 +77,7 @@ struct OnboardingView: View {
             switch viewModel.step {
             case .welcome:
                 WelcomeStep(
-                    onGetStarted: { viewModel.goTo(.location, animation: Motion.standard(reduceMotion: reduceMotion)) },
+                    onGetStarted: { viewModel.goTo(.location, animation: Motion.onboarding(reduceMotion: reduceMotion)) },
                     onHowItWorks: { showHowItWorks = true }
                 )
             case .location:
@@ -79,36 +87,39 @@ struct OnboardingView: View {
                     locationName: viewModel.locationName,
                     hasFixedLocation: viewModel.hasFixedLocation,
                     isWorking: viewModel.isWorking,
+                    showNextAction: viewModel.shouldShowManualAdvanceForCurrentStep,
                     onRequestLocation: viewModel.requestLocation,
                     onOpenSettings: viewModel.openSettings,
                     onChooseCity: { showLocationSearch = true },
-                    onContinue: { viewModel.advance(animation: Motion.standard(reduceMotion: reduceMotion)) }
+                    onNext: { viewModel.advance(animation: Motion.onboarding(reduceMotion: reduceMotion)) }
                 )
             case .alarmKit:
                 AlarmKitStep(
                     alarmState: viewModel.alarmKitState,
                     isRequestable: viewModel.alarmKitRequestable,
+                    showNextAction: viewModel.shouldShowManualAdvanceForCurrentStep,
                     shouldShowFallback: viewModel.shouldShowAlarmKitFallback,
                     onRequestAlarmKit: viewModel.requestAlarmKit,
                     onOpenSettings: viewModel.openSettings,
-                    onContinue: { viewModel.advance(animation: Motion.standard(reduceMotion: reduceMotion)) }
+                    onContinue: { viewModel.advance(animation: Motion.onboarding(reduceMotion: reduceMotion)) }
                 )
-        case .notifications:
-            NotificationsStep(
-                notificationState: viewModel.notificationState,
-                showAlarmKitFallback: viewModel.shouldShowAlarmKitFallback,
-                onRequestNotifications: viewModel.requestNotifications,
-                onOpenSettings: viewModel.openSettings,
-                onContinue: {
-                    guard !viewModel.isConfigured else { return }
-                    viewModel.advance(animation: Motion.standard(reduceMotion: reduceMotion))
+            case .notifications:
+                NotificationsStep(
+                    notificationState: viewModel.notificationState,
+                    showNextAction: viewModel.shouldShowManualAdvanceForCurrentStep,
+                    showAlarmKitFallback: viewModel.shouldShowAlarmKitFallback,
+                    onRequestNotifications: viewModel.requestNotifications,
+                    onOpenSettings: viewModel.openSettings,
+                    onNext: {
+                        guard !viewModel.isConfigured else { return }
+                        viewModel.advance(animation: Motion.onboarding(reduceMotion: reduceMotion))
                     }
                 )
             case .offset:
                 OffsetStep(
                     baseMinutes: $settingsStore.settings.baseWakeOffsetMinutes,
                     failureMessage: viewModel.lastEnableFailureMessage,
-                    onEnable: { viewModel.enableRoutineAndContinue(animation: Motion.standard(reduceMotion: reduceMotion)) }
+                    onEnable: { viewModel.enableRoutineAndContinue(animation: Motion.onboarding(reduceMotion: reduceMotion)) }
                 )
             case .confirmation:
                 ConfirmationStep(
@@ -160,10 +171,11 @@ private struct LocationStep: View {
     let locationName: String?
     let hasFixedLocation: Bool
     let isWorking: Bool
+    let showNextAction: Bool
     let onRequestLocation: () -> Void
     let onOpenSettings: () -> Void
     let onChooseCity: () -> Void
-    let onContinue: () -> Void
+    let onNext: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -195,20 +207,13 @@ private struct LocationStep: View {
             }
 
             Button(Strings.Onboarding.locationSecondaryAction, action: onChooseCity)
-                .buttonStyle(.bordered)
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(.secondary)
 
-            Button(Strings.Onboarding.continueAction, action: onContinue)
-                .buttonStyle(.borderedProminent)
-                .disabled(!isLocationReady)
-        }
-    }
-
-    private var isLocationReady: Bool {
-        switch locationMode {
-        case .auto:
-            return locationState == .authorized
-        case .fixed:
-            return hasFixedLocation
+            if showNextAction {
+                Button(Strings.Onboarding.continueAction, action: onNext)
+                    .buttonStyle(.borderedProminent)
+            }
         }
     }
 
@@ -270,6 +275,7 @@ private struct LocationStep: View {
 private struct AlarmKitStep: View {
     let alarmState: AppPermissionState
     let isRequestable: Bool
+    let showNextAction: Bool
     let shouldShowFallback: Bool
     let onRequestAlarmKit: () -> Void
     let onOpenSettings: () -> Void
@@ -304,8 +310,13 @@ private struct AlarmKitStep: View {
                     .buttonStyle(.borderedProminent)
             }
 
-            Button(Strings.Onboarding.continueAction, action: onContinue)
-                .buttonStyle(.borderedProminent)
+            if showNextAction {
+                Button(Strings.Onboarding.continueAction, action: onContinue)
+                    .buttonStyle(.borderedProminent)
+            } else {
+                Button("Not now", action: onContinue)
+                    .buttonStyle(.bordered)
+            }
         }
     }
 
@@ -347,10 +358,11 @@ private struct AlarmKitStep: View {
 
 private struct NotificationsStep: View {
     let notificationState: AppPermissionState
+    let showNextAction: Bool
     let showAlarmKitFallback: Bool
     let onRequestNotifications: () -> Void
     let onOpenSettings: () -> Void
-    let onContinue: () -> Void
+    let onNext: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -383,9 +395,10 @@ private struct NotificationsStep: View {
                     .buttonStyle(.borderedProminent)
             }
 
-            Button(Strings.Onboarding.continueAction, action: onContinue)
-                .buttonStyle(.borderedProminent)
-                .disabled(notificationState != .authorized)
+            if showNextAction {
+                Button(Strings.Onboarding.continueAction, action: onNext)
+                    .buttonStyle(.borderedProminent)
+            }
         }
     }
 
@@ -440,10 +453,8 @@ private struct OffsetStep: View {
 
             OffsetPickerView(
                 baseMinutes: $baseMinutes,
-                sentenceText: Strings.Onboarding.offsetSummary
+                sentenceText: nil
             )
-                .font(.footnote)
-                .foregroundStyle(.secondary)
 
             Text(Strings.Onboarding.offsetCustomHelper)
                 .font(.footnote)
@@ -527,8 +538,48 @@ private struct OnboardingProgressView: View {
     let stepCount: Int
 
     var body: some View {
-        ProgressView(value: Double(stepIndex + 1), total: Double(max(stepCount, 1)))
-            .tint(DawnColor.accent)
-            .accessibilityLabel("Onboarding progress")
+        HStack(spacing: 8) {
+            ForEach(0..<stepCount, id: \.self) { index in
+                Capsule()
+                    .fill(index <= stepIndex ? DawnColor.accent : Color(.systemGray5))
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 5)
+            }
+        }
+        .accessibilityLabel("Onboarding progress")
+        .accessibilityValue("Step \(stepIndex + 1) of \(stepCount)")
+    }
+}
+
+private struct OnboardingHeaderView: View {
+    let stepIndex: Int
+    let stepCount: Int
+    let canGoBack: Bool
+    let onBack: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 12) {
+                if canGoBack {
+                    Button(action: onBack) {
+                        Image(systemName: "chevron.left")
+                            .font(.headline.weight(.semibold))
+                            .frame(width: 36, height: 36)
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    Color.clear
+                        .frame(width: 36, height: 36)
+                }
+
+                Text("Step \(stepIndex + 1) of \(max(stepCount, 1))")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.secondary)
+
+                Spacer()
+            }
+
+            OnboardingProgressView(stepIndex: stepIndex, stepCount: stepCount)
+        }
     }
 }

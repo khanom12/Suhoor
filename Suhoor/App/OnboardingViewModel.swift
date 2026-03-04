@@ -25,6 +25,7 @@ final class OnboardingViewModel: ObservableObject {
     @Published private(set) var hasFixedLocation = false
     @Published private(set) var alarmKitRequestable = false
     @Published private(set) var lastEnableFailureMessage: String?
+    @Published private(set) var isReviewingBack = false
 
     private weak var scheduleManager: ScheduleManager?
     private weak var locationService: LocationService?
@@ -111,6 +112,7 @@ final class OnboardingViewModel: ObservableObject {
 
     func goTo(_ newStep: Step, animation: Animation?) {
         guard newStep != step else { return }
+        isReviewingBack = false
         if let animation {
             withAnimation(animation) {
                 previousStep = step
@@ -126,6 +128,21 @@ final class OnboardingViewModel: ObservableObject {
         guard let next = nextStep(after: step) else { return }
         guard let resolved = resolvedStep(startingAt: next) else { return }
         goTo(resolved, animation: animation)
+    }
+
+    func goBack(animation: Animation?) {
+        guard let currentIndex = flowSteps.firstIndex(of: step), currentIndex > 0 else { return }
+        let previous = flowSteps[currentIndex - 1]
+        isReviewingBack = true
+        if let animation {
+            withAnimation(animation) {
+                previousStep = step
+                step = previous
+            }
+        } else {
+            previousStep = step
+            step = previous
+        }
     }
 
     func requestLocation() {
@@ -203,23 +220,40 @@ final class OnboardingViewModel: ObservableObject {
         }
     }
 
-    var stepIndex: Int { step.rawValue }
-    var stepCount: Int { Step.allCases.count }
-
     var progressIndex: Int {
-        if useShortFlow {
-            switch step {
-            case .location: return 0
-            case .alarmKit: return 1
-            case .notifications: return 2
-            default: return 0
-            }
-        }
-        return stepIndex
+        flowSteps.firstIndex(of: step) ?? 0
     }
 
     var progressCount: Int {
-        useShortFlow ? 3 : stepCount
+        flowSteps.count
+    }
+
+    var canGoBack: Bool {
+        (flowSteps.firstIndex(of: step) ?? 0) > 0
+    }
+
+    var shouldShowManualAdvanceForCurrentStep: Bool {
+        isReviewingBack && shouldSkip(step)
+    }
+
+    var flowSteps: [Step] {
+        if useShortFlow {
+            var steps: [Step] = []
+            if !isLocationReady {
+                steps.append(.location)
+            }
+            if !isNotificationsReady {
+                steps.append(.notifications)
+            }
+            return steps.isEmpty ? [.notifications] : steps
+        }
+
+        var steps: [Step] = [.welcome, .location]
+        if alarmKitState != .unavailable {
+            steps.append(.alarmKit)
+        }
+        steps.append(contentsOf: [.notifications, .offset, .confirmation])
+        return steps
     }
 
     func transition(reduceMotion: Bool) -> AnyTransition {
@@ -263,9 +297,10 @@ final class OnboardingViewModel: ObservableObject {
     }
 
     private func skipIfNeeded() {
+        guard !isReviewingBack else { return }
         guard let resolved = resolvedStep(startingAt: step) else { return }
         guard resolved != step else { return }
-        goTo(resolved, animation: nil)
+        goTo(resolved, animation: currentAnimation)
     }
 
     private func resolvedStep(startingAt start: Step) -> Step? {
@@ -277,10 +312,10 @@ final class OnboardingViewModel: ObservableObject {
     }
 
     private func nextStep(after step: Step) -> Step? {
-        if useShortFlow, step == .notifications {
+        guard let index = flowSteps.firstIndex(of: step), index + 1 < flowSteps.count else {
             return nil
         }
-        return step.next
+        return flowSteps[index + 1]
     }
 
     private func shouldSkip(_ step: Step) -> Bool {
@@ -301,32 +336,15 @@ final class OnboardingViewModel: ObservableObject {
     }
 
     private func updateInitialStep() {
-        guard useShortFlow else {
-            step = .welcome
-            previousStep = nil
-            return
-        }
-        if (locationMode == .auto && locationState != .authorized)
-            || (locationMode == .fixed && !hasFixedLocation) {
-            step = .location
-        } else if !isNotificationsReady {
-            step = .notifications
+        if useShortFlow {
+            step = flowSteps.first ?? .notifications
         } else {
-            step = .notifications
+            step = .welcome
         }
         previousStep = nil
     }
-}
 
-private extension OnboardingViewModel.Step {
-    var next: OnboardingViewModel.Step? {
-        switch self {
-        case .welcome: return .location
-        case .location: return .alarmKit
-        case .alarmKit: return .notifications
-        case .notifications: return .offset
-        case .offset: return .confirmation
-        case .confirmation: return nil
-        }
+    private var currentAnimation: Animation? {
+        UIAccessibility.isReduceMotionEnabled ? nil : .easeInOut(duration: 0.28)
     }
 }
