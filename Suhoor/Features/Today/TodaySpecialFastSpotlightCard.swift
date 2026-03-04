@@ -15,7 +15,7 @@ struct TodaySpecialFastSpotlightCard: View {
                 VStack(alignment: .leading, spacing: DesignTokens.dashboardCardInternalSpacing) {
                     HStack(alignment: .center, spacing: DesignTokens.spacingS) {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("Special Fast Today")
+                            Text("Sunnah Observances")
                                 .font(DesignTokens.cardTitleFont)
                             Text(content.title)
                                 .font(DesignTokens.cardSubtitleFont)

@@ -32,7 +32,7 @@ enum TodayCardKind: String, Codable, CaseIterable, Identifiable, Hashable, Senda
         case .ramadanProgress:
             return "Ramadan Progress"
         case .specialFastSpotlight:
-            return "Special Fast Today"
+            return "Sunnah Observances"
         case .shawwalSixProgress:
             return "Shawwal 6"
         case .shawwalPlan:

@@ -66,7 +66,7 @@ struct TodayEditCardsSheet: View {
         case .ramadanProgress:
             return "Shows only during Ramadan"
         case .specialFastSpotlight:
-            return "Dynamic spotlight for today's Hijri observance"
+            return "Dynamic spotlight for today's Sunnah observances"
         case .shawwalSixProgress:
             return "Six-bar Shawwal tracker"
         case .shawwalPlan:
