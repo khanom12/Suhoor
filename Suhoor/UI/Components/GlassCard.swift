@@ -8,11 +8,21 @@ struct GlassCard<Content: View>: View {
 
     let style: Style
     let padding: CGFloat
+    let tintColor: Color?
+    let tintOpacity: Double
     @ViewBuilder let content: () -> Content
 
-    init(style: Style = .normal, padding: CGFloat = DesignTokens.dashboardCardPadding, @ViewBuilder content: @escaping () -> Content) {
+    init(
+        style: Style = .normal,
+        padding: CGFloat = DesignTokens.dashboardCardPadding,
+        tintColor: Color? = nil,
+        tintOpacity: Double = 0.18,
+        @ViewBuilder content: @escaping () -> Content
+    ) {
         self.style = style
         self.padding = padding
+        self.tintColor = tintColor
+        self.tintOpacity = tintOpacity
         self.content = content
     }
 
@@ -32,6 +42,10 @@ struct GlassCard<Content: View>: View {
                 .fill(style == .header ? .regularMaterial : .thinMaterial)
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                 .fill(DawnColor.glassWarmOverlay.opacity(style == .header ? 0.10 : 0.06))
+            if let tintColor {
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .fill(tintColor.opacity(tintOpacity))
+            }
         }
     }
 

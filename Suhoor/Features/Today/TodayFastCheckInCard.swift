@@ -6,15 +6,13 @@ struct TodayFastCheckInCard: View {
     @State private var isPulsing = false
 
     var body: some View {
-        GlassCard(style: .header) {
-            TimelineView(.periodic(from: Date(), by: 60)) { context in
-                content(now: context.date)
-            }
+        TimelineView(.periodic(from: Date(), by: 60)) { context in
+            card(now: context.date)
         }
     }
 
     @ViewBuilder
-    private func content(now: Date) -> some View {
+    private func card(now: Date) -> some View {
         let timeZone = TimeZone.current
         let calendar = todayCalendar(timeZone: timeZone)
         let todayStart = calendar.startOfDay(for: now)
@@ -25,17 +23,21 @@ struct TodayFastCheckInCard: View {
         let status = normalizedStatus(for: dateKey, phase: phase, intent: intent, now: now)
         let viewState = viewState(for: status, phase: phase)
 
-        VStack(alignment: .leading, spacing: DesignTokens.dashboardCardInternalSpacing) {
-            switch viewState {
-            case .prompt(let promptPhase):
-                promptContent(phase: promptPhase, dateKey: dateKey, intent: intent)
-                    .transition(.opacity.combined(with: .scale(scale: 0.98)))
-            case .inProgress, .completed, .missed:
-                loggedContent(state: viewState, dateKey: dateKey)
-                    .transition(.opacity.combined(with: .scale(scale: 0.98)))
+        let tint = cardTint(for: viewState, phase: phase)
+
+        GlassCard(style: .header, tintColor: tint.color, tintOpacity: tint.opacity) {
+            VStack(alignment: .leading, spacing: DesignTokens.dashboardCardInternalSpacing) {
+                switch viewState {
+                case .prompt(let promptPhase):
+                    promptContent(phase: promptPhase, dateKey: dateKey, intent: intent)
+                        .transition(.opacity.combined(with: .scale(scale: 0.98)))
+                case .inProgress, .completed, .missed:
+                    loggedContent(state: viewState, phase: phase, dateKey: dateKey)
+                        .transition(.opacity.combined(with: .scale(scale: 0.98)))
+                }
             }
+            .animation(.easeInOut(duration: 0.22), value: viewState)
         }
-        .animation(.easeInOut(duration: 0.22), value: viewState)
     }
 
     @ViewBuilder
@@ -81,9 +83,9 @@ struct TodayFastCheckInCard: View {
     }
 
     @ViewBuilder
-    private func loggedContent(state: FastCheckInViewState, dateKey: String) -> some View {
+    private func loggedContent(state: FastCheckInViewState, phase: FastCheckInPhase, dateKey: String) -> some View {
         ZStack(alignment: .top) {
-            Text(statusTitle(for: state))
+            Text(statusTitle(for: state, phase: phase))
                 .font(.title3.weight(.semibold))
                 .foregroundStyle(statusColor(for: state))
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
@@ -170,7 +172,8 @@ struct TodayFastCheckInCard: View {
     private func phase(now: Date, scheduleDay: ActiveAlarmDay?) -> FastCheckInPhase {
         guard let scheduleDay else { return .timeUnknown }
         if now < scheduleDay.schedule.fajrDate {
-            return .postMaghrib
+            // After midnight but before Fajr belongs to "today planning".
+            return .preFajr
         }
         if now < scheduleDay.schedule.maghribDate {
             return .preMaghrib
@@ -209,35 +212,45 @@ struct TodayFastCheckInCard: View {
 
     private func questionTitle(for phase: FastCheckInPhase) -> String {
         switch phase {
+        case .preFajr:
+            return "Will you fast today?"
         case .preMaghrib:
             return "Are you fasting today?"
         case .postMaghrib, .timeUnknown:
+            return "Did you fast today?"
+        @unknown default:
             return "Did you fast today?"
         }
     }
 
     private func primaryAffirmativeTitle(for phase: FastCheckInPhase) -> String {
         switch phase {
-        case .preMaghrib, .postMaghrib, .timeUnknown:
+        case .preFajr, .preMaghrib, .postMaghrib, .timeUnknown:
+            return "Yes"
+        @unknown default:
             return "Yes"
         }
     }
 
     private func primaryAffirmativeStatus(for phase: FastCheckInPhase) -> FastLogStatus {
         switch phase {
+        case .preFajr:
+            return .inProgress
         case .preMaghrib:
             return .inProgress
         case .postMaghrib, .timeUnknown:
             return .completed
+        @unknown default:
+            return .completed
         }
     }
 
-    private func statusTitle(for state: FastCheckInViewState) -> String {
+    private func statusTitle(for state: FastCheckInViewState, phase: FastCheckInPhase) -> String {
         switch state {
         case .prompt:
             return ""
         case .inProgress:
-            return "Fasting in progress"
+            return phase == .preFajr ? "Fasting planned" : "Fasting in progress"
         case .completed:
             return "Fast completed"
         case .missed:
@@ -258,6 +271,18 @@ struct TodayFastCheckInCard: View {
         }
     }
 
+    private func cardTint(for state: FastCheckInViewState, phase: FastCheckInPhase) -> (color: Color?, opacity: Double) {
+        switch state {
+        case .completed:
+            return (Color.green, 0.12)
+        case .inProgress:
+            // Keep this light so the glass stays glass.
+            return (DawnColor.lightApricot100, phase == .preFajr ? 0.28 : 0.22)
+        case .missed, .prompt:
+            return (nil, 0.0)
+        }
+    }
+
     private func todayCalendar(timeZone: TimeZone) -> Calendar {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = timeZone
@@ -266,6 +291,7 @@ struct TodayFastCheckInCard: View {
 }
 
 private enum FastCheckInPhase: Equatable {
+    case preFajr
     case preMaghrib
     case postMaghrib
     case timeUnknown
