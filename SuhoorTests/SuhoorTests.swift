@@ -511,6 +511,49 @@ struct SuhoorTests {
     }
 
     @Test
+    func nextAlarmEntriesKeepDisabledPinnedRowsAndAppendNextEnabledEntry() {
+        let now = makeDate(year: 2026, month: 3, day: 2).addingTimeInterval(8 * 60 * 60)
+        let firstEntry = sampleAlarmRowEntry(
+            date: makeDate(year: 2026, month: 3, day: 2),
+            wakeDate: now.addingTimeInterval(60 * 60),
+            isEnabled: false
+        )
+        let secondEntry = sampleAlarmRowEntry(
+            date: makeDate(year: 2026, month: 3, day: 3),
+            wakeDate: now.addingTimeInterval(24 * 60 * 60),
+            isEnabled: true
+        )
+        let thirdEntry = sampleAlarmRowEntry(
+            date: makeDate(year: 2026, month: 3, day: 4),
+            wakeDate: now.addingTimeInterval(48 * 60 * 60),
+            isEnabled: true
+        )
+
+        let pinnedEntries = AlarmListSelection.nextAlarmEntries(
+            from: [firstEntry, secondEntry, thirdEntry],
+            pinnedEntryIDs: [firstEntry.id],
+            now: now
+        )
+
+        #expect(pinnedEntries.map(\.id) == [firstEntry.id, secondEntry.id])
+    }
+
+    @Test
+    func reEnablingPinnedRowTrimsPinnedRowsBelowIt() {
+        let firstID = "2026-03-02"
+        let secondID = "2026-03-03"
+        let thirdID = "2026-03-04"
+
+        let updatedPinnedIDs = AlarmListSelection.pinnedEntryIDs(
+            afterToggling: secondID,
+            isOn: true,
+            currentPinnedEntryIDs: [firstID, secondID, thirdID]
+        )
+
+        #expect(updatedPinnedIDs == [firstID, secondID])
+    }
+
+    @Test
     func alarmRowSecondaryTagsAreLimitedToFive() {
         let result = TagComputationResult(
             computedPrimaryIntent: .voluntarySunnah,
@@ -1551,6 +1594,50 @@ struct SuhoorTests {
             defaultsActive: true,
             skipDay: false,
             suhoorEnabled: true,
+            reminderEnabled: false,
+            fajrEnabled: false,
+            iftarEnabled: false,
+            suhoorTimeMode: .relativeToFajrMinusMinutes,
+            suhoorOffsetMinutes: 30,
+            reminderTimeMode: .beforeFajr,
+            reminderMinutesBeforeFajr: 10,
+            reminderFixedTimeMinutes: 0,
+            suhoorTimeOverrideMinutesFromMidnight: nil,
+            reminderTimeOverrideMinutesFromMidnight: nil,
+            fajrSoundChoice: .systemDefault,
+            iftarDelivery: .notificationOnly,
+            iftarSoundChoice: .adhanSoft,
+            hasOverrides: false
+        )
+    }
+
+    private func sampleAlarmRowEntry(
+        date: Date,
+        wakeDate: Date,
+        isEnabled: Bool
+    ) -> AlarmRowEntry {
+        AlarmRowEntry(
+            activeDay: ActiveAlarmDay(
+                date: date,
+                dateKey: DateHelpers.dayIdentifier(for: date, timeZone: .current),
+                schedule: sampleDaySchedule(date: date, wakeDate: wakeDate),
+                effectiveConfig: sampleEffectiveDailyConfig(date: date, isEnabled: isEnabled),
+                provenances: [],
+                isImplicitRamadan: false,
+                isExplicitOneOff: false,
+                tagResult: .empty,
+                primaryDisplay: PrimaryDisplay(time: wakeDate, kind: .suhoor),
+                sourceSummaryText: ""
+            )
+        )
+    }
+
+    private func sampleEffectiveDailyConfig(date: Date, isEnabled: Bool) -> EffectiveDailyConfig {
+        EffectiveDailyConfig(
+            date: date,
+            defaultsActive: true,
+            skipDay: isEnabled == false,
+            suhoorEnabled: isEnabled,
             reminderEnabled: false,
             fajrEnabled: false,
             iftarEnabled: false,

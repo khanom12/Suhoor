@@ -21,18 +21,24 @@ struct AlarmsHomeView: View {
     @State private var pendingFocusDateKey: String?
     @State private var pendingSeriesDeleteEntry: AlarmRowEntry?
     @State private var pendingRamadanEntry: AlarmRowEntry?
+    @State private var pinnedNextAlarmEntryIDs: [String] = []
+    @State private var animatePinnedNextAlarmUpdates = false
 
     var body: some View {
         List {
             Section(Strings.AlarmsTab.nextAlarmSectionTitle) {
-                if let nextAlarmEntry = listSnapshot.nextAlarmEntry {
-                    ForEach([nextAlarmEntry]) { entry in
-                        alarmRow(for: entry)
+                if listSnapshot.nextAlarmEntries.isEmpty == false {
+                    ForEach(listSnapshot.nextAlarmEntries) { entry in
+                        alarmRow(for: entry, isPinnedNextAlarm: true)
                             .deleteDisabled(entry.deleteCapability == .ramadan)
+                            .transition(.asymmetric(
+                                insertion: .move(edge: .top).combined(with: .opacity),
+                                removal: .opacity
+                            ))
                     }
                     .onDelete { offsets in
                         withAnimation(Motion.standard(reduceMotion: reduceMotion)) {
-                            deleteEntries(in: [nextAlarmEntry], at: offsets)
+                            deleteEntries(in: listSnapshot.nextAlarmEntries, at: offsets)
                         }
                     }
                 } else {
@@ -294,7 +300,7 @@ struct AlarmsHomeView: View {
         tagFilter.isActive ? Strings.AlarmsTab.emptyFilteredMonth : Strings.AlarmsTab.emptyMonth
     }
 
-    private func alarmRow(for entry: AlarmRowEntry) -> some View {
+    private func alarmRow(for entry: AlarmRowEntry, isPinnedNextAlarm: Bool = false) -> some View {
         AlarmRowView(
             schedule: entry.schedule,
             config: entry.config,
@@ -304,6 +310,10 @@ struct AlarmsHomeView: View {
             warnings: entry.warnings,
             showsTags: entry.showsTags,
             deleteCapability: entry.deleteCapability,
+            onToggleChanged: { isOn in
+                guard isPinnedNextAlarm else { return }
+                handlePinnedNextAlarmToggleChange(for: entry, isOn: isOn)
+            },
             onSelect: {
                 selectedSchedule = entry.schedule
             },
@@ -323,28 +333,45 @@ struct AlarmsHomeView: View {
             return AlarmRowEntry(activeDay: refreshedDay)
         }
 
-        let nextAlarmEntry = AlarmListSelection.nextAlarmEntry(from: nearTermEntries)
-        guard let nextAlarmEntry else {
+        let sanitizedPinnedNextAlarmEntryIDs = AlarmListSelection.sanitizedPinnedEntryIDs(
+            pinnedEntryIDs: pinnedNextAlarmEntryIDs,
+            availableEntries: nearTermEntries
+        )
+        if sanitizedPinnedNextAlarmEntryIDs != pinnedNextAlarmEntryIDs {
+            pinnedNextAlarmEntryIDs = sanitizedPinnedNextAlarmEntryIDs
+        }
+
+        let nextAlarmEntries = AlarmListSelection.nextAlarmEntries(
+            from: nearTermEntries,
+            pinnedEntryIDs: sanitizedPinnedNextAlarmEntryIDs
+        )
+        guard nextAlarmEntries.isEmpty == false else {
             sectionCollapseOverrides = [:]
             loadingSectionIDs = []
             listSnapshot = AlarmListSnapshot(
-                nextAlarmEntry: nil,
+                nextAlarmEntries: [],
                 sections: [],
                 defaultExpandedSectionID: nil
             )
             return
         }
 
+        let nextAlarmEntryIDs = Set(nextAlarmEntries.map(\.id))
         var nearTermGrouped: [HijriMonthKey: [AlarmRowEntry]] = [:]
         for entry in nearTermEntries {
-            guard entry.id != nextAlarmEntry.id else { continue }
+            guard nextAlarmEntryIDs.contains(entry.id) == false else { continue }
             guard let key = FastIntentEngine.hijriMonthKey(for: entry.schedule.date, timeZone: timeZone) else { continue }
             nearTermGrouped[key, default: []].append(entry)
         }
 
         let previewMonths = scheduleManager.rollingHijriMonths(count: 12, timeZone: timeZone)
         var sections: [HijriMonthSection] = []
-        let nextAlarmMonthKey = FastIntentEngine.hijriMonthKey(for: nextAlarmEntry.schedule.date, timeZone: timeZone)
+        let pinnedNextAlarmCountsByMonth = Dictionary(
+            grouping: nextAlarmEntries.compactMap { entry in
+                FastIntentEngine.hijriMonthKey(for: entry.schedule.date, timeZone: timeZone)
+            },
+            by: { $0 }
+        ).mapValues(\.count)
 
         for yearMonth in previewMonths {
             let key = HijriMonthKey(
@@ -354,8 +381,8 @@ struct AlarmsHomeView: View {
             )
             let totalCount = totalScheduledCount(for: key, timeZone: timeZone)
             guard totalCount > 0 else { continue }
-            let isPinnedMonth = nextAlarmMonthKey == key
-            guard !(isPinnedMonth && totalCount == 1) else { continue }
+            let pinnedCount = pinnedNextAlarmCountsByMonth[key, default: 0]
+            guard totalCount > pinnedCount else { continue }
             guard let preview = scheduleManager.hijriMonthStartPreview(
                 for: yearMonth.month,
                 hijriYear: yearMonth.hijriYear,
@@ -369,7 +396,7 @@ struct AlarmsHomeView: View {
                 entry.matches(filter: tagFilter)
             }
             let isLoaded = cachedEntries != nil || !unfilteredEntries.isEmpty
-            let visibleAlarmCount = tagFilter.isActive ? entries.count : max(totalCount - (isPinnedMonth ? 1 : 0), 0)
+            let visibleAlarmCount = tagFilter.isActive ? entries.count : max(totalCount - pinnedCount, 0)
             sections.append(
                 HijriMonthSection(
                     key: key,
@@ -395,9 +422,9 @@ struct AlarmsHomeView: View {
             }
             .compactMap { key -> HijriMonthSection? in
                 let totalCount = totalScheduledCount(for: key, timeZone: timeZone)
-                let isPinnedMonth = nextAlarmMonthKey == key
+                let pinnedCount = pinnedNextAlarmCountsByMonth[key, default: 0]
                 guard totalCount > 0 else { return nil }
-                guard !(isPinnedMonth && totalCount == 1) else { return nil }
+                guard totalCount > pinnedCount else { return nil }
                 let filteredEntries = (nearTermGrouped[key] ?? []).filter { entry in
                     entry.matches(filter: tagFilter)
                 }
@@ -406,7 +433,7 @@ struct AlarmsHomeView: View {
                     entries: filteredEntries,
                     preview: nil,
                     isLoaded: true,
-                    visibleAlarmCount: tagFilter.isActive ? filteredEntries.count : max(totalCount - (isPinnedMonth ? 1 : 0), 0),
+                    visibleAlarmCount: tagFilter.isActive ? filteredEntries.count : max(totalCount - pinnedCount, 0),
                     totalAlarmCount: totalCount
                 )
             }
@@ -420,7 +447,7 @@ struct AlarmsHomeView: View {
         sectionCollapseOverrides = sectionCollapseOverrides.filter { sectionIdentifiers.contains($0.key) }
         loadingSectionIDs = loadingSectionIDs.filter { sectionIdentifiers.contains($0) }
         listSnapshot = AlarmListSnapshot(
-            nextAlarmEntry: nextAlarmEntry,
+            nextAlarmEntries: nextAlarmEntries,
             sections: resolvedSections,
             defaultExpandedSectionID: nil
         )
@@ -435,11 +462,13 @@ struct AlarmsHomeView: View {
     }
 
     private func refreshListSnapshot(animated: Bool) {
+        let shouldAnimate = animated || animatePinnedNextAlarmUpdates
+        animatePinnedNextAlarmUpdates = false
         let update = {
             rebuildListSnapshot()
             ensureExpandedSectionsLoaded()
         }
-        if animated {
+        if shouldAnimate {
             withAnimation(Motion.standard(reduceMotion: reduceMotion)) {
                 update()
             }
@@ -461,6 +490,7 @@ struct AlarmsHomeView: View {
         for index in offsets {
             guard entries.indices.contains(index) else { continue }
             let entry = entries[index]
+            pinnedNextAlarmEntryIDs.removeAll { $0 == entry.id }
             switch entry.deleteCapability {
             case .explicitOneOff:
                 deleteOneOff(entry)
@@ -630,14 +660,25 @@ struct AlarmsHomeView: View {
             }
         }
     }
+
+    private func handlePinnedNextAlarmToggleChange(for entry: AlarmRowEntry, isOn: Bool) {
+        let updatedPinnedEntryIDs = AlarmListSelection.pinnedEntryIDs(
+            afterToggling: entry.id,
+            isOn: isOn,
+            currentPinnedEntryIDs: pinnedNextAlarmEntryIDs
+        )
+        guard updatedPinnedEntryIDs != pinnedNextAlarmEntryIDs else { return }
+        animatePinnedNextAlarmUpdates = true
+        pinnedNextAlarmEntryIDs = updatedPinnedEntryIDs
+    }
 }
 
 private struct AlarmListSnapshot {
-    let nextAlarmEntry: AlarmRowEntry?
+    let nextAlarmEntries: [AlarmRowEntry]
     let sections: [HijriMonthSection]
     let defaultExpandedSectionID: String?
 
-    static let empty = AlarmListSnapshot(nextAlarmEntry: nil, sections: [], defaultExpandedSectionID: nil)
+    static let empty = AlarmListSnapshot(nextAlarmEntries: [], sections: [], defaultExpandedSectionID: nil)
 
     func defaultCollapsedState(for identifier: String) -> Bool {
         guard let defaultExpandedSectionID else { return true }
@@ -864,6 +905,7 @@ private struct AlarmRowView: View {
     let warnings: [FastWarning]
     let showsTags: Bool
     let deleteCapability: AlarmRowDeleteCapability
+    let onToggleChanged: (Bool) -> Void
     let onSelect: () -> Void
     let onRequestRamadanDisable: () -> Void
     @ScaledMetric(relativeTo: .largeTitle) private var timeFontSize: CGFloat = 46
@@ -894,6 +936,7 @@ private struct AlarmRowView: View {
         warnings: [FastWarning],
         showsTags: Bool,
         deleteCapability: AlarmRowDeleteCapability,
+        onToggleChanged: @escaping (Bool) -> Void = { _ in },
         onSelect: @escaping () -> Void,
         onRequestRamadanDisable: @escaping () -> Void
     ) {
@@ -905,6 +948,7 @@ private struct AlarmRowView: View {
         self.warnings = warnings
         self.showsTags = showsTags
         self.deleteCapability = deleteCapability
+        self.onToggleChanged = onToggleChanged
         self.onSelect = onSelect
         self.onRequestRamadanDisable = onRequestRamadanDisable
         _localIsOn = State(initialValue: AlarmRowView.isEnabled(config: config))
@@ -1024,6 +1068,7 @@ private struct AlarmRowView: View {
             localIsOn
         }, set: { isOn in
             localIsOn = isOn
+            onToggleChanged(isOn)
             let timeZone = TimeZone.current
             alarmConfigStore.setDayEnabled(isOn, for: schedule.date, timeZone: timeZone)
             scheduleManager.requestRescheduleDay(schedule.date)
@@ -1216,6 +1261,56 @@ private struct HomeWarningCapsule: View {
 }
 
 enum AlarmListSelection {
+    static func sanitizedPinnedEntryIDs(
+        pinnedEntryIDs: [String],
+        availableEntries: [AlarmRowEntry]
+    ) -> [String] {
+        let availableEntryIDs = Set(availableEntries.map(\.id))
+        return pinnedEntryIDs.filter { availableEntryIDs.contains($0) }
+    }
+
+    static func pinnedEntryIDs(
+        afterToggling entryID: String,
+        isOn: Bool,
+        currentPinnedEntryIDs: [String]
+    ) -> [String] {
+        if isOn {
+            guard let index = currentPinnedEntryIDs.firstIndex(of: entryID) else {
+                return currentPinnedEntryIDs
+            }
+            return Array(currentPinnedEntryIDs.prefix(index + 1))
+        }
+
+        guard currentPinnedEntryIDs.contains(entryID) == false else {
+            return currentPinnedEntryIDs
+        }
+        return currentPinnedEntryIDs + [entryID]
+    }
+
+    static func nextAlarmEntries(
+        from entries: [AlarmRowEntry],
+        pinnedEntryIDs: [String],
+        now: Date = Date()
+    ) -> [AlarmRowEntry] {
+        let sanitizedPinnedEntryIDs = sanitizedPinnedEntryIDs(
+            pinnedEntryIDs: pinnedEntryIDs,
+            availableEntries: entries
+        )
+        let entriesByID = Dictionary(uniqueKeysWithValues: entries.map { ($0.id, $0) })
+        let pinnedEntries = sanitizedPinnedEntryIDs.compactMap { entriesByID[$0] }
+
+        if pinnedEntries.contains(where: \.isEnabled) {
+            return pinnedEntries
+        }
+
+        let pinnedEntryIDSet = Set(sanitizedPinnedEntryIDs)
+        let remainingEntries = entries.filter { pinnedEntryIDSet.contains($0.id) == false }
+        guard let nextEntry = nextAlarmEntry(from: remainingEntries, now: now) else {
+            return pinnedEntries
+        }
+        return pinnedEntries + [nextEntry]
+    }
+
     static func nextAlarmEntry(from entries: [AlarmRowEntry], now: Date = Date()) -> AlarmRowEntry? {
         let enabledEntries = entries.filter(\.isEnabled)
         if let upcoming = enabledEntries.first(where: { $0.primaryTimeDate >= now }) {
