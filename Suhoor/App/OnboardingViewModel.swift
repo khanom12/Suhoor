@@ -301,26 +301,31 @@ final class OnboardingViewModel: ObservableObject {
     }
 
     var tomorrowPreview: OnboardingTomorrowPreview {
-        let tomorrow = DateHelpers.startOfTomorrow(in: .current)
-        let dateText = "Tomorrow, \(GregorianDateFormatter.shared.cardString(for: tomorrow))"
-        guard let schedule = scheduleManager?.schedule(for: tomorrow) else {
+        let targetDay = nextAlarmStartDay
+        let dateText = nextAlarmDisplayLabel(for: targetDay)
+        guard let schedule = scheduleManager?.schedule(for: targetDay) else {
             let statusText = isLocationReady
                 ? Strings.Onboarding.previewUnavailable
                 : Strings.Onboarding.previewNeedsLocation
             return OnboardingTomorrowPreview(
                 dateText: dateText,
+                targetDate: nil,
+                fajrDate: nil,
+                suhoorDate: nil,
                 fajrTimeText: nil,
                 suhoorTimeText: nil,
                 statusText: statusText
             )
         }
 
+        let wakeDate = schedule.fajrDate.addingTimeInterval(TimeInterval(-selectedOffsetMinutes * 60))
         let fajrTime = TimeFormatters.timeFormatter.string(from: schedule.fajrDate)
-        let offsetMinutes = settingsStore?.settings.baseWakeOffsetMinutes ?? 60
-        let wakeDate = schedule.fajrDate.addingTimeInterval(TimeInterval(-offsetMinutes * 60))
         let suhoorTime = TimeFormatters.timeFormatter.string(from: wakeDate)
         return OnboardingTomorrowPreview(
             dateText: dateText,
+            targetDate: targetDay,
+            fajrDate: schedule.fajrDate,
+            suhoorDate: wakeDate,
             fajrTimeText: fajrTime,
             suhoorTimeText: suhoorTime,
             statusText: nil
@@ -328,15 +333,17 @@ final class OnboardingViewModel: ObservableObject {
     }
 
     var valueScreenPreview: OnboardingTomorrowPreview {
-        let tomorrow = DateHelpers.startOfTomorrow(in: .current)
-        if isLocationReady, let schedule = scheduleManager?.schedule(for: tomorrow) {
-            let dateText = "Tomorrow"
+        let targetDay = nextAlarmStartDay
+        let label = nextAlarmDisplayLabel(for: targetDay)
+        if isLocationReady, let schedule = scheduleManager?.schedule(for: targetDay) {
+            let wakeDate = schedule.fajrDate.addingTimeInterval(TimeInterval(-selectedOffsetMinutes * 60))
             let fajrTime = TimeFormatters.timeFormatter.string(from: schedule.fajrDate)
-            let offsetMinutes = settingsStore?.settings.baseWakeOffsetMinutes ?? 60
-            let wakeDate = schedule.fajrDate.addingTimeInterval(TimeInterval(-offsetMinutes * 60))
             let suhoorTime = TimeFormatters.timeFormatter.string(from: wakeDate)
             return OnboardingTomorrowPreview(
-                dateText: dateText,
+                dateText: label,
+                targetDate: targetDay,
+                fajrDate: schedule.fajrDate,
+                suhoorDate: wakeDate,
                 fajrTimeText: fajrTime,
                 suhoorTimeText: suhoorTime,
                 statusText: nil
@@ -344,40 +351,31 @@ final class OnboardingViewModel: ObservableObject {
         }
 
         return OnboardingTomorrowPreview(
-            dateText: "Tomorrow",
+            dateText: label,
+            targetDate: targetDay,
+            fajrDate: nil,
+            suhoorDate: nil,
             fajrTimeText: "5:27 AM",
             suhoorTimeText: "4:57 AM",
             statusText: nil
         )
     }
 
-    var futureScheduleRows: [SchedulePreviewRow] {
-        guard let scheduleManager, let settingsStore else { return [] }
+    var next5DaysSchedule: [SchedulePreviewRow] {
+        guard let scheduleManager else { return [] }
         let calendar = Calendar.current
-        let offsetMinutes = settingsStore.settings.baseWakeOffsetMinutes
-        let now = Date()
-        let startOfToday = DateHelpers.startOfToday(in: .current)
-        let tomorrow = calendar.date(byAdding: .day, value: 1, to: startOfToday) ?? startOfToday
-        let todaySuhoor = scheduleManager.schedule(for: startOfToday)?.fajrDate
-            .addingTimeInterval(TimeInterval(-offsetMinutes * 60))
-        let startDate = if let todaySuhoor, now < todaySuhoor { startOfToday } else { tomorrow }
-
-        let dayFormatter = DateFormatter()
-        dayFormatter.locale = .current
-        dayFormatter.timeZone = .current
-        dayFormatter.dateFormat = "EEE, MMM d"
-
+        let startDate = nextAlarmStartDay
         var rows: [SchedulePreviewRow] = []
         var dayOffset = 0
         while rows.count < 5 && dayOffset < 21 {
             let day = calendar.date(byAdding: .day, value: dayOffset, to: startDate) ?? startDate
             if let schedule = scheduleManager.schedule(for: day) {
-                let suhoor = schedule.fajrDate.addingTimeInterval(TimeInterval(-offsetMinutes * 60))
+                let suhoor = schedule.fajrDate.addingTimeInterval(TimeInterval(-selectedOffsetMinutes * 60))
                 rows.append(
                     SchedulePreviewRow(
                         id: DateHelpers.dayIdentifier(for: day, timeZone: .current),
                         date: day,
-                        dayLabel: dayFormatter.string(from: day),
+                        dayLabel: dayLabel(for: day),
                         fajr: schedule.fajrDate,
                         suhoor: suhoor
                     )
@@ -388,8 +386,30 @@ final class OnboardingViewModel: ObservableObject {
         return rows
     }
 
-    var futureOffsetMinutes: Int {
+    var selectedOffsetMinutes: Int {
         settingsStore?.settings.baseWakeOffsetMinutes ?? 60
+    }
+
+    var computedFajrTime: Date? {
+        tomorrowPreview.fajrDate
+    }
+
+    var computedSuhoorAlarmTime: Date? {
+        tomorrowPreview.suhoorDate
+    }
+
+    var successTitleText: String {
+        Strings.Onboarding.successTitle(nextAlarmDisplayLabel(for: nextAlarmStartDay))
+    }
+
+    var offsetHelperText: String {
+        Strings.Onboarding.offsetLiveHelper(selectedOffsetMinutes)
+    }
+
+    var valuePrimaryActionTitle: String {
+        nextAlarmDisplayLabel(for: nextAlarmStartDay) == Strings.Onboarding.todayLabel
+            ? Strings.Onboarding.valuePrimaryActionToday
+            : Strings.Onboarding.valuePrimaryActionTomorrow
     }
 
     var successSchedule: DaySchedule? {
@@ -603,5 +623,37 @@ final class OnboardingViewModel: ObservableObject {
         case .success:
             return "success"
         }
+    }
+
+    private var nextAlarmStartDay: Date {
+        let calendar = Calendar.current
+        let now = Date()
+        let startOfToday = DateHelpers.startOfToday(in: .current)
+        let tomorrow = calendar.date(byAdding: .day, value: 1, to: startOfToday) ?? startOfToday
+        guard let scheduleManager else { return tomorrow }
+        guard let todaySchedule = scheduleManager.schedule(for: startOfToday) else { return tomorrow }
+        let todaySuhoor = todaySchedule.fajrDate.addingTimeInterval(TimeInterval(-selectedOffsetMinutes * 60))
+        return now < todaySuhoor ? startOfToday : tomorrow
+    }
+
+    private func dayLabel(for date: Date) -> String {
+        let calendar = Calendar.current
+        let today = DateHelpers.startOfToday(in: .current)
+        let tomorrow = calendar.date(byAdding: .day, value: 1, to: today) ?? today
+        if calendar.isDate(date, inSameDayAs: today) {
+            return Strings.Onboarding.todayLabel
+        }
+        if calendar.isDate(date, inSameDayAs: tomorrow) {
+            return Strings.Onboarding.tomorrowLabel
+        }
+        let formatter = DateFormatter()
+        formatter.locale = .current
+        formatter.timeZone = .current
+        formatter.dateFormat = "EEE"
+        return formatter.string(from: date)
+    }
+
+    private func nextAlarmDisplayLabel(for date: Date) -> String {
+        dayLabel(for: date)
     }
 }

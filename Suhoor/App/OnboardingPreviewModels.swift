@@ -2,6 +2,9 @@ import Foundation
 
 struct OnboardingTomorrowPreview: Equatable {
     let dateText: String
+    let targetDate: Date?
+    let fajrDate: Date?
+    let suhoorDate: Date?
     let fajrTimeText: String?
     let suhoorTimeText: String?
     let statusText: String?

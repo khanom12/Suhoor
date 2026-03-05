@@ -117,8 +117,9 @@ struct OnboardingView: View {
             case .valuePreview:
                 ValuePreviewStep(
                     preview: viewModel.valueScreenPreview,
+                    offsetMinutes: viewModel.selectedOffsetMinutes,
                     activationState: .idle,
-                    showsSampleLabel: !viewModel.isLocationReady,
+                    primaryTitle: viewModel.valuePrimaryActionTitle,
                     onPrimary: { viewModel.startFlow(animation: Motion.onboarding(reduceMotion: reduceMotion)) }
                 )
             case .location:
@@ -138,13 +139,15 @@ struct OnboardingView: View {
                 OffsetStep(
                     baseMinutes: $settingsStore.settings.baseWakeOffsetMinutes,
                     preview: viewModel.tomorrowPreview,
+                    offsetHelperText: viewModel.offsetHelperText,
+                    offsetMinutes: viewModel.selectedOffsetMinutes,
                     activationState: viewModel.activationState,
                     onContinue: { viewModel.advance(animation: Motion.onboarding(reduceMotion: reduceMotion)) }
                 )
             case .futureVisualization:
                 FutureVisualizationStep(
-                    rows: viewModel.futureScheduleRows,
-                    offsetMinutes: viewModel.futureOffsetMinutes,
+                    rows: viewModel.next5DaysSchedule,
+                    offsetMinutes: viewModel.selectedOffsetMinutes,
                     onContinue: { viewModel.advance(animation: Motion.onboarding(reduceMotion: reduceMotion)) }
                 )
             case .permissions:
@@ -163,7 +166,8 @@ struct OnboardingView: View {
             case .success:
                 SuccessStep(
                     preview: viewModel.tomorrowPreview,
-                    schedule: viewModel.successSchedule,
+                    offsetMinutes: viewModel.selectedOffsetMinutes,
+                    title: viewModel.successTitleText,
                     onDone: viewModel.markOnboardingComplete
                 )
             }
@@ -175,8 +179,9 @@ struct OnboardingView: View {
 
 private struct ValuePreviewStep: View {
     let preview: OnboardingTomorrowPreview
+    let offsetMinutes: Int
     let activationState: OnboardingActivationState
-    let showsSampleLabel: Bool
+    let primaryTitle: String
     let onPrimary: () -> Void
 
     var body: some View {
@@ -188,9 +193,14 @@ private struct ValuePreviewStep: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
-            TomorrowPreviewCard(preview: preview, activationState: activationState, showsSampleLabel: showsSampleLabel)
+            OnboardingTimeCard(
+                preview: preview,
+                offsetMinutes: offsetMinutes,
+                activationState: activationState,
+                animateRelationshipOnAppear: true
+            )
 
-            Button(Strings.Onboarding.valuePrimaryAction, action: onPrimary)
+            Button(primaryTitle, action: onPrimary)
                 .buttonStyle(BorderedProminentButtonStyle())
         }
     }
@@ -212,11 +222,17 @@ private struct LocationStep: View {
         VStack(alignment: .leading, spacing: 12) {
             Text(Strings.Onboarding.locationTitle)
                 .font(.title2.weight(.bold))
+                .fixedSize(horizontal: false, vertical: true)
 
             Text(Strings.Onboarding.locationBody)
                 .font(.body)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+
+            VStack(alignment: .leading, spacing: 6) {
+                trustLine(Strings.Onboarding.locationTrustLine1)
+                trustLine(Strings.Onboarding.locationTrustLine2)
+            }
 
             if let message = statusMessage {
                 Text(message)
@@ -238,18 +254,28 @@ private struct LocationStep: View {
                     .buttonStyle(BorderedButtonStyle())
             }
 
-            Button(action: onChooseCity) {
-                Text(Strings.Onboarding.locationSecondaryAction)
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(.primary)
-                    .underline()
-            }
-            .buttonStyle(.plain)
+            Button(Strings.Onboarding.locationSecondaryAction, action: onChooseCity)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .frame(minHeight: 44, alignment: .leading)
+                .buttonStyle(.plain)
 
             if showNextAction {
                 Button(Strings.Onboarding.continueAction, action: onNext)
                     .buttonStyle(BorderedProminentButtonStyle())
             }
+        }
+    }
+
+    private func trustLine(_ text: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Image(systemName: "checkmark")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+            Text(text)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
@@ -312,6 +338,7 @@ private struct FutureVisualizationStep: View {
     let rows: [SchedulePreviewRow]
     let offsetMinutes: Int
     let onContinue: () -> Void
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -325,7 +352,7 @@ private struct FutureVisualizationStep: View {
 
             weekCard
 
-            Text(Strings.Onboarding.futureVisualizationBody)
+            Text(Strings.Onboarding.futureVisualizationFooter)
                 .font(.footnote)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -340,49 +367,86 @@ private struct FutureVisualizationStep: View {
             Text(Strings.Onboarding.futureVisualizationCardTitle)
                 .font(DesignTokens.cardTitleFont)
 
-            HStack(spacing: 10) {
-                Text(" ")
-                    .frame(width: 84, alignment: .leading)
-                Spacer(minLength: 0)
-                Text(Strings.Onboarding.previewFajrLabel)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                    .frame(width: 70, alignment: .trailing)
-                Text("-\(offsetMinutes)m")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                    .frame(width: 52, alignment: .center)
-                Text(Strings.Onboarding.previewSuhoorLabel)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                    .frame(width: 78, alignment: .trailing)
-            }
+            Text(Strings.Onboarding.futureVisualizationTableOffset(offsetMinutes))
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(Color.primary.opacity(0.06), in: Capsule())
 
-            VStack(spacing: 8) {
-                ForEach(rows) { row in
-                    HStack(spacing: 10) {
-                        Text(row.dayLabel)
-                            .font(DesignTokens.cardMetaFont)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.85)
-                            .frame(width: 84, alignment: .leading)
-                        Spacer(minLength: 0)
-                        Text(TimeFormatters.timeFormatter.string(from: row.fajr))
-                            .font(DesignTokens.cardSubtitleFont.monospacedDigit())
-                            .frame(width: 70, alignment: .trailing)
-                        Text("-\(offsetMinutes)m")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                            .frame(width: 52, alignment: .center)
-                        Text(TimeFormatters.timeFormatter.string(from: row.suhoor))
-                            .font(DesignTokens.cardSubtitleFont.monospacedDigit())
-                            .frame(width: 78, alignment: .trailing)
-                    }
-                }
+            if dynamicTypeSize.isAccessibilitySize {
+                accessibilityRows
+            } else {
+                standardRows
             }
         }
         .cardStyle()
+    }
+
+    private var standardRows: some View {
+        VStack(spacing: 8) {
+            HStack(spacing: 8) {
+                Text("Day")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Text(Strings.Onboarding.previewFajrLabel)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 86, alignment: .trailing)
+                Text(Strings.Onboarding.previewSuhoorLabel)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 98, alignment: .trailing)
+            }
+
+            ForEach(rows) { row in
+                HStack(spacing: 8) {
+                    Text(row.dayLabel)
+                        .font(DesignTokens.cardMetaFont)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.9)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Text(TimeFormatters.timeFormatter.string(from: row.fajr))
+                        .font(DesignTokens.cardSubtitleFont.monospacedDigit())
+                        .frame(width: 86, alignment: .trailing)
+                    Text(TimeFormatters.timeFormatter.string(from: row.suhoor))
+                        .font(DesignTokens.cardSubtitleFont.monospacedDigit())
+                        .frame(width: 98, alignment: .trailing)
+                }
+            }
+        }
+    }
+
+    private var accessibilityRows: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            ForEach(rows) { row in
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(row.dayLabel)
+                        .font(DesignTokens.cardMetaFont)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                    HStack {
+                        Text(Strings.Onboarding.previewFajrLabel)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Text(TimeFormatters.timeFormatter.string(from: row.fajr))
+                            .font(DesignTokens.cardSubtitleFont.monospacedDigit())
+                    }
+                    HStack {
+                        Text(Strings.Onboarding.previewSuhoorLabel)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Text(TimeFormatters.timeFormatter.string(from: row.suhoor))
+                            .font(DesignTokens.cardSubtitleFont.monospacedDigit())
+                    }
+                }
+                .padding(.vertical, 2)
+            }
+        }
     }
 }
 
@@ -578,6 +642,8 @@ private struct PermissionsStep: View {
 private struct OffsetStep: View {
     @Binding var baseMinutes: Int
     let preview: OnboardingTomorrowPreview
+    let offsetHelperText: String
+    let offsetMinutes: Int
     let activationState: OnboardingActivationState
     let onContinue: () -> Void
 
@@ -607,7 +673,17 @@ private struct OffsetStep: View {
                 .font(.footnote)
                 .foregroundStyle(.secondary)
 
-            TomorrowPreviewCard(preview: preview, activationState: activationState)
+            Text(offsetHelperText)
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .contentTransition(.opacity)
+                .animation(.easeInOut(duration: 0.25), value: offsetHelperText)
+
+            OnboardingTimeCard(
+                preview: preview,
+                offsetMinutes: offsetMinutes,
+                activationState: activationState
+            )
 
             Button(Strings.Onboarding.continueAction, action: onContinue)
                 .buttonStyle(BorderedProminentButtonStyle())
@@ -617,19 +693,16 @@ private struct OffsetStep: View {
 
 private struct SuccessStep: View {
     let preview: OnboardingTomorrowPreview
-    let schedule: DaySchedule?
+    let offsetMinutes: Int
+    let title: String
     let onDone: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Label(Strings.Onboarding.successTitle, systemImage: "checkmark.circle.fill")
+            Label(title, systemImage: "checkmark.circle.fill")
                 .font(.title2.weight(.bold))
 
-            if let schedule {
-                TomorrowFinalCard(schedule: schedule, preview: preview)
-            } else {
-                TomorrowPreviewCard(preview: preview, activationState: .idle)
-            }
+            OnboardingTimeCard(preview: preview, offsetMinutes: offsetMinutes, activationState: .idle)
 
             Text(Strings.Onboarding.successBody)
                 .font(.footnote)
@@ -641,10 +714,15 @@ private struct SuccessStep: View {
     }
 }
 
-private struct TomorrowPreviewCard: View {
+private struct OnboardingTimeCard: View {
     let preview: OnboardingTomorrowPreview
+    let offsetMinutes: Int
     let activationState: OnboardingActivationState
-    var showsSampleLabel: Bool = false
+    var animateRelationshipOnAppear: Bool = false
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @State private var showRelationship: Bool = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -652,34 +730,30 @@ private struct TomorrowPreviewCard: View {
                 Text(preview.dateText)
                     .font(DesignTokens.cardTitleFont)
                 Spacer()
-                if showsSampleLabel {
-                    Text("Example times")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
             }
 
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Text(Strings.Onboarding.previewFajrLabel)
-                        .font(DesignTokens.cardMetaFont)
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    Text(preview.fajrTimeText ?? Strings.Onboarding.previewFajrPlaceholder)
-                        .font(DesignTokens.cardSubtitleFont)
-                }
+            VStack(alignment: .leading, spacing: 10) {
+                cardRow(
+                    label: Strings.Onboarding.previewFajrLabel,
+                    value: preview.fajrTimeText ?? Strings.Onboarding.previewFajrPlaceholder
+                )
 
                 HStack {
-                    Text(Strings.Onboarding.previewSuhoorLabel)
-                        .font(DesignTokens.cardMetaFont)
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    Text(preview.suhoorTimeText ?? Strings.Onboarding.previewSuhoorPlaceholder)
-                        .font(DesignTokens.cardSubtitleFont)
-                        .contentTransition(.numericText())
-                        .animation(.easeInOut(duration: 0.25), value: preview.suhoorTimeText)
+                    offsetBadge
+                    Spacer(minLength: 0)
+                }
+
+                if dynamicTypeSize.isAccessibilitySize {
+                    suhoorRow
+                    .opacity(showRelationship ? 1 : 0)
+                    .offset(y: showRelationship ? 0 : 4)
+                } else {
+                    suhoorRow
+                        .opacity(showRelationship ? 1 : 0)
+                        .offset(y: showRelationship ? 0 : 4)
                 }
             }
+            .animation(.easeInOut(duration: 0.28), value: showRelationship)
 
             if let statusText = preview.statusText {
                 Text(statusText)
@@ -697,38 +771,65 @@ private struct TomorrowPreviewCard: View {
             }
         }
         .cardStyle()
-    }
-}
-
-private struct TomorrowFinalCard: View {
-    let schedule: DaySchedule
-    let preview: OnboardingTomorrowPreview
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(preview.dateText)
-                .font(DesignTokens.cardTitleFont)
-
-            HStack {
-                Text(Strings.Onboarding.previewSuhoorLabel)
-                    .font(DesignTokens.cardMetaFont)
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Text(TimeFormatters.timeFormatter.string(from: schedule.wakeDate))
-                    .font(DesignTokens.cardSubtitleFont)
+        .onAppear {
+            guard animateRelationshipOnAppear else {
+                showRelationship = true
+                return
             }
-
-            HStack {
-                Text(Strings.Onboarding.previewFajrLabel)
-                    .font(DesignTokens.cardMetaFont)
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Text(TimeFormatters.timeFormatter.string(from: schedule.fajrDate))
-                    .font(DesignTokens.cardSubtitleFont)
+            showRelationship = false
+            if reduceMotion {
+                showRelationship = true
+            } else {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        showRelationship = true
+                    }
+                }
             }
-
         }
-        .cardStyle()
+    }
+
+    private var offsetBadge: some View {
+        Text("\(offsetMinutes)m before Fajr")
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 4)
+            .background(Color.primary.opacity(0.06), in: Capsule())
+            .accessibilityLabel("\(offsetMinutes) minutes before Fajr")
+    }
+
+    private var suhoorRow: some View {
+        cardRow(
+            label: Strings.Onboarding.previewSuhoorLabel,
+            value: preview.suhoorTimeText ?? Strings.Onboarding.previewSuhoorPlaceholder
+        )
+    }
+
+    @ViewBuilder
+    private func cardRow(label: String, value: String) -> some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(label)
+                    .font(DesignTokens.cardMetaFont)
+                    .foregroundStyle(.secondary)
+                Text(value)
+                    .font(DesignTokens.cardSubtitleFont.monospacedDigit())
+                    .contentTransition(.numericText())
+                    .animation(.easeInOut(duration: 0.25), value: value)
+            }
+        } else {
+            HStack {
+                Text(label)
+                    .font(DesignTokens.cardMetaFont)
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 8)
+                Text(value)
+                    .font(DesignTokens.cardSubtitleFont.monospacedDigit())
+                    .contentTransition(.numericText())
+                    .animation(.easeInOut(duration: 0.25), value: value)
+            }
+        }
     }
 }
 

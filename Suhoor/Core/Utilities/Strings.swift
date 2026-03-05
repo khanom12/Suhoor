@@ -197,8 +197,9 @@ enum Strings {
 
     enum Onboarding {
         static let valueTitle = "Never miss Suhoor again"
-        static let valueBody = "Suhoor automatically wakes you before Fajr. No calculations or adjustments needed."
-        static let valuePrimaryAction = "Set tomorrow’s alarm"
+        static let valueBody = "Suhoor calculates your local Fajr time and wakes you before it - automatically."
+        static let valuePrimaryActionTomorrow = "Set tomorrow’s alarm"
+        static let valuePrimaryActionToday = "Set today’s alarm"
         static let valueSecondaryAction = "Explore the app"
 
         static let previewFajrLabel = "Fajr"
@@ -209,7 +210,9 @@ enum Strings {
         static let previewUnavailable = "Preview will appear once Suhoor has generated tomorrow’s schedule."
 
         static let locationTitle = "Find your local Fajr time"
-        static let locationBody = "We use your location to calculate prayer times for your area.\nYour location is never stored or shared."
+        static let locationBody = "We use your location to calculate prayer times for your area. Your location is never stored or shared."
+        static let locationTrustLine1 = "Used only to calculate accurate Fajr times"
+        static let locationTrustLine2 = "Never stored or shared"
         static let locationPrimaryAction = "Use My Location"
         static let locationSecondaryAction = "Choose a city instead"
         static let locationReady = "Location is ready."
@@ -218,12 +221,13 @@ enum Strings {
         static let locationFixedMissing = "Choose a city so Suhoor can calculate Fajr accurately."
 
         static let futureVisualizationTitle = "Your Suhoor schedule adapts automatically"
-        static let futureVisualizationCardTitle = "This week"
-        static func futureVisualizationOffsetLine(_ minutes: Int) -> String { "Always wakes you \(minutes) minutes before Fajr." }
-        static let futureVisualizationBody = "Fajr shifts every day. Suhoor shifts with it - automatically."
+        static let futureVisualizationCardTitle = "Next 5 days"
+        static func futureVisualizationOffsetLine(_ minutes: Int) -> String { "Your alarm stays \(minutes) minutes before Fajr as Fajr shifts day to day." }
+        static func futureVisualizationTableOffset(_ minutes: Int) -> String { "Offset: \(minutes)m before Fajr" }
+        static let futureVisualizationFooter = "You can change this anytime in Settings."
 
         static let permissionsTitle = "Allow Suhoor to wake you up"
-        static let permissionsBody = "Alarm access ensures your Suhoor alarm rings even if your phone is silent."
+        static let permissionsBody = "Alarm access is required so your Suhoor alarm rings even in Silent Mode."
         static let permissionsAlarmTitle = "Alarm Access"
         static let permissionsNotificationsTitle = "Notifications"
         static let permissionsAlarmAction = "Enable Alarm Access"
@@ -239,11 +243,14 @@ enum Strings {
         static let offsetTitle = "How early should we wake you for Suhoor?"
         static let offsetBody = "Choose how much time you want before Fajr begins."
         static let offsetCustomHelper = "You can adjust times for specific days later."
+        static func offsetLiveHelper(_ minutes: Int) -> String { "Waking you \(minutes) minutes before Fajr." }
 
-        static let successTitle = "You’re ready for tomorrow."
+        static func successTitle(_ dayLabel: String) -> String { "You’re ready for \(dayLabel)." }
         static let successBody = "Sleep peacefully tonight.\nSuhoor will wake you before Fajr every day."
         static let successAction = "Done"
         static let successReassurance = "Sleep peacefully—we’ll wake you."
+        static let todayLabel = "Today"
+        static let tomorrowLabel = "Tomorrow"
 
         static let continueAction = "Continue"
         static let doneAction = "Finish"

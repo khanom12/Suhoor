@@ -8,6 +8,7 @@ struct OffsetPickerView: View {
     let step: Int
     let sentenceText: ((Int) -> String)?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @State private var isCustomSelected: Bool = false
 
@@ -29,42 +30,21 @@ struct OffsetPickerView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: DesignTokens.spacingS) {
-            FlowLayout(spacing: 8) {
-                ForEach(presetMinutes, id: \.self) { minutes in
-                    Button {
-                        Haptics.light()
-                        withAnimation(Motion.standard(reduceMotion: reduceMotion)) {
-                            isCustomSelected = false
-                            baseMinutes = minutes
-                        }
-                    } label: {
-                        let subtitle = presetLabels?[minutes]
-                        VStack(spacing: 2) {
-                            Text("\(minutes) min")
-                                .font(.callout.weight(.semibold))
-                            if let subtitle {
-                                Text(subtitle)
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                        .pillChipStyle(isSelected: !isCustomSelected && baseMinutes == minutes)
+            if dynamicTypeSize.isAccessibilitySize {
+                let columns = [GridItem(.flexible(minimum: 120)), GridItem(.flexible(minimum: 120))]
+                LazyVGrid(columns: columns, alignment: .leading, spacing: 8) {
+                    ForEach(presetMinutes, id: \.self) { minutes in
+                        presetButton(minutes: minutes)
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("\(minutes) minutes")
+                    customButton
                 }
-
-                Button {
-                    Haptics.light()
-                    withAnimation(Motion.standard(reduceMotion: reduceMotion)) {
-                        isCustomSelected = true
+            } else {
+                FlowLayout(spacing: 8) {
+                    ForEach(presetMinutes, id: \.self) { minutes in
+                        presetButton(minutes: minutes)
                     }
-                } label: {
-                    Text("Custom")
-                        .pillChipStyle(isSelected: isCustomSelected || !presetMinutes.contains(baseMinutes))
+                    customButton
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Custom minutes")
             }
 
             if let sentenceText {
@@ -93,6 +73,89 @@ struct OffsetPickerView: View {
             if !presetMinutes.contains(newValue) {
                 isCustomSelected = true
             }
+        }
+    }
+
+    private func presetButton(minutes: Int) -> some View {
+        let isSelected = !isCustomSelected && baseMinutes == minutes
+        return Button {
+            Haptics.light()
+            withAnimation(Motion.standard(reduceMotion: reduceMotion)) {
+                isCustomSelected = false
+                baseMinutes = minutes
+            }
+        } label: {
+            let subtitle = presetLabels?[minutes]
+            VStack(spacing: 2) {
+                Text("\(minutes) min")
+                    .font(.callout.weight(.semibold))
+                if let subtitle {
+                    Text(subtitle)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .multilineTextAlignment(.center)
+            .frame(maxWidth: .infinity, minHeight: 52)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+            .background(isSelected ? DawnColor.accent.opacity(0.14) : Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(isSelected ? DawnColor.accent : Color.primary.opacity(0.08), lineWidth: isSelected ? 1.5 : 1)
+            }
+        }
+        .buttonStyle(OffsetTileButtonStyle())
+        .accessibilityLabel("\(minutes) minutes")
+        .modifier(OffsetSelectedAccessibility(isSelected: isSelected))
+    }
+
+    private var customButton: some View {
+        let isSelected = isCustomSelected || !presetMinutes.contains(baseMinutes)
+        return Button {
+            Haptics.light()
+            withAnimation(Motion.standard(reduceMotion: reduceMotion)) {
+                isCustomSelected = true
+            }
+        } label: {
+            Text("Custom")
+                .font(.callout.weight(.semibold))
+                .frame(maxWidth: .infinity, minHeight: 52)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
+                .background(isSelected ? DawnColor.accent.opacity(0.14) : Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .stroke(isSelected ? DawnColor.accent : Color.primary.opacity(0.08), lineWidth: isSelected ? 1.5 : 1)
+                }
+        }
+        .buttonStyle(OffsetTileButtonStyle())
+        .accessibilityLabel("Custom minutes")
+        .modifier(OffsetSelectedAccessibility(isSelected: isSelected))
+    }
+}
+
+private struct OffsetTileButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.98 : 1)
+            .opacity(configuration.isPressed ? 0.92 : 1)
+            .animation(.easeInOut(duration: 0.12), value: configuration.isPressed)
+    }
+}
+
+private struct OffsetSelectedAccessibility: ViewModifier {
+    let isSelected: Bool
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if isSelected {
+            content
+                .accessibilityAddTraits(.isSelected)
+                .accessibilityValue("Selected")
+        } else {
+            content
+                .accessibilityValue("Not selected")
         }
     }
 }
