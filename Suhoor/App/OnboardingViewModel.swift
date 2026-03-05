@@ -173,12 +173,21 @@ final class OnboardingViewModel: ObservableObject {
 
     func requestLocation() {
         guard let locationService else { return }
+
+        if locationMode != .auto {
+            settingsStore?.update { draft in
+                draft.locationMode = .auto
+            }
+            scheduleManager?.requestRefresh(reason: .settingsChanged)
+            syncSettings()
+        }
+
         OnboardingAnalytics.log("location_selected")
         OnboardingAnalytics.log("permission_location_prompted")
-        if locationState == .needsFollowUp {
-            locationService.requestLocation()
-        } else {
+        if locationState == .notDetermined {
             locationService.requestAuthorization()
+        } else {
+            locationService.requestLocation()
         }
         refreshPermissionsInBackground()
     }
@@ -400,10 +409,6 @@ final class OnboardingViewModel: ObservableObject {
 
     var successTitleText: String {
         Strings.Onboarding.successTitle(nextAlarmDisplayLabel(for: nextAlarmStartDay))
-    }
-
-    var offsetHelperText: String {
-        Strings.Onboarding.offsetLiveHelper(selectedOffsetMinutes)
     }
 
     var valuePrimaryActionTitle: String {

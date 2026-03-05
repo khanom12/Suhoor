@@ -197,7 +197,7 @@ enum Strings {
 
     enum Onboarding {
         static let valueTitle = "Never miss Suhoor again"
-        static let valueBody = "Suhoor calculates your local Fajr time and wakes you before it - automatically."
+        static let valueBody = "Suhoor calculates your local Fajr time and wakes you up before it automatically."
         static let valuePrimaryActionTomorrow = "Set tomorrow’s alarm"
         static let valuePrimaryActionToday = "Set today’s alarm"
         static let valueSecondaryAction = "Explore the app"
@@ -210,7 +210,7 @@ enum Strings {
         static let previewUnavailable = "Preview will appear once Suhoor has generated tomorrow’s schedule."
 
         static let locationTitle = "Find your local Fajr time"
-        static let locationBody = "We use your location to calculate prayer times for your area. Your location is never stored or shared."
+        static let locationBody = "We use your location to calculate prayer times for your area."
         static let locationTrustLine1 = "Used only to calculate accurate Fajr times"
         static let locationTrustLine2 = "Never stored or shared"
         static let locationPrimaryAction = "Use My Location"
@@ -243,9 +243,8 @@ enum Strings {
         static let offsetTitle = "How early should we wake you for Suhoor?"
         static let offsetBody = "Choose how much time you want before Fajr begins."
         static let offsetCustomHelper = "You can adjust times for specific days later."
-        static func offsetLiveHelper(_ minutes: Int) -> String { "Waking you \(minutes) minutes before Fajr." }
 
-        static func successTitle(_ dayLabel: String) -> String { "You’re ready for \(dayLabel)." }
+        static func successTitle(_ dayLabel: String) -> String { "You’re ready for \(dayLabel.lowercased())." }
         static let successBody = "Sleep peacefully tonight.\nSuhoor will wake you before Fajr every day."
         static let successAction = "Done"
         static let successReassurance = "Sleep peacefully—we’ll wake you."

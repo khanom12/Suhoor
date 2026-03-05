@@ -1,6 +1,12 @@
 import SwiftUI
 
 struct OffsetPickerView: View {
+    private enum Layout {
+        static let tileCornerRadius: CGFloat = 18
+        static let tileMinHeight: CGFloat = 58
+        static let gridSpacing: CGFloat = 10
+    }
+
     @Binding var baseMinutes: Int
     let presetMinutes: [Int]
     let presetLabels: [Int: String]?
@@ -30,21 +36,11 @@ struct OffsetPickerView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: DesignTokens.spacingS) {
-            if dynamicTypeSize.isAccessibilitySize {
-                let columns = [GridItem(.flexible(minimum: 120)), GridItem(.flexible(minimum: 120))]
-                LazyVGrid(columns: columns, alignment: .leading, spacing: 8) {
-                    ForEach(presetMinutes, id: \.self) { minutes in
-                        presetButton(minutes: minutes)
-                    }
-                    customButton
+            LazyVGrid(columns: gridColumns, alignment: .leading, spacing: Layout.gridSpacing) {
+                ForEach(presetMinutes, id: \.self) { minutes in
+                    presetButton(minutes: minutes)
                 }
-            } else {
-                FlowLayout(spacing: 8) {
-                    ForEach(presetMinutes, id: \.self) { minutes in
-                        presetButton(minutes: minutes)
-                    }
-                    customButton
-                }
+                customButton
             }
 
             if let sentenceText {
@@ -76,6 +72,20 @@ struct OffsetPickerView: View {
         }
     }
 
+    private var gridColumns: [GridItem] {
+        if dynamicTypeSize >= .accessibility1 {
+            return [GridItem(.flexible(minimum: 120))]
+        }
+        if dynamicTypeSize >= .xxLarge {
+            return [GridItem(.flexible(minimum: 120)), GridItem(.flexible(minimum: 120))]
+        }
+        return [
+            GridItem(.flexible(minimum: 96)),
+            GridItem(.flexible(minimum: 96)),
+            GridItem(.flexible(minimum: 96))
+        ]
+    }
+
     private func presetButton(minutes: Int) -> some View {
         let isSelected = !isCustomSelected && baseMinutes == minutes
         return Button {
@@ -93,16 +103,17 @@ struct OffsetPickerView: View {
                     Text(subtitle)
                         .font(.caption2)
                         .foregroundStyle(.secondary)
+                        .lineLimit(2)
                 }
             }
             .multilineTextAlignment(.center)
-            .frame(maxWidth: .infinity, minHeight: 52)
+            .frame(maxWidth: .infinity, minHeight: tileHeight)
             .padding(.horizontal, 8)
             .padding(.vertical, 6)
-            .background(isSelected ? DawnColor.accent.opacity(0.14) : Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .background(tileFill(isSelected: isSelected), in: tileShape)
             .overlay {
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .stroke(isSelected ? DawnColor.accent : Color.primary.opacity(0.08), lineWidth: isSelected ? 1.5 : 1)
+                tileShape
+                    .stroke(isSelected ? DawnColor.accent.opacity(0.9) : Color.primary.opacity(0.1), lineWidth: isSelected ? 1.5 : 1)
             }
         }
         .buttonStyle(OffsetTileButtonStyle())
@@ -120,18 +131,30 @@ struct OffsetPickerView: View {
         } label: {
             Text("Custom")
                 .font(.callout.weight(.semibold))
-                .frame(maxWidth: .infinity, minHeight: 52)
+                .frame(maxWidth: .infinity, minHeight: tileHeight)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 6)
-                .background(isSelected ? DawnColor.accent.opacity(0.14) : Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .background(tileFill(isSelected: isSelected), in: tileShape)
                 .overlay {
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .stroke(isSelected ? DawnColor.accent : Color.primary.opacity(0.08), lineWidth: isSelected ? 1.5 : 1)
+                    tileShape
+                        .stroke(isSelected ? DawnColor.accent.opacity(0.9) : Color.primary.opacity(0.1), lineWidth: isSelected ? 1.5 : 1)
                 }
         }
         .buttonStyle(OffsetTileButtonStyle())
         .accessibilityLabel("Custom minutes")
         .modifier(OffsetSelectedAccessibility(isSelected: isSelected))
+    }
+
+    private var tileHeight: CGFloat {
+        dynamicTypeSize >= .accessibility1 ? 64 : Layout.tileMinHeight
+    }
+
+    private var tileShape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: Layout.tileCornerRadius, style: .continuous)
+    }
+
+    private func tileFill(isSelected: Bool) -> Color {
+        isSelected ? DawnColor.accent.opacity(0.22) : Color.primary.opacity(0.06)
     }
 }
 
@@ -201,3 +224,43 @@ struct OffsetPickerScreen: View {
         return "Earlier by \(minutes) min."
     }
 }
+
+#if DEBUG
+@available(iOS 17.0, *)
+#Preview("Offset Tiles - Default") {
+    @Previewable @State var minutes: Int = 45
+    return OffsetPickerView(
+        baseMinutes: $minutes,
+        presetMinutes: [30, 45, 60, 75],
+        presetLabels: [30: "Quick Suhoor", 45: "Comfortable", 60: "Recommended", 75: "Unhurried"],
+        sentenceText: nil
+    )
+    .padding()
+}
+
+@available(iOS 17.0, *)
+#Preview("Offset Tiles - XXL") {
+    @Previewable @State var minutes: Int = 60
+    return OffsetPickerView(
+        baseMinutes: $minutes,
+        presetMinutes: [30, 45, 60, 75],
+        presetLabels: [30: "Quick Suhoor", 45: "Comfortable", 60: "Recommended", 75: "Unhurried"],
+        sentenceText: nil
+    )
+    .environment(\.dynamicTypeSize, .xxLarge)
+    .padding()
+}
+
+@available(iOS 17.0, *)
+#Preview("Offset Tiles - Accessibility1") {
+    @Previewable @State var minutes: Int = 75
+    return OffsetPickerView(
+        baseMinutes: $minutes,
+        presetMinutes: [30, 45, 60, 75],
+        presetLabels: [30: "Quick Suhoor", 45: "Comfortable", 60: "Recommended", 75: "Unhurried"],
+        sentenceText: nil
+    )
+    .environment(\.dynamicTypeSize, .accessibility1)
+    .padding()
+}
+#endif
