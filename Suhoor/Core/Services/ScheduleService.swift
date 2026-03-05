@@ -1263,35 +1263,53 @@ final class ScheduleManager: ObservableObject {
     }
 
     func schedule(for date: Date) -> DaySchedule? {
-        guard let coordinate = currentCoordinate() else { return nil }
+        scheduleAndConfig(for: date)?.schedule
+    }
 
-        let settings = settingsStore.settings
+    func scheduleTomorrowActivation() async -> ActivationScheduleResult {
         let timeZone = TimeZone.current
-        let normalizedDate = DateHelpers.startOfDay(date, in: timeZone)
-        guard alarmConfigStore.isDefaultsActive(on: normalizedDate, timeZone: timeZone) else { return nil }
-        let method = settings.calculationMethod
-        let ruleEngine = RuleEngine(
-            settings: settings,
-            defaultConfig: alarmConfigStore.defaults,
-            overridesByDay: alarmConfigStore.overridesByDay,
-            timeZone: timeZone
-        )
-        let effectiveConfig = alarmConfigStore.effectiveConfig(
-            for: normalizedDate,
-            ruleSummary: ruleEngine.ruleSummary(for: normalizedDate),
-            settings: settings,
-            timeZone: timeZone
+        let tomorrow = DateHelpers.startOfTomorrow(in: timeZone)
+        guard let result = scheduleAndConfig(for: tomorrow) else {
+            return ActivationScheduleResult(
+                success: false,
+                message: "Schedule unavailable. Check location.",
+                schedule: nil
+            )
+        }
+
+        let alarmState = await permissionState(for: .alarmKit)
+        let notificationState = await permissionState(for: .notifications)
+
+        let canUseAlarmKit = alarmState == .authorized
+        let canUseNotifications = notificationState == .authorized
+
+        if canUseAlarmKit == false && alarmState != .unavailable {
+            return ActivationScheduleResult(
+                success: false,
+                message: Strings.AlarmAccess.deniedExplanation,
+                schedule: result.schedule
+            )
+        }
+
+        if canUseAlarmKit == false && canUseNotifications == false {
+            return ActivationScheduleResult(
+                success: false,
+                message: Strings.NotificationAccess.deniedExplanation,
+                schedule: result.schedule
+            )
+        }
+
+        let scheduled = await alarmScheduler.scheduleDay(
+            schedule: result.schedule,
+            config: result.config,
+            settings: settingsStore.settings,
+            canUseAlarmKit: canUseAlarmKit
         )
 
-        return buildSchedule(
-            for: normalizedDate,
-            coordinate: coordinate,
-            timeZone: timeZone,
-            method: method,
-            adjustmentMinutes: settings.fajrAdjustmentMinutes,
-            maghribAdjustmentMinutes: settings.maghribAdjustmentMinutes,
-            effectiveConfig: effectiveConfig,
-            locationDescription: "Based on your location"
+        return ActivationScheduleResult(
+            success: scheduled,
+            message: scheduled ? "Scheduled" : "Unable to schedule",
+            schedule: result.schedule
         )
     }
 
@@ -2056,6 +2074,43 @@ final class ScheduleManager: ObservableObject {
         }
     }
 
+    private func scheduleAndConfig(for date: Date) -> (schedule: DaySchedule, config: EffectiveDailyConfig)? {
+        guard let coordinate = currentCoordinate() else { return nil }
+
+        let settings = settingsStore.settings
+        let timeZone = TimeZone.current
+        let normalizedDate = DateHelpers.startOfDay(date, in: timeZone)
+        guard alarmConfigStore.isDefaultsActive(on: normalizedDate, timeZone: timeZone) else { return nil }
+        let method = settings.calculationMethod
+        let ruleEngine = RuleEngine(
+            settings: settings,
+            defaultConfig: alarmConfigStore.defaults,
+            overridesByDay: alarmConfigStore.overridesByDay,
+            timeZone: timeZone
+        )
+        let effectiveConfig = alarmConfigStore.effectiveConfig(
+            for: normalizedDate,
+            ruleSummary: ruleEngine.ruleSummary(for: normalizedDate),
+            settings: settings,
+            timeZone: timeZone
+        )
+
+        guard let schedule = buildSchedule(
+            for: normalizedDate,
+            coordinate: coordinate,
+            timeZone: timeZone,
+            method: method,
+            adjustmentMinutes: settings.fajrAdjustmentMinutes,
+            maghribAdjustmentMinutes: settings.maghribAdjustmentMinutes,
+            effectiveConfig: effectiveConfig,
+            locationDescription: "Based on your location"
+        ) else {
+            return nil
+        }
+
+        return (schedule: schedule, config: effectiveConfig)
+    }
+
     private func scheduleQueuedRefresh() {
         guard let request = queuedRefresh else { return }
         queuedRefresh = nil
@@ -2478,10 +2533,13 @@ final class ScheduleManager: ObservableObject {
         }
 
         let locationReady = settings.locationMode == .fixed || permissionStates[.location] == .authorized
+        let alarmState = permissionStates[.alarmKit] ?? .notDetermined
         let notificationsReady = permissionStates[.notifications] == .authorized
+        let alarmReady = alarmState == .authorized || alarmState == .unavailable
+        let schedulingReady = alarmState == .authorized || (alarmState == .unavailable && notificationsReady)
         _ = hasVisibleDays
 
-        guard locationReady, notificationsReady else {
+        guard locationReady, alarmReady, schedulingReady else {
             return .permissions
         }
 
@@ -2753,6 +2811,12 @@ struct PermissionSnapshot: Equatable, Sendable {
         notificationAuthorizationText: "--",
         presentations: [:]
     )
+}
+
+struct ActivationScheduleResult {
+    let success: Bool
+    let message: String
+    let schedule: DaySchedule?
 }
 
 enum AppBootstrapState: Equatable, Sendable {

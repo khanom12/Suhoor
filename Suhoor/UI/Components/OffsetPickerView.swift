@@ -3,6 +3,7 @@ import SwiftUI
 struct OffsetPickerView: View {
     @Binding var baseMinutes: Int
     let presetMinutes: [Int]
+    let presetLabels: [Int: String]?
     let range: ClosedRange<Int>
     let step: Int
     let sentenceText: ((Int) -> String)?
@@ -13,12 +14,14 @@ struct OffsetPickerView: View {
     init(
         baseMinutes: Binding<Int>,
         presetMinutes: [Int] = [15, 30, 45, 60, 90],
+        presetLabels: [Int: String]? = nil,
         range: ClosedRange<Int> = 5...240,
         step: Int = 5,
         sentenceText: ((Int) -> String)? = { "Wake me \($0) min before Fajr." }
     ) {
         _baseMinutes = baseMinutes
         self.presetMinutes = presetMinutes
+        self.presetLabels = presetLabels
         self.range = range
         self.step = step
         self.sentenceText = sentenceText
@@ -35,8 +38,17 @@ struct OffsetPickerView: View {
                             baseMinutes = minutes
                         }
                     } label: {
-                        Text("\(minutes)")
-                            .pillChipStyle(isSelected: !isCustomSelected && baseMinutes == minutes)
+                        let subtitle = presetLabels?[minutes]
+                        VStack(spacing: 2) {
+                            Text("\(minutes) min")
+                                .font(.callout.weight(.semibold))
+                            if let subtitle {
+                                Text(subtitle)
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .pillChipStyle(isSelected: !isCustomSelected && baseMinutes == minutes)
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("\(minutes) minutes")

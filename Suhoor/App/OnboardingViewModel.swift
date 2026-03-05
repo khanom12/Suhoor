@@ -7,15 +7,15 @@ import UIKit
 @MainActor
 final class OnboardingViewModel: ObservableObject {
     enum Step: Int, CaseIterable {
-        case welcome
+        case valuePreview
         case location
-        case alarmKit
-        case notifications
         case offset
-        case confirmation
+        case futureVisualization
+        case permissions
+        case success
     }
 
-    @Published private(set) var step: Step = .welcome
+    @Published private(set) var step: Step = .valuePreview
     @Published private(set) var previousStep: Step?
     @Published private(set) var permissionStates: [AppPermissionKind: AppPermissionState] = [:]
     @Published private(set) var isScheduleReady = false
@@ -24,8 +24,8 @@ final class OnboardingViewModel: ObservableObject {
     @Published private(set) var locationName: String?
     @Published private(set) var hasFixedLocation = false
     @Published private(set) var alarmKitRequestable = false
-    @Published private(set) var lastEnableFailureMessage: String?
     @Published private(set) var isReviewingBack = false
+    @Published private(set) var activationState: OnboardingActivationState = .idle
 
     private weak var scheduleManager: ScheduleManager?
     private weak var locationService: LocationService?
@@ -34,6 +34,8 @@ final class OnboardingViewModel: ObservableObject {
     private var hasLoaded = false
     private var hasRequestedSchedule = false
     private var useShortFlow = false
+    private var lastPermissionStates: [AppPermissionKind: AppPermissionState] = [:]
+    private var lastLoggedOffsetMinutes: Int?
 
     func bind(
         scheduleManager: ScheduleManager,
@@ -51,6 +53,7 @@ final class OnboardingViewModel: ObservableObject {
         guard !hasLoaded else { return }
         hasLoaded = true
         useShortFlow = settingsStore?.settings.isConfigured ?? false
+        OnboardingAnalytics.log("onboarding_started")
         await refreshPermissions()
         updateInitialStep()
     }
@@ -69,9 +72,12 @@ final class OnboardingViewModel: ObservableObject {
             return
         }
         permissionStates = scheduleManager.permissionSnapshot.presentations.mapValues(\.state)
+        logPermissionTransitions(from: lastPermissionStates, to: permissionStates)
+        lastPermissionStates = permissionStates
         alarmKitRequestable = scheduleManager.canRequestAlarmKitAuthorization
         syncSettings()
         updateScheduleReadiness()
+        activationAttemptIfNeeded()
         skipIfNeeded()
         isWorking = false
     }
@@ -79,9 +85,12 @@ final class OnboardingViewModel: ObservableObject {
     func updateFromSnapshot() {
         guard let scheduleManager else { return }
         permissionStates = scheduleManager.permissionSnapshot.presentations.mapValues(\.state)
+        logPermissionTransitions(from: lastPermissionStates, to: permissionStates)
+        lastPermissionStates = permissionStates
         alarmKitRequestable = scheduleManager.canRequestAlarmKitAuthorization
         syncSettings()
         updateScheduleReadiness()
+        activationAttemptIfNeeded()
         skipIfNeeded()
     }
 
@@ -104,7 +113,7 @@ final class OnboardingViewModel: ObservableObject {
             hasRequestedSchedule = false
             return
         }
-        guard isLocationReady, isNotificationsReady else { return }
+        guard isLocationReady, isSchedulingReady else { return }
         guard !hasRequestedSchedule else { return }
         hasRequestedSchedule = true
         scheduleManager.requestRefresh(reason: .settingsChanged)
@@ -122,6 +131,7 @@ final class OnboardingViewModel: ObservableObject {
             previousStep = step
             step = newStep
         }
+        logStepViewed(step: newStep)
     }
 
     func advance(animation: Animation?) {
@@ -145,8 +155,26 @@ final class OnboardingViewModel: ObservableObject {
         }
     }
 
+    func startFlow(animation: Animation?) {
+        if isLocationReady {
+            goTo(.offset, animation: animation)
+        } else {
+            goTo(.location, animation: animation)
+        }
+    }
+
+    func handleExplore(animation: Animation?) {
+        if isConfigured && isLocationReady && isSchedulingReady {
+            markOnboardingComplete()
+        } else {
+            startFlow(animation: animation)
+        }
+    }
+
     func requestLocation() {
         guard let locationService else { return }
+        OnboardingAnalytics.log("location_selected")
+        OnboardingAnalytics.log("permission_location_prompted")
         if locationState == .needsFollowUp {
             locationService.requestLocation()
         } else {
@@ -158,6 +186,7 @@ final class OnboardingViewModel: ObservableObject {
     func requestAlarmKit() {
         Task {
             guard let scheduleManager else { return }
+            OnboardingAnalytics.log("permission_alarm_prompted")
             _ = await scheduleManager.requestAlarmAuthorization()
             await refreshPermissions()
         }
@@ -166,6 +195,7 @@ final class OnboardingViewModel: ObservableObject {
     func requestNotifications() {
         Task {
             guard let scheduleManager else { return }
+            OnboardingAnalytics.log("permission_notifications_prompted")
             _ = await scheduleManager.requestNotificationAuthorization()
             await refreshPermissions()
         }
@@ -178,6 +208,7 @@ final class OnboardingViewModel: ObservableObject {
 
     func chooseCity(_ city: City) {
         guard let settingsStore, let locationService, let scheduleManager else { return }
+        OnboardingAnalytics.log("city_selected", properties: ["name": city.name])
         locationService.locationName = city.name
         settingsStore.update { draft in
             draft.locationMode = .fixed
@@ -192,6 +223,7 @@ final class OnboardingViewModel: ObservableObject {
         guard let settingsStore, let locationService, let scheduleManager else { return }
         let coordinate = mapItem.location.coordinate
         if let city = mapItem.addressRepresentations?.cityName ?? mapItem.name {
+            OnboardingAnalytics.log("city_selected", properties: ["name": city])
             locationService.locationName = city
         }
         settingsStore.update { draft in
@@ -203,21 +235,49 @@ final class OnboardingViewModel: ObservableObject {
         refreshPermissionsInBackground()
     }
 
-    func enableRoutineAndContinue(animation: Animation?) {
-        Task {
-            guard let scheduleManager else { return }
-            lastEnableFailureMessage = nil
-            let enabled = await scheduleManager.enableFromUserAction(markConfigured: false)
-            lastEnableFailureMessage = scheduleManager.lastEnableFailureMessage
-            guard enabled else { return }
-            goTo(.confirmation, animation: animation)
+    func handleOffsetChanged(_ minutes: Int) {
+        guard step == .offset else { return }
+        if lastLoggedOffsetMinutes != minutes {
+            lastLoggedOffsetMinutes = minutes
+            OnboardingAnalytics.log("offset_selected", properties: ["minutes": "\(minutes)"])
         }
+        activationAttempt()
+    }
+
+    func activationAttempt() {
+        guard activationState != .attempting else { return }
+        guard isLocationReady, isSchedulingReady else { return }
+        activationState = .attempting
+        Task {
+            guard let scheduleManager else {
+                activationState = .failed(message: "Schedule unavailable.")
+                return
+            }
+            let result = await scheduleManager.scheduleTomorrowActivation()
+            if result.success, let schedule = result.schedule {
+                activationState = .succeeded(schedule: schedule)
+                OnboardingAnalytics.log("activation_scheduled_success")
+            } else {
+                activationState = .failed(message: result.message)
+                OnboardingAnalytics.log("activation_scheduled_fail", properties: ["reason": result.message])
+            }
+        }
+    }
+
+    private func activationAttemptIfNeeded() {
+        if case .succeeded = activationState { return }
+        guard step == .offset || step == .permissions else { return }
+        guard isLocationReady, isSchedulingReady else { return }
+        activationAttempt()
     }
 
     func markOnboardingComplete() {
         settingsStore?.update { draft in
             draft.isConfigured = true
         }
+        OnboardingAnalytics.log("onboarding_completed")
+        scheduleManager?.requestRefresh(reason: .settingsChanged)
+        refreshPermissionsInBackground()
     }
 
     var progressIndex: Int {
@@ -232,27 +292,133 @@ final class OnboardingViewModel: ObservableObject {
         (flowSteps.firstIndex(of: step) ?? 0) > 0
     }
 
+    var shouldShowProgress: Bool {
+        !useShortFlow && step != .success
+    }
+
     var shouldShowManualAdvanceForCurrentStep: Bool {
         isReviewingBack && shouldSkip(step)
     }
 
-    var flowSteps: [Step] {
-        if useShortFlow {
-            var steps: [Step] = []
-            if !isLocationReady {
-                steps.append(.location)
-            }
-            if !isNotificationsReady {
-                steps.append(.notifications)
-            }
-            return steps.isEmpty ? [.notifications] : steps
+    var tomorrowPreview: OnboardingTomorrowPreview {
+        let tomorrow = DateHelpers.startOfTomorrow(in: .current)
+        let dateText = "Tomorrow, \(GregorianDateFormatter.shared.cardString(for: tomorrow))"
+        guard let schedule = scheduleManager?.schedule(for: tomorrow) else {
+            let statusText = isLocationReady
+                ? Strings.Onboarding.previewUnavailable
+                : Strings.Onboarding.previewNeedsLocation
+            return OnboardingTomorrowPreview(
+                dateText: dateText,
+                fajrTimeText: nil,
+                suhoorTimeText: nil,
+                statusText: statusText
+            )
         }
 
-        var steps: [Step] = [.welcome, .location]
-        if alarmKitState != .unavailable {
-            steps.append(.alarmKit)
+        let fajrTime = TimeFormatters.timeFormatter.string(from: schedule.fajrDate)
+        let offsetMinutes = settingsStore?.settings.baseWakeOffsetMinutes ?? 60
+        let wakeDate = schedule.fajrDate.addingTimeInterval(TimeInterval(-offsetMinutes * 60))
+        let suhoorTime = TimeFormatters.timeFormatter.string(from: wakeDate)
+        return OnboardingTomorrowPreview(
+            dateText: dateText,
+            fajrTimeText: fajrTime,
+            suhoorTimeText: suhoorTime,
+            statusText: nil
+        )
+    }
+
+    var valueScreenPreview: OnboardingTomorrowPreview {
+        let tomorrow = DateHelpers.startOfTomorrow(in: .current)
+        if isLocationReady, let schedule = scheduleManager?.schedule(for: tomorrow) {
+            let dateText = "Tomorrow"
+            let fajrTime = TimeFormatters.timeFormatter.string(from: schedule.fajrDate)
+            let offsetMinutes = settingsStore?.settings.baseWakeOffsetMinutes ?? 60
+            let wakeDate = schedule.fajrDate.addingTimeInterval(TimeInterval(-offsetMinutes * 60))
+            let suhoorTime = TimeFormatters.timeFormatter.string(from: wakeDate)
+            return OnboardingTomorrowPreview(
+                dateText: dateText,
+                fajrTimeText: fajrTime,
+                suhoorTimeText: suhoorTime,
+                statusText: nil
+            )
         }
-        steps.append(contentsOf: [.notifications, .offset, .confirmation])
+
+        return OnboardingTomorrowPreview(
+            dateText: "Tomorrow",
+            fajrTimeText: "5:27 AM",
+            suhoorTimeText: "4:57 AM",
+            statusText: nil
+        )
+    }
+
+    var futureScheduleRows: [SchedulePreviewRow] {
+        guard let scheduleManager, let settingsStore else { return [] }
+        let calendar = Calendar.current
+        let offsetMinutes = settingsStore.settings.baseWakeOffsetMinutes
+        let now = Date()
+        let startOfToday = DateHelpers.startOfToday(in: .current)
+        let tomorrow = calendar.date(byAdding: .day, value: 1, to: startOfToday) ?? startOfToday
+        let todaySuhoor = scheduleManager.schedule(for: startOfToday)?.fajrDate
+            .addingTimeInterval(TimeInterval(-offsetMinutes * 60))
+        let startDate = if let todaySuhoor, now < todaySuhoor { startOfToday } else { tomorrow }
+
+        let dayFormatter = DateFormatter()
+        dayFormatter.locale = .current
+        dayFormatter.timeZone = .current
+        dayFormatter.dateFormat = "EEE, MMM d"
+
+        var rows: [SchedulePreviewRow] = []
+        var dayOffset = 0
+        while rows.count < 5 && dayOffset < 21 {
+            let day = calendar.date(byAdding: .day, value: dayOffset, to: startDate) ?? startDate
+            if let schedule = scheduleManager.schedule(for: day) {
+                let suhoor = schedule.fajrDate.addingTimeInterval(TimeInterval(-offsetMinutes * 60))
+                rows.append(
+                    SchedulePreviewRow(
+                        id: DateHelpers.dayIdentifier(for: day, timeZone: .current),
+                        date: day,
+                        dayLabel: dayFormatter.string(from: day),
+                        fajr: schedule.fajrDate,
+                        suhoor: suhoor
+                    )
+                )
+            }
+            dayOffset += 1
+        }
+        return rows
+    }
+
+    var futureOffsetMinutes: Int {
+        settingsStore?.settings.baseWakeOffsetMinutes ?? 60
+    }
+
+    var successSchedule: DaySchedule? {
+        switch activationState {
+        case .succeeded(let schedule):
+            return schedule
+        default:
+            let tomorrow = DateHelpers.startOfTomorrow(in: .current)
+            return scheduleManager?.schedule(for: tomorrow)
+        }
+    }
+
+    var flowSteps: [Step] {
+        if useShortFlow {
+            let missing = missingShortFlowSteps
+            return missing.isEmpty ? [.success] : (missing + [.success])
+        }
+
+        return [.valuePreview, .location, .offset, .futureVisualization, .permissions, .success]
+    }
+
+    private var missingShortFlowSteps: [Step] {
+        var steps: [Step] = []
+        if !isLocationReady {
+            steps.append(.location)
+        }
+        if !isSchedulingReady {
+            steps.append(.permissions)
+        }
         return steps
     }
 
@@ -288,6 +454,25 @@ final class OnboardingViewModel: ObservableObject {
         notificationState == .authorized
     }
 
+    var isAlarmAccessReady: Bool {
+        alarmKitState == .authorized || alarmKitState == .unavailable
+    }
+
+    var isSchedulingReady: Bool {
+        switch alarmKitState {
+        case .authorized:
+            return true
+        case .unavailable:
+            return isNotificationsReady
+        default:
+            return false
+        }
+    }
+
+    var isNotificationsRequired: Bool {
+        alarmKitState == .unavailable
+    }
+
     var isConfigured: Bool {
         settingsStore?.settings.isConfigured ?? false
     }
@@ -320,31 +505,103 @@ final class OnboardingViewModel: ObservableObject {
 
     private func shouldSkip(_ step: Step) -> Bool {
         switch step {
-        case .welcome:
+        case .valuePreview:
             return false
         case .location:
             return isLocationReady
-        case .alarmKit:
-            return alarmKitState == .authorized || alarmKitState == .unavailable
-        case .notifications:
-            return isNotificationsReady
         case .offset:
             return useShortFlow
-        case .confirmation:
+        case .futureVisualization:
             return useShortFlow
+        case .permissions:
+            return isSchedulingReady
+        case .success:
+            return false
         }
     }
 
     private func updateInitialStep() {
         if useShortFlow {
-            step = flowSteps.first ?? .notifications
+            if missingShortFlowSteps.isEmpty {
+                step = .success
+            } else {
+                step = flowSteps.first ?? .success
+            }
         } else {
-            step = .welcome
+            step = .valuePreview
         }
         previousStep = nil
+        logStepViewed(step: step)
     }
 
     private var currentAnimation: Animation? {
         UIAccessibility.isReduceMotionEnabled ? nil : .easeInOut(duration: 0.28)
+    }
+
+    private func logPermissionTransitions(
+        from oldStates: [AppPermissionKind: AppPermissionState],
+        to newStates: [AppPermissionKind: AppPermissionState]
+    ) {
+        for kind in AppPermissionKind.allCases {
+            let old = oldStates[kind] ?? .notDetermined
+            let new = newStates[kind] ?? .notDetermined
+            guard old != new else { continue }
+            let result = permissionStateLabel(new)
+            switch kind {
+            case .location:
+                OnboardingAnalytics.log("permission_location_result", properties: ["result": result])
+                if new == .authorized {
+                    OnboardingAnalytics.log("permission_granted", properties: ["kind": "location"])
+                }
+            case .alarmKit:
+                OnboardingAnalytics.log("permission_alarm_result", properties: ["result": result])
+                if new == .authorized {
+                    OnboardingAnalytics.log("permission_granted", properties: ["kind": "alarm"])
+                }
+            case .notifications:
+                OnboardingAnalytics.log("permission_notifications_result", properties: ["result": result])
+                if new == .authorized {
+                    OnboardingAnalytics.log("permission_granted", properties: ["kind": "notifications"])
+                }
+            }
+        }
+    }
+
+    private func permissionStateLabel(_ state: AppPermissionState) -> String {
+        switch state {
+        case .notDetermined:
+            return "not_determined"
+        case .authorized:
+            return "authorized"
+        case .denied:
+            return "denied"
+        case .restricted:
+            return "restricted"
+        case .unavailable:
+            return "unavailable"
+        case .needsFollowUp:
+            return "needs_follow_up"
+        }
+    }
+
+    private func logStepViewed(step: Step) {
+        OnboardingAnalytics.log("onboarding_step_viewed", properties: ["step": stepKey(step)])
+    }
+
+    private func stepKey(_ step: Step) -> String {
+        switch step {
+        case .valuePreview:
+            return "value"
+        case .location:
+            return "location"
+        case .offset:
+            return "offset"
+        case .futureVisualization:
+            return "future_visualization"
+        case .permissions:
+            return "permissions"
+        case .success:
+            return "success"
+        }
     }
 }

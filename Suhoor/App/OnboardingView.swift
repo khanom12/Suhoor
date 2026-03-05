@@ -3,12 +3,14 @@ import SwiftUI
 struct OnboardingView: View {
     @EnvironmentObject private var settingsStore: SuhoorSettingsStore
     @EnvironmentObject private var scheduleManager: ScheduleManager
+    @EnvironmentObject private var alarmConfigStore: AlarmConfigStore
     @EnvironmentObject private var locationService: LocationService
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
 
     @StateObject private var viewModel = OnboardingViewModel()
-    @State private var showHowItWorks = false
     @State private var showLocationSearch = false
+    @State private var didAutoShowCityPicker = false
 
     var body: some View {
         NavigationStack {
@@ -16,6 +18,7 @@ struct OnboardingView: View {
                 OnboardingHeaderView(
                     stepIndex: viewModel.progressIndex,
                     stepCount: viewModel.progressCount,
+                    shouldShowProgress: viewModel.shouldShowProgress,
                     canGoBack: viewModel.canGoBack,
                     onBack: { viewModel.goBack(animation: Motion.onboarding(reduceMotion: reduceMotion)) }
                 )
@@ -27,15 +30,20 @@ struct OnboardingView: View {
             .padding(24)
             .navigationTitle("")
             .navigationBarHidden(true)
-            .sheet(isPresented: $showHowItWorks) {
-                HowItWorksView()
-            }
             .sheet(isPresented: $showLocationSearch) {
                 NavigationStack {
                     LocationSearchView(
                         selectedName: viewModel.locationName,
-                        onSelectCity: viewModel.chooseCity,
-                        onSelectMapItem: viewModel.chooseMapItem
+                        onSelectCity: { city in
+                            viewModel.chooseCity(city)
+                            showLocationSearch = false
+                            viewModel.advance(animation: Motion.onboarding(reduceMotion: reduceMotion))
+                        },
+                        onSelectMapItem: { item in
+                            viewModel.chooseMapItem(item)
+                            showLocationSearch = false
+                            viewModel.advance(animation: Motion.onboarding(reduceMotion: reduceMotion))
+                        }
                     )
                 }
             }
@@ -68,6 +76,37 @@ struct OnboardingView: View {
             .onChange(of: locationService.lastLocation) { _, _ in
                 viewModel.refreshPermissionsInBackground()
             }
+            .onChange(of: scenePhase) { _, newPhase in
+                if newPhase == .active {
+                    viewModel.refreshPermissionsInBackground()
+                }
+            }
+            .onChange(of: settingsStore.settings.baseWakeOffsetMinutes) { _, newValue in
+                viewModel.handleOffsetChanged(newValue)
+                // Keep schedule previews + activation in sync with what the user chose in onboarding.
+                alarmConfigStore.defaults.defaultSuhoorTimeMode = .relativeToFajrMinusMinutes
+                alarmConfigStore.defaults.defaultSuhoorOffsetMinutes = newValue
+            }
+            .onChange(of: viewModel.step) { _, newStep in
+                if newStep == .offset {
+                    viewModel.activationAttempt()
+                }
+                if newStep != .location {
+                    didAutoShowCityPicker = false
+                }
+            }
+            .onChange(of: viewModel.locationState) { _, newState in
+                // If the system prompt fails (denied/restricted/unavailable), offer the city picker immediately.
+                guard viewModel.step == .location else { return }
+                guard !didAutoShowCityPicker else { return }
+                switch newState {
+                case .denied, .restricted, .unavailable:
+                    didAutoShowCityPicker = true
+                    showLocationSearch = true
+                default:
+                    break
+                }
+            }
         }
     }
 
@@ -75,10 +114,12 @@ struct OnboardingView: View {
     private var stepView: some View {
         Group {
             switch viewModel.step {
-            case .welcome:
-                WelcomeStep(
-                    onGetStarted: { viewModel.goTo(.location, animation: Motion.onboarding(reduceMotion: reduceMotion)) },
-                    onHowItWorks: { showHowItWorks = true }
+            case .valuePreview:
+                ValuePreviewStep(
+                    preview: viewModel.valueScreenPreview,
+                    activationState: .idle,
+                    showsSampleLabel: !viewModel.isLocationReady,
+                    onPrimary: { viewModel.startFlow(animation: Motion.onboarding(reduceMotion: reduceMotion)) }
                 )
             case .location:
                 LocationStep(
@@ -93,37 +134,36 @@ struct OnboardingView: View {
                     onChooseCity: { showLocationSearch = true },
                     onNext: { viewModel.advance(animation: Motion.onboarding(reduceMotion: reduceMotion)) }
                 )
-            case .alarmKit:
-                AlarmKitStep(
-                    alarmState: viewModel.alarmKitState,
-                    isRequestable: viewModel.alarmKitRequestable,
-                    showNextAction: viewModel.shouldShowManualAdvanceForCurrentStep,
-                    shouldShowFallback: viewModel.shouldShowAlarmKitFallback,
-                    onRequestAlarmKit: viewModel.requestAlarmKit,
-                    onOpenSettings: viewModel.openSettings,
-                    onContinue: { viewModel.advance(animation: Motion.onboarding(reduceMotion: reduceMotion)) }
-                )
-            case .notifications:
-                NotificationsStep(
-                    notificationState: viewModel.notificationState,
-                    showNextAction: viewModel.shouldShowManualAdvanceForCurrentStep,
-                    showAlarmKitFallback: viewModel.shouldShowAlarmKitFallback,
-                    onRequestNotifications: viewModel.requestNotifications,
-                    onOpenSettings: viewModel.openSettings,
-                    onNext: {
-                        guard !viewModel.isConfigured else { return }
-                        viewModel.advance(animation: Motion.onboarding(reduceMotion: reduceMotion))
-                    }
-                )
             case .offset:
                 OffsetStep(
                     baseMinutes: $settingsStore.settings.baseWakeOffsetMinutes,
-                    failureMessage: viewModel.lastEnableFailureMessage,
-                    onEnable: { viewModel.enableRoutineAndContinue(animation: Motion.onboarding(reduceMotion: reduceMotion)) }
+                    preview: viewModel.tomorrowPreview,
+                    activationState: viewModel.activationState,
+                    onContinue: { viewModel.advance(animation: Motion.onboarding(reduceMotion: reduceMotion)) }
                 )
-            case .confirmation:
-                ConfirmationStep(
-                    nextAlarmText: nextAlarmText,
+            case .futureVisualization:
+                FutureVisualizationStep(
+                    rows: viewModel.futureScheduleRows,
+                    offsetMinutes: viewModel.futureOffsetMinutes,
+                    onContinue: { viewModel.advance(animation: Motion.onboarding(reduceMotion: reduceMotion)) }
+                )
+            case .permissions:
+                PermissionsStep(
+                    alarmState: viewModel.alarmKitState,
+                    notificationState: viewModel.notificationState,
+                    isAlarmRequestable: viewModel.alarmKitRequestable,
+                    isNotificationsRequired: viewModel.isNotificationsRequired,
+                    showAlarmKitFallback: viewModel.shouldShowAlarmKitFallback,
+                    showNextAction: viewModel.shouldShowManualAdvanceForCurrentStep,
+                    onRequestAlarm: viewModel.requestAlarmKit,
+                    onRequestNotifications: viewModel.requestNotifications,
+                    onOpenSettings: viewModel.openSettings,
+                    onContinue: { viewModel.advance(animation: Motion.onboarding(reduceMotion: reduceMotion)) }
+                )
+            case .success:
+                SuccessStep(
+                    preview: viewModel.tomorrowPreview,
+                    schedule: viewModel.successSchedule,
                     onDone: viewModel.markOnboardingComplete
                 )
             }
@@ -131,36 +171,27 @@ struct OnboardingView: View {
         .id(viewModel.step)
         .transition(viewModel.transition(reduceMotion: reduceMotion))
     }
-
-    private var nextAlarmText: String {
-        guard let schedule = scheduleManager.schedules.first else {
-            return "Next alarm: --"
-        }
-        let weekday = TimeFormatters.dayFormatter.string(from: schedule.wakeDate)
-        let time = TimeFormatters.timeFormatter.string(from: schedule.wakeDate)
-        return "Next alarm: \(weekday) \(time)"
-    }
 }
 
-private struct WelcomeStep: View {
-    let onGetStarted: () -> Void
-    let onHowItWorks: () -> Void
+private struct ValuePreviewStep: View {
+    let preview: OnboardingTomorrowPreview
+    let activationState: OnboardingActivationState
+    let showsSampleLabel: Bool
+    let onPrimary: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text(Strings.Onboarding.welcomeTitle)
+        VStack(alignment: .leading, spacing: 12) {
+            Text(Strings.Onboarding.valueTitle)
                 .font(.largeTitle.weight(.bold))
-            Text(Strings.Onboarding.welcomeBody)
+            Text(Strings.Onboarding.valueBody)
                 .font(.body)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
-            Button(Strings.Onboarding.welcomePrimaryAction, action: onGetStarted)
-                .buttonStyle(.borderedProminent)
+            TomorrowPreviewCard(preview: preview, activationState: activationState, showsSampleLabel: showsSampleLabel)
 
-            Button(Strings.Onboarding.welcomeSecondaryAction, action: onHowItWorks)
-                .font(.footnote)
-                .foregroundStyle(.secondary)
+            Button(Strings.Onboarding.valuePrimaryAction, action: onPrimary)
+                .buttonStyle(BorderedProminentButtonStyle())
         }
     }
 }
@@ -178,7 +209,7 @@ private struct LocationStep: View {
     let onNext: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 12) {
             Text(Strings.Onboarding.locationTitle)
                 .font(.title2.weight(.bold))
 
@@ -186,10 +217,6 @@ private struct LocationStep: View {
                 .font(.body)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-
-            Text(Strings.Onboarding.locationPrivacyNote)
-                .font(.footnote)
-                .foregroundStyle(.secondary)
 
             if let message = statusMessage {
                 Text(message)
@@ -203,16 +230,25 @@ private struct LocationStep: View {
 
             if let actionTitle = primaryActionTitle {
                 Button(actionTitle, action: primaryAction)
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(BorderedProminentButtonStyle())
             }
 
-            Button(Strings.Onboarding.locationSecondaryAction, action: onChooseCity)
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(.secondary)
+            if locationState == .denied || locationState == .restricted {
+                Button(Strings.LocationAccess.tryAgain, action: onRequestLocation)
+                    .buttonStyle(BorderedButtonStyle())
+            }
+
+            Button(action: onChooseCity) {
+                Text(Strings.Onboarding.locationSecondaryAction)
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .underline()
+            }
+            .buttonStyle(.plain)
 
             if showNextAction {
                 Button(Strings.Onboarding.continueAction, action: onNext)
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(BorderedProminentButtonStyle())
             }
         }
     }
@@ -272,58 +308,153 @@ private struct LocationStep: View {
     }
 }
 
-private struct AlarmKitStep: View {
-    let alarmState: AppPermissionState
-    let isRequestable: Bool
-    let showNextAction: Bool
-    let shouldShowFallback: Bool
-    let onRequestAlarmKit: () -> Void
-    let onOpenSettings: () -> Void
+private struct FutureVisualizationStep: View {
+    let rows: [SchedulePreviewRow]
+    let offsetMinutes: Int
     let onContinue: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text(Strings.Onboarding.alarmKitTitle)
+        VStack(alignment: .leading, spacing: 12) {
+            Text(Strings.Onboarding.futureVisualizationTitle)
                 .font(.title2.weight(.bold))
 
-            Text(Strings.Onboarding.alarmKitBody)
+            Text(Strings.Onboarding.futureVisualizationOffsetLine(offsetMinutes))
                 .font(.body)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
-            Text(Strings.Onboarding.alarmKitFootnote)
+            weekCard
+
+            Text(Strings.Onboarding.futureVisualizationBody)
                 .font(.footnote)
                 .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
 
-            if let statusMessage {
-                Text(statusMessage)
-                    .font(.footnote)
+            Button(Strings.Onboarding.continueAction, action: onContinue)
+                .buttonStyle(BorderedProminentButtonStyle())
+        }
+    }
+
+    private var weekCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(Strings.Onboarding.futureVisualizationCardTitle)
+                .font(DesignTokens.cardTitleFont)
+
+            HStack(spacing: 10) {
+                Text(" ")
+                    .frame(width: 84, alignment: .leading)
+                Spacer(minLength: 0)
+                Text(Strings.Onboarding.previewFajrLabel)
+                    .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
+                    .frame(width: 70, alignment: .trailing)
+                Text("-\(offsetMinutes)m")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 52, alignment: .center)
+                Text(Strings.Onboarding.previewSuhoorLabel)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 78, alignment: .trailing)
             }
 
-            if shouldShowFallback {
-                InfoBanner(systemImage: "alarm", text: Strings.Onboarding.alarmKitFallbackBanner)
+            VStack(spacing: 8) {
+                ForEach(rows) { row in
+                    HStack(spacing: 10) {
+                        Text(row.dayLabel)
+                            .font(DesignTokens.cardMetaFont)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.85)
+                            .frame(width: 84, alignment: .leading)
+                        Spacer(minLength: 0)
+                        Text(TimeFormatters.timeFormatter.string(from: row.fajr))
+                            .font(DesignTokens.cardSubtitleFont.monospacedDigit())
+                            .frame(width: 70, alignment: .trailing)
+                        Text("-\(offsetMinutes)m")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 52, alignment: .center)
+                        Text(TimeFormatters.timeFormatter.string(from: row.suhoor))
+                            .font(DesignTokens.cardSubtitleFont.monospacedDigit())
+                            .frame(width: 78, alignment: .trailing)
+                    }
+                }
+            }
+        }
+        .cardStyle()
+    }
+}
+
+private struct PermissionsStep: View {
+    let alarmState: AppPermissionState
+    let notificationState: AppPermissionState
+    let isAlarmRequestable: Bool
+    let isNotificationsRequired: Bool
+    let showAlarmKitFallback: Bool
+    let showNextAction: Bool
+    let onRequestAlarm: () -> Void
+    let onRequestNotifications: () -> Void
+    let onOpenSettings: () -> Void
+    let onContinue: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(Strings.Onboarding.permissionsTitle)
+                .font(.title2.weight(.bold))
+
+            Text(Strings.Onboarding.permissionsBody)
+                .font(.body)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            let shouldShowNotificationsRow = isNotificationsRequired
+
+            VStack(alignment: .leading, spacing: 12) {
+                permissionRow(
+                    title: Strings.Onboarding.permissionsAlarmTitle,
+                    status: alarmStatus,
+                    actionTitle: alarmActionTitle,
+                    secondaryActionTitle: nil,
+                    isPrimary: true,
+                    showsCheckmark: alarmState == .authorized,
+                    action: alarmAction,
+                    secondaryAction: onContinue
+                )
+
+                if shouldShowNotificationsRow {
+                    Divider()
+
+                    permissionRow(
+                        title: Strings.Onboarding.permissionsNotificationsTitle,
+                        status: notificationStatus,
+                        actionTitle: notificationActionTitle,
+                        secondaryActionTitle: shouldShowNotificationSkip
+                            ? Strings.Onboarding.permissionsNotificationsSkipAction
+                            : nil,
+                        isPrimary: false,
+                        showsCheckmark: notificationState == .authorized,
+                        action: notificationAction,
+                        secondaryAction: onContinue
+                    )
+                }
             }
 
-            if let actionTitle = primaryActionTitle {
-                Button(actionTitle, action: primaryAction)
-                    .buttonStyle(.borderedProminent)
+            if showAlarmKitFallback {
+                InfoBanner(systemImage: "alarm", text: Strings.Onboarding.permissionsFallbackBanner)
             }
 
             if showNextAction {
                 Button(Strings.Onboarding.continueAction, action: onContinue)
-                    .buttonStyle(.borderedProminent)
-            } else {
-                Button("Not now", action: onContinue)
-                    .buttonStyle(.bordered)
+                    .buttonStyle(BorderedProminentButtonStyle())
             }
         }
     }
 
-    private var primaryActionTitle: String? {
+    private var alarmActionTitle: String? {
         switch alarmState {
-        case .notDetermined where isRequestable:
-            return Strings.Onboarding.alarmKitPrimaryAction
+        case .notDetermined where isAlarmRequestable:
+            return Strings.Onboarding.permissionsAlarmAction
         case .denied, .restricted:
             return Strings.LocationAccess.openSettings
         default:
@@ -331,92 +462,34 @@ private struct AlarmKitStep: View {
         }
     }
 
-    private var statusMessage: String? {
+    private var alarmStatus: String? {
         switch alarmState {
         case .authorized:
-            return Strings.Onboarding.alarmKitReady
+            return Strings.Onboarding.permissionsAlarmReady
         case .denied, .restricted:
             return Strings.AlarmAccess.deniedExplanation
         case .unavailable:
             return Strings.AlarmAccess.unavailableExplanation
         default:
-            return nil
+            return Strings.Onboarding.permissionsAlarmHelper
         }
     }
 
-    private func primaryAction() {
+    private func alarmAction() {
         switch alarmState {
-        case .notDetermined where isRequestable:
-            onRequestAlarmKit()
+        case .notDetermined where isAlarmRequestable:
+            onRequestAlarm()
         case .denied, .restricted:
             onOpenSettings()
         default:
             break
         }
     }
-}
 
-private struct NotificationsStep: View {
-    let notificationState: AppPermissionState
-    let showNextAction: Bool
-    let showAlarmKitFallback: Bool
-    let onRequestNotifications: () -> Void
-    let onOpenSettings: () -> Void
-    let onNext: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text(Strings.Onboarding.notificationsTitle)
-                .font(.title2.weight(.bold))
-
-            Text(Strings.Onboarding.notificationsBody)
-                .font(.body)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            if notificationState != .authorized {
-                Text(Strings.Onboarding.notificationsRequirement)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-
-            if showAlarmKitFallback {
-                InfoBanner(systemImage: "alarm", text: Strings.Onboarding.alarmKitFallbackBanner)
-            }
-
-            if let statusMessage {
-                Text(statusMessage)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-
-            if let actionTitle = primaryActionTitle {
-                Button(actionTitle, action: primaryAction)
-                    .buttonStyle(.borderedProminent)
-            }
-
-            if showNextAction {
-                Button(Strings.Onboarding.continueAction, action: onNext)
-                    .buttonStyle(.borderedProminent)
-            }
-        }
-    }
-
-    private var statusMessage: String? {
-        switch notificationState {
-        case .authorized:
-            return Strings.Onboarding.notificationsReady
-        case .denied, .restricted:
-            return Strings.NotificationAccess.deniedExplanation
-        default:
-            return nil
-        }
-    }
-
-    private var primaryActionTitle: String? {
+    private var notificationActionTitle: String? {
         switch notificationState {
         case .notDetermined:
-            return Strings.Onboarding.notificationsPrimaryAction
+            return Strings.Onboarding.permissionsNotificationsAction
         case .denied, .restricted:
             return Strings.LocationAccess.openSettings
         default:
@@ -424,7 +497,20 @@ private struct NotificationsStep: View {
         }
     }
 
-    private func primaryAction() {
+    private var notificationStatus: String? {
+        switch notificationState {
+        case .authorized:
+            return Strings.Onboarding.permissionsNotificationsReady
+        case .denied, .restricted:
+            return Strings.NotificationAccess.deniedExplanation
+        default:
+            return isNotificationsRequired
+                ? Strings.Onboarding.permissionsNotificationsRequired
+                : Strings.Onboarding.permissionsNotificationsRecommended
+        }
+    }
+
+    private func notificationAction() {
         switch notificationState {
         case .notDetermined:
             onRequestNotifications()
@@ -434,15 +520,69 @@ private struct NotificationsStep: View {
             break
         }
     }
+
+    private var shouldShowNotificationSkip: Bool {
+        alarmState == .authorized
+            && !isNotificationsRequired
+            && notificationState != .authorized
+    }
+
+    @ViewBuilder
+    private func permissionRow(
+        title: String,
+        status: String?,
+        actionTitle: String?,
+        secondaryActionTitle: String?,
+        isPrimary: Bool,
+        showsCheckmark: Bool,
+        action: @escaping () -> Void,
+        secondaryAction: @escaping () -> Void
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(title)
+                    .font(.headline.weight(.semibold))
+                Spacer()
+                if showsCheckmark {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                }
+            }
+            if let status {
+                Text(status)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+            if actionTitle != nil || secondaryActionTitle != nil {
+                HStack(spacing: 10) {
+                    if let actionTitle {
+                        if isPrimary {
+                            Button(actionTitle, action: action)
+                                .buttonStyle(BorderedProminentButtonStyle())
+                        } else {
+                            Button(actionTitle, action: action)
+                                .buttonStyle(BorderedButtonStyle())
+                        }
+                    }
+                    if let secondaryActionTitle {
+                        Button(secondaryActionTitle, action: secondaryAction)
+                            .buttonStyle(BorderedButtonStyle())
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
 }
 
 private struct OffsetStep: View {
     @Binding var baseMinutes: Int
-    let failureMessage: String?
-    let onEnable: () -> Void
+    let preview: OnboardingTomorrowPreview
+    let activationState: OnboardingActivationState
+    let onContinue: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 12) {
             Text(Strings.Onboarding.offsetTitle)
                 .font(.title2.weight(.bold))
 
@@ -453,6 +593,13 @@ private struct OffsetStep: View {
 
             OffsetPickerView(
                 baseMinutes: $baseMinutes,
+                presetMinutes: [30, 45, 60, 75],
+                presetLabels: [
+                    30: "Quick Suhoor",
+                    45: "Comfortable",
+                    60: "Recommended",
+                    75: "Unhurried"
+                ],
                 sentenceText: nil
             )
 
@@ -460,76 +607,128 @@ private struct OffsetStep: View {
                 .font(.footnote)
                 .foregroundStyle(.secondary)
 
-            if let failureMessage {
-                InfoBanner(systemImage: "exclamationmark.triangle", text: failureMessage)
-            }
+            TomorrowPreviewCard(preview: preview, activationState: activationState)
 
-            Button(Strings.Onboarding.continueAction, action: onEnable)
-                .buttonStyle(.borderedProminent)
+            Button(Strings.Onboarding.continueAction, action: onContinue)
+                .buttonStyle(BorderedProminentButtonStyle())
         }
     }
 }
 
-private struct ConfirmationStep: View {
-    let nextAlarmText: String
+private struct SuccessStep: View {
+    let preview: OnboardingTomorrowPreview
+    let schedule: DaySchedule?
     let onDone: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Label(Strings.Onboarding.confirmationTitle, systemImage: "checkmark.circle.fill")
+        VStack(alignment: .leading, spacing: 12) {
+            Label(Strings.Onboarding.successTitle, systemImage: "checkmark.circle.fill")
                 .font(.title2.weight(.bold))
 
-            Text(nextAlarmText)
-                .font(.body)
-
-            Text(Strings.Onboarding.confirmationBody)
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-
-            Button(Strings.Onboarding.doneAction, action: onDone)
-                .buttonStyle(.borderedProminent)
-        }
-    }
-}
-
-private struct HowItWorksView: View {
-    @EnvironmentObject private var settingsStore: SuhoorSettingsStore
-
-    var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    Text(Strings.Onboarding.HowItWorks.body)
-                        .font(.body)
-                        .foregroundStyle(.secondary)
-
-                    VStack(alignment: .leading, spacing: 10) {
-                        OnboardingBulletRow(text: Strings.Onboarding.HowItWorks.bulletWakeDefault(settingsStore.settings.baseWakeOffsetMinutes))
-                        OnboardingBulletRow(text: Strings.Onboarding.HowItWorks.bulletReminders)
-                        OnboardingBulletRow(text: Strings.Onboarding.HowItWorks.bulletCustomize)
-                    }
-                }
-                .padding(24)
+            if let schedule {
+                TomorrowFinalCard(schedule: schedule, preview: preview)
+            } else {
+                TomorrowPreviewCard(preview: preview, activationState: .idle)
             }
-            .navigationTitle(Strings.Onboarding.HowItWorks.title)
-            .navigationBarTitleDisplayMode(.inline)
+
+            Text(Strings.Onboarding.successBody)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+
+            Button(Strings.Onboarding.successAction, action: onDone)
+                .buttonStyle(BorderedProminentButtonStyle())
         }
     }
 }
 
-private struct OnboardingBulletRow: View {
-    let text: String
+private struct TomorrowPreviewCard: View {
+    let preview: OnboardingTomorrowPreview
+    let activationState: OnboardingActivationState
+    var showsSampleLabel: Bool = false
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
-            Text("•")
-                .foregroundStyle(.secondary)
-            Text(text)
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text(preview.dateText)
+                    .font(DesignTokens.cardTitleFont)
+                Spacer()
+                if showsSampleLabel {
+                    Text("Example times")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text(Strings.Onboarding.previewFajrLabel)
+                        .font(DesignTokens.cardMetaFont)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Text(preview.fajrTimeText ?? Strings.Onboarding.previewFajrPlaceholder)
+                        .font(DesignTokens.cardSubtitleFont)
+                }
+
+                HStack {
+                    Text(Strings.Onboarding.previewSuhoorLabel)
+                        .font(DesignTokens.cardMetaFont)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Text(preview.suhoorTimeText ?? Strings.Onboarding.previewSuhoorPlaceholder)
+                        .font(DesignTokens.cardSubtitleFont)
+                        .contentTransition(.numericText())
+                        .animation(.easeInOut(duration: 0.25), value: preview.suhoorTimeText)
+                }
+            }
+
+            if let statusText = preview.statusText {
+                Text(statusText)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            switch activationState {
+            case .attempting:
+                ProgressView()
+            case .failed(let message):
+                InfoBanner(systemImage: "exclamationmark.triangle", text: message)
+            default:
+                EmptyView()
+            }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .cardStyle()
+    }
+}
+
+private struct TomorrowFinalCard: View {
+    let schedule: DaySchedule
+    let preview: OnboardingTomorrowPreview
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(preview.dateText)
+                .font(DesignTokens.cardTitleFont)
+
+            HStack {
+                Text(Strings.Onboarding.previewSuhoorLabel)
+                    .font(DesignTokens.cardMetaFont)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Text(TimeFormatters.timeFormatter.string(from: schedule.wakeDate))
+                    .font(DesignTokens.cardSubtitleFont)
+            }
+
+            HStack {
+                Text(Strings.Onboarding.previewFajrLabel)
+                    .font(DesignTokens.cardMetaFont)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Text(TimeFormatters.timeFormatter.string(from: schedule.fajrDate))
+                    .font(DesignTokens.cardSubtitleFont)
+            }
+
+        }
+        .cardStyle()
     }
 }
 
@@ -541,9 +740,9 @@ private struct OnboardingProgressView: View {
         HStack(spacing: 8) {
             ForEach(0..<stepCount, id: \.self) { index in
                 Capsule()
-                    .fill(index <= stepIndex ? DawnColor.accent : Color(.systemGray5))
+                    .fill(index <= stepIndex ? DawnColor.accent : Color.primary.opacity(0.08))
                     .frame(maxWidth: .infinity)
-                    .frame(height: 5)
+                    .frame(height: 4)
             }
         }
         .accessibilityLabel("Onboarding progress")
@@ -554,6 +753,7 @@ private struct OnboardingProgressView: View {
 private struct OnboardingHeaderView: View {
     let stepIndex: Int
     let stepCount: Int
+    let shouldShowProgress: Bool
     let canGoBack: Bool
     let onBack: () -> Void
 
@@ -572,14 +772,18 @@ private struct OnboardingHeaderView: View {
                         .frame(width: 36, height: 36)
                 }
 
-                Text("Step \(stepIndex + 1) of \(max(stepCount, 1))")
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(.secondary)
+                if shouldShowProgress {
+                    Text("Step \(stepIndex + 1) of \(max(stepCount, 1))")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
 
                 Spacer()
             }
 
-            OnboardingProgressView(stepIndex: stepIndex, stepCount: stepCount)
+            if shouldShowProgress {
+                OnboardingProgressView(stepIndex: stepIndex, stepCount: stepCount)
+            }
         }
     }
 }
