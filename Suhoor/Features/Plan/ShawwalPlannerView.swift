@@ -9,6 +9,7 @@ struct ShawwalPlannerView: View {
 
     @State private var strategy: ShawwalPlanStrategy = .maximizeReward
     @State private var displayedMonth = DateHelpers.startOfToday()
+    @State private var focusedDate = DateHelpers.startOfToday()
     @State private var recommendedKeys: Set<String> = []
     @State private var selectedKeys: Set<String> = []
     @State private var isApplying = false
@@ -48,7 +49,18 @@ struct ShawwalPlannerView: View {
                     recommendedDateKeys: recommendedKeys,
                     disablesAlreadyActive: false,
                     isSelectable: isSelectable(_:),
-                    onToggle: toggleDate(_:))
+                    onToggle: toggleDate(_:),
+                    focusedDate: $focusedDate)
+            }
+
+            Section {
+                SuhoorCalendarDetailCard(
+                    detail: scheduleManager.calendarDayDetail(
+                        for: focusedDate,
+                        overrideSelection: FastIntentSelection(primaryIntent: .voluntary, secondaryTags: [])
+                    ),
+                    notScheduledText: "Not scheduled for Shawwal"
+                )
             }
 
             Section {
@@ -144,6 +156,7 @@ struct ShawwalPlannerView: View {
         selectedKeys = keys
         if let first = result.first {
             displayedMonth = monthStart(for: first)
+            focusedDate = first
         }
     }
 

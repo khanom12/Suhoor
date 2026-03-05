@@ -78,6 +78,13 @@ struct CalendarDayState: Identifiable, Hashable, Sendable {
     let isAlreadyActive: Bool
     let activeSourceSummary: String?
     let hijriText: String
+    let computedPrimaryIntent: FastPrimaryIntent
+    let computedSecondaryTags: [FastSecondaryVirtueTag]
+    let previewSecondaryTags: [FastSecondaryVirtueTag]
+    let warnings: [FastWarning]
+    let isForbidden: Bool
+    let isRamadan: Bool
+    let isLocked: Bool
 
     var id: String {
         DateHelpers.dayIdentifier(for: date, timeZone: .current)
@@ -182,4 +189,8 @@ struct CalendarDayDetail: Hashable, Sendable {
     let isAlreadyActive: Bool
     let activeSourceSummary: String?
     let tagSummary: String
+    let computedPrimaryIntent: FastPrimaryIntent
+    let computedSecondaryTags: [FastSecondaryVirtueTag]
+    let previewSecondaryTags: [FastSecondaryVirtueTag]
+    let warnings: [FastWarning]
 }

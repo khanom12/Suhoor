@@ -14,6 +14,7 @@ struct QadaPlannerView: View {
     @State private var avoidShawwal = true
     @State private var avoidMajorSunnah = true
     @State private var displayedMonth = DateHelpers.startOfToday()
+    @State private var focusedDate = DateHelpers.startOfToday()
     @State private var recommendedKeys: Set<String> = []
     @State private var selectedKeys: Set<String> = []
     @State private var fallbackNote: String?
@@ -71,7 +72,18 @@ struct QadaPlannerView: View {
                     recommendedDateKeys: recommendedKeys,
                     disablesAlreadyActive: false,
                     isSelectable: isSelectable(_:),
-                    onToggle: toggleDate(_:))
+                    onToggle: toggleDate(_:),
+                    focusedDate: $focusedDate)
+            }
+
+            Section {
+                SuhoorCalendarDetailCard(
+                    detail: scheduleManager.calendarDayDetail(
+                        for: focusedDate,
+                        overrideSelection: FastIntentSelection(primaryIntent: .qadaMakeup, secondaryTags: [])
+                    ),
+                    notScheduledText: "Not scheduled for Qada"
+                )
             }
 
             Section {
@@ -176,6 +188,7 @@ struct QadaPlannerView: View {
 
         if let first = result.dates.first {
             displayedMonth = monthStart(for: first)
+            focusedDate = first
         }
     }
 

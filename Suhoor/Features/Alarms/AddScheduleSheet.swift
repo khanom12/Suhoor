@@ -141,13 +141,17 @@ struct AddScheduleSheet: View {
             AddScheduleMonthView(
                 displayedMonth: $singleDayDisplayedMonth,
                 selectedDate: $selectedDate,
-                allowedDateRange: addableFutureDateRange,
-                context: singleDayMonthContext
+                allowedDateRange: addableFutureDateRange
             )
 
-            CalendarSelectionDetailCard(detail: singleDayDetail) {
-                onOpenExistingDay(selectedDate)
-                isPresented = false
+            SuhoorCalendarDetailCard(detail: singleDayDetail, notScheduledText: "Available to add")
+
+            if singleDayDetail.isAlreadyActive {
+                Button("View Existing Day") {
+                    onOpenExistingDay(selectedDate)
+                    isPresented = false
+                }
+                .font(.footnote.weight(.semibold))
             }
         }
 
@@ -344,14 +348,6 @@ struct AddScheduleSheet: View {
                 .controlSize(.small)
             }
         }
-    }
-
-    private var singleDayMonthContext: CalendarMonthContext {
-        scheduleManager.calendarMonthContext(
-            displayedMonth: singleDayDisplayedMonth,
-            selectedDate: selectedDate,
-            allowedDateRange: addableFutureDateRange
-        )
     }
 
     private var singleDayDetail: CalendarDayDetail {
@@ -796,19 +792,15 @@ private struct RangeCalendarPickerSheet: View {
                 displayedMonth: $displayedMonth,
                 selectedDate: $selectedDate,
                 allowedDateRange: allowedDateRange,
-                context: scheduleManager.calendarMonthContext(
-                    displayedMonth: displayedMonth,
-                    selectedDate: selectedDate,
-                    allowedDateRange: allowedDateRange
-                )
             )
             .padding(.top, DesignTokens.spacingS)
 
-            CalendarSelectionDetailCard(
+            SuhoorCalendarDetailCard(
                 detail: scheduleManager.calendarDayDetail(
                     for: selectedDate,
                     overrideSelection: detailSelection
-                )
+                ),
+                notScheduledText: "Available to add"
             )
             .padding(.horizontal, DesignTokens.spacingL)
             .padding(.top, DesignTokens.spacingM)
@@ -829,62 +821,15 @@ private struct AddScheduleMonthView: View {
     @Binding var displayedMonth: Date
     @Binding var selectedDate: Date
     let allowedDateRange: ClosedRange<Date>
-    let context: CalendarMonthContext
-
-    private let columns = Array(repeating: GridItem(.flexible(), spacing: 6), count: 7)
 
     var body: some View {
-        VStack(spacing: DesignTokens.spacingM) {
-            HStack {
-                Button {
-                    displayedMonth = Self.shiftMonth(displayedMonth, by: -1)
-                } label: {
-                    Image(systemName: "chevron.left")
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(canMoveToPreviousMonth ? .primary : .tertiary)
-                        .frame(width: 32, height: 32)
-                }
-                .buttonStyle(.plain)
-                .disabled(!canMoveToPreviousMonth)
-
-                Spacer()
-
-                Text(context.monthTitle)
-                    .font(.headline.weight(.semibold))
-
-                Spacer()
-
-                Button {
-                    displayedMonth = Self.shiftMonth(displayedMonth, by: 1)
-                } label: {
-                    Image(systemName: "chevron.right")
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(canMoveToNextMonth ? .primary : .tertiary)
-                        .frame(width: 32, height: 32)
-                }
-                .buttonStyle(.plain)
-                .disabled(!canMoveToNextMonth)
-            }
-
-            LazyVGrid(columns: columns, spacing: 10) {
-                ForEach(Array(context.weekdaySymbols.enumerated()), id: \.offset) { _, symbol in
-                    Text(symbol)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity)
-                }
-
-                ForEach(context.dayStates) { state in
-                    CalendarDayCell(state: state) {
-                        guard !state.isDisabled else { return }
-                        selectedDate = state.date
-                        if state.isInDisplayedMonth == false {
-                            displayedMonth = Self.monthStart(for: state.date)
-                        }
-                    }
-                }
-            }
-        }
+        SuhoorCalendarView(
+            displayedMonth: $displayedMonth,
+            focusedDate: $selectedDate,
+            selectedDate: selectedDate,
+            allowedDateRange: allowedDateRange,
+            onSelectDate: { selectedDate = $0 }
+        )
     }
 
     static func monthStart(for date: Date) -> Date {
@@ -893,158 +838,6 @@ private struct AddScheduleMonthView: View {
         return calendar.date(
             from: calendar.dateComponents([.year, .month], from: date)
         ) ?? DateHelpers.startOfToday()
-    }
-
-    private static func shiftMonth(_ date: Date, by value: Int) -> Date {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = .current
-        let monthStart = monthStart(for: date)
-        return calendar.date(byAdding: .month, value: value, to: monthStart) ?? monthStart
-    }
-
-    private var canMoveToPreviousMonth: Bool {
-        let previousMonth = Self.shiftMonth(displayedMonth, by: -1)
-        return monthIntersectsAllowedRange(previousMonth)
-    }
-
-    private var canMoveToNextMonth: Bool {
-        let nextMonth = Self.shiftMonth(displayedMonth, by: 1)
-        return monthIntersectsAllowedRange(nextMonth)
-    }
-
-    private func monthIntersectsAllowedRange(_ month: Date) -> Bool {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = .current
-        let monthStart = Self.monthStart(for: month)
-        guard let monthEnd = calendar.date(byAdding: DateComponents(month: 1, day: -1), to: monthStart) else {
-            return false
-        }
-        return monthEnd >= allowedDateRange.lowerBound && monthStart <= allowedDateRange.upperBound
-    }
-}
-
-private struct CalendarDayCell: View {
-    let state: CalendarDayState
-    let onSelect: () -> Void
-
-    var body: some View {
-        Button(action: onSelect) {
-            VStack(spacing: 4) {
-                Text(state.dayNumberText)
-                    .font(.subheadline.weight(state.isSelected ? .semibold : .medium))
-                    .foregroundStyle(textColor)
-                    .frame(width: 34, height: 34)
-                    .background(background)
-                    .overlay(selectionOutline)
-
-                HStack(spacing: 4) {
-                    Circle()
-                        .fill(state.isToday ? Color.primary.opacity(0.5) : .clear)
-                        .frame(width: 4, height: 4)
-                    Circle()
-                        .fill(state.isAlreadyActive ? DawnColor.accent : .clear)
-                        .frame(width: 5, height: 5)
-                }
-            }
-            .frame(maxWidth: .infinity)
-            .opacity(state.isDisabled ? 0.35 : 1.0)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(accessibilityLabel)
-    }
-
-    private var background: some View {
-        Circle()
-            .fill(state.isSelected ? DawnColor.accent.opacity(0.18) : Color.clear)
-    }
-
-    private var selectionOutline: some View {
-        Circle()
-            .stroke(borderColor, lineWidth: state.isSelected || state.isAlreadyActive || state.isToday ? 1.2 : 0.6)
-    }
-
-    private var borderColor: Color {
-        if state.isSelected {
-            return DawnColor.accent
-        }
-        if state.isAlreadyActive {
-            return DawnColor.highlight.opacity(0.7)
-        }
-        if state.isToday {
-            return Color.primary.opacity(0.45)
-        }
-        return Color.clear
-    }
-
-    private var textColor: Color {
-        if state.isSelected {
-            return DawnColor.accentPressed
-        }
-        if state.isInDisplayedMonth {
-            return .primary
-        }
-        return .secondary
-    }
-
-    private var accessibilityLabel: String {
-        var parts = [GregorianDateFormatter.shared.headerString(for: state.date)]
-        if state.isAlreadyActive {
-            parts.append("Already active")
-        }
-        if state.isDisabled {
-            parts.append("Unavailable")
-        }
-        return parts.joined(separator: ", ")
-    }
-}
-
-private struct CalendarSelectionDetailCard: View {
-    let detail: CalendarDayDetail
-    let onViewExistingDay: (() -> Void)?
-
-    init(detail: CalendarDayDetail, onViewExistingDay: (() -> Void)? = nil) {
-        self.detail = detail
-        self.onViewExistingDay = onViewExistingDay
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(detail.gregorianText)
-                .font(.headline.weight(.semibold))
-            Text(detail.hijriText)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-
-            HStack {
-                PillBadge(
-                    text: detail.isAlreadyActive ? "Already active" : "Available to add",
-                    style: detail.isAlreadyActive ? .custom : .default
-                )
-                Spacer()
-                if detail.isAlreadyActive, let onViewExistingDay {
-                    Button("View Existing Day") {
-                        onViewExistingDay()
-                    }
-                    .font(.footnote.weight(.semibold))
-                }
-            }
-
-            if detail.isAlreadyActive, let sourceSummary = detail.activeSourceSummary {
-                Text(sourceSummary)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-
-            Text(detail.tagSummary)
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(DesignTokens.spacingM)
-        .background(
-            RoundedRectangle(cornerRadius: DesignTokens.innerCardRadius, style: .continuous)
-                .fill(Color(.secondarySystemGroupedBackground))
-        )
     }
 }
 

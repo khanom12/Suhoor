@@ -7,6 +7,7 @@ struct PlanOthersView: View {
     @State private var purpose: FastPrimaryIntent = .voluntary
     @State private var scheduleCount: Int = 1
     @State private var displayedMonth = DateHelpers.startOfToday()
+    @State private var focusedDate = DateHelpers.startOfToday()
     @State private var selectedKeys: Set<String> = []
     @State private var isApplying = false
 
@@ -35,7 +36,18 @@ struct PlanOthersView: View {
                     recommendedDateKeys: [],
                     disablesAlreadyActive: false,
                     isSelectable: isSelectable(_:),
-                    onToggle: toggleDate(_:))
+                    onToggle: toggleDate(_:),
+                    focusedDate: $focusedDate)
+            }
+
+            Section {
+                SuhoorCalendarDetailCard(
+                    detail: scheduleManager.calendarDayDetail(
+                        for: focusedDate,
+                        overrideSelection: FastIntentSelection(primaryIntent: purpose, secondaryTags: [])
+                    ),
+                    notScheduledText: "Not scheduled"
+                )
             }
 
             Section {
