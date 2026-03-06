@@ -2,7 +2,7 @@ import SwiftUI
 
 struct OffsetPickerView: View {
     private enum Layout {
-        static let tileCornerRadius: CGFloat = 18
+        static let tileCornerRadius: CGFloat = 20
         static let tileMinHeight: CGFloat = 58
         static let gridSpacing: CGFloat = 10
     }
@@ -51,15 +51,7 @@ struct OffsetPickerView: View {
             }
 
             if isCustomSelected || !presetMinutes.contains(baseMinutes) {
-                Stepper(value: $baseMinutes, in: range, step: step) {
-                    Text("Custom: \(baseMinutes) min")
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(.primary)
-                }
-                .onChange(of: baseMinutes) { _, _ in
-                    Haptics.light()
-                }
-                .accessibilityLabel("Custom offset \(baseMinutes) minutes")
+                customStepper
             }
         }
         .onAppear {
@@ -156,6 +148,41 @@ struct OffsetPickerView: View {
     private func tileFill(isSelected: Bool) -> Color {
         isSelected ? DawnColor.accent.opacity(0.22) : Color.primary.opacity(0.06)
     }
+
+    private var customStepper: some View {
+        HStack(spacing: Layout.gridSpacing) {
+            stepButton(systemImage: "minus") {
+                guard baseMinutes - step >= range.lowerBound else { return }
+                baseMinutes -= step
+                Haptics.light()
+            }
+
+            Text("\(baseMinutes) min")
+                .font(.headline.weight(.semibold).monospacedDigit())
+                .frame(minWidth: 92, minHeight: 44)
+
+            stepButton(systemImage: "plus") {
+                guard baseMinutes + step <= range.upperBound else { return }
+                baseMinutes += step
+                Haptics.light()
+            }
+        }
+        .frame(maxWidth: 220)
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 4)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Custom offset")
+        .accessibilityValue("\(baseMinutes) minutes")
+    }
+
+    private func stepButton(systemImage: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.headline.weight(.semibold))
+                .frame(width: 44, height: 44)
+        }
+        .buttonStyle(CustomStepButtonStyle())
+    }
 }
 
 private struct OffsetTileButtonStyle: ButtonStyle {
@@ -180,6 +207,19 @@ private struct OffsetSelectedAccessibility: ViewModifier {
             content
                 .accessibilityValue("Not selected")
         }
+    }
+}
+
+private struct CustomStepButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .foregroundStyle(configuration.isPressed ? DawnColor.accent : .primary)
+            .background(
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .fill(configuration.isPressed ? DawnColor.accent.opacity(0.18) : Color.primary.opacity(0.06))
+            )
+            .scaleEffect(configuration.isPressed ? 0.96 : 1)
+            .animation(.easeInOut(duration: 0.12), value: configuration.isPressed)
     }
 }
 
@@ -231,8 +271,8 @@ struct OffsetPickerScreen: View {
     @Previewable @State var minutes: Int = 45
     return OffsetPickerView(
         baseMinutes: $minutes,
-        presetMinutes: [30, 45, 60, 75],
-        presetLabels: [30: "Quick Suhoor", 45: "Comfortable", 60: "Recommended", 75: "Unhurried"],
+        presetMinutes: [30, 45, 60, 75, 90],
+        presetLabels: [30: "Quick Suhoor", 45: "Comfortable", 60: "Recommended", 75: "Unhurried", 90: "Relaxed"],
         sentenceText: nil
     )
     .padding()
@@ -243,8 +283,8 @@ struct OffsetPickerScreen: View {
     @Previewable @State var minutes: Int = 60
     return OffsetPickerView(
         baseMinutes: $minutes,
-        presetMinutes: [30, 45, 60, 75],
-        presetLabels: [30: "Quick Suhoor", 45: "Comfortable", 60: "Recommended", 75: "Unhurried"],
+        presetMinutes: [30, 45, 60, 75, 90],
+        presetLabels: [30: "Quick Suhoor", 45: "Comfortable", 60: "Recommended", 75: "Unhurried", 90: "Relaxed"],
         sentenceText: nil
     )
     .environment(\.dynamicTypeSize, .xxLarge)
@@ -256,8 +296,8 @@ struct OffsetPickerScreen: View {
     @Previewable @State var minutes: Int = 75
     return OffsetPickerView(
         baseMinutes: $minutes,
-        presetMinutes: [30, 45, 60, 75],
-        presetLabels: [30: "Quick Suhoor", 45: "Comfortable", 60: "Recommended", 75: "Unhurried"],
+        presetMinutes: [30, 45, 60, 75, 90],
+        presetLabels: [30: "Quick Suhoor", 45: "Comfortable", 60: "Recommended", 75: "Unhurried", 90: "Relaxed"],
         sentenceText: nil
     )
     .environment(\.dynamicTypeSize, .accessibility1)

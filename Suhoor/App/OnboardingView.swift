@@ -5,12 +5,15 @@ private enum OnboardingSpacing {
     static let small: CGFloat = 12
     static let medium: CGFloat = 16
     static let large: CGFloat = 24
-    static let sidePadding: CGFloat = 20
+    static let sidePadding: CGFloat = 24
     static let titleToSubtitle: CGFloat = 12
-    static let cardToCTA: CGFloat = 14
+    static let cardToCTA: CGFloat = 16
     static let cardPadding: CGFloat = 16
-    static let cardRowSpacing: CGFloat = 10
-    static let cornerRadius: CGFloat = 18
+    static let cardRowSpacing: CGFloat = 12
+    static let cardCornerRadius: CGFloat = 24
+    static let tileCornerRadius: CGFloat = 20
+    static let buttonCornerRadius: CGFloat = 20
+    static let buttonHeight: CGFloat = 54
     static let tapTargetMin: CGFloat = 44
 }
 
@@ -53,12 +56,10 @@ struct OnboardingView: View {
                         onSelectCity: { city in
                             viewModel.chooseCity(city)
                             showLocationSearch = false
-                            viewModel.advance(animation: Motion.onboarding(reduceMotion: reduceMotion))
                         },
                         onSelectMapItem: { item in
                             viewModel.chooseMapItem(item)
                             showLocationSearch = false
-                            viewModel.advance(animation: Motion.onboarding(reduceMotion: reduceMotion))
                         }
                     )
                 }
@@ -202,8 +203,11 @@ private struct ValuePreviewStep: View {
     var body: some View {
         VStack(alignment: .leading, spacing: OnboardingSpacing.medium) {
             VStack(alignment: .leading, spacing: OnboardingSpacing.titleToSubtitle) {
-                Text(Strings.Onboarding.valueTitle)
-                    .font(.largeTitle.weight(.bold))
+                VStack(alignment: .leading, spacing: 0) {
+                    Text("Never miss")
+                    Text("Suhoor again")
+                }
+                .font(.largeTitle.weight(.bold))
                 Text(Strings.Onboarding.valueBody)
                     .font(.body)
                     .foregroundStyle(.secondary)
@@ -214,12 +218,12 @@ private struct ValuePreviewStep: View {
                 preview: preview,
                 offsetMinutes: offsetMinutes,
                 activationState: activationState,
+                previewTag: Strings.Onboarding.previewTag,
                 animateRelationshipOnAppear: true
             )
 
             Button(primaryTitle, action: onPrimary)
                 .onboardingPrimaryButton()
-                .padding(.top, OnboardingSpacing.cardToCTA)
         }
     }
 }
@@ -247,11 +251,6 @@ private struct LocationStep: View {
                     .font(.body)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
-            }
-
-            VStack(alignment: .leading, spacing: OnboardingSpacing.xSmall) {
-                trustLine(Strings.Onboarding.locationTrustLine1)
-                trustLine(Strings.Onboarding.locationTrustLine2)
             }
 
             if let message = statusMessage {
@@ -293,19 +292,6 @@ private struct LocationStep: View {
                 Button(Strings.Onboarding.continueAction, action: onNext)
                     .onboardingPrimaryButton()
             }
-        }
-    }
-
-    private func trustLine(_ text: String) -> some View {
-        HStack(alignment: .top, spacing: OnboardingSpacing.xSmall) {
-            Image(systemName: "checkmark")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .padding(.top, 2)
-            Text(text)
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
@@ -386,14 +372,8 @@ private struct FutureVisualizationStep: View {
 
             weekCard
 
-            Text(Strings.Onboarding.futureVisualizationFooter)
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-
             Button(Strings.Onboarding.continueAction, action: onContinue)
                 .onboardingPrimaryButton()
-                .padding(.top, OnboardingSpacing.cardToCTA)
         }
     }
 
@@ -653,17 +633,12 @@ private struct PermissionsStep: View {
             if actionTitle != nil || secondaryActionTitle != nil {
                 HStack(spacing: 10) {
                     if let actionTitle {
-                        if isPrimary {
-                            Button(actionTitle, action: action)
-                                .onboardingPrimaryButton()
-                        } else {
-                            Button(actionTitle, action: action)
-                                .onboardingSecondaryButton()
-                        }
+                        Button(actionTitle, action: action)
+                            .onboardingPrimaryButton()
                     }
                     if let secondaryActionTitle {
                         Button(secondaryActionTitle, action: secondaryAction)
-                            .onboardingSecondaryButton()
+                            .onboardingPrimaryButton()
                     }
                 }
             }
@@ -684,38 +659,34 @@ private struct OffsetStep: View {
             VStack(alignment: .leading, spacing: OnboardingSpacing.titleToSubtitle) {
                 Text(Strings.Onboarding.offsetTitle)
                     .font(.title2.weight(.bold))
-
                 Text(Strings.Onboarding.offsetBody)
                     .font(.body)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
+            OnboardingTimeCard(
+                preview: preview,
+                offsetMinutes: offsetMinutes,
+                activationState: activationState,
+                pulseOnOffsetChange: true
+            )
+
             OffsetPickerView(
                 baseMinutes: $baseMinutes,
-                presetMinutes: [30, 45, 60, 75],
+                presetMinutes: [30, 45, 60, 75, 90],
                 presetLabels: [
                     30: "Quick Suhoor",
                     45: "Comfortable",
                     60: "Recommended",
-                    75: "Unhurried"
+                    75: "Unhurried",
+                    90: "Relaxed"
                 ],
                 sentenceText: nil
             )
 
-            Text(Strings.Onboarding.offsetCustomHelper)
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-
-            OnboardingTimeCard(
-                preview: preview,
-                offsetMinutes: offsetMinutes,
-                activationState: activationState
-            )
-
             Button(Strings.Onboarding.continueAction, action: onContinue)
                 .onboardingPrimaryButton()
-                .padding(.top, OnboardingSpacing.cardToCTA)
         }
     }
 }
@@ -739,7 +710,6 @@ private struct SuccessStep: View {
 
             Button(Strings.Onboarding.successAction, action: onDone)
                 .onboardingPrimaryButton()
-                .padding(.top, OnboardingSpacing.cardToCTA)
         }
     }
 }
@@ -748,11 +718,14 @@ private struct OnboardingTimeCard: View {
     let preview: OnboardingTomorrowPreview
     let offsetMinutes: Int
     let activationState: OnboardingActivationState
+    var previewTag: String? = nil
     var animateRelationshipOnAppear: Bool = false
+    var pulseOnOffsetChange: Bool = false
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var showRelationship: Bool = false
+    @State private var pulseConnector: Bool = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: OnboardingSpacing.small) {
@@ -760,6 +733,14 @@ private struct OnboardingTimeCard: View {
                 Text(preview.dateText)
                     .font(DesignTokens.cardTitleFont)
                 Spacer()
+                if let previewTag {
+                    Text(previewTag)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.primary.opacity(0.06), in: Capsule())
+                }
             }
 
             cardRows
@@ -797,13 +778,37 @@ private struct OnboardingTimeCard: View {
                 }
             }
         }
+        .onChange(of: offsetMinutes) { _, _ in
+            guard pulseOnOffsetChange, !reduceMotion else { return }
+            pulseConnector = false
+            withAnimation(.easeInOut(duration: 0.18)) {
+                pulseConnector = true
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.32) {
+                withAnimation(.easeOut(duration: 0.4)) {
+                    pulseConnector = false
+                }
+            }
+        }
     }
 
-    private var relationshipLine: some View {
-        Text("Alarm = Fajr − \(offsetMinutes) min")
-            .font(.footnote)
-            .foregroundStyle(.secondary)
-            .accessibilityLabel("Alarm equals Fajr minus \(offsetMinutes) minutes")
+    private var connectorLine: some View {
+        HStack(spacing: 4) {
+            Image(systemName: "arrow.down")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+            (
+                Text("\(offsetMinutes) min")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(pulseConnector ? DawnColor.accent : .primary)
+                +
+                Text(" earlier")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            )
+        }
+        .scaleEffect(pulseConnector ? 1.08 : 1)
+        .accessibilityLabel("\(offsetMinutes) minutes earlier")
     }
 
     @ViewBuilder
@@ -814,7 +819,7 @@ private struct OnboardingTimeCard: View {
                     label: Strings.Onboarding.previewFajrLabel,
                     value: preview.fajrTimeText ?? Strings.Onboarding.previewFajrPlaceholder
                 )
-                relationshipLine
+                connectorLine
                     .opacity(showRelationship ? 1 : 0)
                     .offset(y: showRelationship ? 0 : 4)
                 stackedRow(
@@ -827,32 +832,26 @@ private struct OnboardingTimeCard: View {
         } else {
             Grid(horizontalSpacing: OnboardingSpacing.small, verticalSpacing: OnboardingSpacing.cardRowSpacing) {
                 GridRow {
-                    Text(Strings.Onboarding.previewFajrLabel)
-                        .font(.body)
-                        .foregroundStyle(.secondary)
-                        .gridColumnAlignment(.leading)
-                    Text(preview.fajrTimeText ?? Strings.Onboarding.previewFajrPlaceholder)
-                        .font(.body.weight(.semibold).monospacedDigit())
-                        .gridColumnAlignment(.trailing)
+                    connectedRow(
+                        label: Strings.Onboarding.previewFajrLabel,
+                        value: preview.fajrTimeText ?? Strings.Onboarding.previewFajrPlaceholder
+                    )
+                    .gridCellColumns(2)
                 }
                 GridRow {
                     Color.clear
-                    relationshipLine
+                    connectorLine
                         .frame(maxWidth: .infinity, alignment: .trailing)
                         .gridColumnAlignment(.trailing)
                         .opacity(showRelationship ? 1 : 0)
                         .offset(y: showRelationship ? 0 : 4)
                 }
                 GridRow {
-                    Text(Strings.Onboarding.previewSuhoorLabel)
-                        .font(.body)
-                        .foregroundStyle(.secondary)
-                        .gridColumnAlignment(.leading)
-                    Text(preview.suhoorTimeText ?? Strings.Onboarding.previewSuhoorPlaceholder)
-                        .font(.body.weight(.semibold).monospacedDigit())
-                        .contentTransition(.numericText())
-                        .animation(.easeInOut(duration: 0.25), value: preview.suhoorTimeText)
-                        .gridColumnAlignment(.trailing)
+                    connectedRow(
+                        label: Strings.Onboarding.previewSuhoorLabel,
+                        value: preview.suhoorTimeText ?? Strings.Onboarding.previewSuhoorPlaceholder
+                    )
+                    .gridCellColumns(2)
                 }
                 .opacity(showRelationship ? 1 : 0)
                 .offset(y: showRelationship ? 0 : 4)
@@ -871,6 +870,25 @@ private struct OnboardingTimeCard: View {
                 .animation(.easeInOut(duration: 0.25), value: value)
         }
     }
+
+    private func connectedRow(label: String, value: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Text(label)
+                .font(.body)
+                .foregroundStyle(.secondary)
+            Text(value)
+                .font(.body.weight(.semibold).monospacedDigit())
+                .contentTransition(.numericText())
+                .animation(.easeInOut(duration: 0.25), value: value)
+                .frame(maxWidth: .infinity, alignment: .trailing)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Color.primary.opacity(0.035))
+        )
+    }
 }
 
 private struct OnboardingCardStyle: ViewModifier {
@@ -878,11 +896,11 @@ private struct OnboardingCardStyle: ViewModifier {
         content
             .padding(OnboardingSpacing.cardPadding)
             .background(
-                RoundedRectangle(cornerRadius: OnboardingSpacing.cornerRadius, style: .continuous)
+                RoundedRectangle(cornerRadius: OnboardingSpacing.cardCornerRadius, style: .continuous)
                     .fill(Color(.secondarySystemGroupedBackground))
             )
             .overlay(
-                RoundedRectangle(cornerRadius: OnboardingSpacing.cornerRadius, style: .continuous)
+                RoundedRectangle(cornerRadius: OnboardingSpacing.cardCornerRadius, style: .continuous)
                     .stroke(Color.primary.opacity(0.08), lineWidth: 1)
             )
     }
@@ -895,16 +913,18 @@ private extension View {
 
     func onboardingPrimaryButton() -> some View {
         self
+            .font(.headline.weight(.semibold))
+            .frame(maxWidth: .infinity, minHeight: OnboardingSpacing.buttonHeight)
             .buttonStyle(.borderedProminent)
-            .buttonBorderShape(.roundedRectangle(radius: OnboardingSpacing.cornerRadius))
-            .controlSize(.regular)
+            .buttonBorderShape(.roundedRectangle(radius: OnboardingSpacing.buttonCornerRadius))
+            .controlSize(.large)
             .frame(minHeight: OnboardingSpacing.tapTargetMin)
     }
 
     func onboardingSecondaryButton() -> some View {
         self
             .buttonStyle(.bordered)
-            .buttonBorderShape(.roundedRectangle(radius: OnboardingSpacing.cornerRadius))
+            .buttonBorderShape(.roundedRectangle(radius: OnboardingSpacing.buttonCornerRadius))
             .controlSize(.regular)
             .frame(minHeight: OnboardingSpacing.tapTargetMin)
     }
