@@ -40,6 +40,7 @@ struct SuhoorCalendarView: View {
     private let isSelectable: (Date) -> Bool
     private let onSelectDate: ((Date) -> Void)?
     private let onToggleDate: ((Date) -> Void)?
+    private let onFocusDate: ((Date) -> Void)?
     private let frameHeight: CGFloat
 
     @State private var hasPerformedInitialScroll = false
@@ -67,6 +68,7 @@ struct SuhoorCalendarView: View {
         self.isSelectable = { _ in true }
         self.onSelectDate = onSelectDate
         self.onToggleDate = nil
+        self.onFocusDate = nil
         self.frameHeight = frameHeight
     }
 
@@ -79,7 +81,8 @@ struct SuhoorCalendarView: View {
         disablesAlreadyActive: Bool,
         isSelectable: @escaping (Date) -> Bool,
         frameHeight: CGFloat = SuhoorCalendarMetrics.gridHeight,
-        onToggleDate: @escaping (Date) -> Void
+        onToggleDate: @escaping (Date) -> Void,
+        onFocusDate: ((Date) -> Void)? = nil
     ) {
         _displayedMonth = displayedMonth
         _focusedDate = focusedDate
@@ -92,6 +95,7 @@ struct SuhoorCalendarView: View {
         self.isSelectable = isSelectable
         self.onSelectDate = nil
         self.onToggleDate = onToggleDate
+        self.onFocusDate = onFocusDate
         self.frameHeight = frameHeight
     }
 
@@ -225,6 +229,7 @@ struct SuhoorCalendarView: View {
     private func handleTap(state: CalendarDayState, isEnabledForToggle: Bool, scrollReader: ScrollViewProxy) {
         guard state.isInDisplayedMonth else { return }
         focusedDate = state.date
+        onFocusDate?(state.date)
 
         switch mode {
         case .single:
@@ -359,6 +364,29 @@ struct PlanMultiSelectCalendar: View {
     let isSelectable: (Date) -> Bool
     let onToggle: (Date) -> Void
     @Binding var focusedDate: Date
+    let onFocusDate: ((Date) -> Void)?
+
+    init(
+        displayedMonth: Binding<Date>,
+        allowedDateRange: ClosedRange<Date>,
+        selectedDateKeys: Set<String>,
+        recommendedDateKeys: Set<String>,
+        disablesAlreadyActive: Bool,
+        isSelectable: @escaping (Date) -> Bool,
+        onToggle: @escaping (Date) -> Void,
+        focusedDate: Binding<Date>,
+        onFocusDate: ((Date) -> Void)? = nil
+    ) {
+        _displayedMonth = displayedMonth
+        self.allowedDateRange = allowedDateRange
+        self.selectedDateKeys = selectedDateKeys
+        self.recommendedDateKeys = recommendedDateKeys
+        self.disablesAlreadyActive = disablesAlreadyActive
+        self.isSelectable = isSelectable
+        self.onToggle = onToggle
+        _focusedDate = focusedDate
+        self.onFocusDate = onFocusDate
+    }
 
     var body: some View {
         SuhoorCalendarView(
@@ -369,7 +397,8 @@ struct PlanMultiSelectCalendar: View {
             recommendedDateKeys: recommendedDateKeys,
             disablesAlreadyActive: disablesAlreadyActive,
             isSelectable: isSelectable,
-            onToggleDate: onToggle
+            onToggleDate: onToggle,
+            onFocusDate: onFocusDate
         )
     }
 }

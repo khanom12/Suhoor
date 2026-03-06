@@ -978,6 +978,20 @@ private struct AlarmRowView: View {
                         .foregroundStyle(isDisabled ? .tertiary : .secondary)
                         .monospacedDigit()
                 }
+
+                if showsTags {
+                    HomeTagCapsuleRow(
+                        primaryIntent: primaryIntent,
+                        secondaryTags: secondaryTags,
+                        warnings: warnings,
+                        showPrimaryIntent: showPrimaryIntent,
+                        isDisabled: isDisabled,
+                        showsTitle: true,
+                        isCompact: true
+                    )
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.top, 4)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
@@ -988,25 +1002,11 @@ private struct AlarmRowView: View {
                 onSelect()
             }
 
-            ZStack(alignment: .bottomTrailing) {
-                Toggle("", isOn: dayActiveBinding)
-                    .labelsHidden()
-                    .tint(DawnColor.accent)
-                    .accessibilityLabel("\(primaryLabelText) alarm")
-                    .frame(maxHeight: .infinity, alignment: .center)
-
-                if showsTags {
-                    HomeTagCapsuleRow(
-                        primaryIntent: primaryIntent,
-                        secondaryTags: secondaryTags,
-                        warnings: warnings,
-                        showPrimaryIntent: showPrimaryIntent,
-                        isDisabled: isDisabled,
-                        showsTitle: false,
-                        isCompact: true
-                    )
-                }
-            }
+            Toggle("", isOn: dayActiveBinding)
+                .labelsHidden()
+                .tint(DawnColor.accent)
+                .accessibilityLabel("\(primaryLabelText) alarm")
+                .frame(maxHeight: .infinity, alignment: .center)
             .frame(minWidth: 51, maxHeight: .infinity, alignment: .trailing)
         }
         .padding(.vertical, 6)

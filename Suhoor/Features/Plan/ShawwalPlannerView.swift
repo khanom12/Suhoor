@@ -183,6 +183,9 @@ struct ShawwalPlannerView: View {
         if status == .completed || status == .inProgress {
             return false
         }
+        if fastTagStore.selection(for: date, timeZone: .current)?.primaryIntent == .qadaMakeup {
+            return false
+        }
         return true
     }
 

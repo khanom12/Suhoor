@@ -62,9 +62,17 @@ struct PlanRootView: View {
     }
 
     private func tiles(progress: QadaProgressSnapshot) -> [PlanTile] {
-        let qadaStatus = progress.baselineOwed > 0
-            ? "Remaining: \(progress.remaining)"
-            : "Plan your Qada"
+        let qadaStatus: String
+        if progress.baselineOwed > 0 {
+            switch qadaBacklogStore.state.inputMode {
+            case .exact:
+                qadaStatus = "Remaining: \(progress.remaining)"
+            case .estimate:
+                qadaStatus = "About \(progress.remaining) remaining"
+            }
+        } else {
+            qadaStatus = "Plan your Qada"
+        }
 
         return [
             PlanTile(

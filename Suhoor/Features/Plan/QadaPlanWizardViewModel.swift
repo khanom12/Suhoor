@@ -4,10 +4,13 @@ import Combine
 @MainActor
 final class QadaPlanWizardViewModel: ObservableObject {
     @Published var step: QadaPlanWizardStep = .setup
+    @Published var setupPage: QadaSetupPage
     @Published var draft: QadaPlanDraft = .empty
     @Published var displayedMonth = DateHelpers.startOfToday()
     @Published var focusedDate = DateHelpers.startOfToday()
+    @Published var scrollResetToken = UUID()
     @Published private(set) var progressSnapshot = QadaProgressSnapshot(remaining: 0, completed: 0, baselineOwed: 0)
+    @Published private(set) var backlogSuggestion: QadaBacklogSuggestion?
     @Published private(set) var recommendedKeys: Set<String> = []
     @Published private(set) var selectedKeys: Set<String> = []
     @Published private(set) var fallbackNote: String?
@@ -16,21 +19,26 @@ final class QadaPlanWizardViewModel: ObservableObject {
     @Published private(set) var isApplying = false
     @Published var isShowingSuccess = false
     @Published var shouldDismissFlow = false
+    @Published var isShowingDateDetail = false
 
     private weak var scheduleManager: ScheduleManager?
     private weak var alarmConfigStore: AlarmConfigStore?
     private weak var fastTagStore: FastTagStore?
     private weak var fastLogStore: FastLogStore?
     private weak var qadaBacklogStore: QadaBacklogStore?
+    private weak var qadaBatchStore: QadaBatchStore?
     private var maintenanceService: QadaPlanMaintenanceService
+    private let launchMode: QadaWizardLaunchMode
     private var hasLoadedDefaults = false
+    private var batchKeysBeingEdited: Set<String> = []
 
-    init() {
-        self.maintenanceService = NoOpQadaPlanMaintenanceService()
-    }
-
-    init(maintenanceService: QadaPlanMaintenanceService) {
-        self.maintenanceService = maintenanceService
+    init(
+        launchMode: QadaWizardLaunchMode = .fresh,
+        maintenanceService: QadaPlanMaintenanceService? = nil
+    ) {
+        self.launchMode = launchMode
+        self.maintenanceService = maintenanceService ?? NoOpQadaPlanMaintenanceService()
+        self.setupPage = launchMode.initialSetupPage
     }
 
     var allowedRange: ClosedRange<Date> {
@@ -40,7 +48,47 @@ final class QadaPlanWizardViewModel: ObservableObject {
     }
 
     var maxPlanBatchCount: Int {
-        min(60, max(1, progressSnapshot.remaining > 0 ? progressSnapshot.remaining : 60))
+        let remainingCeiling = progressSnapshot.remaining > 0 ? progressSnapshot.remaining : 60
+        let trackedBatchCeiling = max(batchKeysBeingEdited.count, qadaBatchStore?.state.targetCount ?? 0)
+        return min(60, max(1, max(remainingCeiling, trackedBatchCeiling)))
+    }
+
+    var navigationTitle: String {
+        step == .review ? "Your plan" : "Plan Your Qada"
+    }
+
+    var setupProgressText: String {
+        "\(setupPage.rawValue + 1) of \(QadaSetupPage.allCases.count)"
+    }
+
+    var setupTitle: String {
+        switch setupPage {
+        case .intake:
+            return "What do you need to make up?"
+        case .pace:
+            return "Choose your pace"
+        case .preferences:
+            return "Set your preferences"
+        }
+    }
+
+    var setupSubtitle: String {
+        switch setupPage {
+        case .intake:
+            return "Start with what you know. You can refine this later."
+        case .pace:
+            return "Pick the rhythm that feels most realistic."
+        case .preferences:
+            return "We’ll use these to build a clean starting batch."
+        }
+    }
+
+    var setupPrimaryActionTitle: String {
+        setupPage == .preferences ? "Build my Qada plan" : "Continue"
+    }
+
+    var canReturnToSetupFromReview: Bool {
+        !launchMode.startsInReview
     }
 
     var planSummary: QadaPlanSummary {
@@ -71,14 +119,24 @@ final class QadaPlanWizardViewModel: ObservableObject {
 
     var progressLineText: String? {
         guard progressSnapshot.baselineOwed > 0 || progressSnapshot.completed > 0 else { return nil }
-        return "Completed: \(progressSnapshot.completed)  •  Remaining: \(progressSnapshot.remaining)"
+        let remainingText = draft.inputMode == .estimate
+            ? "About \(progressSnapshot.remaining) remaining"
+            : "Remaining: \(progressSnapshot.remaining)"
+        guard progressSnapshot.completed > 0 else { return remainingText }
+        return "Completed: \(progressSnapshot.completed)  •  \(remainingText)"
+    }
+
+    var intakeSuggestionHelperText: String? {
+        guard let backlogSuggestion else { return nil }
+        guard draft.baselineOwed > 0 else { return nil }
+        return "Ramadan check-ins suggest about \(backlogSuggestion.suggestedOwed) missed fasts. Keep or adjust this total as needed."
     }
 
     var batchRecommendationText: String {
-        if progressSnapshot.remaining > 0, progressSnapshot.remaining <= 10 {
+        if progressSnapshot.remaining > 0, progressSnapshot.remaining <= 3 {
             return "You can plan them all at once."
         }
-        return "Most people start with 6-10 to keep it manageable."
+        return "Many people start with 1–3 so it feels easier to keep going."
     }
 
     var estimatedBatchFinishText: String? {
@@ -122,12 +180,16 @@ final class QadaPlanWizardViewModel: ObservableObject {
 
         switch fallbackNote {
         case let note where note.contains("major Sunnah"):
-            return "To fit your target, the suggestion now includes a few important Sunnah dates. You can still adjust any of them below."
+            return "To fit your target, this suggestion includes a few important Sunnah dates. You can still change any of them below."
         case let note where note.contains("Shawwal"):
-            return "To fit your target, the suggestion now reaches into Shawwal. You can keep it or edit the dates below."
+            return "To fit your target, this suggestion reaches into Shawwal. You can keep it or adjust it below."
         default:
-            return "There were not enough open days to match your full target before Ramadan, so this plan uses the best available dates for now."
+            return "There were not enough open days before Ramadan to match your full target, so this plan uses the best dates available for now."
         }
+    }
+
+    var protectedDatesHelperText: String {
+        "We’ll avoid these when suggesting dates. You can still choose them yourself."
     }
 
     func configure(
@@ -135,22 +197,54 @@ final class QadaPlanWizardViewModel: ObservableObject {
         alarmConfigStore: AlarmConfigStore,
         fastTagStore: FastTagStore,
         fastLogStore: FastLogStore,
-        qadaBacklogStore: QadaBacklogStore
+        qadaBacklogStore: QadaBacklogStore,
+        qadaBatchStore: QadaBatchStore
     ) {
         self.scheduleManager = scheduleManager
         self.alarmConfigStore = alarmConfigStore
         self.fastTagStore = fastTagStore
         self.fastLogStore = fastLogStore
         self.qadaBacklogStore = qadaBacklogStore
+        self.qadaBatchStore = qadaBatchStore
 
         refreshProgressSnapshot()
+        backlogSuggestion = QadaBacklogSuggestionEngine.currentRamadanSuggestion(logEntries: fastLogStore.entriesByDateKey)
 
         guard !hasLoadedDefaults else { return }
         hasLoadedDefaults = true
 
         draft.baselineOwed = qadaBacklogStore.state.baselineOwed
-        draft.planBatchCount = smartDefaultBatchCount(for: progressSnapshot.remaining)
+        draft.inputMode = qadaBacklogStore.state.inputMode
+
+        if qadaBatchStore.state.targetCount > 0 {
+            draft.pace = qadaBatchStore.state.pace
+            draft.avoidShawwal = qadaBatchStore.state.avoidShawwal
+            draft.avoidImportantSunnah = qadaBatchStore.state.avoidImportantSunnah
+            draft.planBatchCount = qadaBatchStore.state.targetCount
+        } else {
+            draft.planBatchCount = smartDefaultBatchCount(for: progressSnapshot.remaining)
+        }
         clampPlanBatchCount()
+
+        switch launchMode {
+        case .fresh:
+            step = .setup
+            setupPage = .intake
+        case .adjustTotal:
+            step = .setup
+            setupPage = .intake
+        case .nextBatch:
+            step = .setup
+            setupPage = .pace
+            draft.planBatchCount = smartDefaultBatchCount(for: progressSnapshot.remaining)
+        case .reviewCurrentBatch, .recoverMissedDay:
+            if !loadExistingBatch() {
+                step = .setup
+                setupPage = .intake
+            }
+        }
+
+        resetScrollPosition()
     }
 
     func updateBaselineOwed(_ newValue: Int) {
@@ -160,8 +254,17 @@ final class QadaPlanWizardViewModel: ObservableObject {
         clampPlanBatchCount()
     }
 
+    func useSuggestedBacklog() {
+        guard let backlogSuggestion else { return }
+        draft.baselineOwed = backlogSuggestion.suggestedOwed
+        persistBaseline()
+        refreshProgressSnapshot()
+        clampPlanBatchCount()
+    }
+
     func updateInputMode(_ mode: QadaPlanInputMode) {
         draft.inputMode = mode
+        persistBaseline()
     }
 
     func updatePace(_ pace: QadaPlanPace) {
@@ -181,18 +284,57 @@ final class QadaPlanWizardViewModel: ObservableObject {
         clampPlanBatchCount()
     }
 
+    func advanceSetup() {
+        switch setupPage {
+        case .intake:
+            setupPage = .pace
+        case .pace:
+            setupPage = .preferences
+        case .preferences:
+            createPlan()
+            return
+        }
+        resetScrollPosition()
+    }
+
+    func goBackWithinFlow() -> Bool {
+        switch step {
+        case .review:
+            guard canReturnToSetupFromReview else { return false }
+            step = .setup
+            setupPage = .preferences
+            resetScrollPosition()
+            return true
+        case .setup:
+            switch setupPage {
+            case .preferences:
+                setupPage = .pace
+            case .pace:
+                setupPage = .intake
+            case .intake:
+                return false
+            }
+            resetScrollPosition()
+            return true
+        }
+    }
+
     func createPlan() {
         clampPlanBatchCount()
         generatePlan()
         step = .review
+        resetScrollPosition()
     }
 
     func regeneratePlan() {
         generatePlan()
+        resetScrollPosition()
     }
 
     func editSetup() {
         step = .setup
+        setupPage = .preferences
+        resetScrollPosition()
     }
 
     func toggleDate(_ date: Date) {
@@ -202,14 +344,34 @@ final class QadaPlanWizardViewModel: ObservableObject {
             return
         }
         guard selectedKeys.count < draft.planBatchCount else { return }
+        guard isSelectable(date) || batchKeysBeingEdited.contains(key) else { return }
         selectedKeys.insert(key)
     }
 
+    func openDateDetail(for date: Date) {
+        focusedDate = date
+        isShowingDateDetail = true
+    }
+
+    func dismissDateDetail() {
+        isShowingDateDetail = false
+    }
+
     func isSelectable(_ date: Date) -> Bool {
+        let key = DateHelpers.dayIdentifier(for: date, timeZone: .current)
         if FastIntentEngine.isForbiddenToFast(date, timeZone: .current) {
             return false
         }
         if FastIntentEngine.isRamadan(date, timeZone: .current) {
+            return false
+        }
+        if batchKeysBeingEdited.contains(key) {
+            return true
+        }
+        if let detail = scheduleManager?.calendarDayDetail(
+            for: date,
+            overrideSelection: FastIntentSelection(primaryIntent: .qadaMakeup, secondaryTags: [])
+        ), detail.isAlreadyActive {
             return false
         }
         return true
@@ -276,12 +438,27 @@ final class QadaPlanWizardViewModel: ObservableObject {
         isApplying = true
         defer { isApplying = false }
 
+        let removedKeys = batchKeysBeingEdited.subtracting(selectedKeys)
+        for key in removedKeys {
+            guard let date = DateHelpers.date(fromDayIdentifier: key, timeZone: .current) else { continue }
+            await scheduleManager.deleteExplicitScheduledDate(date)
+            fastTagStore?.removeSelection(for: date, timeZone: .current)
+        }
+
         let selection = FastIntentSelection(primaryIntent: .qadaMakeup, secondaryTags: [])
-        _ = await scheduleManager.planDates(selectedDates, selection: selection, groupID: nil)
+        let datesToAdd = selectedDates.filter { date in
+            let key = DateHelpers.dayIdentifier(for: date, timeZone: .current)
+            return !batchKeysBeingEdited.contains(key)
+        }
+        _ = await scheduleManager.planDates(datesToAdd, selection: selection, groupID: nil)
+
+        qadaBatchStore?.saveBatch(dateKeys: selectedKeys, draft: draft)
+        persistBaseline()
 
         // TODO: when missed Qada logs are detected, use the maintenance service to suggest a replacement date.
         // TODO: Surface recovery support here: "You missed a planned Qada fast. Move it to the next available date?"
         _ = maintenanceService
+
         refreshProgressSnapshot()
         isShowingSuccess = true
     }
@@ -293,6 +470,27 @@ final class QadaPlanWizardViewModel: ObservableObject {
 
     func finishFlow() {
         shouldDismissFlow = true
+    }
+
+    private func loadExistingBatch() -> Bool {
+        guard let qadaBatchStore, !qadaBatchStore.state.plannedDateKeys.isEmpty else { return false }
+        let state = qadaBatchStore.state
+        batchKeysBeingEdited = state.plannedDateKeys
+        selectedKeys = state.plannedDateKeys
+        recommendedKeys = state.plannedDateKeys
+        draft.planBatchCount = max(state.targetCount, state.plannedDateKeys.count)
+        draft.pace = state.pace
+        draft.avoidShawwal = state.avoidShawwal
+        draft.avoidImportantSunnah = state.avoidImportantSunnah
+        draft.inputMode = state.backlogInputMode
+        hasGeneratedPlan = true
+        lastGeneratedDates = selectedDates
+        step = .review
+
+        let preferredFocusDate = recoveryFocusDate() ?? nextPlannedDate ?? selectedDates.first ?? allowedRange.lowerBound
+        focusedDate = preferredFocusDate
+        displayedMonth = monthStart(for: preferredFocusDate)
+        return true
     }
 
     private func generatePlan() {
@@ -345,6 +543,7 @@ final class QadaPlanWizardViewModel: ObservableObject {
     private func persistBaseline() {
         qadaBacklogStore?.setBaseline(
             owed: draft.baselineOwed,
+            inputMode: draft.inputMode,
             trackingStartDateKey: qadaBacklogStore?.state.trackingStartDateKey
         )
     }
@@ -358,23 +557,25 @@ final class QadaPlanWizardViewModel: ObservableObject {
 
     private func smartDefaultBatchCount(for remaining: Int) -> Int {
         if remaining > 0 {
-            return min(8, remaining)
+            return min(3, remaining)
         }
-        return 6
+        return 3
     }
 
     private func existingScheduleKeys() -> Set<String> {
         guard let alarmConfigStore else { return [] }
         let interval = DateInterval(start: allowedRange.lowerBound, end: allowedRange.upperBound)
         let entries = alarmConfigStore.resolvedScheduledEntries(in: interval, timeZone: .current)
-        return Set(entries.map(\.dateKey))
+        let keys = Set(entries.map(\.dateKey))
+        return keys.subtracting(batchKeysBeingEdited)
     }
 
     private func existingQadaSelectionKeys() -> Set<String> {
         guard let fastTagStore else { return [] }
-        return Set(fastTagStore.selections.compactMap { key, selection in
+        let keys = Set(fastTagStore.selections.compactMap { key, selection in
             selection.primaryIntent == .qadaMakeup ? key : nil
         })
+        return keys.subtracting(batchKeysBeingEdited)
     }
 
     private func previewBatchDates() -> [Date] {
@@ -392,6 +593,28 @@ final class QadaPlanWizardViewModel: ObservableObject {
             existingQadaKeys: existingQadaSelectionKeys()
         )
         return result.dates.sorted()
+    }
+
+    private func recoveryFocusDate() -> Date? {
+        guard launchMode == .recoverMissedDay,
+              let fastLogStore,
+              let qadaBatchStore else { return nil }
+        let todayKey = DateHelpers.dayIdentifier(for: DateHelpers.startOfToday(), timeZone: .current)
+        let completedKeys = fastLogStore.entriesByDateKey.reduce(into: Set<String>()) { partialResult, item in
+            let (key, entry) = item
+            guard entry.status == .completed,
+                  entry.intentSnapshot?.primaryIntent == .qadaMakeup,
+                  qadaBatchStore.state.plannedDateKeys.contains(key) else {
+                return
+            }
+            partialResult.insert(key)
+        }
+        return qadaBatchStore.state.plannedDateKeys
+            .subtracting(completedKeys)
+            .filter { $0 < todayKey }
+            .compactMap { DateHelpers.date(fromDayIdentifier: $0, timeZone: .current) }
+            .sorted()
+            .first
     }
 
     private func detailCardReasonForAvailableDate() -> String {
@@ -440,6 +663,10 @@ final class QadaPlanWizardViewModel: ObservableObject {
     private func formattedDate(_ date: Date?) -> String? {
         guard let date else { return nil }
         return GregorianDateFormatter.shared.headerString(for: date)
+    }
+
+    private func resetScrollPosition() {
+        scrollResetToken = UUID()
     }
 
     private var weekdayFinishFormatter: DateFormatter {

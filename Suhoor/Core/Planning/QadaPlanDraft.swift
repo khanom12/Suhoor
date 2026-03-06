@@ -1,11 +1,11 @@
 import Foundation
 
-enum QadaPlanWizardStep: Hashable {
+enum QadaPlanWizardStep: Hashable, Sendable {
     case setup
     case review
 }
 
-enum QadaPlanInputMode: String, CaseIterable, Identifiable {
+enum QadaPlanInputMode: String, CaseIterable, Identifiable, Codable, Sendable {
     case exact
     case estimate
 
@@ -21,7 +21,7 @@ enum QadaPlanInputMode: String, CaseIterable, Identifiable {
     }
 }
 
-enum QadaPlanPace: String, CaseIterable, Identifiable {
+enum QadaPlanPace: String, CaseIterable, Identifiable, Codable, Sendable {
     case finishSooner
     case steady
     case gentle
@@ -87,7 +87,7 @@ struct QadaPlanDraft: Equatable, Sendable {
         pace: .steady,
         avoidShawwal: true,
         avoidImportantSunnah: true,
-        planBatchCount: 6
+        planBatchCount: 3
     )
 }
 
