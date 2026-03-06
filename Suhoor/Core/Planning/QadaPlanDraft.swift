@@ -44,7 +44,7 @@ enum QadaPlanPace: String, CaseIterable, Identifiable {
         case .finishSooner:
             return "Complete your Qada more quickly."
         case .steady:
-            return "A sustainable rhythm with rest days."
+            return "A balanced rhythm with rest days."
         case .gentle:
             return "More recovery time between fasts."
         }
@@ -53,11 +53,11 @@ enum QadaPlanPace: String, CaseIterable, Identifiable {
     var differentiatorLine: String {
         switch self {
         case .finishSooner:
-            return "Best if you want fewer gaps between fasts."
+            return "Good if you want fewer gaps between fasts."
         case .steady:
-            return "Best for maintaining consistency."
+            return "Good if you want something sustainable."
         case .gentle:
-            return "Best if you prefer a lighter pace."
+            return "Good if you prefer a lighter pace."
         }
     }
 

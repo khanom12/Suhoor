@@ -228,6 +228,7 @@ final class QadaPlanWizardViewModel: ObservableObject {
         if selectedKeys.contains(key) {
             return SuhoorCalendarSelectionStatus(
                 title: "Selected for Qada",
+                detailLabel: "Why",
                 reason: "This date is currently part of your batch.",
                 color: DawnColor.accent
             )
@@ -235,13 +236,15 @@ final class QadaPlanWizardViewModel: ObservableObject {
         if recommendedKeys.contains(key) {
             return SuhoorCalendarSelectionStatus(
                 title: "Suggested for Qada",
-                reason: "Matches your chosen pace and protected date settings.",
+                detailLabel: "Why this date was suggested",
+                reason: "It matches your chosen pace and protected-date settings.",
                 color: DawnColor.lightGold200
             )
         }
         if let detail, detail.isAlreadyActive {
             return SuhoorCalendarSelectionStatus(
                 title: "Already scheduled",
+                detailLabel: "Why",
                 reason: activeDetailReason(detail),
                 color: detail.computedPrimaryIntent.style.color
             )
@@ -252,12 +255,14 @@ final class QadaPlanWizardViewModel: ObservableObject {
                 : "Fasting is not allowed on this date."
             return SuhoorCalendarSelectionStatus(
                 title: "Unavailable",
+                detailLabel: "Why",
                 reason: subtitle,
                 color: FastPrimaryIntent.forbidden.style.color
             )
         }
         return SuhoorCalendarSelectionStatus(
             title: "Available to add",
+            detailLabel: "Why this date works",
             reason: detailCardReasonForAvailableDate(),
             color: DawnColor.highlight
         )
@@ -394,7 +399,7 @@ final class QadaPlanWizardViewModel: ObservableObject {
             return "No conflicts or observances on this date."
         }
         if let tag = detail.previewSecondaryTags.first {
-            return "This date overlaps with \(tag.shortTitle)."
+            return "This date is open for Qada. It also coincides with \(tag.shortTitle) if you want to keep that in mind."
         }
         return "No conflicts or observances on this date."
     }

@@ -91,7 +91,7 @@ struct QadaPlanWizardView: View {
                 Text(viewModel.step == .setup ? "Plan Your Qada" : "Your plan")
                     .font(.title3.weight(.semibold))
                 Text(viewModel.step == .setup
-                     ? "Choose a pace that feels realistic, and we’ll build a plan to get you started."
+                     ? "Choose a pace that feels realistic, and we’ll build a plan to help you get started."
                      : "Review the suggested dates, make any changes you need, then confirm your schedule.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
@@ -127,8 +127,8 @@ struct QadaPlanWizardView: View {
                     .pickerStyle(.segmented)
 
                     HStack(alignment: .top, spacing: 12) {
-                        setupHint(title: "Exact", body: "Track remaining precisely.")
-                        setupHint(title: "Estimate", body: "You can adjust later.")
+                        setupHint(title: "Exact", body: "Keep an exact remaining count.")
+                        setupHint(title: "Estimate", body: "Start with an estimate and adjust it later.")
                     }
 
                     Stepper(value: Binding(
@@ -328,7 +328,7 @@ struct QadaPlanWizardView: View {
                     }
                 }
 
-                DisclosureGroup("View details", isExpanded: $showsSummaryDetails) {
+                DisclosureGroup("Plan details", isExpanded: $showsSummaryDetails) {
                     VStack(alignment: .leading, spacing: 10) {
                         summaryRow(title: "Starts", value: formattedDate(viewModel.planSummary.startDate))
                         summaryRow(title: "Estimated finish", value: formattedDate(viewModel.planSummary.finishDate))

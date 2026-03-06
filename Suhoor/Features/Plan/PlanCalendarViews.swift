@@ -415,14 +415,14 @@ private struct SuhoorCalendarDayCell: View {
 
     private var todayRing: some View {
         Circle()
-            .stroke(state.isToday ? DawnColor.highlight.opacity(0.85) : .clear, lineWidth: state.isToday ? 1.2 : 0)
+            .stroke(state.isToday ? DawnColor.highlight.opacity(0.7) : .clear, lineWidth: state.isToday ? 1.0 : 0)
     }
 
     private var suggestedOutline: some View {
         Circle()
             .stroke(
                 isRecommended ? DawnColor.lightGold200 : .clear,
-                style: StrokeStyle(lineWidth: isRecommended ? 1.2 : 0, dash: [3, 2])
+                style: StrokeStyle(lineWidth: isRecommended ? 1.1 : 0, dash: [3, 2])
             )
     }
 
@@ -450,17 +450,17 @@ private struct SuhoorCalendarDayCell: View {
 
     private var borderLineWidth: CGFloat {
         if isSelected {
-            return 1.4
+            return 1.5
         }
         if state.isToday {
-            return 1.0
+            return 0.9
         }
         return 0
     }
 
     private var backgroundFill: Color {
         if isSelected {
-            return DawnColor.accent.opacity(0.22)
+            return DawnColor.accent.opacity(0.26)
         }
         if isUnavailable {
             return Color.secondary.opacity(0.08)
@@ -564,6 +564,7 @@ private struct SuhoorCalendarDayCell: View {
 
 struct SuhoorCalendarSelectionStatus {
     let title: String
+    let detailLabel: String
     let reason: String
     let color: Color
 }
@@ -601,7 +602,7 @@ struct SuhoorCalendarDetailCard: View {
                         .font(.footnote.weight(.semibold))
                         .foregroundStyle(selectionStatus.color)
 
-                    Text("Reason")
+                    Text(selectionStatus.detailLabel)
                         .font(.footnote.weight(.semibold))
                         .foregroundStyle(.secondary)
 
