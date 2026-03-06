@@ -38,10 +38,19 @@ struct PlanRootView: View {
 
                 LazyVGrid(columns: columns, spacing: DesignTokens.spacingM) {
                     ForEach(tiles(progress: progress)) { tile in
-                        NavigationLink(value: tile.destination) {
-                            PlanTileView(tile: tile)
+                        if tile.destination == .qadaPlanner {
+                            Button {
+                                NotificationCenter.default.post(name: .openPlanQada, object: nil)
+                            } label: {
+                                PlanTileView(tile: tile)
+                            }
+                            .buttonStyle(.plain)
+                        } else {
+                            NavigationLink(value: tile.destination) {
+                                PlanTileView(tile: tile)
+                            }
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
                     }
                 }
             }
@@ -54,8 +63,8 @@ struct PlanRootView: View {
 
     private func tiles(progress: QadaProgressSnapshot) -> [PlanTile] {
         let qadaStatus = progress.baselineOwed > 0
-            ? "\(progress.remaining) remaining"
-            : "Set your Qada remaining"
+            ? "Remaining: \(progress.remaining)"
+            : "Plan your Qada"
 
         return [
             PlanTile(

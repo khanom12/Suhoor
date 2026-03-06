@@ -204,6 +204,7 @@ enum Strings {
 
         static let previewFajrLabel = "Fajr"
         static let previewSuhoorLabel = "Suhoor alarm"
+        static let previewTag = "Preview"
         static let previewFajrPlaceholder = "— —"
         static let previewSuhoorPlaceholder = "— —"
         static let previewNeedsLocation = "Enable location to calculate tomorrow’s Fajr time."

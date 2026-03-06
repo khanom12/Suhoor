@@ -1,5 +1,19 @@
 import SwiftUI
 
+private enum QadaWizardInfoSheet: Identifiable {
+    case estimate
+    case protectedDays
+
+    var id: String {
+        switch self {
+        case .estimate:
+            return "estimate"
+        case .protectedDays:
+            return "protectedDays"
+        }
+    }
+}
+
 struct QadaPlanWizardView: View {
     @EnvironmentObject private var scheduleManager: ScheduleManager
     @EnvironmentObject private var alarmConfigStore: AlarmConfigStore
@@ -9,6 +23,8 @@ struct QadaPlanWizardView: View {
     @Environment(\.dismiss) private var dismiss
 
     @StateObject private var viewModel = QadaPlanWizardViewModel()
+    @State private var activeInfoSheet: QadaWizardInfoSheet?
+    @State private var showsSummaryDetails = false
 
     var body: some View {
         ScrollView {
@@ -28,11 +44,18 @@ struct QadaPlanWizardView: View {
             }
             .padding(.horizontal, DesignTokens.spacingL)
             .padding(.top, DesignTokens.spacingL)
-            .padding(.bottom, 120)
+            .padding(.bottom, viewModel.step == .review ? 116 : DesignTokens.spacingXL)
         }
         .background(Color.clear)
         .navigationTitle("Plan Your Qada")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button("Back") {
+                    dismiss()
+                }
+            }
+        }
         .animation(.easeInOut(duration: 0.24), value: viewModel.step)
         .safeAreaInset(edge: .bottom) {
             if viewModel.step == .review {
@@ -41,6 +64,10 @@ struct QadaPlanWizardView: View {
         }
         .sheet(isPresented: $viewModel.isShowingSuccess) {
             successSheet
+                .presentationDetents([.medium])
+        }
+        .sheet(item: $activeInfoSheet) { sheet in
+            infoSheet(sheet)
                 .presentationDetents([.medium])
         }
         .onChange(of: viewModel.shouldDismissFlow) { _, shouldDismiss in
@@ -59,12 +86,12 @@ struct QadaPlanWizardView: View {
     }
 
     private var headerCard: some View {
-        GlassCard(style: .header, tintColor: DawnColor.lightGold200, tintOpacity: 0.18) {
+        GlassCard(style: .header, tintColor: DawnColor.lightGold200, tintOpacity: 0.12) {
             VStack(alignment: .leading, spacing: 8) {
                 Text(viewModel.step == .setup ? "Plan Your Qada" : "Your plan")
                     .font(.title3.weight(.semibold))
                 Text(viewModel.step == .setup
-                     ? "Set a pace that feels realistic, and we’ll suggest a clean starting plan for you."
+                     ? "Choose a pace that feels realistic, and we’ll build a plan to get you started."
                      : "Review the suggested dates, make any changes you need, then confirm your schedule.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
@@ -76,7 +103,18 @@ struct QadaPlanWizardView: View {
         VStack(alignment: .leading, spacing: DesignTokens.spacingL) {
             GlassCard {
                 VStack(alignment: .leading, spacing: 14) {
-                    sectionLabel("How many fasts do you need to make up?")
+                    HStack(alignment: .center) {
+                        sectionLabel("How many fasts do you need to make up?")
+                        Spacer()
+                        Button {
+                            activeInfoSheet = .estimate
+                        } label: {
+                            Image(systemName: "info.circle")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                    }
 
                     Picker("Count type", selection: Binding(
                         get: { viewModel.draft.inputMode },
@@ -87,6 +125,11 @@ struct QadaPlanWizardView: View {
                         }
                     }
                     .pickerStyle(.segmented)
+
+                    HStack(alignment: .top, spacing: 12) {
+                        setupHint(title: "Exact", body: "Track remaining precisely.")
+                        setupHint(title: "Estimate", body: "You can adjust later.")
+                    }
 
                     Stepper(value: Binding(
                         get: { viewModel.draft.baselineOwed },
@@ -100,12 +143,12 @@ struct QadaPlanWizardView: View {
                         }
                     }
 
-                    Text("Start with what you know — you can adjust later.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-
-                    if viewModel.progressSnapshot.baselineOwed > 0 {
-                        Text("\(viewModel.progressSnapshot.remaining) still remaining based on your tracked Qada.")
+                    if let progressLine = viewModel.progressLineText {
+                        Text(progressLine)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text("You can adjust this later.")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
@@ -130,17 +173,35 @@ struct QadaPlanWizardView: View {
 
             GlassCard {
                 VStack(alignment: .leading, spacing: 14) {
-                    sectionLabel("Keep these dates free")
+                    HStack(alignment: .center) {
+                        sectionLabel("Keep these dates free")
+                        Spacer()
+                        Button {
+                            activeInfoSheet = .protectedDays
+                        } label: {
+                            Image(systemName: "info.circle")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                    }
 
                     Toggle("Keep Shawwal free (for the 6 fasts)", isOn: Binding(
                         get: { viewModel.draft.avoidShawwal },
                         set: viewModel.updateAvoidShawwal
                     ))
 
-                    Toggle("Keep important Sunnah fasts separate", isOn: Binding(
-                        get: { viewModel.draft.avoidImportantSunnah },
-                        set: viewModel.updateAvoidImportantSunnah
-                    ))
+                    VStack(alignment: .leading, spacing: 6) {
+                        Toggle("Keep important Sunnah fasts separate", isOn: Binding(
+                            get: { viewModel.draft.avoidImportantSunnah },
+                            set: viewModel.updateAvoidImportantSunnah
+                        ))
+
+                        Text("Arafah, Ashura, White Days, Dhul Hijjah...")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .padding(.leading, 4)
+                    }
                 }
             }
 
@@ -153,17 +214,24 @@ struct QadaPlanWizardView: View {
                         set: viewModel.updatePlanBatchCount
                     ), in: 1...viewModel.maxPlanBatchCount) {
                         HStack {
-                            Text("Plan the next")
+                            Text("Plan this batch")
                             Spacer()
                             Text("\(viewModel.draft.planBatchCount) fast\(viewModel.draft.planBatchCount == 1 ? "" : "s")")
                                 .font(.headline.weight(.semibold))
                         }
                     }
 
-                    Text("Recommended: Most people start with 6-10 to keep it manageable.")
+                    Text(viewModel.batchRecommendationText)
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
+            }
+
+            if let estimatedFinish = viewModel.estimatedBatchFinishText {
+                Text("Estimated finish for this batch: \(estimatedFinish)")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 4)
             }
 
             Button("Create My Qada Plan") {
@@ -181,7 +249,7 @@ struct QadaPlanWizardView: View {
             summaryCard
 
             if let fallback = viewModel.fallbackDisplayCopy {
-                GlassCard(tintColor: DawnColor.lightGold200, tintOpacity: 0.12) {
+                GlassCard(tintColor: DawnColor.lightGold200, tintOpacity: 0.08) {
                     Text(fallback)
                         .font(.footnote)
                         .foregroundStyle(.secondary)
@@ -227,22 +295,49 @@ struct QadaPlanWizardView: View {
             if let detail = viewModel.detailCardData() {
                 SuhoorCalendarDetailCard(
                     detail: detail,
-                    notScheduledText: "Not scheduled for Qada"
+                    notScheduledText: "Available to add",
+                    selectionStatus: viewModel.detailSelectionStatus()
                 )
             }
         }
     }
 
     private var summaryCard: some View {
-        GlassCard(style: .header, tintColor: FastPrimaryIntent.qadaMakeup.style.color, tintOpacity: 0.14) {
+        GlassCard(style: .header, tintColor: FastPrimaryIntent.qadaMakeup.style.color, tintOpacity: 0.08) {
             VStack(alignment: .leading, spacing: 12) {
-                sectionLabel("Plan summary")
+                Text("\(viewModel.planSummary.plannedCount) fast\(viewModel.planSummary.plannedCount == 1 ? "" : "s") planned")
+                    .font(.title3.weight(.semibold))
 
-                summaryRow(title: "Fasts planned", value: "\(viewModel.planSummary.plannedCount)")
-                summaryRow(title: "Starts", value: formattedDate(viewModel.planSummary.startDate))
-                summaryRow(title: "Estimated finish", value: formattedDate(viewModel.planSummary.finishDate))
-                summaryRow(title: "Pace", value: viewModel.planSummary.paceTitle)
-                summaryRow(title: "Protected", value: viewModel.planSummary.protectedSummary)
+                if let dateRange = viewModel.summaryDateRange {
+                    Text(dateRange)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+
+                Text(viewModel.planSummary.paceTitle)
+                    .font(.footnote.weight(.medium))
+                    .foregroundStyle(.secondary)
+
+                if !viewModel.planSummaryProtectionChips.isEmpty {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(viewModel.planSummaryProtectionChips, id: \.self) { chip in
+                                summaryChip(chip)
+                            }
+                        }
+                    }
+                }
+
+                DisclosureGroup("View details", isExpanded: $showsSummaryDetails) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        summaryRow(title: "Starts", value: formattedDate(viewModel.planSummary.startDate))
+                        summaryRow(title: "Estimated finish", value: formattedDate(viewModel.planSummary.finishDate))
+                        summaryRow(title: "Pace", value: viewModel.planSummary.paceTitle)
+                        summaryRow(title: "Protected", value: viewModel.planSummary.protectedSummary)
+                    }
+                    .padding(.top, 8)
+                }
+                .font(.footnote.weight(.semibold))
             }
         }
     }
@@ -265,7 +360,8 @@ struct QadaPlanWizardView: View {
                 .disabled(!viewModel.canConfirmSchedule || viewModel.isApplying)
             }
             .padding(.horizontal, DesignTokens.spacingL)
-            .padding(.vertical, DesignTokens.spacingM)
+            .padding(.top, DesignTokens.spacingM)
+            .padding(.bottom, max(DesignTokens.spacingM, 12))
             .background(.ultraThinMaterial)
         }
     }
@@ -281,26 +377,97 @@ struct QadaPlanWizardView: View {
                     .foregroundStyle(.secondary)
             }
 
+            Text("If you miss a day, you can move it to the next available date.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+
             Button("Go to Alarms") {
                 viewModel.proceedToAlarms()
-                dismiss()
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
             .tint(DawnColor.accent)
 
             Button("Done") {
-                dismiss()
+                viewModel.finishFlow()
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(.plain)
+            .font(.footnote.weight(.semibold))
+            .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .padding(DesignTokens.spacingL)
     }
 
+    @ViewBuilder
+    private func infoSheet(_ sheet: QadaWizardInfoSheet) -> some View {
+        switch sheet {
+        case .estimate:
+            VStack(alignment: .leading, spacing: DesignTokens.spacingL) {
+                Text("Not sure?")
+                    .font(.title3.weight(.semibold))
+                Text("Start with a simple estimate.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                Text("You can update the number later whenever you have a more precise count.")
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+                Button("Done") {
+                    activeInfoSheet = nil
+                }
+                .buttonStyle(.plain)
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(.secondary)
+            }
+            .padding(DesignTokens.spacingL)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        case .protectedDays:
+            VStack(alignment: .leading, spacing: DesignTokens.spacingL) {
+                Text("Important Sunnah fasts")
+                    .font(.title3.weight(.semibold))
+                Text("These are observances many people prefer to keep separate from Qada.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                Text("This includes Arafah, Ashura, the White Days, and the early days of Dhul Hijjah. Shawwal-related observances are also kept separate when they apply.")
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+                Button("Done") {
+                    activeInfoSheet = nil
+                }
+                .buttonStyle(.plain)
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(.secondary)
+            }
+            .padding(DesignTokens.spacingL)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        }
+    }
+
     private func sectionLabel(_ text: String) -> some View {
         Text(text)
             .font(.headline.weight(.semibold))
+    }
+
+    private func setupHint(title: String, body: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+            Text(body)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func summaryChip(_ text: String) -> some View {
+        Text(text)
+            .font(.caption.weight(.semibold))
+            .padding(.horizontal, DesignTokens.spacingS)
+            .padding(.vertical, DesignTokens.spacingXS)
+            .background(DawnColor.lightGold200.opacity(0.14))
+            .foregroundStyle(.secondary)
+            .clipShape(Capsule(style: .continuous))
     }
 
     private func summaryRow(title: String, value: String) -> some View {

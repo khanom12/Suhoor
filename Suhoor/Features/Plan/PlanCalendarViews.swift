@@ -119,6 +119,7 @@ struct SuhoorCalendarView: View {
                                 mode: mode,
                                 selectedDate: selectedDate,
                                 selectedDateKeys: selectedDateKeys,
+                                recommendedDateKeys: recommendedDateKeys,
                                 disablesAlreadyActive: disablesAlreadyActive,
                                 isSelectable: isSelectable,
                                 columns: columns,
@@ -282,6 +283,7 @@ private struct SuhoorCalendarMonthGrid: View {
     let mode: SuhoorCalendarMode
     let selectedDate: Date?
     let selectedDateKeys: Set<String>
+    let recommendedDateKeys: Set<String>
     let disablesAlreadyActive: Bool
     let isSelectable: (Date) -> Bool
     let columns: [GridItem]
@@ -305,14 +307,18 @@ private struct SuhoorCalendarMonthGrid: View {
                     case .multi:
                         selectedDateKeys.contains(key)
                     }
+                    let isRecommended = mode == .multi && recommendedDateKeys.contains(key) && !isSelected
                     let canToggle = !state.isDisabled
                         && !state.isLocked
                         && isSelectable(state.date)
                         && !(disablesAlreadyActive && state.isAlreadyActive)
+                    let isUnavailable = state.isLocked || !isSelectable(state.date)
 
                     SuhoorCalendarDayCell(
                         state: state,
                         isSelected: isSelected,
+                        isRecommended: isRecommended,
+                        isUnavailable: isUnavailable,
                         isEnabledForToggle: canToggle,
                         mode: mode
                     ) {
@@ -371,6 +377,8 @@ struct PlanMultiSelectCalendar: View {
 private struct SuhoorCalendarDayCell: View {
     let state: CalendarDayState
     let isSelected: Bool
+    let isRecommended: Bool
+    let isUnavailable: Bool
     let isEnabledForToggle: Bool
     let mode: SuhoorCalendarMode
     let onSelect: () -> Void
@@ -383,7 +391,9 @@ private struct SuhoorCalendarDayCell: View {
                     .foregroundStyle(textColor)
                     .frame(width: SuhoorCalendarMetrics.daySize, height: SuhoorCalendarMetrics.daySize)
                     .background(baseBackground)
+                    .overlay(suggestedOutline)
                     .overlay(todayRing)
+                    .overlay(unavailableSlash)
                     .overlay(selectionOutline)
                     .frame(maxWidth: .infinity)
                     .opacity(opacity)
@@ -400,21 +410,32 @@ private struct SuhoorCalendarDayCell: View {
 
     private var baseBackground: some View {
         Circle()
-            .fill(primaryPurposeColor.opacity(primaryBackgroundOpacity))
-            .overlay(
-                Circle()
-                    .fill(isSelected ? DawnColor.accent.opacity(0.2) : .clear)
-            )
+            .fill(backgroundFill)
     }
 
     private var todayRing: some View {
         Circle()
-            .stroke(state.isToday ? DawnColor.highlight.opacity(0.95) : .clear, lineWidth: state.isToday ? 2.0 : 0)
+            .stroke(state.isToday ? DawnColor.highlight.opacity(0.85) : .clear, lineWidth: state.isToday ? 1.2 : 0)
+    }
+
+    private var suggestedOutline: some View {
+        Circle()
+            .stroke(
+                isRecommended ? DawnColor.lightGold200 : .clear,
+                style: StrokeStyle(lineWidth: isRecommended ? 1.2 : 0, dash: [3, 2])
+            )
+    }
+
+    private var unavailableSlash: some View {
+        Rectangle()
+            .fill(isUnavailable ? Color.secondary.opacity(0.65) : .clear)
+            .frame(width: 16, height: isUnavailable ? 1.5 : 0)
+            .rotationEffect(.degrees(-45))
     }
 
     private var selectionOutline: some View {
         Circle()
-            .stroke(borderColor, lineWidth: isSelected || state.isAlreadyActive || state.isToday ? 1.2 : 0.6)
+            .stroke(borderColor, lineWidth: borderLineWidth)
     }
 
     private var borderColor: Color {
@@ -422,62 +443,82 @@ private struct SuhoorCalendarDayCell: View {
             return DawnColor.accent
         }
         if state.isToday {
-            return DawnColor.highlight.opacity(0.8)
-        }
-        if state.isAlreadyActive {
-            return primaryPurposeColor.opacity(0.7)
+            return DawnColor.highlight.opacity(0.7)
         }
         return Color.clear
     }
 
-    private var primaryPurposeColor: Color {
-        if state.isRamadan {
-            return FastPrimaryIntent.ramadanObligatory.style.color
-        }
-        if state.isForbidden {
-            return FastPrimaryIntent.forbidden.style.color
-        }
-        if state.isAlreadyActive {
-            return state.computedPrimaryIntent.style.color
-        }
-        return Color.clear
-    }
-
-    private var primaryBackgroundOpacity: Double {
+    private var borderLineWidth: CGFloat {
         if isSelected {
-            return 0.2
+            return 1.4
         }
-        if state.isLocked {
-            return 0.2
-        }
-        if state.isAlreadyActive {
-            return 0.14
+        if state.isToday {
+            return 1.0
         }
         return 0
     }
 
-    private var textColor: Color {
+    private var backgroundFill: Color {
         if isSelected {
-            return DawnColor.accentPressed
+            return DawnColor.accent.opacity(0.22)
         }
-        if state.isDisabled {
-            return .secondary
+        if isUnavailable {
+            return Color.secondary.opacity(0.08)
         }
-        if mode == .multi && !isEnabledForToggle {
-            return .secondary
+        return .clear
+    }
+
+    private var displayAsDimmed: Bool {
+        isUnavailable || state.isDisabled
+    }
+
+    private var displayAsUnavailableText: Bool {
+        displayAsDimmed
+    }
+
+    private var selectedTextColor: Color {
+        DawnColor.accentPressed
+    }
+
+    private var defaultTextColor: Color {
+        .primary
+    }
+
+    private var dimmedTextColor: Color {
+        .secondary
+    }
+
+    private var todayTextColor: Color {
+        .primary
+    }
+
+    private var recommendationTextColor: Color {
+        .primary
+    }
+
+    private var statusTextColor: Color {
+        if isSelected {
+            return selectedTextColor
         }
-        if !state.isInDisplayedMonth {
-            return .secondary
+        if displayAsUnavailableText {
+            return dimmedTextColor
         }
-        return .primary
+        if state.isToday {
+            return todayTextColor
+        }
+        if isRecommended {
+            return recommendationTextColor
+        }
+        return defaultTextColor
+    }
+
+    private var textColor: Color {
+        statusTextColor
     }
 
     private var opacity: Double {
-        if state.isDisabled {
+        if displayAsDimmed {
             return 0.35
-        }
-        if mode == .multi && !isEnabledForToggle {
-            return 0.5
         }
         return 1.0
     }
@@ -513,19 +554,33 @@ private struct SuhoorCalendarDayCell: View {
 
         if isSelected {
             parts.append("Selected")
+        } else if isRecommended {
+            parts.append("Suggested")
         }
 
         return parts.joined(separator: ", ")
     }
 }
 
+struct SuhoorCalendarSelectionStatus {
+    let title: String
+    let reason: String
+    let color: Color
+}
+
 struct SuhoorCalendarDetailCard: View {
     let detail: CalendarDayDetail
     let notScheduledText: String
+    let selectionStatus: SuhoorCalendarSelectionStatus?
 
-    init(detail: CalendarDayDetail, notScheduledText: String = "Not scheduled") {
+    init(
+        detail: CalendarDayDetail,
+        notScheduledText: String = "Not scheduled",
+        selectionStatus: SuhoorCalendarSelectionStatus? = nil
+    ) {
         self.detail = detail
         self.notScheduledText = notScheduledText
+        self.selectionStatus = selectionStatus
     }
 
     var body: some View {
@@ -535,6 +590,26 @@ struct SuhoorCalendarDetailCard: View {
             Text(detail.hijriText)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
+
+            if let selectionStatus {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Status")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.secondary)
+
+                    Text(selectionStatus.title)
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(selectionStatus.color)
+
+                    Text("Reason")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.secondary)
+
+                    Text(selectionStatus.reason)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
 
             if !detail.warnings.isEmpty {
                 FlowLayout(spacing: 6) {
@@ -548,19 +623,14 @@ struct SuhoorCalendarDetailCard: View {
                 }
             }
 
-            if detail.isAlreadyActive {
-                Text("Purpose")
+            let observanceTags = detail.isAlreadyActive ? detail.computedSecondaryTags : detail.previewSecondaryTags
+            if !observanceTags.isEmpty {
+                Text("Observances")
                     .font(.footnote.weight(.semibold))
                     .foregroundStyle(.secondary)
 
                 FlowLayout(spacing: 6) {
-                    SuhoorCalendarTagChip(
-                        text: detail.computedPrimaryIntent.shortTitle,
-                        systemImage: detail.computedPrimaryIntent.style.systemImage,
-                        color: detail.computedPrimaryIntent.style.color
-                    )
-
-                    ForEach(detail.computedSecondaryTags, id: \.self) { tag in
+                    ForEach(observanceTags, id: \.self) { tag in
                         SuhoorCalendarTagChip(
                             text: tag.shortTitle,
                             systemImage: tag.style.systemImage,
@@ -568,30 +638,10 @@ struct SuhoorCalendarDetailCard: View {
                         )
                     }
                 }
-            } else {
+            } else if selectionStatus == nil {
                 Text(notScheduledText)
-                    .font(.footnote.weight(.semibold))
+                    .font(.footnote)
                     .foregroundStyle(.secondary)
-
-                Text("Coincides with")
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(.secondary)
-
-                if detail.previewSecondaryTags.isEmpty {
-                    Text("No known observances on this date.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                } else {
-                    FlowLayout(spacing: 6) {
-                        ForEach(detail.previewSecondaryTags, id: \.self) { tag in
-                            SuhoorCalendarTagChip(
-                                text: tag.shortTitle,
-                                systemImage: tag.style.systemImage,
-                                color: tag.style.color
-                            )
-                        }
-                    }
-                }
             }
 
             if detail.isAlreadyActive, let sourceSummary = detail.activeSourceSummary {

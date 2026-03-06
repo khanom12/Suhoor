@@ -16,6 +16,7 @@ struct RootTabView: View {
     @State private var selectedTab: RootTab = .today
     @State private var profilePath = NavigationPath()
     @State private var planPath = NavigationPath()
+    @State private var isShowingQadaWizard = false
 
     var body: some View {
         TabView(selection: $selectedTab) {
@@ -83,6 +84,11 @@ struct RootTabView: View {
             }
             .tag(RootTab.profile)
         }
+        .fullScreenCover(isPresented: $isShowingQadaWizard) {
+            NavigationStack {
+                QadaPlannerView()
+            }
+        }
         .onReceive(NotificationCenter.default.publisher(for: .switchToAlarmTab)) { _ in
             selectedTab = .alarms
         }
@@ -96,7 +102,7 @@ struct RootTabView: View {
         .onReceive(NotificationCenter.default.publisher(for: .openPlanQada)) { _ in
             selectedTab = .plan
             planPath.removeLast(planPath.count)
-            planPath.append(PlanDestination.qadaPlanner)
+            isShowingQadaWizard = true
         }
         .onReceive(NotificationCenter.default.publisher(for: .openPlanShawwal)) { _ in
             selectedTab = .plan
