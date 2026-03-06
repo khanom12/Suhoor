@@ -3,6 +3,7 @@ import SwiftUI
 struct PlanRootView: View {
     @EnvironmentObject private var qadaBacklogStore: QadaBacklogStore
     @EnvironmentObject private var fastLogStore: FastLogStore
+    @State private var progress = QadaProgressSnapshot(remaining: 0, completed: 0, baselineOwed: 0)
 
     private let columns = [
         GridItem(.flexible(), spacing: DesignTokens.spacingM),
@@ -10,11 +11,6 @@ struct PlanRootView: View {
     ]
 
     var body: some View {
-        let progress = QadaProgressEngine.snapshot(
-            state: qadaBacklogStore.state,
-            logEntries: fastLogStore.entriesByDateKey
-        )
-
         ScrollView {
             VStack(alignment: .leading, spacing: DesignTokens.spacingL) {
                 NavigationLink(value: PlanDestination.calendar) {
@@ -59,6 +55,22 @@ struct PlanRootView: View {
         }
         .navigationTitle("Plan")
         .navigationBarTitleDisplayMode(.large)
+        .onAppear {
+            refreshProgress()
+        }
+        .onChange(of: qadaBacklogStore.state) { _, _ in
+            refreshProgress()
+        }
+        .onChange(of: fastLogStore.currentRevision) { _, _ in
+            refreshProgress()
+        }
+    }
+
+    private func refreshProgress() {
+        progress = QadaProgressEngine.snapshot(
+            state: qadaBacklogStore.state,
+            logEntries: fastLogStore.entriesByDateKey
+        )
     }
 
     private func tiles(progress: QadaProgressSnapshot) -> [PlanTile] {
@@ -128,11 +140,12 @@ struct PlanRootView: View {
 }
 
 private struct PlanTile: Identifiable {
-    let id = UUID()
     let title: String
     let subtitle: String
     let color: Color
     let destination: PlanDestination
+
+    var id: PlanDestination { destination }
 }
 
 private struct PlanTileView: View {

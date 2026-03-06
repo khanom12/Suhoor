@@ -11,15 +11,19 @@ final class QadaPlanWizardViewModel: ObservableObject {
     @Published var scrollResetToken = UUID()
     @Published private(set) var progressSnapshot = QadaProgressSnapshot(remaining: 0, completed: 0, baselineOwed: 0)
     @Published private(set) var backlogSuggestion: QadaBacklogSuggestion?
+    @Published private(set) var sortedSelectedDates: [Date] = []
     @Published private(set) var recommendedKeys: Set<String> = []
     @Published private(set) var selectedKeys: Set<String> = []
     @Published private(set) var fallbackNote: String?
     @Published private(set) var lastGeneratedDates: [Date] = []
+    @Published private(set) var estimatedBatchFinishText: String?
     @Published private(set) var hasGeneratedPlan = false
     @Published private(set) var isApplying = false
     @Published var isShowingSuccess = false
     @Published var shouldDismissFlow = false
     @Published var isShowingDateDetail = false
+    @Published private(set) var focusedDateDetail: CalendarDayDetail?
+    @Published private(set) var focusedDateSelectionStatus: SuhoorCalendarSelectionStatus?
 
     private weak var scheduleManager: ScheduleManager?
     private weak var alarmConfigStore: AlarmConfigStore?
@@ -31,6 +35,8 @@ final class QadaPlanWizardViewModel: ObservableObject {
     private let launchMode: QadaWizardLaunchMode
     private var hasLoadedDefaults = false
     private var batchKeysBeingEdited: Set<String> = []
+    private var cachedExistingScheduleKeys: Set<String> = []
+    private var cachedExistingQadaSelectionKeys: Set<String> = []
 
     init(
         launchMode: QadaWizardLaunchMode = .fresh,
@@ -92,21 +98,18 @@ final class QadaPlanWizardViewModel: ObservableObject {
     }
 
     var planSummary: QadaPlanSummary {
-        let sorted = selectedDates
         return QadaPlanSummary(
             plannedCount: selectedKeys.count,
             targetCount: draft.planBatchCount,
-            startDate: sorted.first,
-            finishDate: sorted.last,
+            startDate: sortedSelectedDates.first,
+            finishDate: sortedSelectedDates.last,
             paceTitle: draft.pace.title,
             protectedSummary: protectedSummary
         )
     }
 
     var selectedDates: [Date] {
-        selectedKeys
-            .compactMap { DateHelpers.date(fromDayIdentifier: $0, timeZone: .current) }
-            .sorted()
+        sortedSelectedDates
     }
 
     var nextPlannedDate: Date? {
@@ -137,12 +140,6 @@ final class QadaPlanWizardViewModel: ObservableObject {
             return "You can plan them all at once."
         }
         return "Many people start with 1–3 so it feels easier to keep going."
-    }
-
-    var estimatedBatchFinishText: String? {
-        let dates = previewBatchDates()
-        guard let last = dates.last else { return nil }
-        return weekdayFinishFormatter.string(from: last)
     }
 
     var protectedSummary: String {
@@ -244,6 +241,9 @@ final class QadaPlanWizardViewModel: ObservableObject {
             }
         }
 
+        refreshAvailabilityCaches()
+        refreshPreviewData()
+        refreshFocusedDateDetailIfNeeded()
         resetScrollPosition()
     }
 
@@ -252,6 +252,7 @@ final class QadaPlanWizardViewModel: ObservableObject {
         persistBaseline()
         refreshProgressSnapshot()
         clampPlanBatchCount()
+        refreshPreviewData()
     }
 
     func useSuggestedBacklog() {
@@ -260,6 +261,7 @@ final class QadaPlanWizardViewModel: ObservableObject {
         persistBaseline()
         refreshProgressSnapshot()
         clampPlanBatchCount()
+        refreshPreviewData()
     }
 
     func updateInputMode(_ mode: QadaPlanInputMode) {
@@ -269,19 +271,23 @@ final class QadaPlanWizardViewModel: ObservableObject {
 
     func updatePace(_ pace: QadaPlanPace) {
         draft.pace = pace
+        refreshPreviewData()
     }
 
     func updateAvoidShawwal(_ isOn: Bool) {
         draft.avoidShawwal = isOn
+        refreshPreviewData()
     }
 
     func updateAvoidImportantSunnah(_ isOn: Bool) {
         draft.avoidImportantSunnah = isOn
+        refreshPreviewData()
     }
 
     func updatePlanBatchCount(_ newValue: Int) {
         draft.planBatchCount = newValue
         clampPlanBatchCount()
+        refreshPreviewData()
     }
 
     func advanceSetup() {
@@ -321,12 +327,14 @@ final class QadaPlanWizardViewModel: ObservableObject {
 
     func createPlan() {
         clampPlanBatchCount()
+        refreshAvailabilityCaches()
         generatePlan()
         step = .review
         resetScrollPosition()
     }
 
     func regeneratePlan() {
+        refreshAvailabilityCaches()
         generatePlan()
         resetScrollPosition()
     }
@@ -341,20 +349,25 @@ final class QadaPlanWizardViewModel: ObservableObject {
         let key = DateHelpers.dayIdentifier(for: date, timeZone: .current)
         if selectedKeys.contains(key) {
             selectedKeys.remove(key)
+            syncSelectedDates()
             return
         }
         guard selectedKeys.count < draft.planBatchCount else { return }
         guard isSelectable(date) || batchKeysBeingEdited.contains(key) else { return }
         selectedKeys.insert(key)
+        syncSelectedDates()
     }
 
     func openDateDetail(for date: Date) {
         focusedDate = date
+        refreshFocusedDateDetail()
         isShowingDateDetail = true
     }
 
     func dismissDateDetail() {
         isShowingDateDetail = false
+        focusedDateDetail = nil
+        focusedDateSelectionStatus = nil
     }
 
     func isSelectable(_ date: Date) -> Bool {
@@ -368,66 +381,15 @@ final class QadaPlanWizardViewModel: ObservableObject {
         if batchKeysBeingEdited.contains(key) {
             return true
         }
-        if let detail = scheduleManager?.calendarDayDetail(
-            for: date,
-            overrideSelection: FastIntentSelection(primaryIntent: .qadaMakeup, secondaryTags: [])
-        ), detail.isAlreadyActive {
-            return false
-        }
-        return true
+        return !cachedExistingScheduleKeys.contains(key)
     }
 
     func detailCardData() -> CalendarDayDetail? {
-        scheduleManager?.calendarDayDetail(
-            for: focusedDate,
-            overrideSelection: FastIntentSelection(primaryIntent: .qadaMakeup, secondaryTags: [])
-        )
+        focusedDateDetail
     }
 
     func detailSelectionStatus() -> SuhoorCalendarSelectionStatus? {
-        let detail = detailCardData()
-        let key = DateHelpers.dayIdentifier(for: focusedDate, timeZone: .current)
-        if selectedKeys.contains(key) {
-            return SuhoorCalendarSelectionStatus(
-                title: "Selected for Qada",
-                detailLabel: "Why",
-                reason: "This date is currently part of your batch.",
-                color: DawnColor.accent
-            )
-        }
-        if recommendedKeys.contains(key) {
-            return SuhoorCalendarSelectionStatus(
-                title: "Suggested for Qada",
-                detailLabel: "Why this date was suggested",
-                reason: "It matches your chosen pace and protected-date settings.",
-                color: DawnColor.lightGold200
-            )
-        }
-        if let detail, detail.isAlreadyActive {
-            return SuhoorCalendarSelectionStatus(
-                title: "Already scheduled",
-                detailLabel: "Why",
-                reason: activeDetailReason(detail),
-                color: detail.computedPrimaryIntent.style.color
-            )
-        }
-        if !isSelectable(focusedDate) {
-            let subtitle = FastIntentEngine.isRamadan(focusedDate, timeZone: .current)
-                ? "This date falls in Ramadan, so fasting here is not part of Qada planning."
-                : "Fasting is not allowed on this date."
-            return SuhoorCalendarSelectionStatus(
-                title: "Unavailable",
-                detailLabel: "Why",
-                reason: subtitle,
-                color: FastPrimaryIntent.forbidden.style.color
-            )
-        }
-        return SuhoorCalendarSelectionStatus(
-            title: "Available to add",
-            detailLabel: "Why this date works",
-            reason: detailCardReasonForAvailableDate(),
-            color: DawnColor.highlight
-        )
+        focusedDateSelectionStatus
     }
 
     func applyPlan() async {
@@ -446,11 +408,7 @@ final class QadaPlanWizardViewModel: ObservableObject {
         }
 
         let selection = FastIntentSelection(primaryIntent: .qadaMakeup, secondaryTags: [])
-        let datesToAdd = selectedDates.filter { date in
-            let key = DateHelpers.dayIdentifier(for: date, timeZone: .current)
-            return !batchKeysBeingEdited.contains(key)
-        }
-        _ = await scheduleManager.planDates(datesToAdd, selection: selection, groupID: nil)
+        _ = await scheduleManager.planDates(selectedDates, selection: selection, groupID: nil)
 
         qadaBatchStore?.saveBatch(dateKeys: selectedKeys, draft: draft)
         persistBaseline()
@@ -477,6 +435,7 @@ final class QadaPlanWizardViewModel: ObservableObject {
         let state = qadaBatchStore.state
         batchKeysBeingEdited = state.plannedDateKeys
         selectedKeys = state.plannedDateKeys
+        syncSelectedDates()
         recommendedKeys = state.plannedDateKeys
         draft.planBatchCount = max(state.targetCount, state.plannedDateKeys.count)
         draft.pace = state.pace
@@ -484,12 +443,13 @@ final class QadaPlanWizardViewModel: ObservableObject {
         draft.avoidImportantSunnah = state.avoidImportantSunnah
         draft.inputMode = state.backlogInputMode
         hasGeneratedPlan = true
-        lastGeneratedDates = selectedDates
+        lastGeneratedDates = sortedSelectedDates
         step = .review
 
-        let preferredFocusDate = recoveryFocusDate() ?? nextPlannedDate ?? selectedDates.first ?? allowedRange.lowerBound
+        let preferredFocusDate = recoveryFocusDate() ?? nextPlannedDate ?? sortedSelectedDates.first ?? allowedRange.lowerBound
         focusedDate = preferredFocusDate
         displayedMonth = monthStart(for: preferredFocusDate)
+        refreshFocusedDateDetailIfNeeded()
         return true
     }
 
@@ -497,31 +457,25 @@ final class QadaPlanWizardViewModel: ObservableObject {
         guard draft.planBatchCount > 0 else {
             recommendedKeys = []
             selectedKeys = []
+            sortedSelectedDates = []
             lastGeneratedDates = []
             fallbackNote = nil
+            estimatedBatchFinishText = nil
             hasGeneratedPlan = false
             return
         }
 
-        let result = QadaAutoPlanner.generate(
-            desiredCount: draft.planBatchCount,
-            startDate: allowedRange.lowerBound,
-            endDate: allowedRange.upperBound,
-            options: QadaAutoPlanOptions(
-                strategy: draft.pace.strategy,
-                avoidShawwal: draft.avoidShawwal,
-                avoidMajorSunnah: draft.avoidImportantSunnah
-            ),
-            existingDateKeys: existingScheduleKeys(),
-            existingQadaKeys: existingQadaSelectionKeys()
-        )
+        let result = makeAutoPlanResult()
 
         let keys = Set(result.dates.map { DateHelpers.dayIdentifier(for: $0, timeZone: .current) })
         recommendedKeys = keys
         selectedKeys = keys
-        lastGeneratedDates = result.dates.sorted()
+        let sortedDates = result.dates.sorted()
+        sortedSelectedDates = sortedDates
+        lastGeneratedDates = sortedDates
         fallbackNote = result.fallbackNote
         hasGeneratedPlan = true
+        estimatedBatchFinishText = sortedDates.last.map { Self.weekdayFinishFormatter.string(from: $0) }
 
         if let first = result.dates.first {
             displayedMonth = monthStart(for: first)
@@ -530,6 +484,7 @@ final class QadaPlanWizardViewModel: ObservableObject {
             displayedMonth = monthStart(for: allowedRange.lowerBound)
             focusedDate = allowedRange.lowerBound
         }
+        refreshFocusedDateDetailIfNeeded()
     }
 
     private func refreshProgressSnapshot() {
@@ -562,7 +517,7 @@ final class QadaPlanWizardViewModel: ObservableObject {
         return 3
     }
 
-    private func existingScheduleKeys() -> Set<String> {
+    private func computeExistingScheduleKeys() -> Set<String> {
         guard let alarmConfigStore else { return [] }
         let interval = DateInterval(start: allowedRange.lowerBound, end: allowedRange.upperBound)
         let entries = alarmConfigStore.resolvedScheduledEntries(in: interval, timeZone: .current)
@@ -570,7 +525,7 @@ final class QadaPlanWizardViewModel: ObservableObject {
         return keys.subtracting(batchKeysBeingEdited)
     }
 
-    private func existingQadaSelectionKeys() -> Set<String> {
+    private func computeExistingQadaSelectionKeys() -> Set<String> {
         guard let fastTagStore else { return [] }
         let keys = Set(fastTagStore.selections.compactMap { key, selection in
             selection.primaryIntent == .qadaMakeup ? key : nil
@@ -578,9 +533,24 @@ final class QadaPlanWizardViewModel: ObservableObject {
         return keys.subtracting(batchKeysBeingEdited)
     }
 
-    private func previewBatchDates() -> [Date] {
-        guard draft.planBatchCount > 0 else { return [] }
-        let result = QadaAutoPlanner.generate(
+    private func refreshAvailabilityCaches() {
+        cachedExistingScheduleKeys = computeExistingScheduleKeys()
+        cachedExistingQadaSelectionKeys = computeExistingQadaSelectionKeys()
+    }
+
+    private func refreshPreviewData() {
+        guard hasLoadedDefaults else { return }
+        guard draft.planBatchCount > 0 else {
+            estimatedBatchFinishText = nil
+            return
+        }
+        let result = makeAutoPlanResult()
+        let sortedDates = result.dates.sorted()
+        estimatedBatchFinishText = sortedDates.last.map { Self.weekdayFinishFormatter.string(from: $0) }
+    }
+
+    private func makeAutoPlanResult() -> QadaAutoPlanResult {
+        QadaAutoPlanner.generate(
             desiredCount: draft.planBatchCount,
             startDate: allowedRange.lowerBound,
             endDate: allowedRange.upperBound,
@@ -589,10 +559,9 @@ final class QadaPlanWizardViewModel: ObservableObject {
                 avoidShawwal: draft.avoidShawwal,
                 avoidMajorSunnah: draft.avoidImportantSunnah
             ),
-            existingDateKeys: existingScheduleKeys(),
-            existingQadaKeys: existingQadaSelectionKeys()
+            existingDateKeys: cachedExistingScheduleKeys,
+            existingQadaKeys: cachedExistingQadaSelectionKeys
         )
-        return result.dates.sorted()
     }
 
     private func recoveryFocusDate() -> Date? {
@@ -617,8 +586,8 @@ final class QadaPlanWizardViewModel: ObservableObject {
             .first
     }
 
-    private func detailCardReasonForAvailableDate() -> String {
-        guard let detail = detailCardData() else {
+    private func detailCardReasonForAvailableDate(_ detail: CalendarDayDetail?) -> String {
+        guard let detail else {
             return "No conflicts or observances on this date."
         }
         if let tag = detail.previewSecondaryTags.first {
@@ -665,15 +634,86 @@ final class QadaPlanWizardViewModel: ObservableObject {
         return GregorianDateFormatter.shared.headerString(for: date)
     }
 
+    private func syncSelectedDates() {
+        sortedSelectedDates = selectedKeys
+            .compactMap { DateHelpers.date(fromDayIdentifier: $0, timeZone: .current) }
+            .sorted()
+    }
+
+    private func refreshFocusedDateDetailIfNeeded() {
+        guard isShowingDateDetail else { return }
+        refreshFocusedDateDetail()
+    }
+
+    private func refreshFocusedDateDetail() {
+        guard let scheduleManager else {
+            focusedDateDetail = nil
+            focusedDateSelectionStatus = nil
+            return
+        }
+
+        let detail = scheduleManager.calendarDayDetail(
+            for: focusedDate,
+            overrideSelection: FastIntentSelection(primaryIntent: .qadaMakeup, secondaryTags: [])
+        )
+        focusedDateDetail = detail
+        focusedDateSelectionStatus = buildSelectionStatus(for: detail)
+    }
+
+    private func buildSelectionStatus(for detail: CalendarDayDetail) -> SuhoorCalendarSelectionStatus {
+        let key = DateHelpers.dayIdentifier(for: focusedDate, timeZone: .current)
+        if selectedKeys.contains(key) {
+            return SuhoorCalendarSelectionStatus(
+                title: "Selected for Qada",
+                detailLabel: "Why",
+                reason: "This date is currently part of your batch.",
+                color: DawnColor.accent
+            )
+        }
+        if recommendedKeys.contains(key) {
+            return SuhoorCalendarSelectionStatus(
+                title: "Suggested for Qada",
+                detailLabel: "Why this date was suggested",
+                reason: "It matches your chosen pace and protected-date settings.",
+                color: DawnColor.lightGold200
+            )
+        }
+        if detail.isAlreadyActive {
+            return SuhoorCalendarSelectionStatus(
+                title: "Already scheduled",
+                detailLabel: "Why",
+                reason: activeDetailReason(detail),
+                color: detail.computedPrimaryIntent.style.color
+            )
+        }
+        if !isSelectable(focusedDate) {
+            let subtitle = FastIntentEngine.isRamadan(focusedDate, timeZone: .current)
+                ? "This date falls in Ramadan, so fasting here is not part of Qada planning."
+                : "Fasting is not allowed on this date."
+            return SuhoorCalendarSelectionStatus(
+                title: "Unavailable",
+                detailLabel: "Why",
+                reason: subtitle,
+                color: FastPrimaryIntent.forbidden.style.color
+            )
+        }
+        return SuhoorCalendarSelectionStatus(
+            title: "Available to add",
+            detailLabel: "Why this date works",
+            reason: detailCardReasonForAvailableDate(detail),
+            color: DawnColor.highlight
+        )
+    }
+
     private func resetScrollPosition() {
         scrollResetToken = UUID()
     }
 
-    private var weekdayFinishFormatter: DateFormatter {
+    private static let weekdayFinishFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.locale = .current
         formatter.timeZone = .current
         formatter.dateFormat = "EEE, MMM d"
         return formatter
-    }
+    }()
 }

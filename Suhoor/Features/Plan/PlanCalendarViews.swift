@@ -5,22 +5,16 @@ enum SuhoorCalendarMode {
     case multi
 }
 
-private struct SuhoorCalendarMonthOffsetKey: PreferenceKey {
-    static var defaultValue: [Date: CGFloat] = [:]
-
-    static func reduce(value: inout [Date: CGFloat], nextValue: () -> [Date: CGFloat]) {
-        value.merge(nextValue(), uniquingKeysWith: { _, new in new })
-    }
-}
-
 private enum SuhoorCalendarMetrics {
     static let daySize: CGFloat = 34
     static let rowSpacing: CGFloat = 10
-    static let rowCount: CGFloat = 6
+    static let visibleWeekCount = 3
     static let verticalPadding: CGFloat = 4
 
     static var gridHeight: CGFloat {
-        rowCount * daySize + (rowCount - 1) * rowSpacing + verticalPadding
+        CGFloat(visibleWeekCount) * daySize
+            + CGFloat(visibleWeekCount - 1) * rowSpacing
+            + verticalPadding
     }
 }
 
@@ -42,10 +36,6 @@ struct SuhoorCalendarView: View {
     private let onToggleDate: ((Date) -> Void)?
     private let onFocusDate: ((Date) -> Void)?
     private let frameHeight: CGFloat
-
-    @State private var hasPerformedInitialScroll = false
-    @State private var visibleMonthStart: Date?
-    @State private var isSyncingFromScroll = false
 
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 6), count: 7)
 
@@ -100,98 +90,93 @@ struct SuhoorCalendarView: View {
     }
 
     var body: some View {
-        ScrollViewReader { reader in
-            VStack(spacing: DesignTokens.spacingM) {
-                header(reader: reader)
+        VStack(spacing: DesignTokens.spacingM) {
+            header
 
-                LazyVGrid(columns: columns, spacing: 10) {
-                    ForEach(Array(weekdaySymbols.enumerated()), id: \.offset) { _, symbol in
-                        Text(symbol)
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                            .frame(maxWidth: .infinity)
-                    }
+            LazyVGrid(columns: columns, spacing: 10) {
+                ForEach(Array(weekdaySymbols.enumerated()), id: \.offset) { _, symbol in
+                    Text(symbol)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity)
                 }
+            }
 
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: DesignTokens.spacingL) {
-                        ForEach(monthStarts, id: \.self) { monthStart in
-                            SuhoorCalendarMonthGrid(
-                                monthStart: monthStart,
-                                focusedDate: focusedDate,
-                                allowedDateRange: allowedDateRange,
-                                mode: mode,
-                                selectedDate: selectedDate,
-                                selectedDateKeys: selectedDateKeys,
-                                recommendedDateKeys: recommendedDateKeys,
-                                disablesAlreadyActive: disablesAlreadyActive,
-                                isSelectable: isSelectable,
-                                columns: columns,
-                                scrollReader: reader,
-                                handleTap: handleTap
-                            )
-                            .id(monthStart)
-                            .background(
-                                GeometryReader { proxy in
-                                    Color.clear.preference(
-                                        key: SuhoorCalendarMonthOffsetKey.self,
-                                        value: [monthStart: proxy.frame(in: .named("SuhoorCalendarScroll")).minY]
-                                    )
-                                }
-                            )
-                        }
-                    }
-                    .padding(.vertical, 2)
-                }
-                .coordinateSpace(name: "SuhoorCalendarScroll")
-                .frame(height: frameHeight)
-                .background(
-                    RoundedRectangle(cornerRadius: DesignTokens.innerCardRadius, style: .continuous)
-                        .fill(Color(.secondarySystemGroupedBackground))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: DesignTokens.innerCardRadius, style: .continuous)
-                        .stroke(Color(.separator).opacity(0.6), lineWidth: 1)
-                )
-                .clipShape(RoundedRectangle(cornerRadius: DesignTokens.innerCardRadius, style: .continuous))
-                .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
+            SuhoorCalendarWeekDeck(
+                weekStart: currentWeekDeckStart,
+                focusedDate: focusedDate,
+                allowedDateRange: allowedDateRange,
+                mode: mode,
+                selectedDate: selectedDate,
+                selectedDateKeys: selectedDateKeys,
+                recommendedDateKeys: recommendedDateKeys,
+                disablesAlreadyActive: disablesAlreadyActive,
+                isSelectable: isSelectable,
+                columns: columns,
+                handleTap: handleTap
+            )
+            .id(currentWeekDeckStart)
+            .frame(height: frameHeight)
+            .background(
+                RoundedRectangle(cornerRadius: DesignTokens.innerCardRadius, style: .continuous)
+                    .fill(Color(.secondarySystemGroupedBackground))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: DesignTokens.innerCardRadius, style: .continuous)
+                    .stroke(Color(.separator).opacity(0.6), lineWidth: 1)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: DesignTokens.innerCardRadius, style: .continuous))
+            .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
+            .contentShape(Rectangle())
+            .gesture(weekSwipeGesture)
+        }
+        .onAppear {
+            syncFocusedDateFromDisplayedMonthIfNeeded()
+            let clamped = clampedFocusedDate(focusedDate)
+            if focusedDate != clamped {
+                focusedDate = clamped
+                displayedMonth = normalizedMonthStart(for: clamped)
             }
-            .onPreferenceChange(SuhoorCalendarMonthOffsetKey.self) { offsets in
-                syncVisibleMonth(with: offsets)
+        }
+        .onChange(of: displayedMonth) { _, newValue in
+            let clampedMonth = clampedMonthStart(for: newValue)
+            if displayedMonth != clampedMonth { displayedMonth = clampedMonth }
+            syncFocusedDateFromDisplayedMonthIfNeeded()
+        }
+        .onChange(of: focusedDate) { _, newValue in
+            let clamped = clampedFocusedDate(newValue)
+            if focusedDate != clamped {
+                focusedDate = clamped
             }
-            .onAppear {
-                guard !hasPerformedInitialScroll else { return }
-                hasPerformedInitialScroll = true
-                let target = normalizedMonthStart(for: displayedMonth)
-                visibleMonthStart = target
-                DispatchQueue.main.async {
-                    reader.scrollTo(target, anchor: .top)
-                }
-            }
-            .onChange(of: displayedMonth) { _, newValue in
-                guard !isSyncingFromScroll else { return }
-                let target = normalizedMonthStart(for: newValue)
-                withAnimation(Motion.standard(reduceMotion: reduceMotion)) {
-                    reader.scrollTo(target, anchor: .top)
-                }
+            let monthStart = normalizedMonthStart(for: clamped)
+            if displayedMonth != monthStart {
+                displayedMonth = monthStart
             }
         }
     }
 
-    private var currentMonthStart: Date {
-        visibleMonthStart ?? normalizedMonthStart(for: displayedMonth)
+    private var currentWeekStart: Date {
+        normalizedWeekStart(for: clampedFocusedDate(focusedDate))
     }
 
-    private var monthStarts: [Date] {
-        var starts: [Date] = []
-        var cursor = normalizedMonthStart(for: allowedDateRange.lowerBound)
-        let end = normalizedMonthStart(for: allowedDateRange.upperBound)
-        while cursor <= end {
-            starts.append(cursor)
-            guard let next = shiftMonth(cursor, by: 1) else { break }
-            cursor = next
-        }
-        return starts
+    private var currentWeekDeckStart: Date {
+        clampedDeckStart(for: shiftWeek(currentWeekStart, by: -1) ?? currentWeekStart)
+    }
+
+    private var minimumMonthStart: Date {
+        normalizedMonthStart(for: allowedDateRange.lowerBound)
+    }
+
+    private var maximumMonthStart: Date {
+        normalizedMonthStart(for: allowedDateRange.upperBound)
+    }
+
+    private var minimumWeekStart: Date {
+        normalizedWeekStart(for: allowedDateRange.lowerBound)
+    }
+
+    private var maximumWeekStart: Date {
+        normalizedWeekStart(for: allowedDateRange.upperBound)
     }
 
     private var weekdaySymbols: [String] {
@@ -202,33 +187,48 @@ struct SuhoorCalendarView: View {
         return Array(symbols[prefixIndex...]) + Array(symbols[..<prefixIndex])
     }
 
-    private func header(reader: ScrollViewProxy) -> some View {
+    private var header: some View {
         HStack {
-            Text(GregorianDateFormatter.shared.monthYearString(for: currentMonthStart))
+            Text(GregorianDateFormatter.shared.monthYearString(for: clampedFocusedDate(focusedDate)))
                 .font(.headline.weight(.semibold))
-
             Spacer()
-
-            Button {
-                let today = DateHelpers.startOfToday()
-                let todayStart = normalizedMonthStart(for: today)
-                focusedDate = today
-                displayedMonth = todayStart
-                visibleMonthStart = todayStart
-                withAnimation(Motion.standard(reduceMotion: reduceMotion)) {
-                    reader.scrollTo(todayStart, anchor: .top)
-                }
-            } label: {
-                Text("Today")
-                    .font(.footnote.weight(.semibold))
-            }
-            .buttonStyle(.plain)
         }
     }
 
-    private func handleTap(state: CalendarDayState, isEnabledForToggle: Bool, scrollReader: ScrollViewProxy) {
+    private var weekSwipeGesture: some Gesture {
+        DragGesture(minimumDistance: 20)
+            .onEnded { value in
+                let verticalTravel = value.translation.height
+                let horizontalTravel = value.translation.width
+                guard abs(verticalTravel) > abs(horizontalTravel) else { return }
+                guard abs(verticalTravel) > 42 else { return }
+                if verticalTravel < 0 {
+                    moveWeek(by: 1)
+                } else {
+                    moveWeek(by: -1)
+                }
+            }
+    }
+
+    private func moveWeek(by offset: Int) {
+        guard let shifted = shiftWeek(currentWeekStart, by: offset) else { return }
+        let targetWeekStart = clampedWeekStart(for: shifted)
+        guard targetWeekStart != currentWeekStart else {
+            Haptics.medium()
+            return
+        }
+        let targetFocusDate = alignedFocusDate(forWeekStart: targetWeekStart, relativeTo: focusedDate)
+        withAnimation(Motion.standard(reduceMotion: reduceMotion)) {
+            focusedDate = targetFocusDate
+            displayedMonth = normalizedMonthStart(for: targetFocusDate)
+        }
+        Haptics.light()
+    }
+
+    private func handleTap(state: CalendarDayState, isEnabledForToggle: Bool) {
         guard state.isInDisplayedMonth else { return }
         focusedDate = state.date
+        displayedMonth = normalizedMonthStart(for: state.date)
         onFocusDate?(state.date)
 
         switch mode {
@@ -249,18 +249,24 @@ struct SuhoorCalendarView: View {
         }
     }
 
-    private func syncVisibleMonth(with offsets: [Date: CGFloat]) {
-        guard let nearest = offsets.min(by: { abs($0.value) < abs($1.value) })?.key else { return }
-        if nearest == visibleMonthStart { return }
-
-        visibleMonthStart = nearest
-        if displayedMonth != nearest {
-            isSyncingFromScroll = true
-            displayedMonth = nearest
-            DispatchQueue.main.async {
-                isSyncingFromScroll = false
-            }
+    private func clampedMonthStart(for date: Date) -> Date {
+        let normalized = normalizedMonthStart(for: date)
+        if normalized < minimumMonthStart {
+            return minimumMonthStart
         }
+        if normalized > maximumMonthStart {
+            return maximumMonthStart
+        }
+        return normalized
+    }
+
+    private func clampedFocusedDate(_ date: Date) -> Date {
+        let normalized = DateHelpers.startOfDay(date, in: .current)
+        let lowerBound = DateHelpers.startOfDay(allowedDateRange.lowerBound, in: .current)
+        let upperBound = DateHelpers.startOfDay(allowedDateRange.upperBound, in: .current)
+        if normalized < lowerBound { return lowerBound }
+        if normalized > upperBound { return upperBound }
+        return normalized
     }
 
     private func normalizedMonthStart(for date: Date) -> Date {
@@ -277,12 +283,96 @@ struct SuhoorCalendarView: View {
         let monthStart = normalizedMonthStart(for: date)
         return calendar.date(byAdding: .month, value: value, to: monthStart)
     }
+
+    private func normalizedWeekStart(for date: Date) -> Date {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .current
+        let startOfDay = calendar.startOfDay(for: date)
+        let weekday = calendar.component(.weekday, from: startOfDay)
+        let offset = (weekday - calendar.firstWeekday + 7) % 7
+        return calendar.date(byAdding: .day, value: -offset, to: startOfDay) ?? startOfDay
+    }
+
+    private func shiftWeek(_ date: Date, by value: Int) -> Date? {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .current
+        return calendar.date(byAdding: .day, value: value * 7, to: normalizedWeekStart(for: date))
+    }
+
+    private func clampedWeekStart(for date: Date) -> Date {
+        let normalized = normalizedWeekStart(for: date)
+        if normalized < minimumWeekStart { return minimumWeekStart }
+        if normalized > maximumWeekStart { return maximumWeekStart }
+        return normalized
+    }
+
+    private func clampedDeckStart(for date: Date) -> Date {
+        let normalized = clampedWeekStart(for: date)
+        guard SuhoorCalendarMetrics.visibleWeekCount > 1 else { return normalized }
+        guard let maxDeckStartCandidate = shiftWeek(maximumWeekStart, by: -(SuhoorCalendarMetrics.visibleWeekCount - 1)) else {
+            return normalized
+        }
+        let maxDeckStart = max(minimumWeekStart, maxDeckStartCandidate)
+        if normalized < minimumWeekStart { return minimumWeekStart }
+        if normalized > maxDeckStart { return maxDeckStart }
+        return normalized
+    }
+
+    private func alignedFocusDate(for monthStart: Date, relativeTo seedDate: Date) -> Date {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .current
+        let preferredDay = max(1, calendar.component(.day, from: seedDate))
+        let rawCandidate = calendar.date(byAdding: .day, value: preferredDay - 1, to: monthStart) ?? monthStart
+        let monthRange = allowedMonthRange(for: monthStart)
+        let candidate = DateHelpers.startOfDay(rawCandidate, in: .current)
+        if candidate < monthRange.lowerBound {
+            return monthRange.lowerBound
+        }
+        if candidate > monthRange.upperBound {
+            return monthRange.upperBound
+        }
+        return candidate
+    }
+
+    private func allowedMonthRange(for monthStart: Date) -> ClosedRange<Date> {
+        let lowerBound = max(
+            DateHelpers.startOfDay(allowedDateRange.lowerBound, in: .current),
+            monthStart
+        )
+        let nextMonth = shiftMonth(monthStart, by: 1)
+        let lastDayInMonth = nextMonth.map {
+            DateHelpers.startOfDay($0.addingTimeInterval(-24 * 60 * 60), in: .current)
+        } ?? monthStart
+        let upperBound = min(
+            DateHelpers.startOfDay(allowedDateRange.upperBound, in: .current),
+            lastDayInMonth
+        )
+        let clampedUpperBound = upperBound < lowerBound ? lowerBound : upperBound
+        return lowerBound...clampedUpperBound
+    }
+
+    private func alignedFocusDate(forWeekStart weekStart: Date, relativeTo seedDate: Date) -> Date {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .current
+        let offset = calendar.dateComponents([.day], from: normalizedWeekStart(for: seedDate), to: seedDate).day ?? 0
+        let rawCandidate = calendar.date(byAdding: .day, value: max(0, min(6, offset)), to: weekStart) ?? weekStart
+        return clampedFocusedDate(rawCandidate)
+    }
+
+    private func syncFocusedDateFromDisplayedMonthIfNeeded() {
+        let targetMonthStart = clampedMonthStart(for: displayedMonth)
+        if normalizedMonthStart(for: focusedDate) == targetMonthStart {
+            return
+        }
+        let aligned = alignedFocusDate(for: targetMonthStart, relativeTo: focusedDate)
+        focusedDate = clampedFocusedDate(aligned)
+    }
 }
 
-private struct SuhoorCalendarMonthGrid: View {
+private struct SuhoorCalendarWeekDeck: View {
     @EnvironmentObject private var scheduleManager: ScheduleManager
 
-    let monthStart: Date
+    let weekStart: Date
     let focusedDate: Date
     let allowedDateRange: ClosedRange<Date>
     let mode: SuhoorCalendarMode
@@ -292,8 +382,7 @@ private struct SuhoorCalendarMonthGrid: View {
     let disablesAlreadyActive: Bool
     let isSelectable: (Date) -> Bool
     let columns: [GridItem]
-    let scrollReader: ScrollViewProxy
-    let handleTap: (CalendarDayState, Bool, ScrollViewProxy) -> Void
+    let handleTap: (CalendarDayState, Bool) -> Void
 
     @State private var dayStates: [CalendarDayState] = []
 
@@ -313,11 +402,13 @@ private struct SuhoorCalendarMonthGrid: View {
                         selectedDateKeys.contains(key)
                     }
                     let isRecommended = mode == .multi && recommendedDateKeys.contains(key) && !isSelected
+                    let selectable = isSelectable(state.date)
+                    let isBlockedByExistingActivity = disablesAlreadyActive && state.isAlreadyActive
                     let canToggle = !state.isDisabled
                         && !state.isLocked
-                        && isSelectable(state.date)
-                        && !(disablesAlreadyActive && state.isAlreadyActive)
-                    let isUnavailable = state.isLocked || !isSelectable(state.date)
+                        && selectable
+                        && !isBlockedByExistingActivity
+                    let isUnavailable = state.isLocked || !selectable || isBlockedByExistingActivity
 
                     SuhoorCalendarDayCell(
                         state: state,
@@ -327,30 +418,40 @@ private struct SuhoorCalendarMonthGrid: View {
                         isEnabledForToggle: canToggle,
                         mode: mode
                     ) {
-                        handleTap(state, canToggle, scrollReader)
+                        handleTap(state, canToggle)
                     }
                 }
             } else {
-                ForEach(0..<42, id: \.self) { _ in
+                ForEach(0..<(SuhoorCalendarMetrics.visibleWeekCount * 7), id: \.self) { _ in
                     Color.clear
                         .frame(width: SuhoorCalendarMetrics.daySize, height: SuhoorCalendarMetrics.daySize)
                         .frame(maxWidth: .infinity)
                 }
             }
         }
-        .onAppear {
-            dayStates = scheduleManager.calendarMonthContext(
-                displayedMonth: monthStart,
-                selectedDate: focusedDate,
-                allowedDateRange: allowedDateRange
-            ).dayStates
-        }
+        .onAppear(perform: refreshDayStates)
+        .onChange(of: weekStart) { _, _ in refreshDayStates() }
+        .onChange(of: focusedDate) { _, _ in refreshDayStates() }
         .onChange(of: scheduleManager.lastUpdated) { _, _ in
-            dayStates = scheduleManager.calendarMonthContext(
-                displayedMonth: monthStart,
-                selectedDate: focusedDate,
-                allowedDateRange: allowedDateRange
-            ).dayStates
+            refreshDayStates()
+        }
+    }
+
+    private func refreshDayStates() {
+        let visibleDates = weekDates()
+        dayStates = scheduleManager.calendarDayStates(
+            dates: visibleDates,
+            selectedDate: focusedDate,
+            allowedDateRange: allowedDateRange
+        )
+    }
+
+    private func weekDates() -> [Date] {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .current
+        let clampedWeekStart = DateHelpers.startOfDay(weekStart, in: .current)
+        return (0..<(SuhoorCalendarMetrics.visibleWeekCount * 7)).compactMap {
+            calendar.date(byAdding: .day, value: $0, to: clampedWeekStart)
         }
     }
 }

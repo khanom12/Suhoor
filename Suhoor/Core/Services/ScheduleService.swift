@@ -310,7 +310,13 @@ final class ScheduleManager: ObservableObject {
     }
 
     func cachedMonthEntries(for key: HijriMonthKey) -> [ActiveAlarmDay]? {
-        expandedMonthSnapshots[expandedMonthIdentifier(for: key)]?.entries
+        let identifier = expandedMonthIdentifier(for: key)
+        guard let cached = expandedMonthSnapshots[identifier],
+              cached.invalidationToken == expandedMonthInvalidationToken,
+              cached.tagSelectionRevision == fastTagStore.currentRevision else {
+            return nil
+        }
+        return cached.entries
     }
 
     func monthEntries(for key: HijriMonthKey, timeZone: TimeZone = .current) async -> [ActiveAlarmDay] {
@@ -694,6 +700,76 @@ final class ScheduleManager: ObservableObject {
         )
     }
 
+    func calendarDayStates(
+        dates: [Date],
+        selectedDate: Date,
+        allowedDateRange: ClosedRange<Date>,
+        timeZone: TimeZone = .current
+    ) -> [CalendarDayState] {
+        guard !dates.isEmpty else { return [] }
+
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+
+        let normalizedDates = dates.map { DateHelpers.startOfDay($0, in: timeZone) }
+        let cachedByKey = activeWindowSnapshot.byDateKey
+        let missingDates = normalizedDates.filter {
+            cachedByKey[DateHelpers.dayIdentifier(for: $0, timeZone: timeZone)] == nil
+        }
+        let missingProvenance = alarmConfigStore.provenanceByDate(for: missingDates, timeZone: timeZone)
+        let seeds: [ActiveTagComputationSeed] = normalizedDates.map { date in
+            let key = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
+            let cached = cachedByKey[key]
+            let provenances = cached?.provenances ?? missingProvenance[key] ?? []
+            return ActiveTagComputationSeed(
+                date: date,
+                dateKey: key,
+                defaultPrimaryIntent: provenances.defaultFastPrimaryIntent()
+            )
+        }
+        let tagResults = TagComputationEngine.results(
+            seeds: seeds,
+            selections: fastTagStore.selections,
+            ruleset: .strict,
+            timeZone: timeZone
+        )
+
+        return normalizedDates.map { date in
+            let key = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
+            let cached = cachedByKey[key]
+            let provenances = cached?.provenances ?? missingProvenance[key] ?? []
+            let summary = summaryText(for: provenances)
+            let tagResult = tagResults[key] ?? .empty
+            let previewTags = FastIntentEngine.displaySecondaryTags(
+                FastIntentEngine.dateDerivedObservanceTags(
+                    for: date,
+                    timeZone: timeZone,
+                    includeShawwalPotential: true
+                )
+            )
+            let warnings = FastIntentEngine.warnings(for: date, timeZone: timeZone)
+            let isRamadan = FastIntentEngine.isRamadan(date, timeZone: timeZone)
+            return CalendarDayState(
+                date: date,
+                dayNumberText: String(calendar.component(.day, from: date)),
+                isInDisplayedMonth: true,
+                isToday: calendar.isDateInToday(date),
+                isSelected: calendar.isDate(date, inSameDayAs: selectedDate),
+                isDisabled: !allowedDateRange.contains(date),
+                isAlreadyActive: !provenances.isEmpty,
+                activeSourceSummary: summary.isEmpty ? nil : summary,
+                hijriText: HijriDateFormatter.shared.string(from: date),
+                computedPrimaryIntent: tagResult.computedPrimaryIntent,
+                computedSecondaryTags: FastIntentEngine.displaySecondaryTags(tagResult.computedSecondaryTags),
+                previewSecondaryTags: previewTags,
+                warnings: warnings,
+                isForbidden: !warnings.isEmpty,
+                isRamadan: isRamadan,
+                isLocked: !warnings.isEmpty || isRamadan
+            )
+        }
+    }
+
     func calendarDayDetail(
         for date: Date,
         overrideSelection: FastIntentSelection? = nil,
@@ -763,6 +839,7 @@ final class ScheduleManager: ObservableObject {
 
         var addedDates: [Date] = []
         var skippedDates: [Date] = []
+        var didChangeAnySelection = false
         for date in normalized {
             let key = DateHelpers.dayIdentifier(for: date, timeZone: .current)
             if (provenanceByKey[key] ?? []).isEmpty {
@@ -771,11 +848,14 @@ final class ScheduleManager: ObservableObject {
             } else {
                 skippedDates.append(date)
             }
+            didChangeAnySelection = didChangeAnySelection || willChangeStoredSelection(selection, for: date)
             applyAddFlowSelection(selection, for: date)
         }
 
         if !addedDates.isEmpty {
             await refreshSchedules(force: true)
+        } else if didChangeAnySelection {
+            retagActiveWindow(reason: "plan_dates_tag_only_update")
         }
 
         return AddScheduledDatesResult(addedDates: addedDates, skippedActiveDates: skippedDates)
@@ -894,6 +974,15 @@ final class ScheduleManager: ObservableObject {
         } else {
             fastTagStore.removeSelection(for: date, timeZone: .current)
         }
+    }
+
+    private func willChangeStoredSelection(_ selection: FastIntentSelection?, for date: Date) -> Bool {
+        let existingSelection = fastTagStore.selection(for: date, timeZone: .current)
+        let normalizedSelection = selection.map {
+            FastIntentEngine.normalizedSelection($0, for: date, ruleset: .strict, timeZone: .current)
+        }
+        let storedSelection = normalizedSelection?.hasMeaningfulTags == true ? normalizedSelection : nil
+        return existingSelection != storedSelection
     }
 
     private func summaryText(for provenances: [ResolvedScheduledDateProvenance]) -> String {

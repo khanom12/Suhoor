@@ -309,9 +309,16 @@ struct AlarmsHomeView: View {
         defer { PerformanceTrace.end(token) }
 
         let timeZone = TimeZone.current
-        let nearTermEntries = scheduleManager.activeWindowSnapshot.visibleDays.map { day in
-            let refreshedDay = scheduleManager.refreshedActiveDay(for: day.date, timeZone: timeZone) ?? day
-            return AlarmRowEntry(activeDay: refreshedDay)
+        let nearTermEntries = scheduleManager.activeWindowSnapshot.visibleDays.map(AlarmRowEntry.init)
+        var totalCountCache: [HijriMonthKey: Int] = [:]
+
+        func totalCount(for key: HijriMonthKey) -> Int {
+            if let cached = totalCountCache[key] {
+                return cached
+            }
+            let count = totalScheduledCount(for: key, timeZone: timeZone)
+            totalCountCache[key] = count
+            return count
         }
 
         let sanitizedPinnedNextAlarmEntryIDs = AlarmListSelection.sanitizedPinnedEntryIDs(
@@ -360,7 +367,7 @@ struct AlarmsHomeView: View {
                 month: yearMonth.month.rawValue,
                 title: "\(yearMonth.month.displayName) \(yearMonth.hijriYear)"
             )
-            let totalCount = totalScheduledCount(for: key, timeZone: timeZone)
+            let totalCount = totalCount(for: key)
             guard totalCount > 0 else { continue }
             let pinnedCount = pinnedNextAlarmCountsByMonth[key, default: 0]
             guard totalCount > pinnedCount else { continue }
@@ -402,7 +409,7 @@ struct AlarmsHomeView: View {
                 (nearTermGrouped[lhs]?.first?.schedule.date ?? .distantPast) < (nearTermGrouped[rhs]?.first?.schedule.date ?? .distantPast)
             }
             .compactMap { key -> HijriMonthSection? in
-                let totalCount = totalScheduledCount(for: key, timeZone: timeZone)
+                let totalCount = totalCount(for: key)
                 let pinnedCount = pinnedNextAlarmCountsByMonth[key, default: 0]
                 guard totalCount > 0 else { return nil }
                 guard totalCount > pinnedCount else { return nil }
@@ -978,6 +985,23 @@ private struct AlarmRowView: View {
                         .foregroundStyle(isDisabled ? .tertiary : .secondary)
                         .monospacedDigit()
                 }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .layoutPriority(1)
+            .contentShape(Rectangle())
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(accessibilitySummary)
+            .onTapGesture {
+                guard editMode?.wrappedValue.isEditing != true else { return }
+                onSelect()
+            }
+
+            VStack(alignment: .trailing, spacing: 10) {
+                Toggle("", isOn: dayActiveBinding)
+                    .labelsHidden()
+                    .tint(DawnColor.accent)
+                    .accessibilityLabel("\(primaryLabelText) alarm")
+                    .frame(minWidth: 51, alignment: .trailing)
 
                 if showsTags {
                     HomeTagCapsuleRow(
@@ -987,27 +1011,13 @@ private struct AlarmRowView: View {
                         showPrimaryIntent: showPrimaryIntent,
                         isDisabled: isDisabled,
                         showsTitle: true,
-                        isCompact: true
+                        isCompact: false
                     )
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.top, 4)
+                    .frame(maxWidth: 190, alignment: .trailing)
+                    .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .contentShape(Rectangle())
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(accessibilitySummary)
-            .onTapGesture {
-                guard editMode?.wrappedValue.isEditing != true else { return }
-                onSelect()
-            }
-
-            Toggle("", isOn: dayActiveBinding)
-                .labelsHidden()
-                .tint(DawnColor.accent)
-                .accessibilityLabel("\(primaryLabelText) alarm")
-                .frame(maxHeight: .infinity, alignment: .center)
-            .frame(minWidth: 51, maxHeight: .infinity, alignment: .trailing)
+            .frame(minWidth: 74, alignment: .trailing)
         }
         .padding(.vertical, 6)
         .onChange(of: config) { _, newValue in
@@ -1140,7 +1150,7 @@ private struct HomeTagCapsuleRow: View {
     let isCompact: Bool
 
     var body: some View {
-        HStack(spacing: isCompact ? 4 : 6) {
+        FlowLayout(spacing: isCompact ? 4 : 6) {
             ForEach(warnings, id: \.self) { warning in
                 HomeWarningCapsule(
                     warning: warning,

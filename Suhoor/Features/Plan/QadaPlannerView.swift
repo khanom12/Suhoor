@@ -12,13 +12,14 @@ struct QadaPlannerView: View {
 
     @State private var initialRoute: QadaPlannerRoute?
     @State private var routeOverride: QadaPlannerRoute?
+    @State private var resolvedExperienceState: QadaExperienceState = .needsSetup(suggestion: nil)
 
     var body: some View {
         Group {
             switch activeRoute {
             case .companion:
                 QadaCompanionView(
-                    state: experienceState,
+                    state: resolvedExperienceState,
                     onViewCurrentBatch: { routeOverride = .wizard(.reviewCurrentBatch) },
                     onPlanNextBatch: { routeOverride = .wizard(.nextBatch) },
                     onAdjustTotal: { routeOverride = .wizard(.adjustTotal) },
@@ -32,18 +33,28 @@ struct QadaPlannerView: View {
             }
         }
         .onAppear {
+            refreshExperienceState()
             if initialRoute == nil {
-                initialRoute = defaultRoute
+                initialRoute = defaultRoute(for: resolvedExperienceState)
             }
+        }
+        .onChange(of: qadaBacklogStore.state) { _, _ in
+            refreshExperienceState()
+        }
+        .onChange(of: qadaBatchStore.state) { _, _ in
+            refreshExperienceState()
+        }
+        .onChange(of: fastLogStore.currentRevision) { _, _ in
+            refreshExperienceState()
         }
     }
 
     private var activeRoute: QadaPlannerRoute {
-        routeOverride ?? initialRoute ?? defaultRoute
+        routeOverride ?? initialRoute ?? defaultRoute(for: resolvedExperienceState)
     }
 
-    private var defaultRoute: QadaPlannerRoute {
-        switch experienceState {
+    private func defaultRoute(for state: QadaExperienceState) -> QadaPlannerRoute {
+        switch state {
         case .needsSetup:
             return .wizard(.fresh)
         case .activeBatch, .batchCompleteNeedsNext, .needsRecovery:
@@ -51,7 +62,7 @@ struct QadaPlannerView: View {
         }
     }
 
-    private var experienceState: QadaExperienceState {
+    private func refreshExperienceState() {
         let progress = QadaProgressEngine.snapshot(
             state: qadaBacklogStore.state,
             logEntries: fastLogStore.entriesByDateKey
@@ -59,7 +70,7 @@ struct QadaPlannerView: View {
         let suggestion = QadaBacklogSuggestionEngine.currentRamadanSuggestion(
             logEntries: fastLogStore.entriesByDateKey
         )
-        return QadaExperienceEngine.resolve(
+        resolvedExperienceState = QadaExperienceEngine.resolve(
             backlogState: qadaBacklogStore.state,
             progress: progress,
             batchState: qadaBatchStore.state,
