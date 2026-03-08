@@ -128,13 +128,21 @@ struct RootTabView: View {
             planPath.append(PlanDestination.sunnahPlanner)
         }
         .onReceive(NotificationCenter.default.publisher(for: .switchToSettingsTab)) { _ in
-            settingsPath.removeLast(settingsPath.count)
-            isShowingSettings = true
+            // Compatibility alias: legacy callers still post this notification name,
+            // but Settings is now presented as a utility destination, not selected as a tab.
+            presentSettings()
         }
         .onReceive(NotificationCenter.default.publisher(for: .switchToHijriCorrections)) { _ in
-            settingsPath.removeLast(settingsPath.count)
-            settingsPath.append(SettingsRoute.hijriCorrections)
-            isShowingSettings = true
+            // Compatibility alias for directly opening Hijri corrections inside Settings.
+            presentSettings(route: .hijriCorrections)
         }
+    }
+
+    private func presentSettings(route: SettingsRoute? = nil) {
+        settingsPath.removeLast(settingsPath.count)
+        if let route {
+            settingsPath.append(route)
+        }
+        isShowingSettings = true
     }
 }

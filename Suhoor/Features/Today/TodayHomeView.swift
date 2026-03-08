@@ -226,18 +226,11 @@ private struct TodayNextWakeHeroCard: View {
                             .font(DesignTokens.cardSubtitleFont)
                             .foregroundStyle(.secondary)
 
-                        HStack(spacing: DesignTokens.spacingS) {
-                            Button("Set Morning Plan") {
-                                NotificationCenter.default.post(name: .openPlanDefaultMorningPlan, object: nil)
-                            }
-                            .buttonStyle(.borderedProminent)
-                            .tint(DawnColor.accent)
-
-                            Button("Settings") {
-                                NotificationCenter.default.post(name: .switchToSettingsTab, object: nil)
-                            }
-                            .buttonStyle(.bordered)
+                        Button("Set Morning Plan") {
+                            NotificationCenter.default.post(name: .openPlanDefaultMorningPlan, object: nil)
                         }
+                        .buttonStyle(.borderedProminent)
+                        .tint(DawnColor.accent)
                     }
                 }
             }
