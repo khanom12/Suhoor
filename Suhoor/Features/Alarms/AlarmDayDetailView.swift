@@ -1222,7 +1222,7 @@ private struct SourceManagementActionPresentation {
     private static func subtitle(for provenance: ResolvedScheduledDateProvenance) -> String {
         switch provenance.sourceOrigin {
         case .defaultDailyPlan:
-            return "Adjust the default daily morning plan from Settings."
+            return "Adjust the default daily morning plan from Plans."
         case .manualGregorianRange:
             return "Removes every date that came from this saved date range."
         case .recurringIslamic(let rule):

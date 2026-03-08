@@ -240,7 +240,6 @@ struct SettingsSummaryFormatter {
 }
 
 enum SettingsDestination: String, CaseIterable, Identifiable {
-    case defaultAlarms
     case location
     case prayerTimes
     case hijriCalendarCorrections
@@ -251,8 +250,6 @@ enum SettingsDestination: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .defaultAlarms:
-            return Strings.Settings.defaultAlarmsScreenTitle
         case .location:
             return Strings.Settings.locationSection
         case .prayerTimes:
@@ -268,8 +265,6 @@ enum SettingsDestination: String, CaseIterable, Identifiable {
 
     var systemImage: String {
         switch self {
-        case .defaultAlarms:
-            return "alarm"
         case .location:
             return "location.circle"
         case .prayerTimes:
@@ -285,15 +280,12 @@ enum SettingsDestination: String, CaseIterable, Identifiable {
 }
 
 enum SettingsDestinationGroup: CaseIterable, Identifiable {
-    case alerts
     case calendarTimes
     case appHealth
     case about
 
     var id: String {
         switch self {
-        case .alerts:
-            return "alerts"
         case .calendarTimes:
             return "calendar-times"
         case .appHealth:
@@ -305,8 +297,6 @@ enum SettingsDestinationGroup: CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .alerts:
-            return Strings.Settings.alertsGroup
         case .calendarTimes:
             return Strings.Settings.calendarTimesGroup
         case .appHealth:
@@ -318,8 +308,6 @@ enum SettingsDestinationGroup: CaseIterable, Identifiable {
 
     var destinations: [SettingsDestination] {
         switch self {
-        case .alerts:
-            return [.defaultAlarms]
         case .calendarTimes:
             return [.location, .prayerTimes, .hijriCalendarCorrections]
         case .appHealth:

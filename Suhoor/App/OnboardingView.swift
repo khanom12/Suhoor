@@ -203,11 +203,8 @@ private struct ValuePreviewStep: View {
     var body: some View {
         VStack(alignment: .leading, spacing: OnboardingSpacing.medium) {
             VStack(alignment: .leading, spacing: OnboardingSpacing.titleToSubtitle) {
-                VStack(alignment: .leading, spacing: 0) {
-                    Text("Never miss")
-                    Text("Suhoor again")
-                }
-                .font(.largeTitle.weight(.bold))
+                Text(Strings.Onboarding.valueTitle)
+                    .font(.largeTitle.weight(.bold))
                 Text(Strings.Onboarding.valueBody)
                     .font(.body)
                     .foregroundStyle(.secondary)

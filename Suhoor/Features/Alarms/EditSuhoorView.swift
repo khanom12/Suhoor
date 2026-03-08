@@ -86,7 +86,7 @@ struct EditSuhoorView: View {
     private var alertDefaultsSection: some View {
         Section(Strings.AlarmDetail.alertDefaultsSection) {
             Button(Strings.AlarmDetail.editAlertDefaults) {
-                NotificationCenter.default.post(name: .switchToSettingsTab, object: nil)
+                NotificationCenter.default.post(name: .openPlanDefaultMorningPlan, object: nil)
                 dismiss()
             }
             .frame(maxWidth: .infinity, alignment: .center)
@@ -124,7 +124,7 @@ struct EditSuhoorView: View {
     private var scheduleSection: some View {
         Section {
             Button(Strings.AlarmDetail.viewSchedule) {
-                NotificationCenter.default.post(name: .switchToPlanTab, object: nil)
+                NotificationCenter.default.post(name: .switchToAlarmTab, object: nil)
                 dismiss()
             }
             .frame(maxWidth: .infinity, alignment: .center)

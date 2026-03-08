@@ -1,10 +1,12 @@
 import SwiftUI
+import UIKit
 
 struct SettingsRootView: View {
     @EnvironmentObject private var settingsStore: SuhoorSettingsStore
     @EnvironmentObject private var alarmConfigStore: AlarmConfigStore
     @EnvironmentObject private var scheduleManager: ScheduleManager
     @EnvironmentObject private var locationService: LocationService
+    @State private var showingCopiedAlert = false
 
     var body: some View {
         Form {
@@ -28,6 +30,25 @@ struct SettingsRootView: View {
                 }
             }
 
+            Section {
+                Button {
+                    NotificationCenter.default.post(name: .openPlanDefaultMorningPlan, object: nil)
+                } label: {
+                    SettingsSummaryRow(
+                        title: "Morning planning",
+                        subtitle: SettingsSummaryFormatter.defaultAlarmsSummary(config: alarmConfigStore.defaults),
+                        systemImage: "sun.horizon",
+                        badgeText: nil,
+                        badgeTone: .neutral
+                    )
+                }
+                .buttonStyle(.plain)
+            } header: {
+                SettingsSectionHeader(title: "Planning")
+            } footer: {
+                Text("Morning intention and planning live in Plans. Settings only manages system configuration.")
+            }
+
             ForEach(SettingsDestinationGroup.allCases) { group in
                 Section {
                     ForEach(group.destinations) { destination in
@@ -47,10 +68,48 @@ struct SettingsRootView: View {
                     SettingsSectionHeader(title: group.title)
                 }
             }
+
+            Section {
+                Button {
+                    openFeedbackEmail()
+                } label: {
+                    SettingsSummaryRow(
+                        title: "Send Feedback",
+                        subtitle: "Share product feedback with diagnostics-ready context.",
+                        systemImage: "envelope",
+                        badgeText: nil,
+                        badgeTone: .neutral
+                    )
+                }
+                .buttonStyle(.plain)
+
+                Button {
+                    UIPasteboard.general.string = diagnosticsText
+                    showingCopiedAlert = true
+                } label: {
+                    SettingsSummaryRow(
+                        title: "Copy Diagnostics",
+                        subtitle: "Includes app version, device, locale, and permission summary.",
+                        systemImage: "doc.on.doc",
+                        badgeText: nil,
+                        badgeTone: .neutral
+                    )
+                }
+                .buttonStyle(.plain)
+            } header: {
+                SettingsSectionHeader(title: "Support")
+            } footer: {
+                Text("Diagnostics do not include precise location or personal data unless you paste it yourself.")
+            }
         }
         .formStyle(.grouped)
         .navigationTitle(Strings.Settings.title)
         .navigationBarTitleDisplayMode(.large)
+        .alert("Copied", isPresented: $showingCopiedAlert) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("Diagnostics copied to clipboard.")
+        }
     }
 
     private var issues: [SettingsIssue] {
@@ -63,8 +122,6 @@ struct SettingsRootView: View {
 
     private func summary(for destination: SettingsDestination) -> String {
         switch destination {
-        case .defaultAlarms:
-            return SettingsSummaryFormatter.defaultAlarmsSummary(config: alarmConfigStore.defaults)
         case .location:
             return SettingsSummaryFormatter.locationSummary(settings: settingsStore.settings, locationService: locationService)
         case .prayerTimes:
@@ -84,7 +141,7 @@ struct SettingsRootView: View {
 
     private func badgeText(for destination: SettingsDestination) -> String? {
         switch destination {
-        case .defaultAlarms, .prayerTimes, .hijriCalendarCorrections, .about:
+        case .prayerTimes, .hijriCalendarCorrections, .about:
             return nil
         case .location:
             guard hasLoadedPermissions else { return nil }
@@ -122,7 +179,7 @@ struct SettingsRootView: View {
                 return badgeTone(for: issue.tone)
             }
             return .neutral
-        case .defaultAlarms, .prayerTimes, .hijriCalendarCorrections, .about:
+        case .prayerTimes, .hijriCalendarCorrections, .about:
             return .neutral
         }
     }
@@ -139,8 +196,6 @@ struct SettingsRootView: View {
     @ViewBuilder
     private func destinationView(for destination: SettingsDestination) -> some View {
         switch destination {
-        case .defaultAlarms:
-            DefaultAlarmsSettingsView()
         case .location:
             LocationSettingsView()
         case .prayerTimes:
@@ -164,5 +219,40 @@ struct SettingsRootView: View {
 
     private var hasLoadedPermissions: Bool {
         SettingsSummaryFormatter.hasLoadedPermissions(permissionPresentations)
+    }
+
+    private var diagnosticsText: String {
+        let device = UIDevice.current
+        let timeZone = TimeZone.current.identifier
+        let locale = Locale.current.identifier
+        let buildNumber = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "--"
+
+        return """
+        Suhoor Diagnostics
+        - Version: \(appVersion) (\(buildNumber))
+        - Device: \(device.model) (\(device.systemName) \(device.systemVersion))
+        - Time Zone: \(timeZone)
+        - Locale: \(locale)
+        - Permissions: \(scheduleManager.permissionSummary)
+        """
+    }
+
+    private func openFeedbackEmail() {
+        let subject = "Suhoor Feedback"
+        let body = diagnosticsText + "\n\nWhat happened?\n"
+        guard let url = mailtoURL(subject: subject, body: body) else { return }
+        UIApplication.shared.open(url)
+    }
+
+    private func mailtoURL(subject: String, body: String) -> URL? {
+        var allowed = CharacterSet.urlQueryAllowed
+        allowed.remove(charactersIn: "&=?+")
+
+        func encode(_ value: String) -> String {
+            value.addingPercentEncoding(withAllowedCharacters: allowed) ?? value
+        }
+
+        let urlString = "mailto:?subject=\(encode(subject))&body=\(encode(body))"
+        return URL(string: urlString)
     }
 }

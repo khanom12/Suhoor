@@ -3,6 +3,7 @@ import SwiftUI
 struct DefaultAlarmsSettingsView: View {
     @EnvironmentObject private var alarmConfigStore: AlarmConfigStore
     @EnvironmentObject private var scheduleManager: ScheduleManager
+    @EnvironmentObject private var settingsStore: SuhoorSettingsStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var reminderTimeClamped = false
@@ -11,14 +12,40 @@ struct DefaultAlarmsSettingsView: View {
     var body: some View {
         Form {
             Section {
+                LabeledContent("Wake anchor", value: "Fajr start")
+                LabeledContent("Wake relation", value: wakeSummaryText)
+                LabeledContent("Follow-up", value: followUpSummaryText)
+
+                if usesFixedTimeCompatibility {
+                    Text("Fixed-time wake settings are preserved for compatibility. Fajr-relative planning is the long-term default.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            } header: {
+                SettingsSectionHeader(
+                    title: "Morning plan",
+                    supportingText: "Set your default wake relationship to Fajr and the sequence that supports it."
+                )
+            }
+
+            Section {
                 Toggle(Strings.Settings.wakeAlarmLabel, isOn: suhoorDefaultBinding)
                 Toggle(Strings.Settings.reminderLabel, isOn: reminderDefaultBinding)
                 Toggle(Strings.Settings.fajrAdhanLabel, isOn: fajrDefaultBinding)
                 Toggle("Iftar / Maghrib", isOn: iftarDefaultBinding)
+                Toggle("Wake follow-up", isOn: wakeFollowUpEnabledBinding)
+
+                if settingsStore.settings.snoozeEnabled {
+                    Picker("Follow-up delay", selection: wakeFollowUpMinutesBinding) {
+                        ForEach([5, 9, 10, 15], id: \.self) { value in
+                            Text("\(value) minutes").tag(value)
+                        }
+                    }
+                }
             } header: {
                 SettingsSectionHeader(
-                    title: Strings.Settings.alertsSection,
-                    supportingText: Strings.Settings.defaultAlarmsHelper
+                    title: "Wake sequence",
+                    supportingText: "Choose which support events should be part of your default morning sequence."
                 )
             }
 
@@ -96,7 +123,7 @@ struct DefaultAlarmsSettingsView: View {
                 }
                 .padding(.vertical, 4)
             } header: {
-                SettingsSectionHeader(title: Strings.Settings.routineDefaultsSection)
+                SettingsSectionHeader(title: "Wake timing")
             }
 
             Section {
@@ -145,6 +172,11 @@ struct DefaultAlarmsSettingsView: View {
         .navigationBarTitleDisplayMode(.inline)
     }
 
+    private var usesFixedTimeCompatibility: Bool {
+        alarmConfigStore.defaults.defaultSuhoorTimeMode == .fixedTime
+            || alarmConfigStore.defaults.defaultReminderTimeMode == .fixedTime
+    }
+
     private var wakeSummaryText: String {
         guard alarmConfigStore.defaults.suhoorEnabledDefault else {
             return Strings.AlarmsTab.alarmOffLabel
@@ -176,6 +208,13 @@ struct DefaultAlarmsSettingsView: View {
             return Strings.AlarmsTab.alarmOffLabel
         }
         return alarmConfigStore.defaults.defaultIftarDelivery.summaryText
+    }
+
+    private var followUpSummaryText: String {
+        guard settingsStore.settings.snoozeEnabled else {
+            return Strings.AlarmsTab.alarmOffLabel
+        }
+        return "\(settingsStore.settings.snoozeMinutes) min after wake"
     }
 
     private func previewRow(title: String, value: String) -> some View {
@@ -263,6 +302,28 @@ struct DefaultAlarmsSettingsView: View {
             var delivery = alarmConfigStore.defaults.defaultIftarDelivery
             delivery.adhan = newValue
             alarmConfigStore.defaults.defaultIftarDelivery = delivery.normalized()
+            rescheduleFromDefaults()
+        })
+    }
+
+    private var wakeFollowUpEnabledBinding: Binding<Bool> {
+        Binding(get: {
+            settingsStore.settings.snoozeEnabled
+        }, set: { newValue in
+            settingsStore.update { draft in
+                draft.snoozeEnabled = newValue
+            }
+            rescheduleFromDefaults()
+        })
+    }
+
+    private var wakeFollowUpMinutesBinding: Binding<Int> {
+        Binding(get: {
+            settingsStore.settings.snoozeMinutes
+        }, set: { newValue in
+            settingsStore.update { draft in
+                draft.snoozeMinutes = newValue
+            }
             rescheduleFromDefaults()
         })
     }

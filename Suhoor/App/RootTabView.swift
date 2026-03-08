@@ -40,6 +40,8 @@ struct RootTabView: View {
                 PlanRootView()
                     .navigationDestination(for: PlanDestination.self) { destination in
                         switch destination {
+                        case .defaultMorningPlan:
+                            DefaultAlarmsSettingsView()
                         case .qadaPlanner:
                             QadaPlannerView()
                         case .shawwalPlanner:
@@ -104,6 +106,11 @@ struct RootTabView: View {
         .onReceive(NotificationCenter.default.publisher(for: .openPlanHome)) { _ in
             selectedTab = .plans
             planPath.removeLast(planPath.count)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .openPlanDefaultMorningPlan)) { _ in
+            selectedTab = .plans
+            planPath.removeLast(planPath.count)
+            planPath.append(PlanDestination.defaultMorningPlan)
         }
         .onReceive(NotificationCenter.default.publisher(for: .openPlanQada)) { _ in
             selectedTab = .plans

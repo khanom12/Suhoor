@@ -1,9 +1,12 @@
 import SwiftUI
 
 struct PlanRootView: View {
+    @EnvironmentObject private var scheduleManager: ScheduleManager
+    @EnvironmentObject private var alarmConfigStore: AlarmConfigStore
+    @EnvironmentObject private var settingsStore: SuhoorSettingsStore
     @EnvironmentObject private var qadaBacklogStore: QadaBacklogStore
     @EnvironmentObject private var fastLogStore: FastLogStore
-    @State private var progress = QadaProgressSnapshot(remaining: 0, completed: 0, baselineOwed: 0)
+    @State private var qadaProgress = QadaProgressSnapshot(remaining: 0, completed: 0, baselineOwed: 0)
 
     private let columns = [
         GridItem(.flexible(), spacing: DesignTokens.spacingM),
@@ -12,36 +15,43 @@ struct PlanRootView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: DesignTokens.spacingL) {
-                NavigationLink(value: PlanDestination.calendar) {
-                    GlassCard(style: .header, tintColor: DawnColor.lightGold200, tintOpacity: 0.25) {
-                        HStack {
-                            VStack(alignment: .leading, spacing: 6) {
-                                Text("View Calendar")
-                                    .font(.headline.weight(.semibold))
-                                Text("See scheduled days and upcoming observances.")
-                                    .font(.footnote)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            Image(systemName: "calendar")
-                                .font(.title3.weight(.semibold))
-                                .foregroundStyle(.primary)
-                        }
-                    }
+            VStack(alignment: .leading, spacing: DesignTokens.spacingXL) {
+                NavigationLink(value: PlanDestination.defaultMorningPlan) {
+                    DefaultMorningPlanCard(summary: defaultMorningPlanSummary)
                 }
                 .buttonStyle(.plain)
 
-                LazyVGrid(columns: columns, spacing: DesignTokens.spacingM) {
-                    ForEach(tiles(progress: progress)) { tile in
-                        if tile.destination == .qadaPlanner {
-                            Button {
-                                NotificationCenter.default.post(name: .openPlanQada, object: nil)
-                            } label: {
-                                PlanTileView(tile: tile)
-                            }
-                            .buttonStyle(.plain)
-                        } else {
+                VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
+                    SectionTitle("Configured Plans")
+
+                    NavigationLink(value: PlanDestination.calendar) {
+                        ConfiguredPlansCard(snapshot: configuredPlansSnapshot)
+                    }
+                    .buttonStyle(.plain)
+
+                    Button {
+                        NotificationCenter.default.post(name: .openPlanQada, object: nil)
+                    } label: {
+                        ConfiguredQadaCard(progress: qadaProgress)
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
+                    SectionTitle("Opportunity Browsing")
+
+                    NavigationLink(value: PlanDestination.sunnahPlanner) {
+                        PlansFeatureRow(
+                            title: "Sunnah opportunities",
+                            subtitle: "Browse upcoming observances and recurring opportunities.",
+                            systemImage: "sparkles",
+                            color: DawnColor.lightGold200
+                        )
+                    }
+                    .buttonStyle(.plain)
+
+                    LazyVGrid(columns: columns, spacing: DesignTokens.spacingM) {
+                        ForEach(opportunityTiles) { tile in
                             NavigationLink(value: tile.destination) {
                                 PlanTileView(tile: tile)
                             }
@@ -55,9 +65,7 @@ struct PlanRootView: View {
         }
         .navigationTitle("Plans")
         .navigationBarTitleDisplayMode(.large)
-        .onAppear {
-            refreshProgress()
-        }
+        .onAppear(perform: refreshProgress)
         .onChange(of: qadaBacklogStore.state) { _, _ in
             refreshProgress()
         }
@@ -66,28 +74,64 @@ struct PlanRootView: View {
         }
     }
 
-    private func refreshProgress() {
-        progress = QadaProgressEngine.snapshot(
-            state: qadaBacklogStore.state,
-            logEntries: fastLogStore.entriesByDateKey
+    private var defaultMorningPlanSummary: DefaultMorningPlanSummary {
+        let defaults = alarmConfigStore.defaults
+        let wakeRelation: String
+        switch defaults.defaultSuhoorTimeMode {
+        case .relativeToFajrMinusMinutes:
+            wakeRelation = "\(defaults.defaultSuhoorOffsetMinutes) min before Fajr"
+        case .fixedTime:
+            let timeText = SettingsSummaryFormatter.timeText(minutesFromMidnight: defaults.defaultSuhoorOffsetMinutes)
+            wakeRelation = "\(timeText) fixed wake (compatibility)"
+        }
+
+        let reminderSummary = defaults.reminderEnabledDefault
+            ? defaultReminderSummary
+            : "Reminder off"
+        let followUpSummary = settingsStore.settings.snoozeEnabled
+            ? "\(settingsStore.settings.snoozeMinutes) min after wake"
+            : "Off"
+
+        var supportItems = [
+            defaults.wakeAlarmEnabledText,
+            reminderSummary,
+            "Follow-up \(followUpSummary)"
+        ]
+        if defaults.fajrEnabledDefault {
+            supportItems.append("Fajr notice on")
+        }
+        if defaults.iftarEnabledDefault {
+            supportItems.append("Iftar support on")
+        }
+
+        return DefaultMorningPlanSummary(
+            wakeAnchor: "Fajr start",
+            wakeRelation: wakeRelation,
+            supportItems: supportItems
         )
     }
 
-    private func tiles(progress: QadaProgressSnapshot) -> [PlanTile] {
-        let qadaStatus: String
-        if progress.baselineOwed > 0 {
-            qadaStatus = "Remaining: \(progress.remaining)"
-        } else {
-            qadaStatus = "Plan your Qada"
+    private var defaultReminderSummary: String {
+        let defaults = alarmConfigStore.defaults
+        switch defaults.defaultReminderTimeMode {
+        case .beforeFajr:
+            return "Reminder \(defaults.defaultReminderMinutesBeforeFajr) min before Fajr"
+        case .fixedTime:
+            let timeText = SettingsSummaryFormatter.timeText(minutesFromMidnight: defaults.defaultReminderFixedTimeMinutes)
+            return "Reminder \(timeText) fixed"
         }
+    }
 
-        return [
-            PlanTile(
-                title: "Qada",
-                subtitle: qadaStatus,
-                color: FastPrimaryIntent.qadaMakeup.style.color,
-                destination: .qadaPlanner
-            ),
+    private var configuredPlansSnapshot: ConfiguredPlansSnapshot {
+        ProductSurfacePresentation.configuredPlansSnapshot(
+            upcomingDays: scheduleManager.activeWindowSnapshot.visibleDays,
+            overrideDateKeys: Set(alarmConfigStore.overridesByDay.keys),
+            qadaProgress: qadaProgress
+        )
+    }
+
+    private var opportunityTiles: [PlanTile] {
+        [
             PlanTile(
                 title: "Shawwal",
                 subtitle: "Plan Shawwal 6",
@@ -126,11 +170,213 @@ struct PlanRootView: View {
             ),
             PlanTile(
                 title: "Others",
-                subtitle: "Custom days",
+                subtitle: "Custom fasting days",
                 color: .secondary,
                 destination: .others
             ),
         ]
+    }
+
+    private func refreshProgress() {
+        qadaProgress = QadaProgressEngine.snapshot(
+            state: qadaBacklogStore.state,
+            logEntries: fastLogStore.entriesByDateKey
+        )
+    }
+}
+
+private struct DefaultMorningPlanSummary {
+    let wakeAnchor: String
+    let wakeRelation: String
+    let supportItems: [String]
+}
+
+private struct DefaultMorningPlanCard: View {
+    let summary: DefaultMorningPlanSummary
+
+    var body: some View {
+        GlassCard(style: .header, tintColor: DawnColor.lightGold200, tintOpacity: 0.25) {
+            VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
+                HStack(alignment: .top, spacing: DesignTokens.spacingM) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Default Morning Plan")
+                            .font(.headline.weight(.semibold))
+                        Text("Your daily wake setup around Fajr.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Spacer()
+
+                    Image(systemName: "sun.horizon")
+                        .font(.title3.weight(.semibold))
+                        .foregroundStyle(.primary)
+                }
+
+                VStack(alignment: .leading, spacing: DesignTokens.spacingS) {
+                    SummaryRow(label: "Wake anchor", value: summary.wakeAnchor)
+                    SummaryRow(label: "Wake relation", value: summary.wakeRelation)
+                    SummaryRow(
+                        label: "Support",
+                        value: summary.supportItems.joined(separator: " · ")
+                    )
+                }
+            }
+        }
+    }
+}
+
+private struct ConfiguredPlansCard: View {
+    let snapshot: ConfiguredPlansSnapshot
+
+    var body: some View {
+        GlassCard(tintColor: DawnColor.accent, tintOpacity: 0.12) {
+            VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
+                HStack(alignment: .top, spacing: DesignTokens.spacingM) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Upcoming special planned mornings")
+                            .font(.headline.weight(.semibold))
+                        Text("Overrides, Qada days, selected fasting days, and other non-default mornings.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Spacer()
+
+                    Image(systemName: "calendar.badge.clock")
+                        .font(.title3.weight(.semibold))
+                        .foregroundStyle(DawnColor.accent)
+                }
+
+                if snapshot.hasUpcomingSpecialMornings {
+                    VStack(alignment: .leading, spacing: DesignTokens.spacingS) {
+                        ForEach(snapshot.upcomingSpecialMornings) { item in
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(item.title)
+                                    .font(.subheadline.weight(.semibold))
+                                Text(item.subtitle)
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+
+                        if snapshot.additionalSpecialMorningCount > 0 {
+                            Text("+\(snapshot.additionalSpecialMorningCount) more in Schedule")
+                                .font(.footnote.weight(.semibold))
+                                .foregroundStyle(DawnColor.accent)
+                        }
+                    }
+                } else {
+                    Text("No upcoming non-default mornings are scheduled yet.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+}
+
+private struct ConfiguredQadaCard: View {
+    let progress: QadaProgressSnapshot
+
+    var body: some View {
+        GlassCard(tintColor: FastPrimaryIntent.qadaMakeup.style.color, tintOpacity: 0.14) {
+            VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
+                HStack(alignment: .top, spacing: DesignTokens.spacingM) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Fasting & Qada")
+                            .font(.headline.weight(.semibold))
+                        Text(qadaDescription)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Spacer()
+
+                    Image(systemName: "checklist")
+                        .font(.title3.weight(.semibold))
+                        .foregroundStyle(FastPrimaryIntent.qadaMakeup.style.color)
+                }
+
+                SummaryRow(label: "Qada", value: qadaValue)
+            }
+        }
+    }
+
+    private var qadaDescription: String {
+        if progress.baselineOwed > 0 {
+            return "Track remaining Qada obligations and planned Qada mornings."
+        }
+        return "Set up Qada obligations when you need them."
+    }
+
+    private var qadaValue: String {
+        if progress.baselineOwed > 0 {
+            return "\(progress.completed) completed · \(progress.remaining) remaining"
+        }
+        return "Not configured"
+    }
+}
+
+private struct PlansFeatureRow: View {
+    let title: String
+    let subtitle: String
+    let systemImage: String
+    let color: Color
+
+    var body: some View {
+        GlassCard(tintColor: color, tintOpacity: 0.12) {
+            HStack(alignment: .top, spacing: DesignTokens.spacingM) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(title)
+                        .font(.headline.weight(.semibold))
+                    Text(subtitle)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                Image(systemName: systemImage)
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(color)
+            }
+        }
+    }
+}
+
+private struct SectionTitle: View {
+    let title: String
+
+    init(_ title: String) {
+        self.title = title
+    }
+
+    var body: some View {
+        Text(title)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .textCase(.uppercase)
+    }
+}
+
+private struct SummaryRow: View {
+    let label: String
+    let value: String
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: DesignTokens.spacingM) {
+            Text(label)
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(.secondary)
+
+            Spacer()
+
+            Text(value)
+                .font(.footnote)
+                .foregroundStyle(.primary)
+                .multilineTextAlignment(.trailing)
+        }
     }
 }
 
@@ -164,5 +410,15 @@ private struct PlanTileView: View {
                 }
             }
         }
+    }
+}
+
+private extension DefaultAlarmConfig {
+    var wakeAlarmEnabledText: String {
+        wakeAlarmEnabledDefault ? "Wake alarm on" : "Wake alarm off"
+    }
+
+    var wakeAlarmEnabledDefault: Bool {
+        suhoorEnabledDefault
     }
 }

@@ -39,7 +39,7 @@ struct FastHistoryView: View {
                 Text("Tap an icon to log. Tap again to clear.")
             }
         }
-        .navigationTitle("Fast History")
+        .navigationTitle("Observance History")
         .navigationBarTitleDisplayMode(.inline)
     }
 

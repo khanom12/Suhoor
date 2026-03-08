@@ -128,15 +128,10 @@ struct AlarmsHomeView: View {
                 } label: {
                     Image(systemName: tagFilter.isActive ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
                 }
-                Button {
-                    NotificationCenter.default.post(name: .switchToSettingsTab, object: nil)
-                } label: {
-                    Image(systemName: "gearshape")
-                }
             }
         }
         .confirmationDialog(
-            "Delete alarm",
+            "Remove scheduled morning",
             isPresented: Binding(
                 get: { pendingSeriesDeleteEntry != nil },
                 set: { isPresented in
@@ -150,21 +145,21 @@ struct AlarmsHomeView: View {
             if let entry = pendingSeriesDeleteEntry {
                 let excludable = entry.excludableProvenances
                 if excludable.count == 1, let provenance = excludable.first {
-                    Button("Remove this day only") {
+                    Button("Remove this morning only") {
                         Task {
                             await deleteDayOnly(entry: entry, provenance: provenance)
                             await MainActor.run { pendingSeriesDeleteEntry = nil }
                         }
                     }
                 } else {
-                    Button("Remove this day from all schedules", role: .destructive) {
+                    Button("Remove this morning from all plans", role: .destructive) {
                         Task {
                             await deleteDayFromAllSchedules(entry: entry, provenances: excludable)
                             await MainActor.run { pendingSeriesDeleteEntry = nil }
                         }
                     }
                     ForEach(excludable, id: \.id) { provenance in
-                        Button("Remove this day from \(provenance.label)") {
+                        Button("Remove this morning from \(provenance.label)") {
                             Task {
                                 await deleteDayOnly(entry: entry, provenance: provenance)
                                 await MainActor.run { pendingSeriesDeleteEntry = nil }
@@ -187,7 +182,7 @@ struct AlarmsHomeView: View {
             }
         }
         .alert(
-            "Ramadan alarms can't be deleted",
+            "Ramadan mornings can't be deleted",
             isPresented: Binding(
                 get: { pendingRamadanEntry != nil },
                 set: { isPresented in
@@ -208,7 +203,7 @@ struct AlarmsHomeView: View {
                 pendingRamadanEntry = nil
             }
         } message: {
-            Text("This date is part of Ramadan. You can turn it off for the day instead.")
+            Text("This date is part of Ramadan. You can still turn it off for the day.")
         }
         .navigationDestination(isPresented: navigationIsActiveBinding) {
             if let schedule = selectedSchedule {
@@ -277,13 +272,7 @@ struct AlarmsHomeView: View {
 
     private func alarmRow(for entry: AlarmRowEntry, isPinnedNextAlarm: Bool = false) -> some View {
         AlarmRowView(
-            schedule: entry.schedule,
-            config: entry.config,
-            primaryDisplay: entry.primary,
-            primaryIntent: entry.primaryIntent,
-            secondaryTags: entry.secondaryTags,
-            warnings: entry.warnings,
-            showsTags: entry.showsTags,
+            entry: entry,
             deleteCapability: entry.deleteCapability,
             onToggleChanged: { isOn in
                 guard isPinnedNextAlarm else { return }
@@ -880,13 +869,7 @@ private struct AlarmRowView: View {
 
     private let editAccessoryWidth: CGFloat = 40
 
-    let schedule: DaySchedule
-    let config: EffectiveDailyConfig
-    let primaryDisplay: PrimaryDisplay?
-    let primaryIntent: FastPrimaryIntent
-    let secondaryTags: [FastSecondaryVirtueTag]
-    let warnings: [FastWarning]
-    let showsTags: Bool
+    let entry: AlarmRowEntry
     let deleteCapability: AlarmRowDeleteCapability
     let onToggleChanged: (Bool) -> Void
     let onSelect: () -> Void
@@ -911,30 +894,18 @@ private struct AlarmRowView: View {
     }()
 
     init(
-        schedule: DaySchedule,
-        config: EffectiveDailyConfig,
-        primaryDisplay: PrimaryDisplay?,
-        primaryIntent: FastPrimaryIntent,
-        secondaryTags: [FastSecondaryVirtueTag],
-        warnings: [FastWarning],
-        showsTags: Bool,
+        entry: AlarmRowEntry,
         deleteCapability: AlarmRowDeleteCapability,
         onToggleChanged: @escaping (Bool) -> Void = { _ in },
         onSelect: @escaping () -> Void,
         onRequestRamadanDisable: @escaping () -> Void
     ) {
-        self.schedule = schedule
-        self.config = config
-        self.primaryDisplay = primaryDisplay
-        self.primaryIntent = primaryIntent
-        self.secondaryTags = secondaryTags
-        self.warnings = warnings
-        self.showsTags = showsTags
+        self.entry = entry
         self.deleteCapability = deleteCapability
         self.onToggleChanged = onToggleChanged
         self.onSelect = onSelect
         self.onRequestRamadanDisable = onRequestRamadanDisable
-        _localIsOn = State(initialValue: AlarmRowView.isEnabled(config: config))
+        _localIsOn = State(initialValue: AlarmRowView.isEnabled(config: entry.config))
     }
 
     var body: some View {
@@ -973,11 +944,31 @@ private struct AlarmRowView: View {
                     }
                 }
 
-                HStack(alignment: .center, spacing: 10) {
-                    Text(fajrLineText)
-                        .font(.callout)
+                Text("\(rowPresentation.relationText) • Fajr \(fajrTimeText)")
+                    .font(.callout)
+                    .foregroundStyle(isDisabled ? .tertiary : .secondary)
+                    .monospacedDigit()
+
+                HStack(spacing: DesignTokens.spacingXS) {
+                    ScheduleContextChip(
+                        title: rowPresentation.primaryContextTitle,
+                        prominence: .primary,
+                        isDisabled: isDisabled
+                    )
+
+                    ForEach(rowPresentation.secondaryContextTitles, id: \.self) { title in
+                        ScheduleContextChip(
+                            title: title,
+                            prominence: .secondary,
+                            isDisabled: isDisabled
+                        )
+                    }
+                }
+
+                if let provenanceText = rowPresentation.provenanceText {
+                    Text(provenanceText)
+                        .font(.footnote)
                         .foregroundStyle(isDisabled ? .tertiary : .secondary)
-                        .monospacedDigit()
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -994,27 +985,13 @@ private struct AlarmRowView: View {
                 Toggle("", isOn: dayActiveBinding)
                     .labelsHidden()
                     .tint(DawnColor.accent)
-                    .accessibilityLabel("\(primaryLabelText) alarm")
+                    .accessibilityLabel("Enable this wake plan day")
                     .frame(minWidth: 51, alignment: .trailing)
-
-                if showsTags {
-                    HomeTagCapsuleRow(
-                        primaryIntent: primaryIntent,
-                        secondaryTags: secondaryTags,
-                        warnings: warnings,
-                        showPrimaryIntent: showPrimaryIntent,
-                        isDisabled: isDisabled,
-                        showsTitle: true,
-                        isCompact: false
-                    )
-                    .frame(maxWidth: 190, alignment: .trailing)
-                    .fixedSize(horizontal: false, vertical: true)
-                }
             }
             .frame(minWidth: 74, alignment: .trailing)
         }
         .padding(.vertical, 6)
-        .onChange(of: config) { _, newValue in
+        .onChange(of: entry.config) { _, newValue in
             localIsOn = AlarmRowView.isEnabled(config: newValue)
         }
     }
@@ -1027,15 +1004,8 @@ private struct AlarmRowView: View {
         TimeFormatters.timeFormatter.string(from: schedule.fajrDate)
     }
 
-    private var primaryTimeText: String {
-        if let primaryDisplay {
-            return TimeFormatters.timeFormatter.string(from: primaryDisplay.time)
-        }
-        return TimeFormatters.timeFormatter.string(from: schedule.wakeDate)
-    }
-
     private var primaryTimeDate: Date {
-        primaryDisplay?.time ?? schedule.wakeDate
+        schedule.wakeDate
     }
 
     private var primaryTimeMain: String {
@@ -1046,8 +1016,11 @@ private struct AlarmRowView: View {
         AlarmRowView.timeSuffixFormatter.string(from: primaryTimeDate)
     }
 
-    private var fajrLineText: String {
-        return "Fajr \(fajrTimeText)"
+    private var rowPresentation: ScheduleRowPresentation {
+        ProductSurfacePresentation.scheduleRowPresentation(
+            for: entry.activeDay,
+            hasDayOverride: alarmConfigStore.override(for: schedule.date, timeZone: .current) != nil
+        )
     }
 
     private var dateLabel: String {
@@ -1067,24 +1040,14 @@ private struct AlarmRowView: View {
     }
 
     private var accessibilitySummary: String {
-        var summary = "\(dateLabelWithPrefix). \(primaryLabelText) alarm. \(primaryTimeText). Fajr \(fajrTimeText)."
-        if let tagAccessibilityText {
-            summary += " \(tagAccessibilityText)"
+        var summary = "\(dateLabelWithPrefix). Wake at \(primaryTimeText). \(rowPresentation.relationText). \(rowPresentation.primaryContextTitle)."
+        if rowPresentation.secondaryContextTitles.isEmpty == false {
+            summary += " \(rowPresentation.secondaryContextTitles.joined(separator: ", "))."
+        }
+        if let provenanceText = rowPresentation.provenanceText {
+            summary += " \(provenanceText)."
         }
         return summary
-    }
-
-    private var primaryLabelText: String {
-        switch primaryDisplay?.kind ?? .suhoor {
-        case .suhoor:
-            return "Suhoor"
-        case .reminder:
-            return "Reminder"
-        case .fajr:
-            return "Fajr"
-        case .iftar:
-            return "Iftar"
-        }
     }
 
     private var isDisabled: Bool {
@@ -1095,23 +1058,44 @@ private struct AlarmRowView: View {
         AlarmRowPresentation.accessibilityDateLabel(for: schedule.date)
     }
 
-    private var tagAccessibilityText: String? {
-        guard showsTags else { return nil }
-        var titles: [String] = []
-        titles.append(contentsOf: warnings.map(\.title))
-        if showPrimaryIntent {
-            titles.append(primaryIntent.style.title)
-        }
-        titles.append(contentsOf: secondaryTags.map { $0.title })
-        return "Tags: \(titles.joined(separator: ", "))."
-    }
-
-    private var showPrimaryIntent: Bool {
-        primaryIntent != .other || !secondaryTags.isEmpty
-    }
-
     private static func isEnabled(config: EffectiveDailyConfig) -> Bool {
         !config.skipDay && config.hasAnyEnabled
+    }
+
+    private var schedule: DaySchedule {
+        entry.schedule
+    }
+
+    private var primaryTimeText: String {
+        TimeFormatters.timeFormatter.string(from: primaryTimeDate)
+    }
+}
+
+private struct ScheduleContextChip: View {
+    enum Prominence {
+        case primary
+        case secondary
+    }
+
+    let title: String
+    let prominence: Prominence
+    let isDisabled: Bool
+
+    var body: some View {
+        Text(title)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(prominence == .primary ? DawnColor.accent : Color.secondary)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(
+                Capsule()
+                    .fill(
+                        prominence == .primary
+                            ? DawnColor.accent.opacity(0.14)
+                            : Color(.secondarySystemGroupedBackground)
+                    )
+            )
+            .opacity(isDisabled ? 0.55 : 1.0)
     }
 }
 

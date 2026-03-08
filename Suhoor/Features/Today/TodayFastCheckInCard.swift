@@ -131,7 +131,7 @@ struct TodayFastCheckInCard: View {
                 )
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Open fast history")
+        .accessibilityLabel("Open observance history")
     }
 
     @ViewBuilder
@@ -151,7 +151,7 @@ struct TodayFastCheckInCard: View {
                 )
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Undo fast status")
+        .accessibilityLabel("Undo fasting status")
     }
 
     private func resolvedIntentSnapshot(for date: Date, dateKey: String, timeZone: TimeZone) -> FastIntentSnapshot {
