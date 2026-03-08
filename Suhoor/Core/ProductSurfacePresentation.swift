@@ -1,18 +1,10 @@
 import Foundation
 
-enum HomeObservanceSupportKind: Equatable, Sendable {
-    case ramadan
-    case shawwalSix
-    case dhulHijjah
-    case ashura
-    case whiteDays
-}
-
 enum HomeSupportCardKind: Equatable, Sendable {
     case blockingIssue(AppPermissionKind)
+    case fajrCheckIn
     case forbiddenFast(FastWarning)
     case fastingCheckIn
-    case observance(HomeObservanceSupportKind)
 }
 
 struct ConfiguredPlanItem: Identifiable, Equatable, Sendable {
@@ -50,7 +42,7 @@ struct WakeProgressSnapshot: Equatable, Sendable {
         summaryTitle: nil,
         summaryDetail: nil,
         recentActivityLines: [],
-        emptyStateText: "Wake activity will appear after Suhoor records a few wake events."
+        emptyStateText: "Wake activity will appear after a few mornings."
     )
 }
 
@@ -124,7 +116,10 @@ enum ProductSurfacePresentation {
     }
 
     static func homeSupportCard(
+        now: Date,
         currentDay: ActiveAlarmDay?,
+        todaySchedule: DaySchedule?,
+        fajrStatus: FajrCompletionStatus,
         permissionSnapshot: PermissionSnapshot,
         hijriComponents: AdjustedHijriDateComponents?,
         dismissedWarnings: Set<FastWarning>
@@ -136,6 +131,10 @@ enum ProductSurfacePresentation {
             }
         }
 
+        if let todaySchedule, isFajrCheckInRelevant(now: now, schedule: todaySchedule, status: fajrStatus) {
+            return .fajrCheckIn
+        }
+
         if let forbidden = activeForbiddenWarning(
             for: hijriComponents,
             dismissedWarnings: dismissedWarnings
@@ -145,10 +144,6 @@ enum ProductSurfacePresentation {
 
         if let currentDay, isFastingCheckInRelevant(for: currentDay) {
             return .fastingCheckIn
-        }
-
-        if let observance = liveObservanceSupportKind(for: hijriComponents) {
-            return .observance(observance)
         }
 
         return nil
@@ -271,30 +266,6 @@ enum ProductSurfacePresentation {
         return nil
     }
 
-    private static func liveObservanceSupportKind(
-        for components: AdjustedHijriDateComponents?
-    ) -> HomeObservanceSupportKind? {
-        guard let components else { return nil }
-
-        if components.month == .ramadan {
-            return .ramadan
-        }
-        if components.month == .shawwal && components.day >= 2 {
-            return .shawwalSix
-        }
-        if components.month == .dhulHijjah && (1...9).contains(components.day) {
-            return .dhulHijjah
-        }
-        if components.month == .muharram && (9...11).contains(components.day) {
-            return .ashura
-        }
-        if components.month != .ramadan && (13...15).contains(components.day) {
-            return .whiteDays
-        }
-
-        return nil
-    }
-
     private static func isFastingCheckInRelevant(for day: ActiveAlarmDay) -> Bool {
         let tags = Set(day.resolvedDayContext.supportingTags)
         if day.resolvedDayContext.primaryContext == .fasting
@@ -317,6 +288,27 @@ enum ProductSurfacePresentation {
             .mondayThursday,
             .dhulHijjahFirstNine,
         ]).isEmpty == false
+    }
+
+    private static func isFajrCheckInRelevant(
+        now: Date,
+        schedule: DaySchedule,
+        status: FajrCompletionStatus
+    ) -> Bool {
+        guard status == .unknown else { return false }
+
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .current
+        let midday = calendar.date(
+            bySettingHour: 12,
+            minute: 0,
+            second: 0,
+            of: schedule.date
+        ) ?? schedule.fajrDate.addingTimeInterval(60 * 60 * 12)
+        let earlyWindowEnd = schedule.fajrDate.addingTimeInterval(60 * 60 * 3)
+        let cutoff = min(midday, earlyWindowEnd)
+
+        return now >= schedule.fajrDate && now <= cutoff
     }
 
     private static func isConfiguredSpecialMorning(

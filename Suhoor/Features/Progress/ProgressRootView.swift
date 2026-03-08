@@ -3,6 +3,7 @@ import SwiftUI
 struct ProgressRootView: View {
     @EnvironmentObject private var qadaBacklogStore: QadaBacklogStore
     @EnvironmentObject private var fastLogStore: FastLogStore
+    @EnvironmentObject private var fajrLogStore: FajrLogStore
     @State private var qadaProgress = QadaProgressSnapshot(remaining: 0, completed: 0, baselineOwed: 0)
     @State private var wakeProgress = WakeProgressSnapshot.empty
 
@@ -10,6 +11,54 @@ struct ProgressRootView: View {
 
     var body: some View {
         List {
+            Section {
+                NavigationLink {
+                    FajrHistoryView()
+                } label: {
+                    VStack(alignment: .leading, spacing: DesignTokens.spacingS) {
+                        LabeledContent("Today", value: fajrTodaySummary)
+                        LabeledContent("Last 30 mornings", value: fajrSummary)
+                    }
+                }
+            } header: {
+                Text("Fajr Completion")
+            } footer: {
+                Text("Log whether you made Fajr. This stays separate from fasting.")
+            }
+
+            Section {
+                VStack(alignment: .leading, spacing: DesignTokens.spacingS) {
+                    LabeledContent("Today", value: fastTodaySummary)
+                    LabeledContent("Last 30 days", value: fastSummary)
+                }
+            } header: {
+                Text("Fast Completion")
+            } footer: {
+                Text("Use fasting logs only for fasting days.")
+            }
+
+            Section {
+                LabeledContent("Completed", value: "\(qadaProgress.completed)")
+                LabeledContent("Remaining", value: "\(qadaProgress.remaining)")
+                if qadaProgress.baselineOwed == 0 {
+                    Text("Add Qada obligations from Plans when you need them.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            } header: {
+                Text("Qada Progress")
+            }
+
+            Section {
+                NavigationLink {
+                    FastHistoryView()
+                } label: {
+                    LabeledContent("Past 30 days", value: historySummary)
+                }
+            } header: {
+                Text("Observance History")
+            }
+
             Section {
                 if let summaryTitle = wakeProgress.summaryTitle {
                     VStack(alignment: .leading, spacing: DesignTokens.spacingXS) {
@@ -35,29 +84,7 @@ struct ProgressRootView: View {
             } header: {
                 Text("Wake Activity")
             } footer: {
-                Text("Recent wake activity uses the current wake-event log until a dedicated wake history model replaces it.")
-            }
-
-            Section {
-                LabeledContent("Completed", value: "\(qadaProgress.completed)")
-                LabeledContent("Remaining", value: "\(qadaProgress.remaining)")
-                if qadaProgress.baselineOwed == 0 {
-                    Text("Add Qada obligations from Plans when you need them.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-            } header: {
-                Text("Qada Progress")
-            }
-
-            Section {
-                NavigationLink {
-                    FastHistoryView()
-                } label: {
-                    LabeledContent("Last 30 days", value: historySummary)
-                }
-            } header: {
-                Text("Observance History")
+                Text("Recent wake activity still uses the current wake-event log until a dedicated wake history model replaces it.")
             }
         }
         .navigationTitle("Progress")
@@ -72,14 +99,77 @@ struct ProgressRootView: View {
         .onChange(of: fastLogStore.currentRevision) { _, _ in
             refreshProgress()
         }
+        .onChange(of: fajrLogStore.currentRevision) { _, _ in
+            refreshProgress()
+        }
     }
 
     private var historySummary: String {
-        let completed = fastLogStore.entriesByDateKey.values.filter { $0.status == .completed }.count
-        if completed == 0 {
+        let logged = fastLogStore.entriesByDateKey.values.count
+        if logged == 0 {
             return "No logged days yet"
         }
-        return "\(completed) completed"
+        return "\(logged) logged"
+    }
+
+    private var fajrTodaySummary: String {
+        let todayKey = DateHelpers.dayIdentifier(for: Date(), timeZone: .current)
+        return fajrLogStore.status(for: todayKey).title
+    }
+
+    private var fastTodaySummary: String {
+        let todayKey = DateHelpers.dayIdentifier(for: Date(), timeZone: .current)
+        switch fastLogStore.status(for: todayKey) {
+        case .unknown:
+            return "No fast logged"
+        case .inProgress:
+            return "In progress"
+        case .completed:
+            return "Completed"
+        case .missed:
+            return "Missed"
+        }
+    }
+
+    private var fajrSummary: String {
+        let entries = recentFajrEntries
+        let completed = entries.filter { $0.status == .completed }.count
+        let missed = entries.filter { $0.status == .missed }.count
+        if completed == 0 && missed == 0 {
+            return "No logged mornings yet"
+        }
+        return "\(completed) made it · \(missed) missed"
+    }
+
+    private var fastSummary: String {
+        let entries = recentFastEntries
+        let completed = entries.filter { $0.status == .completed }.count
+        let missed = entries.filter { $0.status == .missed }.count
+        if completed == 0 && missed == 0 {
+            return "No logged fasts yet"
+        }
+        return "\(completed) completed · \(missed) missed"
+    }
+
+    private var recentFajrEntries: [FajrLogEntry] {
+        let keys = recentDateKeys(days: 30)
+        return keys.compactMap { fajrLogStore.entry(for: $0) }
+    }
+
+    private var recentFastEntries: [FastLogEntry] {
+        let keys = recentDateKeys(days: 30)
+        return keys.compactMap { fastLogStore.entry(for: $0) }
+    }
+
+    private func recentDateKeys(days: Int) -> [String] {
+        let timeZone = TimeZone.current
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let today = calendar.startOfDay(for: Date())
+        return (0..<days).compactMap { offset in
+            let date = calendar.date(byAdding: .day, value: -offset, to: today) ?? today
+            return DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
+        }
     }
 
     private func refreshProgress() {

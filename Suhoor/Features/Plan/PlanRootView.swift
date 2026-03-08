@@ -22,12 +22,21 @@ struct PlanRootView: View {
                 .buttonStyle(.plain)
 
                 VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
-                    SectionTitle("Configured Plans")
+                    SectionTitle("Upcoming Special Plans")
 
                     NavigationLink(value: PlanDestination.calendar) {
                         ConfiguredPlansCard(snapshot: configuredPlansSnapshot)
                     }
                     .buttonStyle(.plain)
+
+                    NavigationLink(value: PlanDestination.calendar) {
+                        DatePlanningCard()
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
+                    SectionTitle("Fasting & Qada")
 
                     Button {
                         NotificationCenter.default.post(name: .openPlanQada, object: nil)
@@ -35,15 +44,20 @@ struct PlanRootView: View {
                         ConfiguredQadaCard(progress: qadaProgress)
                     }
                     .buttonStyle(.plain)
+
+                    NavigationLink(value: PlanDestination.others) {
+                        CustomFastingCard()
+                    }
+                    .buttonStyle(.plain)
                 }
 
                 VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
-                    SectionTitle("Opportunity Browsing")
+                    SectionTitle("Observance Opportunities")
 
                     NavigationLink(value: PlanDestination.sunnahPlanner) {
                         PlansFeatureRow(
                             title: "Sunnah opportunities",
-                            subtitle: "Browse upcoming observances and recurring opportunities.",
+                            subtitle: "Browse upcoming observances and recurring fasting opportunities.",
                             systemImage: "sparkles",
                             color: DawnColor.lightGold200
                         )
@@ -201,7 +215,7 @@ private struct DefaultMorningPlanCard: View {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("Default Morning Plan")
                             .font(.headline.weight(.semibold))
-                        Text("Your daily wake setup around Fajr.")
+                        Text("Your everyday wake setup around Fajr.")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
@@ -234,7 +248,7 @@ private struct ConfiguredPlansCard: View {
             VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
                 HStack(alignment: .top, spacing: DesignTokens.spacingM) {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("Upcoming special planned mornings")
+                        Text("Upcoming special plans")
                             .font(.headline.weight(.semibold))
                         Text("Overrides, Qada days, selected fasting days, and other non-default mornings.")
                             .font(.footnote)
@@ -267,10 +281,32 @@ private struct ConfiguredPlansCard: View {
                         }
                     }
                 } else {
-                    Text("No upcoming non-default mornings are scheduled yet.")
+                    Text("No upcoming special mornings yet.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
+            }
+        }
+    }
+}
+
+private struct DatePlanningCard: View {
+    var body: some View {
+        GlassCard(tintColor: DawnColor.lightGold200, tintOpacity: 0.14) {
+            HStack(alignment: .top, spacing: DesignTokens.spacingM) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Plan by date")
+                        .font(.headline.weight(.semibold))
+                    Text("Pick a date for a one-day change, fasting day, or Qada morning.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                Image(systemName: "calendar.badge.plus")
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(DawnColor.lightGold200)
             }
         }
     }
@@ -284,7 +320,7 @@ private struct ConfiguredQadaCard: View {
             VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
                 HStack(alignment: .top, spacing: DesignTokens.spacingM) {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("Fasting & Qada")
+                        Text("Qada")
                             .font(.headline.weight(.semibold))
                         Text(qadaDescription)
                             .font(.footnote)
@@ -315,6 +351,28 @@ private struct ConfiguredQadaCard: View {
             return "\(progress.completed) completed · \(progress.remaining) remaining"
         }
         return "Not configured"
+    }
+}
+
+private struct CustomFastingCard: View {
+    var body: some View {
+        GlassCard(tintColor: DawnColor.accent, tintOpacity: 0.1) {
+            HStack(alignment: .top, spacing: DesignTokens.spacingM) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Custom fasting days")
+                        .font(.headline.weight(.semibold))
+                    Text("Plan selected fasting days and other non-recurring observances.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                Image(systemName: "moon.stars")
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(DawnColor.accent)
+            }
+        }
     }
 }
 

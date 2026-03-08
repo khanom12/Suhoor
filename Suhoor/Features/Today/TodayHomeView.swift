@@ -2,48 +2,56 @@ import SwiftUI
 
 struct TodayHomeView: View {
     @EnvironmentObject private var scheduleManager: ScheduleManager
+    @EnvironmentObject private var fajrLogStore: FajrLogStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @StateObject private var dismissalStore = TodayCardDismissalStore()
 
     var body: some View {
-        let now = Date()
-        let hijriComponents = AdjustedHijriCalendar.shared.adjustedComponents(for: now, timeZone: .current)
-        let todayKey = DateHelpers.dayIdentifier(for: now, timeZone: .current)
-        let currentDay = scheduleManager.activeWindowSnapshot.byDateKey[todayKey]
-        let contextDay = scheduleManager.nextWakeEventSummary?.day ?? currentDay
-        let supportCardKind = ProductSurfacePresentation.homeSupportCard(
-            currentDay: currentDay,
-            permissionSnapshot: scheduleManager.permissionSnapshot,
-            hijriComponents: hijriComponents,
-            dismissedWarnings: dismissedWarnings(on: now)
-        )
+        TimelineView(.periodic(from: Date(), by: 60)) { context in
+            let now = context.date
+            let hijriComponents = AdjustedHijriCalendar.shared.adjustedComponents(for: now, timeZone: .current)
+            let todayKey = DateHelpers.dayIdentifier(for: now, timeZone: .current)
+            let todayStart = DateHelpers.startOfDay(now, in: .current)
+            let currentDay = scheduleManager.activeWindowSnapshot.byDateKey[todayKey]
+            let contextDay = scheduleManager.nextWakeEventSummary?.day ?? currentDay
+            let todaySchedule = currentDay?.schedule ?? scheduleManager.schedule(for: todayStart)
+            let supportCardKind = ProductSurfacePresentation.homeSupportCard(
+                now: now,
+                currentDay: currentDay,
+                todaySchedule: todaySchedule,
+                fajrStatus: fajrLogStore.status(for: todayKey),
+                permissionSnapshot: scheduleManager.permissionSnapshot,
+                hijriComponents: hijriComponents,
+                dismissedWarnings: dismissedWarnings(on: now)
+            )
 
-        ScrollView {
-            LazyVStack(spacing: DesignTokens.dashboardStackSpacing) {
-                TodayNextWakeHeroCard()
+            ScrollView {
+                LazyVStack(spacing: DesignTokens.dashboardStackSpacing) {
+                    TodayNextWakeHeroCard()
 
-                TodayDateContextStrip(
-                    now: now,
-                    contextDay: contextDay
-                )
-
-                if let supportCardKind {
-                    supportCardView(
-                        for: supportCardKind,
-                        now: now
+                    TodayDateContextStrip(
+                        now: now,
+                        contextDay: contextDay
                     )
+
+                    if let supportCardKind {
+                        supportCardView(
+                            for: supportCardKind,
+                            now: now
+                        )
+                    }
                 }
+                .padding(.horizontal, DesignTokens.spacingL)
+                .padding(.top, DesignTokens.spacingXS)
+                .padding(.bottom, DesignTokens.spacingXL)
             }
-            .padding(.horizontal, DesignTokens.spacingL)
-            .padding(.top, DesignTokens.spacingXS)
-            .padding(.bottom, DesignTokens.spacingXL)
+            .background(
+                Color(.systemGroupedBackground)
+                    .ignoresSafeArea()
+            )
+            .navigationTitle("Home")
+            .onAppear { _ = scheduleManager.lastUpdated }
         }
-        .background(
-            Color(.systemGroupedBackground)
-                .ignoresSafeArea()
-        )
-        .navigationTitle("Home")
-        .onAppear { _ = scheduleManager.lastUpdated }
     }
 
     private func dismissedWarnings(on now: Date) -> Set<FastWarning> {
@@ -60,6 +68,8 @@ struct TodayHomeView: View {
             if let presentation = scheduleManager.permissionSnapshot.presentations[permissionKind] {
                 TodayBlockingIssueCard(presentation: presentation)
             }
+        case .fajrCheckIn:
+            TodayFajrCheckInCard()
         case .forbiddenFast(let warning):
             TodayForbiddenFastDayCard(
                 kind: warning,
@@ -72,24 +82,6 @@ struct TodayHomeView: View {
             )
         case .fastingCheckIn:
             TodayFastCheckInCard()
-        case .observance(let observance):
-            seasonalSupportCard(for: observance)
-        }
-    }
-
-    @ViewBuilder
-    private func seasonalSupportCard(for observance: HomeObservanceSupportKind) -> some View {
-        switch observance {
-        case .ramadan:
-            TodayRamadanProgressCard(mode: .live)
-        case .shawwalSix:
-            TodayShawwalSixProgressCard(mode: .live)
-        case .dhulHijjah:
-            TodayDhulHijjahProgressCard(mode: .live)
-        case .ashura:
-            TodayAshuraProgressCard(mode: .live)
-        case .whiteDays:
-            TodayWhiteDaysProgressCard(mode: .live)
         }
     }
 }
@@ -199,7 +191,7 @@ private struct TodayNextWakeHeroCard: View {
     var body: some View {
         GlassCard(style: .header, tintColor: DawnColor.lightGold200, tintOpacity: 0.18) {
             VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
-                Text("Next Wake Event")
+                Text("Next wake")
                     .font(DesignTokens.cardMetaFont)
                     .foregroundStyle(.secondary)
 
@@ -212,25 +204,23 @@ private struct TodayNextWakeHeroCard: View {
                         Text(summaryLabel(for: summary))
                             .font(DesignTokens.cardTitleFont)
 
-                        Text(summary.relationText)
-                            .font(DesignTokens.cardSubtitleFont)
-                            .foregroundStyle(.secondary)
-
-                        Text("Fajr \(TimeFormatters.timeFormatter.string(from: summary.day.schedule.fajrDate))")
-                            .font(DesignTokens.cardMetaFont)
-                            .foregroundStyle(.secondary)
-
-                        Text(summary.day.resolvedDayContext.explanation.summary)
+                        Text("\(summary.relationText) • Fajr \(TimeFormatters.timeFormatter.string(from: summary.day.schedule.fajrDate))")
                             .font(DesignTokens.cardMetaFont)
                             .foregroundStyle(.secondary)
                     }
                 } else {
                     VStack(alignment: .leading, spacing: DesignTokens.spacingS) {
-                        Text("No wake event is scheduled yet.")
+                        Text("No wake yet.")
                             .font(DesignTokens.cardTitleFont)
-                        Text("Set your location and morning plan to compute your next wake around Fajr.")
+                        Text("Set your morning plan to start waking around Fajr.")
                             .font(DesignTokens.cardSubtitleFont)
                             .foregroundStyle(.secondary)
+
+                        Button("Set Morning Plan") {
+                            NotificationCenter.default.post(name: .openPlanDefaultMorningPlan, object: nil)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(DawnColor.accent)
                     }
                 }
             }
@@ -245,13 +235,13 @@ private struct TodayNextWakeHeroCard: View {
         case .wakeAlarm:
             eventTitle = "Main wake"
         case .wakeFollowUp:
-            eventTitle = "Wake follow-up"
+            eventTitle = "Follow-up"
         case .fajrBoundaryNotice:
             eventTitle = "Fajr notice"
         case .iftarReminder:
             eventTitle = "Iftar reminder"
         }
 
-        return "\(eventTitle) for \(scheduleManager.dayLabel(for: summary.day.date))"
+        return "\(eventTitle) • \(scheduleManager.dayLabel(for: summary.day.date))"
     }
 }

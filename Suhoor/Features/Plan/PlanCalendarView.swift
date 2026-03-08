@@ -5,27 +5,89 @@ struct PlanCalendarView: View {
 
     @State private var displayedMonth = DateHelpers.startOfToday()
     @State private var selectedDate = DateHelpers.startOfToday()
+    @State private var showsAddSheet = false
+    @State private var selectedSchedule: DaySchedule?
 
     var body: some View {
-        VStack(spacing: DesignTokens.spacingM) {
-            SuhoorCalendarView(
-                displayedMonth: $displayedMonth,
-                focusedDate: $selectedDate,
-                selectedDate: selectedDate,
-                allowedDateRange: allowedRange,
-                onSelectDate: { selectedDate = $0 }
-            )
-            .padding(.horizontal, DesignTokens.spacingL)
+        ScrollView {
+            VStack(spacing: DesignTokens.spacingM) {
+                SuhoorCalendarView(
+                    displayedMonth: $displayedMonth,
+                    focusedDate: $selectedDate,
+                    selectedDate: selectedDate,
+                    allowedDateRange: allowedRange,
+                    onSelectDate: { selectedDate = $0 }
+                )
+                .padding(.horizontal, DesignTokens.spacingL)
 
-            SuhoorCalendarDetailCard(
-                detail: scheduleManager.calendarDayDetail(for: selectedDate),
-                notScheduledText: "Not scheduled"
-            )
-            .padding(.horizontal, DesignTokens.spacingL)
-            .padding(.bottom, DesignTokens.spacingL)
+                SuhoorCalendarDetailCard(
+                    detail: detail,
+                    notScheduledText: "No special plan yet"
+                )
+                .padding(.horizontal, DesignTokens.spacingL)
+
+                VStack(spacing: DesignTokens.spacingS) {
+                    Button(primaryActionTitle) {
+                        if let existingSchedule {
+                            selectedSchedule = existingSchedule
+                        } else {
+                            showsAddSheet = true
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(DawnColor.accent)
+
+                    Text(primaryActionSubtitle)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .padding(.horizontal, DesignTokens.spacingL)
+                .padding(.bottom, DesignTokens.spacingL)
+            }
         }
-        .navigationTitle("Calendar")
+        .navigationTitle("Plan by Date")
         .navigationBarTitleDisplayMode(.large)
+        .sheet(isPresented: $showsAddSheet) {
+            NavigationStack {
+                AddScheduleSheet(
+                    isPresented: $showsAddSheet,
+                    onOpenExistingDay: { date in
+                        selectedDate = date
+                        selectedSchedule = scheduleManager.schedule(for: date)
+                    },
+                    initialSelectedDate: selectedDate
+                )
+            }
+        }
+        .sheet(item: $selectedSchedule) { schedule in
+            NavigationStack {
+                AlarmDayDetailView(schedule: schedule)
+            }
+        }
+    }
+
+    private var detail: CalendarDayDetail {
+        scheduleManager.calendarDayDetail(for: normalizedSelectedDate)
+    }
+
+    private var existingSchedule: DaySchedule? {
+        scheduleManager.schedule(for: normalizedSelectedDate)
+    }
+
+    private var normalizedSelectedDate: Date {
+        DateHelpers.startOfDay(selectedDate, in: .current)
+    }
+
+    private var primaryActionTitle: String {
+        existingSchedule == nil ? "Plan This Date" : "Edit This Morning"
+    }
+
+    private var primaryActionSubtitle: String {
+        if existingSchedule == nil {
+            return "Use this for one-day changes, fasting days, and Qada dates."
+        }
+        return "Open this morning to adjust its wake, meaning, or source."
     }
 
     private var allowedRange: ClosedRange<Date> {

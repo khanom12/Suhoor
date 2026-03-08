@@ -20,6 +20,23 @@ struct AddScheduleSheet: View {
     @State private var showsAshuraPatternSheet = false
     @State private var rangePickerTarget: RangePickerTarget?
 
+    init(
+        isPresented: Binding<Bool>,
+        onOpenExistingDay: @escaping (Date) -> Void,
+        initialSelectedDate: Date? = nil
+    ) {
+        _isPresented = isPresented
+        self.onOpenExistingDay = onOpenExistingDay
+
+        let seedDate = DateHelpers.startOfDay(initialSelectedDate ?? DateHelpers.startOfToday(), in: .current)
+        _selectedDate = State(initialValue: seedDate)
+        _singleDayDisplayedMonth = State(initialValue: AddScheduleMonthView.monthStart(for: seedDate))
+        _rangeStartDate = State(initialValue: seedDate)
+        _rangeEndDate = State(initialValue: seedDate)
+        _rangeStartDisplayedMonth = State(initialValue: AddScheduleMonthView.monthStart(for: seedDate))
+        _rangeEndDisplayedMonth = State(initialValue: AddScheduleMonthView.monthStart(for: seedDate))
+    }
+
     var body: some View {
         Form {
             Section {
@@ -155,13 +172,13 @@ struct AddScheduleSheet: View {
             }
         }
 
-        Section("Purpose") {
+        Section("Day Meaning") {
             Button {
                 showsTagPicker = true
             } label: {
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Edit Tags")
+                        Text("Edit day meaning")
                             .foregroundStyle(.primary)
                         Text(singleDayDetail.tagSummary)
                             .font(.footnote)
@@ -196,7 +213,7 @@ struct AddScheduleSheet: View {
             Text(Strings.AddSchedule.rangeHelper)
         }
 
-        Section("Purpose") {
+        Section("Day Meaning") {
             Picker("Purpose", selection: $rangePurposeSelection) {
                 ForEach(RangePurposeSelection.allCases) { purpose in
                     Text(purpose.title).tag(purpose)

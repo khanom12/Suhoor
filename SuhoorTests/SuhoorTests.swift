@@ -14,6 +14,27 @@ struct SuhoorTests {
     }
 
     @Test
+    func fajrLogStorePersistsAndClearsStatuses() {
+        let suiteName = "SuhoorTests.FajrLogStore"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+
+        let store = FajrLogStore(defaults: defaults)
+        store.setStatus(.completed, for: "2026-03-08", now: .distantPast)
+        #expect(store.status(for: "2026-03-08") == .completed)
+
+#if DEBUG
+        store.flushPersistenceForTesting()
+#endif
+
+        let reloaded = FajrLogStore(defaults: defaults)
+        #expect(reloaded.status(for: "2026-03-08") == .completed)
+
+        reloaded.clear(for: "2026-03-08")
+        #expect(reloaded.status(for: "2026-03-08") == .unknown)
+    }
+
+    @Test
     func iftarDeliveryNormalizesAudibleChoice() {
         let selection = IftarDeliverySelection(notification: true, alarm: true, adhan: true).normalized()
         #expect(selection.notification == true)

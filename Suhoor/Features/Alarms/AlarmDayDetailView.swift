@@ -404,7 +404,7 @@ struct AlarmDayDetailView: View {
                 } label: {
                     HStack {
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("Edit Tags")
+                            Text("Edit day meaning")
                                 .foregroundStyle(.primary)
                             Text(intentSummaryText)
                                 .font(.footnote)
@@ -419,17 +419,17 @@ struct AlarmDayDetailView: View {
                     }
                 }
             } header: {
-                Text("Intent")
+                Text("Day Meaning")
                     .textCase(nil)
             }
 
             Section {
-                Toggle("Enable this day", isOn: dayToggleBinding)
+                Toggle("Keep this morning active", isOn: dayToggleBinding)
             } header: {
-                Text("Day")
+                Text("One-Day Override")
                     .textCase(nil)
             } footer: {
-                Text(Strings.AlarmsTab.dayDisabledHelper)
+                Text("Changes here only apply to this date.")
             }
             .animation(Motion.standard(reduceMotion: reduceMotion), value: dayToggleBinding.wrappedValue)
 
@@ -526,7 +526,7 @@ struct AlarmDayDetailView: View {
                     showsResetConfirmation = true
                 }
             } header: {
-                Text("Reset")
+                Text("Clear One-Day Changes")
                     .textCase(nil)
             } footer: {
                 Text(Strings.AlarmsTab.resetDayHelper)
@@ -540,7 +540,7 @@ struct AlarmDayDetailView: View {
                         ScheduleSourceCard(presentation: presentation)
                     }
                 } header: {
-                    Text("Plan Source")
+                    Text("Why This Morning")
                         .textCase(nil)
                 }
             }
@@ -594,7 +594,7 @@ struct AlarmDayDetailView: View {
                         }
                     }
                 } header: {
-                    Text("Manage Source")
+                    Text("Change Planned Source")
                         .textCase(nil)
                 }
             }

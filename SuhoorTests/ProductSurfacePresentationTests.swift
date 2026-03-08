@@ -59,7 +59,7 @@ struct ProductSurfacePresentationTests {
     }
 
     @Test
-    func homeSupportCardPrefersBlockingIssuesOverFastingAndObservances() {
+    func homeSupportCardPrefersBlockingIssuesOverFajrAndFasting() {
         let currentDay = makeActiveDay(
             day: 5,
             context: .fasting,
@@ -94,13 +94,43 @@ struct ProductSurfacePresentationTests {
         )
 
         let result = ProductSurfacePresentation.homeSupportCard(
+            now: makeDate(day: 5, hour: 6, minute: 0),
             currentDay: currentDay,
+            todaySchedule: currentDay.schedule,
+            fajrStatus: .unknown,
             permissionSnapshot: permissionSnapshot,
             hijriComponents: components,
             dismissedWarnings: []
         )
 
         #expect(result == .blockingIssue(.location))
+    }
+
+    @Test
+    func homeSupportCardShowsFajrCheckInBeforeFastingCheckInDuringMorningWindow() {
+        let currentDay = makeActiveDay(
+            day: 5,
+            context: .fasting,
+            supportingTags: [.ramadan],
+            provenances: [defaultDailyProvenance]
+        )
+
+        let result = ProductSurfacePresentation.homeSupportCard(
+            now: makeDate(day: 5, hour: 6, minute: 30),
+            currentDay: currentDay,
+            todaySchedule: currentDay.schedule,
+            fajrStatus: .unknown,
+            permissionSnapshot: PermissionSnapshot(
+                summaryText: "",
+                alarmAuthorizationText: "",
+                notificationAuthorizationText: "",
+                presentations: [:]
+            ),
+            hijriComponents: nil,
+            dismissedWarnings: []
+        )
+
+        #expect(result == .fajrCheckIn)
     }
 
     @Test

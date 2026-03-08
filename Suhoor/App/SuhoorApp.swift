@@ -10,6 +10,7 @@ struct SuhoorApp: App {
     @StateObject private var scheduleManager: ScheduleManager
     @StateObject private var fastTagStore: FastTagStore
     @StateObject private var fastLogStore: FastLogStore
+    @StateObject private var fajrLogStore: FajrLogStore
     @StateObject private var qadaBacklogStore: QadaBacklogStore
     @StateObject private var qadaBatchStore: QadaBatchStore
 
@@ -21,6 +22,7 @@ struct SuhoorApp: App {
         let locationService = LocationService()
         let fastTagStore = FastTagStore()
         let fastLogStore = FastLogStore()
+        let fajrLogStore = FajrLogStore()
         let qadaBacklogStore = QadaBacklogStore()
         let qadaBatchStore = QadaBatchStore()
         let scheduleManager = ScheduleManager(
@@ -35,6 +37,7 @@ struct SuhoorApp: App {
         _scheduleManager = StateObject(wrappedValue: scheduleManager)
         _fastTagStore = StateObject(wrappedValue: fastTagStore)
         _fastLogStore = StateObject(wrappedValue: fastLogStore)
+        _fajrLogStore = StateObject(wrappedValue: fajrLogStore)
         _qadaBacklogStore = StateObject(wrappedValue: qadaBacklogStore)
         _qadaBatchStore = StateObject(wrappedValue: qadaBatchStore)
         fastLogStore.normalizeStaleInProgress(todayKey: DateHelpers.dayIdentifier(for: Date(), timeZone: .current))
@@ -52,6 +55,7 @@ struct SuhoorApp: App {
                 .environmentObject(scheduleManager)
                 .environmentObject(fastTagStore)
                 .environmentObject(fastLogStore)
+                .environmentObject(fajrLogStore)
                 .environmentObject(qadaBacklogStore)
                 .environmentObject(qadaBatchStore)
                 .task {
