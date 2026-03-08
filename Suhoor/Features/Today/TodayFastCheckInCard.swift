@@ -1,55 +1,55 @@
 import SwiftUI
 
 struct TodayFastCheckInCard: View {
-    @EnvironmentObject private var scheduleManager: ScheduleManager
     @EnvironmentObject private var fastLogStore: FastLogStore
     @State private var isPulsing = false
 
+    let presentation: FastingHomeSupportPresentation
+
     var body: some View {
-        TimelineView(.periodic(from: Date(), by: 60)) { context in
-            card(now: context.date)
-        }
-    }
-
-    @ViewBuilder
-    private func card(now: Date) -> some View {
-        let timeZone = TimeZone.current
-        let calendar = todayCalendar(timeZone: timeZone)
-        let todayStart = calendar.startOfDay(for: now)
-        let dateKey = DateHelpers.dayIdentifier(for: todayStart, timeZone: timeZone)
-        let intent = resolvedIntentSnapshot(for: todayStart, dateKey: dateKey, timeZone: timeZone)
-        let scheduleDay = scheduleManager.activeWindowSnapshot.byDateKey[dateKey]
-        let phase = phase(now: now, scheduleDay: scheduleDay)
-        let status = normalizedStatus(for: dateKey, phase: phase, intent: intent, now: now)
-        let viewState = viewState(for: status, phase: phase)
-
-        let tint = cardTint(for: viewState, phase: phase)
-
         GlassCard(style: .header, tintColor: tint.color, tintOpacity: tint.opacity) {
             VStack(alignment: .leading, spacing: DesignTokens.dashboardCardInternalSpacing) {
-                switch viewState {
-                case .prompt(let promptPhase):
-                    promptContent(phase: promptPhase, dateKey: dateKey, intent: intent)
+                switch presentation.phase {
+                case .fastingStatusPrompt, .fastCompletionPrompt:
+                    promptContent
                         .transition(.opacity.combined(with: .scale(scale: 0.98)))
-                case .inProgress, .completed, .missed:
-                    loggedContent(state: viewState, phase: phase, dateKey: dateKey)
+                case .fastingInProgress, .fastCompletionLogged:
+                    loggedContent
                         .transition(.opacity.combined(with: .scale(scale: 0.98)))
+                default:
+                    EmptyView()
                 }
             }
-            .animation(.easeInOut(duration: 0.22), value: viewState)
+            .animation(.easeInOut(duration: 0.22), value: currentStatus)
+        }
+        .task(id: currentStatus) {
+            normalizeAutoCompletionIfNeeded()
         }
     }
 
+    private var currentStatus: FastLogStatus {
+        fastLogStore.status(for: presentation.dateKey)
+    }
+
+    private var effectiveStatus: FastLogStatus {
+        if presentation.phase == .fastCompletionLogged, currentStatus == .inProgress {
+            return .completed
+        }
+        return currentStatus
+    }
+
     @ViewBuilder
-    private func promptContent(
-        phase: FastCheckInPhase,
-        dateKey: String,
-        intent: FastIntentSnapshot
-    ) -> some View {
+    private var promptContent: some View {
         VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
             HStack(alignment: .top, spacing: DesignTokens.spacingM) {
-                Text(questionTitle(for: phase))
-                    .font(DesignTokens.cardTitleFont)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(presentation.title)
+                        .font(DesignTokens.cardTitleFont)
+
+                    Text(presentation.detail)
+                        .font(DesignTokens.cardSubtitleFont)
+                        .foregroundStyle(.secondary)
+                }
 
                 Spacer()
 
@@ -57,63 +57,76 @@ struct TodayFastCheckInCard: View {
             }
 
             HStack(spacing: DesignTokens.spacingS) {
-                Button {
-                    withAnimation(.easeInOut(duration: 0.22)) {
-                        fastLogStore.setStatus(primaryAffirmativeStatus(for: phase), for: dateKey, intentSnapshot: intent)
+                if let primaryActionTitle = presentation.primaryActionTitle {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.22)) {
+                            fastLogStore.setStatus(primaryActionStatus, for: presentation.dateKey, intentSnapshot: presentation.intentSnapshot)
+                        }
+                    } label: {
+                        Text(primaryActionTitle)
+                            .frame(maxWidth: .infinity)
                     }
-                } label: {
-                    Text(primaryAffirmativeTitle(for: phase))
-                        .frame(maxWidth: .infinity)
+                    .buttonStyle(.borderedProminent)
+                    .tint(.green)
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(.green)
 
-                Button {
-                    withAnimation(.easeInOut(duration: 0.22)) {
-                        fastLogStore.setStatus(.missed, for: dateKey, intentSnapshot: intent)
+                if let secondaryActionTitle = presentation.secondaryActionTitle {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.22)) {
+                            fastLogStore.setStatus(.missed, for: presentation.dateKey, intentSnapshot: presentation.intentSnapshot)
+                        }
+                    } label: {
+                        Text(secondaryActionTitle)
+                            .frame(maxWidth: .infinity)
                     }
-                } label: {
-                    Text("No")
-                        .frame(maxWidth: .infinity)
+                    .buttonStyle(.bordered)
+                    .tint(presentation.phase == .fastCompletionPrompt ? .red : .secondary)
                 }
-                .buttonStyle(.bordered)
-                .tint(.red)
             }
         }
     }
 
     @ViewBuilder
-    private func loggedContent(state: FastCheckInViewState, phase: FastCheckInPhase, dateKey: String) -> some View {
+    private var loggedContent: some View {
         ZStack(alignment: .top) {
-            Text(statusTitle(for: state, phase: phase))
-                .font(.title3.weight(.semibold))
-                .foregroundStyle(statusColor(for: state))
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-                .opacity(state == .inProgress ? (isPulsing ? 1.0 : 0.82) : 1.0)
-                .scaleEffect(state == .inProgress ? (isPulsing ? 1.0 : 0.99) : 1.0)
-                .onAppear {
-                    guard state == .inProgress else {
-                        isPulsing = false
-                        return
-                    }
+            VStack(spacing: DesignTokens.spacingXS) {
+                Text(presentation.statusTitle ?? statusTitle)
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(statusColor)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .opacity(shouldPulse ? (isPulsing ? 1.0 : 0.82) : 1.0)
+                    .scaleEffect(shouldPulse ? (isPulsing ? 1.0 : 0.99) : 1.0)
+
+                Text(presentation.detail)
+                    .font(DesignTokens.cardSubtitleFont)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+            .frame(maxWidth: .infinity, minHeight: 88, alignment: .center)
+            .onAppear {
+                guard shouldPulse else {
                     isPulsing = false
-                    withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {
-                        isPulsing = true
-                    }
+                    return
                 }
-                .onDisappear {
-                    isPulsing = false
+                isPulsing = false
+                withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {
+                    isPulsing = true
                 }
+            }
+            .onDisappear {
+                isPulsing = false
+            }
 
             HStack(alignment: .top, spacing: DesignTokens.spacingM) {
-                undoButton(dateKey: dateKey)
+                if presentation.showsUndo {
+                    undoButton
+                }
 
                 Spacer()
 
                 historyButton
             }
         }
-        .frame(maxWidth: .infinity, minHeight: 88)
     }
 
     @ViewBuilder
@@ -131,14 +144,14 @@ struct TodayFastCheckInCard: View {
                 )
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Open observance history")
+        .accessibilityLabel("Open fast completion history")
     }
 
     @ViewBuilder
-    private func undoButton(dateKey: String) -> some View {
+    private var undoButton: some View {
         Button {
             withAnimation(.easeInOut(duration: 0.22)) {
-                fastLogStore.setStatus(.unknown, for: dateKey)
+                fastLogStore.setStatus(.unknown, for: presentation.dateKey)
             }
         } label: {
             Image(systemName: "arrow.uturn.backward")
@@ -151,116 +164,40 @@ struct TodayFastCheckInCard: View {
                 )
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Undo fasting status")
+        .accessibilityLabel("Clear fasting status")
     }
 
-    private func resolvedIntentSnapshot(for date: Date, dateKey: String, timeZone: TimeZone) -> FastIntentSnapshot {
-        if let day = scheduleManager.activeWindowSnapshot.byDateKey[dateKey] {
-            return FastIntentSnapshot(
-                primaryIntent: day.tagResult.computedPrimaryIntent,
-                secondaryTags: day.tagResult.computedSecondaryTags
-            )
-        }
-
-        let suggestions = FastIntentEngine.suggestions(for: date, timeZone: timeZone)
-        return FastIntentSnapshot(
-            primaryIntent: suggestions.suggestedPrimary ?? .other,
-            secondaryTags: Set(suggestions.suggestedSecondary)
-        )
-    }
-
-    private func phase(now: Date, scheduleDay: ActiveAlarmDay?) -> FastCheckInPhase {
-        guard let scheduleDay else { return .timeUnknown }
-        if now < scheduleDay.schedule.fajrDate {
-            // After midnight but before Fajr belongs to "today planning".
-            return .preFajr
-        }
-        if now < scheduleDay.schedule.maghribDate {
-            return .preMaghrib
-        }
-        return .postMaghrib
-    }
-
-    private func normalizedStatus(
-        for dateKey: String,
-        phase: FastCheckInPhase,
-        intent: FastIntentSnapshot,
-        now: Date
-    ) -> FastLogStatus {
-        let current = fastLogStore.status(for: dateKey)
-        if phase == .postMaghrib, current == .inProgress {
-            withAnimation(.easeInOut(duration: 0.22)) {
-                fastLogStore.setStatus(.completed, for: dateKey, intentSnapshot: fastLogStore.entry(for: dateKey)?.intentSnapshot ?? intent, now: now)
-            }
+    private var primaryActionStatus: FastLogStatus {
+        switch presentation.phase {
+        case .fastingStatusPrompt:
+            return .inProgress
+        case .fastCompletionPrompt:
+            return .completed
+        default:
             return .completed
         }
-        return current
     }
 
-    private func viewState(for status: FastLogStatus, phase: FastCheckInPhase) -> FastCheckInViewState {
-        switch status {
-        case .unknown:
-            return .prompt(phase)
+    private var shouldPulse: Bool {
+        presentation.phase == .fastingInProgress && effectiveStatus == .inProgress
+    }
+
+    private var statusTitle: String {
+        switch effectiveStatus {
         case .inProgress:
-            return .inProgress
-        case .completed:
-            return .completed
-        case .missed:
-            return .missed
-        }
-    }
-
-    private func questionTitle(for phase: FastCheckInPhase) -> String {
-        switch phase {
-        case .preFajr:
-            return "Will you fast today?"
-        case .preMaghrib:
-            return "Are you fasting today?"
-        case .postMaghrib, .timeUnknown:
-            return "Did you fast today?"
-        @unknown default:
-            return "Did you fast today?"
-        }
-    }
-
-    private func primaryAffirmativeTitle(for phase: FastCheckInPhase) -> String {
-        switch phase {
-        case .preFajr, .preMaghrib, .postMaghrib, .timeUnknown:
-            return "Yes"
-        @unknown default:
-            return "Yes"
-        }
-    }
-
-    private func primaryAffirmativeStatus(for phase: FastCheckInPhase) -> FastLogStatus {
-        switch phase {
-        case .preFajr:
-            return .inProgress
-        case .preMaghrib:
-            return .inProgress
-        case .postMaghrib, .timeUnknown:
-            return .completed
-        @unknown default:
-            return .completed
-        }
-    }
-
-    private func statusTitle(for state: FastCheckInViewState, phase: FastCheckInPhase) -> String {
-        switch state {
-        case .prompt:
-            return ""
-        case .inProgress:
-            return phase == .preFajr ? "Fasting planned" : "Fasting in progress"
+            return "Fasting in progress"
         case .completed:
             return "Fast completed"
         case .missed:
-            return "Not fasting today"
+            return "Not completed"
+        case .unknown:
+            return ""
         }
     }
 
-    private func statusColor(for state: FastCheckInViewState) -> Color {
-        switch state {
-        case .prompt:
+    private var statusColor: Color {
+        switch effectiveStatus {
+        case .unknown:
             return .primary
         case .inProgress:
             return .orange
@@ -271,35 +208,21 @@ struct TodayFastCheckInCard: View {
         }
     }
 
-    private func cardTint(for state: FastCheckInViewState, phase: FastCheckInPhase) -> (color: Color?, opacity: Double) {
-        switch state {
+    private var tint: (color: Color?, opacity: Double) {
+        switch effectiveStatus {
         case .completed:
             return (Color.green, 0.12)
         case .inProgress:
-            // Keep this light so the glass stays glass.
-            return (DawnColor.lightApricot100, phase == .preFajr ? 0.28 : 0.22)
-        case .missed, .prompt:
+            return (DawnColor.lightApricot100, 0.22)
+        case .missed, .unknown:
             return (nil, 0.0)
         }
     }
 
-    private func todayCalendar(timeZone: TimeZone) -> Calendar {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = timeZone
-        return calendar
+    private func normalizeAutoCompletionIfNeeded() {
+        guard presentation.phase == .fastCompletionLogged, currentStatus == .inProgress else {
+            return
+        }
+        fastLogStore.setStatus(.completed, for: presentation.dateKey, intentSnapshot: presentation.intentSnapshot)
     }
-}
-
-private enum FastCheckInPhase: Equatable {
-    case preFajr
-    case preMaghrib
-    case postMaghrib
-    case timeUnknown
-}
-
-private enum FastCheckInViewState: Equatable {
-    case prompt(FastCheckInPhase)
-    case inProgress
-    case completed
-    case missed
 }

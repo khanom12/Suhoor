@@ -35,6 +35,37 @@ struct SuhoorTests {
     }
 
     @Test
+    func qadaProgressOnlyDecrementsForCompletedQadaFasts() {
+        let state = QadaBacklogState(trackingStartDateKey: "2026-03-01", baselineOwed: 4)
+        let logEntries: [String: FastLogEntry] = [
+            "2026-03-02": FastLogEntry(
+                dateKey: "2026-03-02",
+                status: .completed,
+                updatedAt: .distantPast,
+                intentSnapshot: FastIntentSnapshot(primaryIntent: .qadaMakeup, secondaryTags: [])
+            ),
+            "2026-03-03": FastLogEntry(
+                dateKey: "2026-03-03",
+                status: .missed,
+                updatedAt: .distantPast,
+                intentSnapshot: FastIntentSnapshot(primaryIntent: .qadaMakeup, secondaryTags: [])
+            ),
+            "2026-03-04": FastLogEntry(
+                dateKey: "2026-03-04",
+                status: .completed,
+                updatedAt: .distantPast,
+                intentSnapshot: FastIntentSnapshot(primaryIntent: .voluntary, secondaryTags: [])
+            )
+        ]
+
+        let snapshot = QadaProgressEngine.snapshot(state: state, logEntries: logEntries)
+
+        #expect(snapshot.completed == 1)
+        #expect(snapshot.remaining == 3)
+        #expect(snapshot.baselineOwed == 4)
+    }
+
+    @Test
     func iftarDeliveryNormalizesAudibleChoice() {
         let selection = IftarDeliverySelection(notification: true, alarm: true, adhan: true).normalized()
         #expect(selection.notification == true)

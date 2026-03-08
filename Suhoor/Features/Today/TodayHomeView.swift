@@ -3,6 +3,7 @@ import SwiftUI
 struct TodayHomeView: View {
     @EnvironmentObject private var scheduleManager: ScheduleManager
     @EnvironmentObject private var fajrLogStore: FajrLogStore
+    @EnvironmentObject private var fastLogStore: FastLogStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @StateObject private var dismissalStore = TodayCardDismissalStore()
 
@@ -15,11 +16,12 @@ struct TodayHomeView: View {
             let currentDay = scheduleManager.activeWindowSnapshot.byDateKey[todayKey]
             let contextDay = scheduleManager.nextWakeEventSummary?.day ?? currentDay
             let todaySchedule = currentDay?.schedule ?? scheduleManager.schedule(for: todayStart)
-            let supportCardKind = ProductSurfacePresentation.homeSupportCard(
+            let supportCard = ProductSurfacePresentation.homeSupportCard(
                 now: now,
                 currentDay: currentDay,
                 todaySchedule: todaySchedule,
                 fajrStatus: fajrLogStore.status(for: todayKey),
+                fastStatus: fastLogStore.status(for: todayKey),
                 permissionSnapshot: scheduleManager.permissionSnapshot,
                 hijriComponents: hijriComponents,
                 dismissedWarnings: dismissedWarnings(on: now)
@@ -34,9 +36,9 @@ struct TodayHomeView: View {
                         contextDay: contextDay
                     )
 
-                    if let supportCardKind {
+                    if let supportCard {
                         supportCardView(
-                            for: supportCardKind,
+                            for: supportCard,
                             now: now
                         )
                     }
@@ -70,17 +72,17 @@ struct TodayHomeView: View {
 
     @ViewBuilder
     private func supportCardView(
-        for kind: HomeSupportCardKind,
+        for presentation: HomeSupportCardPresentation,
         now: Date
     ) -> some View {
-        switch kind {
+        switch presentation {
         case .blockingIssue(let permissionKind):
             if let presentation = scheduleManager.permissionSnapshot.presentations[permissionKind] {
                 TodayBlockingIssueCard(presentation: presentation)
             }
-        case .fajrCheckIn:
-            TodayFajrCheckInCard()
-        case .forbiddenFast(let warning):
+        case .fajrCompletionPrompt(let presentation):
+            TodayFajrCheckInCard(presentation: presentation)
+        case .forbiddenFastNotice(let warning):
             TodayForbiddenFastDayCard(
                 kind: warning,
                 mode: .live,
@@ -90,8 +92,8 @@ struct TodayHomeView: View {
                     }
                 }
             )
-        case .fastingCheckIn:
-            TodayFastCheckInCard()
+        case .fasting(let presentation):
+            TodayFastCheckInCard(presentation: presentation)
         }
     }
 }

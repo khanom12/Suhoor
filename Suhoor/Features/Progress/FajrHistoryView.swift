@@ -32,7 +32,7 @@ struct FajrHistoryView: View {
             } header: {
                 Text("Last \(days) mornings")
             } footer: {
-                Text("Tap a mark to log. Tap again to clear.")
+                Text("Tap a mark to log or update the result. Tap again to clear.")
             }
         }
         .navigationTitle("Fajr Completion")

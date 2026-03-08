@@ -36,10 +36,10 @@ struct FastHistoryView: View {
             } header: {
                 Text("Past \(days) days")
             } footer: {
-                Text("Tap an icon to log. Tap again to clear.")
+                Text("Tap a mark to log or update the result. Tap again to clear.")
             }
         }
-        .navigationTitle("Observance History")
+        .navigationTitle("Fast Completion")
         .navigationBarTitleDisplayMode(.inline)
     }
 

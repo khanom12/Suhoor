@@ -21,20 +21,24 @@ struct ProgressRootView: View {
                     }
                 }
             } header: {
-                Text("Fajr Completion")
+                Text("Fajr")
             } footer: {
-                Text("Log whether you made Fajr. This stays separate from fasting.")
+                Text("Log whether you prayed Fajr. This stays separate from fasting.")
             }
 
             Section {
-                VStack(alignment: .leading, spacing: DesignTokens.spacingS) {
-                    LabeledContent("Today", value: fastTodaySummary)
-                    LabeledContent("Last 30 days", value: fastSummary)
+                NavigationLink {
+                    FastHistoryView()
+                } label: {
+                    VStack(alignment: .leading, spacing: DesignTokens.spacingS) {
+                        LabeledContent("Today", value: fastTodaySummary)
+                        LabeledContent("Last 30 days", value: fastSummary)
+                    }
                 }
             } header: {
-                Text("Fast Completion")
+                Text("Fasts")
             } footer: {
-                Text("Use fasting logs only for fasting days.")
+                Text("Use this only for fasting days. Qada days stay distinct through their Qada impact.")
             }
 
             Section {
@@ -47,16 +51,8 @@ struct ProgressRootView: View {
                 }
             } header: {
                 Text("Qada Progress")
-            }
-
-            Section {
-                NavigationLink {
-                    FastHistoryView()
-                } label: {
-                    LabeledContent("Past 30 days", value: historySummary)
-                }
-            } header: {
-                Text("Observance History")
+            } footer: {
+                Text("Completed Qada fasts reduce what you still owe.")
             }
 
             Section {
@@ -84,7 +80,7 @@ struct ProgressRootView: View {
             } header: {
                 Text("Wake Activity")
             } footer: {
-                Text("Wake activity still uses the current wake-event log until a dedicated wake history model replaces it.")
+                Text("This still uses the current wake-event log until a dedicated wake history model replaces it.")
             }
         }
         .navigationTitle("Progress")
@@ -104,14 +100,6 @@ struct ProgressRootView: View {
         }
     }
 
-    private var historySummary: String {
-        let logged = fastLogStore.entriesByDateKey.values.count
-        if logged == 0 {
-            return "No logged days yet"
-        }
-        return "\(logged) logged"
-    }
-
     private var fajrTodaySummary: String {
         let todayKey = DateHelpers.dayIdentifier(for: Date(), timeZone: .current)
         return fajrLogStore.status(for: todayKey).title
@@ -119,15 +107,17 @@ struct ProgressRootView: View {
 
     private var fastTodaySummary: String {
         let todayKey = DateHelpers.dayIdentifier(for: Date(), timeZone: .current)
-        switch fastLogStore.status(for: todayKey) {
+        let status = fastLogStore.status(for: todayKey)
+        let isQada = fastLogStore.entry(for: todayKey)?.intentSnapshot?.primaryIntent == .qadaMakeup
+        switch status {
         case .unknown:
-            return "No fast logged"
+            return "Not logged"
         case .inProgress:
-            return "In progress"
+            return isQada ? "Qada in progress" : "In progress"
         case .completed:
-            return "Completed"
+            return isQada ? "Qada completed" : "Completed"
         case .missed:
-            return "Missed"
+            return isQada ? "Qada not completed" : "Missed"
         }
     }
 

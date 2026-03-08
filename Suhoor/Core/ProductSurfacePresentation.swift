@@ -1,10 +1,71 @@
 import Foundation
 
 enum HomeSupportCardKind: Equatable, Sendable {
+    case blockingIssue
+    case fajrCompletion
+    case forbiddenFast
+    case fasting
+}
+
+enum HomeSupportCardPhase: Equatable, Sendable {
+    case blockingIssue
+    case fajrCompletionPrompt
+    case forbiddenFastNotice
+    case fastingStatusPrompt
+    case fastingInProgress
+    case fastCompletionPrompt
+    case fastCompletionLogged
+}
+
+struct FajrHomeSupportPresentation: Equatable, Sendable {
+    let dateKey: String
+    let title: String
+    let detail: String
+}
+
+struct FastingHomeSupportPresentation: Equatable, Sendable {
+    let phase: HomeSupportCardPhase
+    let dateKey: String
+    let intentSnapshot: FastIntentSnapshot
+    let title: String
+    let detail: String
+    let primaryActionTitle: String?
+    let secondaryActionTitle: String?
+    let statusTitle: String?
+    let showsUndo: Bool
+}
+
+enum HomeSupportCardPresentation: Equatable, Sendable {
     case blockingIssue(AppPermissionKind)
-    case fajrCheckIn
-    case forbiddenFast(FastWarning)
-    case fastingCheckIn
+    case fajrCompletionPrompt(FajrHomeSupportPresentation)
+    case forbiddenFastNotice(FastWarning)
+    case fasting(FastingHomeSupportPresentation)
+
+    var kind: HomeSupportCardKind {
+        switch self {
+        case .blockingIssue:
+            return .blockingIssue
+        case .fajrCompletionPrompt:
+            return .fajrCompletion
+        case .forbiddenFastNotice:
+            return .forbiddenFast
+        case .fasting:
+            return .fasting
+        }
+    }
+
+    var phase: HomeSupportCardPhase {
+        switch self {
+        case .blockingIssue:
+            return .blockingIssue
+        case .fajrCompletionPrompt:
+            return .fajrCompletionPrompt
+        case .forbiddenFastNotice:
+            return .forbiddenFastNotice
+        case .fasting(let presentation):
+            return presentation.phase
+        }
+    }
 }
 
 struct ConfiguredPlanItem: Identifiable, Equatable, Sendable {
@@ -120,10 +181,11 @@ enum ProductSurfacePresentation {
         currentDay: ActiveAlarmDay?,
         todaySchedule: DaySchedule?,
         fajrStatus: FajrCompletionStatus,
+        fastStatus: FastLogStatus,
         permissionSnapshot: PermissionSnapshot,
         hijriComponents: AdjustedHijriDateComponents?,
         dismissedWarnings: Set<FastWarning>
-    ) -> HomeSupportCardKind? {
+    ) -> HomeSupportCardPresentation? {
         let blockingPriority: [AppPermissionKind] = [.location, .notifications, .alarmKit]
         for kind in blockingPriority {
             if permissionSnapshot.presentations[kind]?.isBlocking == true {
@@ -131,22 +193,73 @@ enum ProductSurfacePresentation {
             }
         }
 
-        if let todaySchedule, isFajrCheckInRelevant(now: now, schedule: todaySchedule, status: fajrStatus) {
-            return .fajrCheckIn
-        }
-
-        if let forbidden = activeForbiddenWarning(
+        let forbiddenWarning = activeForbiddenWarning(
             for: hijriComponents,
             dismissedWarnings: dismissedWarnings
-        ) {
-            return .forbiddenFast(forbidden)
+        )
+        let fajrPrompt = fajrPromptPresentation(
+            now: now,
+            schedule: todaySchedule,
+            status: fajrStatus
+        )
+        let fastingPresentation = currentDay.flatMap {
+            fastingHomePresentation(
+                now: now,
+                day: $0,
+                currentStatus: fastStatus
+            )
         }
 
-        if let currentDay, isFastingCheckInRelevant(for: currentDay) {
-            return .fastingCheckIn
+        if let todaySchedule {
+            switch dayPhase(now: now, schedule: todaySchedule) {
+            case .beforeFajr:
+                if let forbiddenWarning {
+                    return .forbiddenFastNotice(forbiddenWarning)
+                }
+                if let fastingPresentation {
+                    return .fasting(fastingPresentation)
+                }
+            case .fajrMorning:
+                if let fajrPrompt {
+                    return .fajrCompletionPrompt(fajrPrompt)
+                }
+                if let forbiddenWarning {
+                    return .forbiddenFastNotice(forbiddenWarning)
+                }
+                if let fastingPresentation {
+                    return .fasting(fastingPresentation)
+                }
+            case .daytime:
+                if let forbiddenWarning {
+                    return .forbiddenFastNotice(forbiddenWarning)
+                }
+                if let fastingPresentation {
+                    return .fasting(fastingPresentation)
+                }
+                if let fajrPrompt {
+                    return .fajrCompletionPrompt(fajrPrompt)
+                }
+            case .afterMaghrib:
+                if let fastingPresentation {
+                    return .fasting(fastingPresentation)
+                }
+                if let fajrPrompt {
+                    return .fajrCompletionPrompt(fajrPrompt)
+                }
+            }
+
+            return nil
         }
 
-        return nil
+        if let forbiddenWarning {
+            return .forbiddenFastNotice(forbiddenWarning)
+        }
+
+        if let fastingPresentation {
+            return .fasting(fastingPresentation)
+        }
+
+        return fajrPrompt.map(HomeSupportCardPresentation.fajrCompletionPrompt)
     }
 
     static func configuredPlansSnapshot(
@@ -290,13 +403,10 @@ enum ProductSurfacePresentation {
         ]).isEmpty == false
     }
 
-    private static func isFajrCheckInRelevant(
+    private static func dayPhase(
         now: Date,
-        schedule: DaySchedule,
-        status: FajrCompletionStatus
-    ) -> Bool {
-        guard status == .unknown else { return false }
-
+        schedule: DaySchedule
+    ) -> DayPhase {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = .current
         let midday = calendar.date(
@@ -306,9 +416,251 @@ enum ProductSurfacePresentation {
             of: schedule.date
         ) ?? schedule.fajrDate.addingTimeInterval(60 * 60 * 12)
         let earlyWindowEnd = schedule.fajrDate.addingTimeInterval(60 * 60 * 3)
-        let cutoff = min(midday, earlyWindowEnd)
+        let morningCutoff = min(midday, earlyWindowEnd)
 
-        return now >= schedule.fajrDate && now <= cutoff
+        if now < schedule.fajrDate {
+            return .beforeFajr
+        }
+        if now <= morningCutoff {
+            return .fajrMorning
+        }
+        if now < schedule.maghribDate {
+            return .daytime
+        }
+        return .afterMaghrib
+    }
+
+    private static func fajrPromptPresentation(
+        now: Date,
+        schedule: DaySchedule?,
+        status: FajrCompletionStatus
+    ) -> FajrHomeSupportPresentation? {
+        guard let schedule, status == .unknown, now >= schedule.fajrDate else {
+            return nil
+        }
+
+        return FajrHomeSupportPresentation(
+            dateKey: DateHelpers.dayIdentifier(for: schedule.date, timeZone: .current),
+            title: "Did you pray Fajr?",
+            detail: "Fajr was at \(TimeFormatters.timeFormatter.string(from: schedule.fajrDate)). You can log it now or review it later."
+        )
+    }
+
+    private static func fastingHomePresentation(
+        now: Date,
+        day: ActiveAlarmDay,
+        currentStatus: FastLogStatus
+    ) -> FastingHomeSupportPresentation? {
+        guard isFastingCheckInRelevant(for: day) else { return nil }
+
+        let intent = fastIntentSnapshot(for: day)
+        let isQada = intent.primaryIntent == .qadaMakeup
+        let schedule = day.schedule
+        let phase = dayPhase(now: now, schedule: schedule)
+        let dateKey = day.dateKey
+
+        switch phase {
+        case .beforeFajr, .daytime:
+            switch currentStatus {
+            case .unknown:
+                return FastingHomeSupportPresentation(
+                    phase: .fastingStatusPrompt,
+                    dateKey: dateKey,
+                    intentSnapshot: intent,
+                    title: isQada ? "Fasting for Qada today?" : "Fasting today?",
+                    detail: isQada
+                        ? "Mark this Qada day when you start, then confirm completion later."
+                        : "Mark this fasting day when you start, then confirm completion later.",
+                    primaryActionTitle: isQada ? "Start Qada" : "Yes",
+                    secondaryActionTitle: "Not today",
+                    statusTitle: nil,
+                    showsUndo: false
+                )
+            case .inProgress:
+                return FastingHomeSupportPresentation(
+                    phase: .fastingInProgress,
+                    dateKey: dateKey,
+                    intentSnapshot: intent,
+                    title: isQada ? "Qada fast in progress" : "Fasting today",
+                    detail: isQada
+                        ? "Keep going. Mark it completed after Maghrib."
+                        : "You're set for today. Mark it completed after Maghrib.",
+                    primaryActionTitle: nil,
+                    secondaryActionTitle: nil,
+                    statusTitle: isQada ? "Qada in progress" : "Fasting in progress",
+                    showsUndo: true
+                )
+            case .completed:
+                return FastingHomeSupportPresentation(
+                    phase: .fastCompletionLogged,
+                    dateKey: dateKey,
+                    intentSnapshot: intent,
+                    title: isQada ? "Qada fast completed" : "Fast completed",
+                    detail: isQada
+                        ? "This counts toward your Qada progress."
+                        : "Today's fast is logged.",
+                    primaryActionTitle: nil,
+                    secondaryActionTitle: nil,
+                    statusTitle: isQada ? "Qada completed" : "Fast completed",
+                    showsUndo: true
+                )
+            case .missed:
+                return FastingHomeSupportPresentation(
+                    phase: .fastCompletionLogged,
+                    dateKey: dateKey,
+                    intentSnapshot: intent,
+                    title: isQada ? "Qada fast not completed" : "Not fasting today",
+                    detail: isQada
+                        ? "This day stays in your Qada balance until a Qada fast is completed."
+                        : "You can log a different result later from Progress.",
+                    primaryActionTitle: nil,
+                    secondaryActionTitle: nil,
+                    statusTitle: isQada ? "Not completed" : "Not fasting today",
+                    showsUndo: true
+                )
+            }
+        case .fajrMorning:
+            switch currentStatus {
+            case .unknown:
+                return FastingHomeSupportPresentation(
+                    phase: .fastingStatusPrompt,
+                    dateKey: dateKey,
+                    intentSnapshot: intent,
+                    title: isQada ? "Fasting for Qada today?" : "Fasting today?",
+                    detail: isQada
+                        ? "If this is your Qada day, mark it now and confirm completion after Maghrib."
+                        : "Mark this fasting day now and confirm completion after Maghrib.",
+                    primaryActionTitle: isQada ? "Start Qada" : "Yes",
+                    secondaryActionTitle: "Not today",
+                    statusTitle: nil,
+                    showsUndo: false
+                )
+            case .inProgress:
+                return FastingHomeSupportPresentation(
+                    phase: .fastingInProgress,
+                    dateKey: dateKey,
+                    intentSnapshot: intent,
+                    title: isQada ? "Qada fast in progress" : "Fasting today",
+                    detail: isQada
+                        ? "You've started this Qada day. Mark it completed after Maghrib."
+                        : "You're marked as fasting today. Confirm completion after Maghrib.",
+                    primaryActionTitle: nil,
+                    secondaryActionTitle: nil,
+                    statusTitle: isQada ? "Qada in progress" : "Fasting in progress",
+                    showsUndo: true
+                )
+            case .completed:
+                return FastingHomeSupportPresentation(
+                    phase: .fastCompletionLogged,
+                    dateKey: dateKey,
+                    intentSnapshot: intent,
+                    title: isQada ? "Qada fast completed" : "Fast completed",
+                    detail: isQada
+                        ? "This counts toward your Qada progress."
+                        : "Today's fast is logged.",
+                    primaryActionTitle: nil,
+                    secondaryActionTitle: nil,
+                    statusTitle: isQada ? "Qada completed" : "Fast completed",
+                    showsUndo: true
+                )
+            case .missed:
+                return FastingHomeSupportPresentation(
+                    phase: .fastCompletionLogged,
+                    dateKey: dateKey,
+                    intentSnapshot: intent,
+                    title: isQada ? "Qada fast not completed" : "Not fasting today",
+                    detail: isQada
+                        ? "This day stays in your Qada balance until a Qada fast is completed."
+                        : "You can log a different result later from Progress.",
+                    primaryActionTitle: nil,
+                    secondaryActionTitle: nil,
+                    statusTitle: isQada ? "Not completed" : "Not fasting today",
+                    showsUndo: true
+                )
+            }
+        case .afterMaghrib:
+            switch currentStatus {
+            case .unknown:
+                return FastingHomeSupportPresentation(
+                    phase: .fastCompletionPrompt,
+                    dateKey: dateKey,
+                    intentSnapshot: intent,
+                    title: isQada ? "Did you complete the Qada fast?" : "Did you complete the fast?",
+                    detail: isQada
+                        ? "Completed Qada fasts reduce what you still owe."
+                        : "Log the result for this fasting day.",
+                    primaryActionTitle: "Completed",
+                    secondaryActionTitle: "Not completed",
+                    statusTitle: nil,
+                    showsUndo: false
+                )
+            case .inProgress, .completed:
+                return FastingHomeSupportPresentation(
+                    phase: .fastCompletionLogged,
+                    dateKey: dateKey,
+                    intentSnapshot: intent,
+                    title: isQada ? "Qada fast completed" : "Fast completed",
+                    detail: isQada
+                        ? "This counts toward your Qada progress."
+                        : "Today's fast is logged.",
+                    primaryActionTitle: nil,
+                    secondaryActionTitle: nil,
+                    statusTitle: isQada ? "Qada completed" : "Fast completed",
+                    showsUndo: true
+                )
+            case .missed:
+                return FastingHomeSupportPresentation(
+                    phase: .fastCompletionLogged,
+                    dateKey: dateKey,
+                    intentSnapshot: intent,
+                    title: isQada ? "Qada fast not completed" : "Fast not completed",
+                    detail: isQada
+                        ? "Your remaining Qada stays the same."
+                        : "You can update this later from Progress if needed.",
+                    primaryActionTitle: nil,
+                    secondaryActionTitle: nil,
+                    statusTitle: "Not completed",
+                    showsUndo: true
+                )
+            }
+        }
+    }
+
+    private static func fastIntentSnapshot(for day: ActiveAlarmDay) -> FastIntentSnapshot {
+        let fromTagResult = FastIntentSnapshot(
+            primaryIntent: day.tagResult.computedPrimaryIntent,
+            secondaryTags: day.tagResult.computedSecondaryTags
+        )
+        if fromTagResult != .empty {
+            return fromTagResult
+        }
+
+        let tags = Set(day.resolvedDayContext.supportingTags)
+        let primaryIntent: FastPrimaryIntent
+        if tags.contains(.ramadan) {
+            primaryIntent = .ramadanObligatory
+        } else if tags.contains(.qada) || day.resolvedDayContext.primaryContext == .qadaFast {
+            primaryIntent = .qadaMakeup
+        } else if tags.contains(.kaffarah) {
+            primaryIntent = .kaffarahExpiation
+        } else if tags.contains(.vow) {
+            primaryIntent = .vowNadhr
+        } else if day.resolvedDayContext.primaryContext == .fasting
+            || day.resolvedDayContext.primaryContext == .sunnahFast
+            || day.resolvedDayContext.primaryContext == .suhoor
+            || tags.contains(.voluntary)
+            || tags.contains(.shawwalSix)
+            || tags.contains(.arafah)
+            || tags.contains(.ashura)
+            || tags.contains(.whiteDays)
+            || tags.contains(.mondayThursday)
+            || tags.contains(.dhulHijjahFirstNine) {
+            primaryIntent = .voluntary
+        } else {
+            primaryIntent = .other
+        }
+
+        return FastIntentSnapshot(primaryIntent: primaryIntent, secondaryTags: [])
     }
 
     private static func isConfiguredSpecialMorning(
@@ -395,4 +747,11 @@ enum ProductSurfacePresentation {
         }
         return "\(prefix) · \(formatter.string(from: event.timestamp))"
     }
+}
+
+private enum DayPhase {
+    case beforeFajr
+    case fajrMorning
+    case daytime
+    case afterMaghrib
 }

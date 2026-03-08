@@ -52,7 +52,7 @@ struct ProductSurfacePresentationTests {
         )
 
         #expect(snapshot.upcomingSpecialMornings.count == 3)
-        #expect(snapshot.upcomingSpecialMornings.contains(where: { $0.title == "Day-specific morning" }))
+        #expect(snapshot.upcomingSpecialMornings.contains(where: { $0.title == "Adjusted morning" }))
         #expect(snapshot.upcomingSpecialMornings.contains(where: { $0.title == "Qada" }))
         #expect(snapshot.upcomingSpecialMornings.contains(where: { $0.title == "Fasting" }))
         #expect(snapshot.qadaSummary == "2 completed · 4 remaining")
@@ -98,6 +98,7 @@ struct ProductSurfacePresentationTests {
             currentDay: currentDay,
             todaySchedule: currentDay.schedule,
             fajrStatus: .unknown,
+            fastStatus: .unknown,
             permissionSnapshot: permissionSnapshot,
             hijriComponents: components,
             dismissedWarnings: []
@@ -120,6 +121,7 @@ struct ProductSurfacePresentationTests {
             currentDay: currentDay,
             todaySchedule: currentDay.schedule,
             fajrStatus: .unknown,
+            fastStatus: .unknown,
             permissionSnapshot: PermissionSnapshot(
                 summaryText: "",
                 alarmAuthorizationText: "",
@@ -130,7 +132,79 @@ struct ProductSurfacePresentationTests {
             dismissedWarnings: []
         )
 
-        #expect(result == .fajrCheckIn)
+        switch result {
+        case .fajrCompletionPrompt:
+            #expect(Bool(true))
+        default:
+            Issue.record("Expected Fajr completion prompt during morning window.")
+        }
+    }
+
+    @Test
+    func homeSupportCardShowsFastingStatusLaterInDayBeforeLingeringFajrPrompt() {
+        let currentDay = makeActiveDay(
+            day: 5,
+            context: .fasting,
+            supportingTags: [.voluntary],
+            provenances: [defaultDailyProvenance]
+        )
+
+        let result = ProductSurfacePresentation.homeSupportCard(
+            now: makeDate(day: 5, hour: 14, minute: 0),
+            currentDay: currentDay,
+            todaySchedule: currentDay.schedule,
+            fajrStatus: .unknown,
+            fastStatus: .unknown,
+            permissionSnapshot: PermissionSnapshot(
+                summaryText: "",
+                alarmAuthorizationText: "",
+                notificationAuthorizationText: "",
+                presentations: [:]
+            ),
+            hijriComponents: nil,
+            dismissedWarnings: []
+        )
+
+        switch result {
+        case .fasting(let presentation):
+            #expect(presentation.phase == .fastingStatusPrompt)
+        default:
+            Issue.record("Expected fasting status prompt later in the day.")
+        }
+    }
+
+    @Test
+    func homeSupportCardShowsFastCompletionPromptAfterMaghribWhenStillUnknown() {
+        let currentDay = makeActiveDay(
+            day: 5,
+            context: .qadaFast,
+            supportingTags: [.qada],
+            provenances: [defaultDailyProvenance]
+        )
+
+        let result = ProductSurfacePresentation.homeSupportCard(
+            now: makeDate(day: 5, hour: 19, minute: 15),
+            currentDay: currentDay,
+            todaySchedule: currentDay.schedule,
+            fajrStatus: .unknown,
+            fastStatus: .unknown,
+            permissionSnapshot: PermissionSnapshot(
+                summaryText: "",
+                alarmAuthorizationText: "",
+                notificationAuthorizationText: "",
+                presentations: [:]
+            ),
+            hijriComponents: nil,
+            dismissedWarnings: []
+        )
+
+        switch result {
+        case .fasting(let presentation):
+            #expect(presentation.phase == .fastCompletionPrompt)
+            #expect(presentation.title == "Did you complete the Qada fast?")
+        default:
+            Issue.record("Expected fast completion prompt after Maghrib.")
+        }
     }
 
     @Test
