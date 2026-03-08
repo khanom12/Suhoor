@@ -61,7 +61,7 @@ struct TodayOpenScheduleButton: View {
 
     var body: some View {
         Button {
-            NotificationCenter.default.post(name: .switchToAlarmTab, object: nil)
+            NotificationCenter.default.post(name: .switchToWakeTab, object: nil)
         } label: {
             Image(systemName: "calendar.badge.clock")
                 .font(DesignTokens.cardMetaFont.weight(.semibold))
@@ -73,6 +73,6 @@ struct TodayOpenScheduleButton: View {
                 )
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Open schedule")
+        .accessibilityLabel("Open Wake")
     }
 }

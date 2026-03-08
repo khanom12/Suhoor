@@ -1423,7 +1423,7 @@ final class ScheduleManager: ObservableObject {
         guard let result = scheduleAndConfig(for: tomorrow) else {
             return ActivationScheduleResult(
                 success: false,
-                message: "Schedule unavailable. Check location.",
+                message: "Wake preview unavailable. Check location.",
                 schedule: nil
             )
         }

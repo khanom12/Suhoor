@@ -25,6 +25,7 @@ struct ContentView: View {
 
 
 extension Notification.Name {
+    static let switchToWakeTab = Notification.Name("SwitchToWakeTab")
     static let switchToAlarmTab = Notification.Name("SwitchToAlarmTab")
     static let switchToPlanTab = Notification.Name("SwitchToPlanTab")
     static let switchToSettingsTab = Notification.Name("SwitchToSettingsTab")

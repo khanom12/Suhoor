@@ -124,7 +124,7 @@ struct EditSuhoorView: View {
     private var scheduleSection: some View {
         Section {
             Button(Strings.AlarmDetail.viewSchedule) {
-                NotificationCenter.default.post(name: .switchToAlarmTab, object: nil)
+                NotificationCenter.default.post(name: .switchToWakeTab, object: nil)
                 dismiss()
             }
             .frame(maxWidth: .infinity, alignment: .center)

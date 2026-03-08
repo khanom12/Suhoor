@@ -75,7 +75,7 @@ struct PrayerTimeSettingsView: View {
     }
 }
 
-private struct CalculationMethodSelectionView: View {
+struct CalculationMethodSelectionView: View {
     @EnvironmentObject private var settingsStore: SuhoorSettingsStore
     @EnvironmentObject private var scheduleManager: ScheduleManager
 

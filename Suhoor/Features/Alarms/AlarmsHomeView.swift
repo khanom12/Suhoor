@@ -106,7 +106,7 @@ struct AlarmsHomeView: View {
             }
         }
         .listStyle(.insetGrouped)
-        .navigationTitle("Schedule")
+        .navigationTitle("Wake")
         .navigationBarTitleDisplayMode(.large)
         .environment(\.editMode, $editMode)
         .toolbar {

@@ -58,12 +58,12 @@ struct TodayCountdownCard: View {
                 Text("No upcoming wake days are scheduled yet.")
                     .font(DesignTokens.cardSubtitleFont)
                     .foregroundStyle(.secondary)
-                Button("Open Schedule") {
-                    NotificationCenter.default.post(name: .switchToAlarmTab, object: nil)
+                Button("Open Wake") {
+                    NotificationCenter.default.post(name: .switchToWakeTab, object: nil)
                 }
                 .font(DesignTokens.cardMetaFont)
             } else {
-                Text("Your schedule is still updating.")
+                Text("Your wake view is still updating.")
                     .font(DesignTokens.cardSubtitleFont)
                     .foregroundStyle(.secondary)
                 Button("Open Settings") {

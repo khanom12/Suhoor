@@ -2,9 +2,9 @@ import Foundation
 
 enum Strings {
     enum AlarmList {
-        static let title = "Alarms"
-        static let routineTitle = "Suhoor"
-        static let notSetUp = "Not set up"
+        static let title = "Wake"
+        static let routineTitle = "Morning plan"
+        static let notSetUp = "Morning plan not set up"
         static let turnOnFooter = "Turn on to schedule."
         static let wakeTitle = "Wake"
         static let reminderTitle = "Reminder"
@@ -23,7 +23,7 @@ enum Strings {
         }
         static let fajrSubtitle = "Fajr Adhan"
         static func nextAlarmTitleLine(prefix: String) -> String {
-            "Next Alarm - \(prefix)"
+            "Next Wake - \(prefix)"
         }
         static func subtitle(dateText: String, wakeMinutes: Int, reminderOn: Bool, fajrOn: Bool) -> String {
             let reminder = reminderOn ? "On" : "Off"
@@ -38,7 +38,7 @@ enum Strings {
         static let learnMore = "Learn more"
         static let alarmDenied = "Using notifications. Allow alarms for reliability."
         static let notificationsFallback = "Using notifications (less reliable)."
-        static let scheduleUnable = "Schedule couldn’t load. Tap to retry."
+        static let scheduleUnable = "Wake view couldn’t load. Tap to retry."
         static let hijriAdjustmentsTitle = "Hijri corrections updated"
         static func hijriAdjustmentsMessage(_ count: Int) -> String {
             "\(count) date\(count == 1 ? "" : "s") adjusted."
@@ -54,8 +54,8 @@ enum Strings {
         static func todayHeader(gregorian: String, hijri: String) -> String {
             "Today: \(gregorian) • \(hijri)"
         }
-        static let listRangeTitle = "Alarms list range"
-        static let listRangeHelper = "Controls how many days are shown in the Alarms tab list."
+        static let listRangeTitle = "Wake list range"
+        static let listRangeHelper = "Controls how many days are shown in the Wake tab list."
         static let emptyTitle = "No wake events yet"
         static let emptySubtitle = "Use Plans to set your default morning plan or add special days."
         static let customizedBadge = "Customized"
@@ -102,7 +102,7 @@ enum Strings {
         static let sourceDeleteDay = "Delete this planned morning"
         static let sourceDeleteDayHelper = "Removes this one manually added morning."
         static let defaultsSection = "Default Morning Plan"
-        static let suhoorMode = "Suhoor time mode"
+        static let suhoorMode = "Wake timing mode"
         static let activationMode = "Activation mode"
         static let activeStartDate = "Start date"
         static let activeEndDate = "End date"
@@ -129,7 +129,7 @@ enum Strings {
     }
 
     enum AddSchedule {
-        static let title = "Add Schedule"
+        static let title = "Plan Special Mornings"
         static let modeHelperSingleDay = "Add one specific date."
         static let modeHelperDateRange = "Add a span of dates."
         static let modeHelperIslamicDates = "Add common fasting dates using your Hijri corrections."
@@ -208,7 +208,7 @@ enum Strings {
         static let previewFajrPlaceholder = "— —"
         static let previewSuhoorPlaceholder = "— —"
         static let previewNeedsLocation = "Enable location to calculate tomorrow’s Fajr time."
-        static let previewUnavailable = "Preview will appear once Suhoor has generated tomorrow’s wake schedule."
+        static let previewUnavailable = "Preview will appear once your next wake is ready."
 
         static let locationTitle = "Find your local Fajr time"
         static let locationBody = "We use your location to calculate prayer times for your area."
@@ -260,7 +260,7 @@ enum Strings {
             static let body = "Suhoor calculates Fajr for your area, then keeps tomorrow’s wake-up up to date."
             static func bulletWakeDefault(_ minutes: Int) -> String { "Choose a default, for example \(minutes) minutes before Fajr." }
             static let bulletReminders = "Get a reminder and an optional Fajr Adhan alert."
-            static let bulletCustomize = "Adjust any day later in Schedule."
+            static let bulletCustomize = "Adjust any day later in Wake."
         }
     }
 
@@ -273,7 +273,7 @@ enum Strings {
         static let wakeSection = "Wake"
         static let wakeMe = "Wake me"
         static let wakeHelper = "Your main wake alarm."
-        static let wakeCustomHelper = "Customize any day later in Schedule."
+        static let wakeCustomHelper = "Customize any day later in Wake."
         static let reminderSection = "Reminder"
         static let reminderToggle = "Reminder before Fajr"
         static let reminderTime = "Time"
@@ -289,7 +289,7 @@ enum Strings {
         static let snoozeDuration = "Duration"
         static let snoozeHelper = "Only for Wake."
         static let labelSection = "Label"
-        static let viewSchedule = "Open Schedule"
+        static let viewSchedule = "Open Wake"
     }
 
     enum Settings {
@@ -301,7 +301,7 @@ enum Strings {
         static let aboutGroup = "About"
         static let defaultAlarmsScreenTitle = "Default Morning Plan"
         static let prayerTimesTitle = "Prayer times"
-        static let prayerTimesHelper = "Choose how Fajr is calculated for your schedule."
+        static let prayerTimesHelper = "Choose how Fajr is calculated for your morning plan."
         static let permissionsReliabilityTitle = "Permissions & reliability"
         static let alarmReliabilityTitle = "Alarm reliability"
         static let alarmReliabilitySummary = "How wake-ups work, when notifications are used, and what to check if alarms are quiet."
@@ -311,28 +311,28 @@ enum Strings {
         static let badgeNeedsAttention = "Needs attention"
         static let badgeUsingFallback = "Using fallback"
         static let badgeReady = "Ready"
-        static let defaultsEnabledSection = "Default enabled alarms"
-        static let defaultsEnabledHelper = "These defaults apply when a day has no custom overrides."
-        static let defaultSuhoorToggle = "Suhoor alarm enabled by default"
-        static let defaultReminderToggle = "Reminder alarm enabled by default"
-        static let defaultFajrToggle = "Fajr event enabled by default"
-        static let suhoorTimingSection = "Suhoor timing"
-        static let suhoorTimingHelper = "Applies to the Suhoor alarm only."
-        static let suhoorTimeBasedOn = "Suhoor time is based on"
+        static let defaultsEnabledSection = "Default wake support"
+        static let defaultsEnabledHelper = "These defaults apply to your morning plan unless a date has its own override."
+        static let defaultSuhoorToggle = "Main wake enabled by default"
+        static let defaultReminderToggle = "Wake reminder enabled by default"
+        static let defaultFajrToggle = "Fajr notice enabled by default"
+        static let suhoorTimingSection = "Wake timing"
+        static let suhoorTimingHelper = "Applies to the main wake only."
+        static let suhoorTimeBasedOn = "Wake time is based on"
         static let suhoorMinutesBeforeFajr = "Minutes before Fajr"
         static let reminderTimingSection = "Reminder timing"
         static let reminderTimingHelper = "Applies to the Reminder alarm only."
         static let reminderTimeBasedOn = "Reminder time is based on"
         static let reminderMinutesBeforeFajr = "Minutes before Fajr"
         static let reminderTime = "Reminder time"
-        static let reminderBeforeSuhoorWarning = "Reminder can’t be earlier than Suhoor."
+        static let reminderBeforeSuhoorWarning = "Reminder can’t be earlier than your main wake."
         static let activePeriodSection = "Active period"
         static let activePeriodHelper = "Limits scheduling and default behavior to a time range. You can still manually enable alarms on specific days."
         static let defaultsActive = "Defaults active"
         static let activeAlways = "Always"
         static let activeDateRange = "Date range"
-        static let alarmsListRangeSection = "Alarms list range"
-        static let alarmsListRangeHelper = "Controls how many days are shown in the Alarms tab list."
+        static let alarmsListRangeSection = "Wake list range"
+        static let alarmsListRangeHelper = "Controls how many days are shown in the Wake tab list."
         static let alarmsListRangeLabel = "Show next"
         static let alertsSection = "Wake sequence"
         static let wakeAlarmLabel = "Main wake"
@@ -344,14 +344,14 @@ enum Strings {
         static let reminderSection = "Reminder"
         static let reminderScreenHelper = "Use a reminder when you want a heads-up before Fajr."
         static let timeStyleLabel = "Time style"
-        static let fixedTime = "Fixed time"
+        static let fixedTime = "Fixed time (compatibility)"
         static let wakeTimeLabel = "Wake time"
-        static let wakeOffsetTitle = "Wake time"
+        static let wakeOffsetTitle = "Wake relation to Fajr"
         static let reminderOffsetTitle = "Reminder time"
         static let minutesBeforeFajr = "Minutes before Fajr"
         static func offsetValue(_ minutes: Int) -> String { "\(minutes) min" }
         static let previewSection = "Next wake preview"
-        static let previewUnavailable = "Preview will appear once Suhoor has generated tomorrow’s schedule."
+        static let previewUnavailable = "Preview will appear once your next wake is ready."
         static let previewHelper = "Preview uses your current morning plan and location."
         static let routineDefaultsSection = "Wake timing"
         static let reminderToggle = "Reminder before Fajr"
@@ -369,14 +369,14 @@ enum Strings {
         static let stopAdhan = "Stop Adhan"
         static let testFajrAdhanAlarm = "Test Fajr alarm (Adhan, 1 min)"
         static let cancelSoundTests = "Cancel sound tests"
-        static let testAlarmKit = "Schedule test alarm (1 min)"
-        static let cancelAlarmKitTest = "Cancel test alarm"
+        static let testAlarmKit = "Run test wake alarm (1 min)"
+        static let cancelAlarmKitTest = "Cancel test wake alarm"
         static let testNotificationScheduled = "Test notification scheduled in 5 seconds."
         static let testNotificationFailed = "Couldn’t schedule test notification. Check permissions."
         static let fajrAlarmScheduled = "Test Fajr alarm scheduled for 1 minute from now."
         static let fajrAlarmScheduleFailed = "Couldn’t schedule Fajr test alarm. Check permissions."
-        static let alarmScheduled = "Test alarm scheduled for 1 minute from now."
-        static let alarmScheduleFailed = "Couldn’t schedule test alarm. Check permissions."
+        static let alarmScheduled = "Test wake alarm scheduled for 1 minute from now."
+        static let alarmScheduleFailed = "Couldn’t schedule test wake alarm. Check permissions."
         static let testsCancelled = "Test schedules canceled."
         static let locationSection = "Location"
         static let locationMode = "Location mode"

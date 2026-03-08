@@ -22,9 +22,9 @@ struct PlanOthersView: View {
                 }
             }
 
-            Section("Schedule") {
+            Section("Plan") {
                 Stepper(value: $scheduleCount, in: 1...60) {
-                    Text("Schedule now: \(scheduleCount) day\(scheduleCount == 1 ? "" : "s")")
+                    Text("Add now: \(scheduleCount) day\(scheduleCount == 1 ? "" : "s")")
                 }
             }
 
@@ -58,12 +58,12 @@ struct PlanOthersView: View {
                     Spacer()
                 }
 
-                Button(isApplying ? "Applying..." : "Add to schedule") {
+                Button(isApplying ? "Applying..." : "Add to plan") {
                     Task { await applyPlan() }
                 }
                 .disabled(isApplying || selectedKeys.count != scheduleCount)
             } footer: {
-                Text("Selecting an already scheduled day updates its purpose without duplicating alarms.")
+                Text("If a morning is already planned, its purpose is updated without creating duplicate wake events.")
             }
         }
         .navigationTitle("Other Fasts")
@@ -109,7 +109,7 @@ struct PlanOthersView: View {
         let dates = selectedKeys.compactMap { DateHelpers.date(fromDayIdentifier: $0, timeZone: .current) }
         let selection = FastIntentSelection(primaryIntent: purpose, secondaryTags: [])
         _ = await scheduleManager.planDates(dates, selection: selection, groupID: nil)
-        NotificationCenter.default.post(name: .switchToAlarmTab, object: nil)
+        NotificationCenter.default.post(name: .switchToWakeTab, object: nil)
         dismiss()
     }
 

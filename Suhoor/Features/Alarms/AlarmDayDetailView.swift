@@ -436,7 +436,7 @@ struct AlarmDayDetailView: View {
             Section {
                 VStack(spacing: DesignTokens.spacingM) {
                     AlarmTimingEditor(
-                        title: "Suhoor Alarm",
+                        title: Strings.Settings.wakeAlarmLabel,
                         summary: suhoorSummaryText,
                         isEnabled: suhoorEnabledBinding,
                         mode: suhoorTimeModeBinding,
@@ -455,7 +455,7 @@ struct AlarmDayDetailView: View {
                     )
 
                     AlarmTimingEditor(
-                        title: "Reminder Alarm",
+                        title: Strings.Settings.reminderLabel,
                         summary: reminderSummaryText,
                         isEnabled: reminderEnabledBinding,
                         mode: reminderTimeModeBinding,
@@ -514,7 +514,7 @@ struct AlarmDayDetailView: View {
                 }
                 .padding(.vertical, 4)
             } header: {
-                Text("Alarms")
+                Text("Wake sequence")
                     .textCase(nil)
             }
             .animation(Motion.standard(reduceMotion: reduceMotion), value: expandedAlarm)
@@ -540,7 +540,7 @@ struct AlarmDayDetailView: View {
                         ScheduleSourceCard(presentation: presentation)
                     }
                 } header: {
-                    Text("Schedule Source")
+                    Text("Plan Source")
                         .textCase(nil)
                 }
             }
@@ -804,9 +804,9 @@ struct AlarmDayDetailView: View {
         guard let primaryDisplayKind else { return Strings.AlarmsTab.alarmOffLabel }
         switch primaryDisplayKind {
         case .suhoor:
-            return "Suhoor Alarm"
+            return Strings.Settings.wakeAlarmLabel
         case .reminder:
-            return "Reminder Alarm"
+            return Strings.Settings.reminderLabel
         case .fajr:
             return Strings.AlarmsTab.fajrAdhanLabel
         case .iftar:

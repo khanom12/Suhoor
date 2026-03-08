@@ -6,17 +6,9 @@ import UIKit
 
 @MainActor
 final class OnboardingViewModel: ObservableObject {
-    enum Step: Int, CaseIterable {
-        case valuePreview
-        case location
-        case offset
-        case futureVisualization
-        case permissions
-        case success
-    }
-
-    @Published private(set) var step: Step = .valuePreview
-    @Published private(set) var previousStep: Step?
+    @Published private(set) var step: OnboardingStep = .valuePreview
+    @Published private(set) var previousStep: OnboardingStep?
+    @Published private(set) var onboardingPath: OnboardingPath = .fajr
     @Published private(set) var permissionStates: [AppPermissionKind: AppPermissionState] = [:]
     @Published private(set) var isScheduleReady = false
     @Published private(set) var isWorking = false
@@ -53,7 +45,9 @@ final class OnboardingViewModel: ObservableObject {
         guard !hasLoaded else { return }
         hasLoaded = true
         useShortFlow = settingsStore?.settings.isConfigured ?? false
+        resolveOnboardingPath()
         OnboardingAnalytics.log("onboarding_started")
+        OnboardingAnalytics.log("onboarding_path_selected", properties: ["path": onboardingPath.rawValue])
         await refreshPermissions()
         updateInitialStep()
     }
@@ -119,7 +113,7 @@ final class OnboardingViewModel: ObservableObject {
         scheduleManager.requestRefresh(reason: .settingsChanged)
     }
 
-    func goTo(_ newStep: Step, animation: Animation?) {
+    func goTo(_ newStep: OnboardingStep, animation: Animation?) {
         guard newStep != step else { return }
         isReviewingBack = false
         if let animation {
@@ -157,7 +151,7 @@ final class OnboardingViewModel: ObservableObject {
 
     func startFlow(animation: Animation?) {
         if isLocationReady {
-            goTo(.offset, animation: animation)
+            goTo(.relationship, animation: animation)
         } else {
             goTo(.location, animation: animation)
         }
@@ -245,7 +239,7 @@ final class OnboardingViewModel: ObservableObject {
     }
 
     func handleOffsetChanged(_ minutes: Int) {
-        guard step == .offset else { return }
+        guard step == .relationship else { return }
         if lastLoggedOffsetMinutes != minutes {
             lastLoggedOffsetMinutes = minutes
             OnboardingAnalytics.log("offset_selected", properties: ["minutes": "\(minutes)"])
@@ -259,7 +253,7 @@ final class OnboardingViewModel: ObservableObject {
         activationState = .attempting
         Task {
             guard let scheduleManager else {
-                activationState = .failed(message: "Schedule unavailable.")
+                activationState = .failed(message: "Wake preview unavailable.")
                 return
             }
             let result = await scheduleManager.scheduleTomorrowActivation()
@@ -275,7 +269,7 @@ final class OnboardingViewModel: ObservableObject {
 
     private func activationAttemptIfNeeded() {
         if case .succeeded = activationState { return }
-        guard step == .offset || step == .permissions else { return }
+        guard step == .relationship || step == .permissions else { return }
         guard isLocationReady, isSchedulingReady else { return }
         activationAttempt()
     }
@@ -287,6 +281,13 @@ final class OnboardingViewModel: ObservableObject {
         OnboardingAnalytics.log("onboarding_completed")
         scheduleManager?.requestRefresh(reason: .settingsChanged)
         refreshPermissionsInBackground()
+    }
+
+    func markOnboardingCompleteAndOpenPlans() {
+        markOnboardingComplete()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            NotificationCenter.default.post(name: .openPlanHome, object: nil)
+        }
     }
 
     var progressIndex: Int {
@@ -308,6 +309,39 @@ final class OnboardingViewModel: ObservableObject {
     var shouldShowManualAdvanceForCurrentStep: Bool {
         isReviewingBack && shouldSkip(step)
     }
+
+    var valueTitleText: String { onboardingPath.valueTitle }
+    var valueBodyText: String { onboardingPath.valueBody }
+    var previewWakeLabelText: String { onboardingPath.previewWakeLabel }
+    var locationTitleText: String { onboardingPath.locationTitle }
+    var locationBodyText: String { onboardingPath.locationBody }
+    var locationTrustBullets: [String] { onboardingPath.locationTrustBullets }
+    var showsCalculationMethodSummary: Bool { onboardingPath.showsCalculationMethodSummary }
+    var relationshipTitleText: String { onboardingPath.relationshipTitle }
+    var relationshipBodyText: String { onboardingPath.relationshipBody }
+    var relationshipPresetLabels: [Int: String] { onboardingPath.relationshipPresetLabels }
+    var supportBehaviorTitleText: String { onboardingPath.supportBehaviorTitle }
+    var supportBehaviorBodyText: String { onboardingPath.supportBehaviorBody }
+    var permissionsTitleText: String { onboardingPath.permissionsTitle }
+    var permissionsBodyText: String { onboardingPath.permissionsBody }
+    var showNotificationsRowInPermissions: Bool { onboardingPath.alwaysShowNotificationsRow || isNotificationsRequired }
+    var successTitleText: String { onboardingPath.successTitle }
+    var successBodyText: String { onboardingPath.successBody }
+    var successPrimaryActionTitle: String { onboardingPath.successPrimaryActionTitle }
+    var successSecondaryActionTitle: String? { onboardingPath.successSecondaryActionTitle }
+    var calculationMethodName: String {
+        settingsStore?.settings.calculationMethod.displayName
+            ?? CalculationMethod.defaultForTimeZone(.current).displayName
+    }
+    var relationshipSentenceText: (Int) -> String {
+        { [onboardingPath] minutes in
+            onboardingPath.relationshipSentence(minutes)
+        }
+    }
+    var wakeSupportSummaryText: String {
+        "\(selectedOffsetMinutes) min before Fajr"
+    }
+    var reminderMinutesOptions: [Int] { [5, 10, 15, 20, 30] }
 
     var tomorrowPreview: OnboardingTomorrowPreview {
         let targetDay = nextAlarmStartDay
@@ -407,14 +441,8 @@ final class OnboardingViewModel: ObservableObject {
         tomorrowPreview.suhoorDate
     }
 
-    var successTitleText: String {
-        Strings.Onboarding.successTitle(nextAlarmDisplayLabel(for: nextAlarmStartDay))
-    }
-
     var valuePrimaryActionTitle: String {
-        nextAlarmDisplayLabel(for: nextAlarmStartDay) == Strings.Onboarding.todayLabel
-            ? Strings.Onboarding.valuePrimaryActionToday
-            : Strings.Onboarding.valuePrimaryActionTomorrow
+        onboardingPath.valuePrimaryActionTitle(for: nextAlarmDisplayLabel(for: nextAlarmStartDay))
     }
 
     var successSchedule: DaySchedule? {
@@ -427,17 +455,17 @@ final class OnboardingViewModel: ObservableObject {
         }
     }
 
-    var flowSteps: [Step] {
+    var flowSteps: [OnboardingStep] {
         if useShortFlow {
             let missing = missingShortFlowSteps
             return missing.isEmpty ? [.success] : (missing + [.success])
         }
 
-        return [.valuePreview, .location, .offset, .futureVisualization, .permissions, .success]
+        return onboardingPath.flowSteps
     }
 
-    private var missingShortFlowSteps: [Step] {
-        var steps: [Step] = []
+    private var missingShortFlowSteps: [OnboardingStep] {
+        var steps: [OnboardingStep] = []
         if !isLocationReady {
             steps.append(.location)
         }
@@ -513,28 +541,30 @@ final class OnboardingViewModel: ObservableObject {
         goTo(resolved, animation: currentAnimation)
     }
 
-    private func resolvedStep(startingAt start: Step) -> Step? {
-        var candidate: Step? = start
+    private func resolvedStep(startingAt start: OnboardingStep) -> OnboardingStep? {
+        var candidate: OnboardingStep? = start
         while let current = candidate, shouldSkip(current) {
             candidate = nextStep(after: current)
         }
         return candidate
     }
 
-    private func nextStep(after step: Step) -> Step? {
+    private func nextStep(after step: OnboardingStep) -> OnboardingStep? {
         guard let index = flowSteps.firstIndex(of: step), index + 1 < flowSteps.count else {
             return nil
         }
         return flowSteps[index + 1]
     }
 
-    private func shouldSkip(_ step: Step) -> Bool {
+    private func shouldSkip(_ step: OnboardingStep) -> Bool {
         switch step {
         case .valuePreview:
             return false
         case .location:
             return isLocationReady
-        case .offset:
+        case .relationship:
+            return useShortFlow
+        case .supportBehavior:
             return useShortFlow
         case .futureVisualization:
             return useShortFlow
@@ -609,18 +639,20 @@ final class OnboardingViewModel: ObservableObject {
         }
     }
 
-    private func logStepViewed(step: Step) {
+    private func logStepViewed(step: OnboardingStep) {
         OnboardingAnalytics.log("onboarding_step_viewed", properties: ["step": stepKey(step)])
     }
 
-    private func stepKey(_ step: Step) -> String {
+    private func stepKey(_ step: OnboardingStep) -> String {
         switch step {
         case .valuePreview:
             return "value"
         case .location:
             return "location"
-        case .offset:
-            return "offset"
+        case .relationship:
+            return "relationship"
+        case .supportBehavior:
+            return "support_behavior"
         case .futureVisualization:
             return "future_visualization"
         case .permissions:
@@ -628,6 +660,11 @@ final class OnboardingViewModel: ObservableObject {
         case .success:
             return "success"
         }
+    }
+
+    private func resolveOnboardingPath() {
+        let hijriMonth = scheduleManager?.currentHijriYearMonth(date: Date())?.month
+        onboardingPath = OnboardingPath.resolve(currentHijriMonth: hijriMonth)
     }
 
     private var nextAlarmStartDay: Date {

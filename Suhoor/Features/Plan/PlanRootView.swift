@@ -261,7 +261,7 @@ private struct ConfiguredPlansCard: View {
                         }
 
                         if snapshot.additionalSpecialMorningCount > 0 {
-                            Text("+\(snapshot.additionalSpecialMorningCount) more in Schedule")
+                            Text("+\(snapshot.additionalSpecialMorningCount) more in Wake")
                                 .font(.footnote.weight(.semibold))
                                 .foregroundStyle(DawnColor.accent)
                         }

@@ -197,7 +197,7 @@ struct ShawwalPlannerView: View {
         let dates = selectedKeys.compactMap { DateHelpers.date(fromDayIdentifier: $0, timeZone: .current) }
         let selection = FastIntentSelection(primaryIntent: .voluntary, secondaryTags: [])
         _ = await scheduleManager.planDates(dates, selection: selection, groupID: nil)
-        NotificationCenter.default.post(name: .switchToAlarmTab, object: nil)
+        NotificationCenter.default.post(name: .switchToWakeTab, object: nil)
         dismiss()
     }
 

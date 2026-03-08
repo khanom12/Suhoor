@@ -2,7 +2,7 @@ import SwiftUI
 
 enum RootTab: Hashable {
     case home
-    case schedule
+    case wake
     case plans
     case progress
     case settings
@@ -32,9 +32,9 @@ struct RootTabView: View {
                 AlarmsHomeView()
             }
             .tabItem {
-                Label("Schedule", systemImage: "alarm")
+                Label("Wake", systemImage: "alarm")
             }
-            .tag(RootTab.schedule)
+            .tag(RootTab.wake)
 
             NavigationStack(path: $planPath) {
                 PlanRootView()
@@ -97,8 +97,11 @@ struct RootTabView: View {
                 QadaPlannerView()
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .switchToWakeTab)) { _ in
+            selectedTab = .wake
+        }
         .onReceive(NotificationCenter.default.publisher(for: .switchToAlarmTab)) { _ in
-            selectedTab = .schedule
+            selectedTab = .wake
         }
         .onReceive(NotificationCenter.default.publisher(for: .switchToPlanTab)) { _ in
             selectedTab = .plans

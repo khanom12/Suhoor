@@ -412,7 +412,7 @@ struct QadaPlanWizardView: View {
 
                 Spacer()
 
-                Button(viewModel.isApplying ? "Confirming..." : "Confirm Qada Schedule") {
+                Button(viewModel.isApplying ? "Confirming..." : "Confirm Qada plan") {
                     Task { await viewModel.applyPlan() }
                 }
                 .buttonStyle(.borderedProminent)
@@ -441,7 +441,7 @@ struct QadaPlanWizardView: View {
                 .font(.footnote)
                 .foregroundStyle(.secondary)
 
-            Button("Go to Alarms") {
+            Button("Go to Wake") {
                 viewModel.proceedToAlarms()
             }
             .buttonStyle(.borderedProminent)

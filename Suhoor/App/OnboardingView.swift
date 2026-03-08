@@ -7,11 +7,9 @@ private enum OnboardingSpacing {
     static let large: CGFloat = 24
     static let sidePadding: CGFloat = 24
     static let titleToSubtitle: CGFloat = 12
-    static let cardToCTA: CGFloat = 16
     static let cardPadding: CGFloat = 16
     static let cardRowSpacing: CGFloat = 12
     static let cardCornerRadius: CGFloat = 24
-    static let tileCornerRadius: CGFloat = 20
     static let buttonCornerRadius: CGFloat = 20
     static let buttonHeight: CGFloat = 54
     static let tapTargetMin: CGFloat = 44
@@ -27,23 +25,12 @@ struct OnboardingView: View {
 
     @StateObject private var viewModel = OnboardingViewModel()
     @State private var showLocationSearch = false
+    @State private var showCalculationMethodSheet = false
     @State private var didAutoShowCityPicker = false
 
     var body: some View {
         NavigationStack {
-            VStack(alignment: .leading, spacing: OnboardingSpacing.medium) {
-                OnboardingHeaderView(
-                    stepIndex: viewModel.progressIndex,
-                    stepCount: viewModel.progressCount,
-                    shouldShowProgress: viewModel.shouldShowProgress,
-                    canGoBack: viewModel.canGoBack,
-                    onBack: { viewModel.goBack(animation: Motion.onboarding(reduceMotion: reduceMotion)) }
-                )
-                ScrollView(showsIndicators: false) {
-                    stepView
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-            }
+            contentStack
             .padding(.horizontal, OnboardingSpacing.sidePadding)
             .padding(.top, OnboardingSpacing.large)
             .padding(.bottom, OnboardingSpacing.large)
@@ -62,6 +49,11 @@ struct OnboardingView: View {
                             showLocationSearch = false
                         }
                     )
+                }
+            }
+            .sheet(isPresented: $showCalculationMethodSheet) {
+                NavigationStack {
+                    CalculationMethodSelectionView()
                 }
             }
             .task {
@@ -84,6 +76,17 @@ struct OnboardingView: View {
             .onChange(of: settingsStore.settings.fixedLocation) { _, _ in
                 viewModel.syncSettings()
             }
+            .onChange(of: settingsStore.settings.baseWakeOffsetMinutes) { _, newValue in
+                viewModel.handleOffsetChanged(newValue)
+                alarmConfigStore.defaults.defaultSuhoorTimeMode = .relativeToFajrMinusMinutes
+                alarmConfigStore.defaults.defaultSuhoorOffsetMinutes = newValue
+                if alarmConfigStore.defaults.defaultReminderTimeMode != .fixedTime {
+                    alarmConfigStore.defaults.defaultReminderTimeMode = .beforeFajr
+                }
+                if alarmConfigStore.defaults.defaultReminderMinutesBeforeFajr > newValue {
+                    alarmConfigStore.defaults.defaultReminderMinutesBeforeFajr = max(5, newValue)
+                }
+            }
             .onChange(of: locationService.locationName) { _, _ in
                 viewModel.syncSettings()
             }
@@ -98,14 +101,8 @@ struct OnboardingView: View {
                     viewModel.refreshPermissionsInBackground()
                 }
             }
-            .onChange(of: settingsStore.settings.baseWakeOffsetMinutes) { _, newValue in
-                viewModel.handleOffsetChanged(newValue)
-                // Keep schedule previews + activation in sync with what the user chose in onboarding.
-                alarmConfigStore.defaults.defaultSuhoorTimeMode = .relativeToFajrMinusMinutes
-                alarmConfigStore.defaults.defaultSuhoorOffsetMinutes = newValue
-            }
             .onChange(of: viewModel.step) { _, newStep in
-                if newStep == .offset {
+                if newStep == .relationship {
                     viewModel.activationAttempt()
                 }
                 if newStep != .location {
@@ -113,7 +110,6 @@ struct OnboardingView: View {
                 }
             }
             .onChange(of: viewModel.locationState) { _, newState in
-                // If the system prompt fails (denied/restricted/unavailable), offer the city picker immediately.
                 guard viewModel.step == .location else { return }
                 guard !didAutoShowCityPicker else { return }
                 switch newState {
@@ -127,85 +123,175 @@ struct OnboardingView: View {
         }
     }
 
-    @ViewBuilder
-    private var stepView: some View {
-        Group {
-            switch viewModel.step {
-            case .valuePreview:
-                ValuePreviewStep(
-                    preview: viewModel.valueScreenPreview,
-                    offsetMinutes: viewModel.selectedOffsetMinutes,
-                    activationState: .idle,
-                    primaryTitle: viewModel.valuePrimaryActionTitle,
-                    onPrimary: { viewModel.startFlow(animation: Motion.onboarding(reduceMotion: reduceMotion)) }
-                )
-            case .location:
-                LocationStep(
-                    locationMode: viewModel.locationMode,
-                    locationState: viewModel.locationState,
-                    locationName: viewModel.locationName,
-                    hasFixedLocation: viewModel.hasFixedLocation,
-                    isWorking: viewModel.isWorking,
-                    showNextAction: viewModel.shouldShowManualAdvanceForCurrentStep,
-                    onRequestLocation: viewModel.requestLocation,
-                    onOpenSettings: viewModel.openSettings,
-                    onChooseCity: { showLocationSearch = true },
-                    onNext: { viewModel.advance(animation: Motion.onboarding(reduceMotion: reduceMotion)) }
-                )
-            case .offset:
-                OffsetStep(
-                    baseMinutes: $settingsStore.settings.baseWakeOffsetMinutes,
-                    preview: viewModel.tomorrowPreview,
-                    offsetMinutes: viewModel.selectedOffsetMinutes,
-                    activationState: viewModel.activationState,
-                    onContinue: { viewModel.advance(animation: Motion.onboarding(reduceMotion: reduceMotion)) }
-                )
-            case .futureVisualization:
-                FutureVisualizationStep(
-                    rows: viewModel.next5DaysSchedule,
-                    offsetMinutes: viewModel.selectedOffsetMinutes,
-                    onContinue: { viewModel.advance(animation: Motion.onboarding(reduceMotion: reduceMotion)) }
-                )
-            case .permissions:
-                PermissionsStep(
-                    alarmState: viewModel.alarmKitState,
-                    notificationState: viewModel.notificationState,
-                    isAlarmRequestable: viewModel.alarmKitRequestable,
-                    isNotificationsRequired: viewModel.isNotificationsRequired,
-                    showAlarmKitFallback: viewModel.shouldShowAlarmKitFallback,
-                    showNextAction: viewModel.shouldShowManualAdvanceForCurrentStep,
-                    onRequestAlarm: viewModel.requestAlarmKit,
-                    onRequestNotifications: viewModel.requestNotifications,
-                    onOpenSettings: viewModel.openSettings,
-                    onContinue: { viewModel.advance(animation: Motion.onboarding(reduceMotion: reduceMotion)) }
-                )
-            case .success:
-                SuccessStep(
-                    preview: viewModel.tomorrowPreview,
-                    offsetMinutes: viewModel.selectedOffsetMinutes,
-                    title: viewModel.successTitleText,
-                    onDone: viewModel.markOnboardingComplete
-                )
+    private var contentStack: some View {
+        VStack(alignment: .leading, spacing: OnboardingSpacing.medium) {
+            OnboardingHeaderView(
+                stepIndex: viewModel.progressIndex,
+                stepCount: viewModel.progressCount,
+                shouldShowProgress: viewModel.shouldShowProgress,
+                canGoBack: viewModel.canGoBack,
+                onBack: { viewModel.goBack(animation: Motion.onboarding(reduceMotion: reduceMotion)) }
+            )
+
+            ScrollView(showsIndicators: false) {
+                stepView
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .id(viewModel.step)
-        .transition(viewModel.transition(reduceMotion: reduceMotion))
+    }
+
+    private var stepView: some View {
+        stepContent
+            .id(viewModel.step)
+            .transition(viewModel.transition(reduceMotion: reduceMotion))
+    }
+
+    private var stepContent: AnyView {
+        switch viewModel.step {
+        case .valuePreview:
+            AnyView(ValuePreviewStep(
+                title: viewModel.valueTitleText,
+                descriptionText: viewModel.valueBodyText,
+                preview: viewModel.valueScreenPreview,
+                offsetMinutes: viewModel.selectedOffsetMinutes,
+                activationState: .idle,
+                primaryTitle: viewModel.valuePrimaryActionTitle,
+                wakeLabel: viewModel.previewWakeLabelText,
+                onPrimary: { viewModel.startFlow(animation: Motion.onboarding(reduceMotion: reduceMotion)) }
+            ))
+        case .location:
+            AnyView(LocationStep(
+                title: viewModel.locationTitleText,
+                descriptionText: viewModel.locationBodyText,
+                trustBullets: viewModel.locationTrustBullets,
+                calculationMethodName: viewModel.showsCalculationMethodSummary ? viewModel.calculationMethodName : nil,
+                locationMode: viewModel.locationMode,
+                locationState: viewModel.locationState,
+                locationName: viewModel.locationName,
+                hasFixedLocation: viewModel.hasFixedLocation,
+                isWorking: viewModel.isWorking,
+                showNextAction: viewModel.shouldShowManualAdvanceForCurrentStep,
+                onRequestLocation: viewModel.requestLocation,
+                onOpenSettings: viewModel.openSettings,
+                onChooseCity: { showLocationSearch = true },
+                onChangeCalculationMethod: { showCalculationMethodSheet = true },
+                onNext: { viewModel.advance(animation: Motion.onboarding(reduceMotion: reduceMotion)) }
+            ))
+        case .relationship:
+            AnyView(RelationshipStep(
+                title: viewModel.relationshipTitleText,
+                descriptionText: viewModel.relationshipBodyText,
+                baseMinutes: $settingsStore.settings.baseWakeOffsetMinutes,
+                preview: viewModel.tomorrowPreview,
+                offsetMinutes: viewModel.selectedOffsetMinutes,
+                activationState: viewModel.activationState,
+                wakeLabel: viewModel.previewWakeLabelText,
+                presetLabels: viewModel.relationshipPresetLabels,
+                sentenceText: viewModel.relationshipSentenceText,
+                onContinue: { viewModel.advance(animation: Motion.onboarding(reduceMotion: reduceMotion)) }
+            ))
+        case .supportBehavior:
+            AnyView(WakeSupportStep(
+                title: viewModel.supportBehaviorTitleText,
+                descriptionText: viewModel.supportBehaviorBodyText,
+                wakeSummary: viewModel.wakeSupportSummaryText,
+                reminderEnabled: reminderEnabledBinding,
+                reminderMinutes: reminderMinutesBinding,
+                reminderMinuteOptions: reminderMinuteOptions,
+                followUpEnabled: $settingsStore.settings.snoozeEnabled,
+                followUpMinutes: $settingsStore.settings.snoozeMinutes,
+                onContinue: { viewModel.advance(animation: Motion.onboarding(reduceMotion: reduceMotion)) }
+            ))
+        case .futureVisualization:
+            AnyView(FutureVisualizationStep(
+                title: viewModel.onboardingPath.futureVisualizationTitle,
+                cardTitle: viewModel.onboardingPath.futureVisualizationCardTitle,
+                rows: viewModel.next5DaysSchedule,
+                offsetMinutes: viewModel.selectedOffsetMinutes,
+                offsetLine: viewModel.onboardingPath.futureVisualizationOffsetLine(viewModel.selectedOffsetMinutes),
+                tableOffset: viewModel.onboardingPath.futureVisualizationTableOffset(viewModel.selectedOffsetMinutes),
+                wakeLabel: viewModel.previewWakeLabelText,
+                onContinue: { viewModel.advance(animation: Motion.onboarding(reduceMotion: reduceMotion)) }
+            ))
+        case .permissions:
+            AnyView(PermissionsStep(
+                title: viewModel.permissionsTitleText,
+                descriptionText: viewModel.permissionsBodyText,
+                alarmState: viewModel.alarmKitState,
+                notificationState: viewModel.notificationState,
+                isAlarmRequestable: viewModel.alarmKitRequestable,
+                isNotificationsRequired: viewModel.isNotificationsRequired,
+                showNotificationsRow: viewModel.showNotificationsRowInPermissions,
+                showAlarmKitFallback: viewModel.shouldShowAlarmKitFallback,
+                showNextAction: viewModel.shouldShowManualAdvanceForCurrentStep,
+                onRequestAlarm: viewModel.requestAlarmKit,
+                onRequestNotifications: viewModel.requestNotifications,
+                onOpenSettings: viewModel.openSettings,
+                onContinue: { viewModel.advance(animation: Motion.onboarding(reduceMotion: reduceMotion)) }
+            ))
+        case .success:
+            AnyView(SuccessStep(
+                title: viewModel.successTitleText,
+                descriptionText: viewModel.successBodyText,
+                preview: viewModel.tomorrowPreview,
+                offsetMinutes: viewModel.selectedOffsetMinutes,
+                wakeLabel: viewModel.previewWakeLabelText,
+                primaryActionTitle: viewModel.successPrimaryActionTitle,
+                secondaryActionTitle: viewModel.successSecondaryActionTitle,
+                onPrimary: viewModel.markOnboardingComplete,
+                onSecondary: viewModel.markOnboardingCompleteAndOpenPlans
+            ))
+        }
+    }
+
+    private var reminderEnabledBinding: Binding<Bool> {
+        Binding(
+            get: { alarmConfigStore.defaults.reminderEnabledDefault },
+            set: { newValue in
+                alarmConfigStore.defaults.reminderEnabledDefault = newValue
+                if alarmConfigStore.defaults.defaultReminderTimeMode != .fixedTime {
+                    alarmConfigStore.defaults.defaultReminderTimeMode = .beforeFajr
+                }
+            }
+        )
+    }
+
+    private var reminderMinutesBinding: Binding<Int> {
+        Binding(
+            get: { min(alarmConfigStore.defaults.defaultReminderMinutesBeforeFajr, max(5, settingsStore.settings.baseWakeOffsetMinutes)) },
+            set: { newValue in
+                alarmConfigStore.defaults.defaultReminderTimeMode = .beforeFajr
+                alarmConfigStore.defaults.defaultReminderMinutesBeforeFajr = min(newValue, max(5, settingsStore.settings.baseWakeOffsetMinutes))
+            }
+        )
+    }
+
+    private var reminderMinuteOptions: [Int] {
+        let limit = max(5, settingsStore.settings.baseWakeOffsetMinutes)
+        var options = [5, 10, 15, 20, 30, 45, 60, 75, 90].filter { $0 <= limit }
+        if !options.contains(limit) {
+            options.append(limit)
+        }
+        return options.sorted()
     }
 }
 
 private struct ValuePreviewStep: View {
+    let title: String
+    let descriptionText: String
     let preview: OnboardingTomorrowPreview
     let offsetMinutes: Int
     let activationState: OnboardingActivationState
     let primaryTitle: String
+    let wakeLabel: String
     let onPrimary: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: OnboardingSpacing.medium) {
             VStack(alignment: .leading, spacing: OnboardingSpacing.titleToSubtitle) {
-                Text(Strings.Onboarding.valueTitle)
+                Text(title)
                     .font(.largeTitle.weight(.bold))
-                Text(Strings.Onboarding.valueBody)
+                Text(descriptionText)
                     .font(.body)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -215,6 +301,7 @@ private struct ValuePreviewStep: View {
                 preview: preview,
                 offsetMinutes: offsetMinutes,
                 activationState: activationState,
+                wakeLabel: wakeLabel,
                 previewTag: Strings.Onboarding.previewTag,
                 animateRelationshipOnAppear: true
             )
@@ -226,6 +313,10 @@ private struct ValuePreviewStep: View {
 }
 
 private struct LocationStep: View {
+    let title: String
+    let descriptionText: String
+    let trustBullets: [String]
+    let calculationMethodName: String?
     let locationMode: LocationMode
     let locationState: AppPermissionState
     let locationName: String?
@@ -235,16 +326,17 @@ private struct LocationStep: View {
     let onRequestLocation: () -> Void
     let onOpenSettings: () -> Void
     let onChooseCity: () -> Void
+    let onChangeCalculationMethod: () -> Void
     let onNext: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: OnboardingSpacing.medium) {
             VStack(alignment: .leading, spacing: OnboardingSpacing.titleToSubtitle) {
-                Text(Strings.Onboarding.locationTitle)
+                Text(title)
                     .font(.title2.weight(.bold))
                     .fixedSize(horizontal: false, vertical: true)
 
-                Text(Strings.Onboarding.locationBody)
+                Text(descriptionText)
                     .font(.body)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -254,6 +346,38 @@ private struct LocationStep: View {
                 Text(message)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
+            }
+
+            if let calculationMethodName {
+                VStack(alignment: .leading, spacing: DesignTokens.spacingXS) {
+                    Text("Prayer-time method")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.secondary)
+
+                    HStack(alignment: .firstTextBaseline) {
+                        Text(calculationMethodName)
+                            .font(.body.weight(.semibold))
+                        Spacer()
+                        Button("Change", action: onChangeCalculationMethod)
+                            .font(.footnote.weight(.semibold))
+                    }
+                }
+                .onboardingCardStyle()
+            }
+
+            if !trustBullets.isEmpty {
+                VStack(alignment: .leading, spacing: DesignTokens.spacingXS) {
+                    ForEach(trustBullets, id: \.self) { bullet in
+                        HStack(alignment: .top, spacing: DesignTokens.spacingXS) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.footnote)
+                                .foregroundStyle(DawnColor.accent)
+                            Text(bullet)
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
             }
 
             if locationState == .needsFollowUp || isWorking {
@@ -349,19 +473,142 @@ private struct LocationStep: View {
     }
 }
 
+private struct RelationshipStep: View {
+    let title: String
+    let descriptionText: String
+    @Binding var baseMinutes: Int
+    let preview: OnboardingTomorrowPreview
+    let offsetMinutes: Int
+    let activationState: OnboardingActivationState
+    let wakeLabel: String
+    let presetLabels: [Int: String]
+    let sentenceText: (Int) -> String
+    let onContinue: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: OnboardingSpacing.medium) {
+            VStack(alignment: .leading, spacing: OnboardingSpacing.titleToSubtitle) {
+                Text(title)
+                    .font(.title2.weight(.bold))
+                Text(descriptionText)
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            OnboardingTimeCard(
+                preview: preview,
+                offsetMinutes: offsetMinutes,
+                activationState: activationState,
+                wakeLabel: wakeLabel,
+                pulseOnOffsetChange: true
+            )
+
+            OffsetPickerView(
+                baseMinutes: $baseMinutes,
+                presetMinutes: [30, 45, 60, 75, 90],
+                presetLabels: presetLabels,
+                sentenceText: sentenceText
+            )
+
+            Button(Strings.Onboarding.continueAction, action: onContinue)
+                .onboardingPrimaryButton()
+        }
+    }
+}
+
+private struct WakeSupportStep: View {
+    let title: String
+    let descriptionText: String
+    let wakeSummary: String
+    @Binding var reminderEnabled: Bool
+    @Binding var reminderMinutes: Int
+    let reminderMinuteOptions: [Int]
+    @Binding var followUpEnabled: Bool
+    @Binding var followUpMinutes: Int
+    let onContinue: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: OnboardingSpacing.medium) {
+            VStack(alignment: .leading, spacing: OnboardingSpacing.titleToSubtitle) {
+                Text(title)
+                    .font(.title2.weight(.bold))
+                Text(descriptionText)
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
+                supportRow(
+                    title: "Main wake",
+                    subtitle: wakeSummary
+                )
+
+                Divider()
+
+                Toggle("Wake reminder", isOn: $reminderEnabled)
+
+                if reminderEnabled {
+                    Picker("Reminder timing", selection: $reminderMinutes) {
+                        ForEach(reminderMinuteOptions, id: \.self) { value in
+                            Text("\(value) min before Fajr").tag(value)
+                        }
+                    }
+                }
+
+                Divider()
+
+                Toggle("Wake follow-up", isOn: $followUpEnabled)
+
+                if followUpEnabled {
+                    Picker("Follow-up delay", selection: $followUpMinutes) {
+                        ForEach([5, 9, 10, 15], id: \.self) { value in
+                            Text("\(value) min after wake").tag(value)
+                        }
+                    }
+                }
+
+                Text("Special fasting days, Qada days, and other observances can add more support later in Plans.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+            .onboardingCardStyle()
+
+            Button(Strings.Onboarding.continueAction, action: onContinue)
+                .onboardingPrimaryButton()
+        }
+    }
+
+    private func supportRow(title: String, subtitle: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.headline.weight(.semibold))
+            Text(subtitle)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
+    }
+}
+
 private struct FutureVisualizationStep: View {
+    let title: String
+    let cardTitle: String
     let rows: [SchedulePreviewRow]
     let offsetMinutes: Int
+    let offsetLine: String
+    let tableOffset: String
+    let wakeLabel: String
     let onContinue: () -> Void
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         VStack(alignment: .leading, spacing: OnboardingSpacing.medium) {
             VStack(alignment: .leading, spacing: OnboardingSpacing.titleToSubtitle) {
-                Text(Strings.Onboarding.futureVisualizationTitle)
+                Text(title)
                     .font(.title2.weight(.bold))
 
-                Text(Strings.Onboarding.futureVisualizationOffsetLine(offsetMinutes))
+                Text(offsetLine)
                     .font(.body)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -376,10 +623,10 @@ private struct FutureVisualizationStep: View {
 
     private var weekCard: some View {
         VStack(alignment: .leading, spacing: OnboardingSpacing.small) {
-            Text(Strings.Onboarding.futureVisualizationCardTitle)
+            Text(cardTitle)
                 .font(DesignTokens.cardTitleFont)
 
-            Text(Strings.Onboarding.futureVisualizationTableOffset(offsetMinutes))
+            Text(tableOffset)
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
 
@@ -401,10 +648,10 @@ private struct FutureVisualizationStep: View {
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
                     .frame(width: 86, alignment: .trailing)
-                Text(Strings.Onboarding.previewSuhoorLabel)
+                Text(wakeLabel)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
-                    .frame(width: 98, alignment: .trailing)
+                    .frame(width: 110, alignment: .trailing)
             }
 
             ForEach(rows) { row in
@@ -419,9 +666,9 @@ private struct FutureVisualizationStep: View {
                     Text(TimeFormatters.timeFormatter.string(from: row.fajr))
                         .font(DesignTokens.cardSubtitleFont.monospacedDigit())
                         .frame(width: 86, alignment: .trailing)
-                    Text(TimeFormatters.timeFormatter.string(from: row.suhoor))
+                    Text(TimeFormatters.timeFormatter.string(from: row.wake))
                         .font(DesignTokens.cardSubtitleFont.monospacedDigit())
-                        .frame(width: 98, alignment: .trailing)
+                        .frame(width: 110, alignment: .trailing)
                 }
             }
         }
@@ -444,11 +691,11 @@ private struct FutureVisualizationStep: View {
                             .font(DesignTokens.cardSubtitleFont.monospacedDigit())
                     }
                     HStack {
-                        Text(Strings.Onboarding.previewSuhoorLabel)
+                        Text(wakeLabel)
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                         Spacer()
-                        Text(TimeFormatters.timeFormatter.string(from: row.suhoor))
+                        Text(TimeFormatters.timeFormatter.string(from: row.wake))
                             .font(DesignTokens.cardSubtitleFont.monospacedDigit())
                     }
                 }
@@ -459,10 +706,13 @@ private struct FutureVisualizationStep: View {
 }
 
 private struct PermissionsStep: View {
+    let title: String
+    let descriptionText: String
     let alarmState: AppPermissionState
     let notificationState: AppPermissionState
     let isAlarmRequestable: Bool
     let isNotificationsRequired: Bool
+    let showNotificationsRow: Bool
     let showAlarmKitFallback: Bool
     let showNextAction: Bool
     let onRequestAlarm: () -> Void
@@ -473,16 +723,14 @@ private struct PermissionsStep: View {
     var body: some View {
         VStack(alignment: .leading, spacing: OnboardingSpacing.medium) {
             VStack(alignment: .leading, spacing: OnboardingSpacing.titleToSubtitle) {
-                Text(Strings.Onboarding.permissionsTitle)
+                Text(title)
                     .font(.title2.weight(.bold))
 
-                Text(Strings.Onboarding.permissionsBody)
+                Text(descriptionText)
                     .font(.body)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
-
-            let shouldShowNotificationsRow = isNotificationsRequired
 
             VStack(alignment: .leading, spacing: 12) {
                 permissionRow(
@@ -490,13 +738,12 @@ private struct PermissionsStep: View {
                     status: alarmStatus,
                     actionTitle: alarmActionTitle,
                     secondaryActionTitle: nil,
-                    isPrimary: true,
                     showsCheckmark: alarmState == .authorized,
                     action: alarmAction,
                     secondaryAction: onContinue
                 )
 
-                if shouldShowNotificationsRow {
+                if showNotificationsRow {
                     Divider()
 
                     permissionRow(
@@ -506,7 +753,6 @@ private struct PermissionsStep: View {
                         secondaryActionTitle: shouldShowNotificationSkip
                             ? Strings.Onboarding.permissionsNotificationsSkipAction
                             : nil,
-                        isPrimary: false,
                         showsCheckmark: notificationState == .authorized,
                         action: notificationAction,
                         secondaryAction: onContinue
@@ -607,7 +853,6 @@ private struct PermissionsStep: View {
         status: String?,
         actionTitle: String?,
         secondaryActionTitle: String?,
-        isPrimary: Bool,
         showsCheckmark: Bool,
         action: @escaping () -> Void,
         secondaryAction: @escaping () -> Void
@@ -644,69 +889,40 @@ private struct PermissionsStep: View {
     }
 }
 
-private struct OffsetStep: View {
-    @Binding var baseMinutes: Int
-    let preview: OnboardingTomorrowPreview
-    let offsetMinutes: Int
-    let activationState: OnboardingActivationState
-    let onContinue: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: OnboardingSpacing.medium) {
-            VStack(alignment: .leading, spacing: OnboardingSpacing.titleToSubtitle) {
-                Text(Strings.Onboarding.offsetTitle)
-                    .font(.title2.weight(.bold))
-                Text(Strings.Onboarding.offsetBody)
-                    .font(.body)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            OnboardingTimeCard(
-                preview: preview,
-                offsetMinutes: offsetMinutes,
-                activationState: activationState,
-                pulseOnOffsetChange: true
-            )
-
-            OffsetPickerView(
-                baseMinutes: $baseMinutes,
-                presetMinutes: [30, 45, 60, 75, 90],
-                presetLabels: [
-                    30: "Quick Suhoor",
-                    45: "Comfortable",
-                    60: "Recommended",
-                    75: "Unhurried",
-                    90: "Relaxed"
-                ],
-                sentenceText: nil
-            )
-
-            Button(Strings.Onboarding.continueAction, action: onContinue)
-                .onboardingPrimaryButton()
-        }
-    }
-}
-
 private struct SuccessStep: View {
+    let title: String
+    let descriptionText: String
     let preview: OnboardingTomorrowPreview
     let offsetMinutes: Int
-    let title: String
-    let onDone: () -> Void
+    let wakeLabel: String
+    let primaryActionTitle: String
+    let secondaryActionTitle: String?
+    let onPrimary: () -> Void
+    let onSecondary: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: OnboardingSpacing.medium) {
             Label(title, systemImage: "checkmark.circle.fill")
                 .font(.title2.weight(.bold))
 
-            OnboardingTimeCard(preview: preview, offsetMinutes: offsetMinutes, activationState: .idle)
+            OnboardingTimeCard(
+                preview: preview,
+                offsetMinutes: offsetMinutes,
+                activationState: .idle,
+                wakeLabel: wakeLabel
+            )
 
-            Text(Strings.Onboarding.successBody)
+            Text(descriptionText)
                 .font(.footnote)
                 .foregroundStyle(.secondary)
 
-            Button(Strings.Onboarding.successAction, action: onDone)
+            Button(primaryActionTitle, action: onPrimary)
                 .onboardingPrimaryButton()
+
+            if let secondaryActionTitle {
+                Button(secondaryActionTitle, action: onSecondary)
+                    .onboardingSecondaryButton()
+            }
         }
     }
 }
@@ -715,6 +931,7 @@ private struct OnboardingTimeCard: View {
     let preview: OnboardingTomorrowPreview
     let offsetMinutes: Int
     let activationState: OnboardingActivationState
+    let wakeLabel: String
     var previewTag: String? = nil
     var animateRelationshipOnAppear: Bool = false
     var pulseOnOffsetChange: Bool = false
@@ -794,18 +1011,12 @@ private struct OnboardingTimeCard: View {
             Image(systemName: "arrow.down")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
-            (
-                Text("\(offsetMinutes) min")
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(pulseConnector ? DawnColor.accent : .primary)
-                +
-                Text(" earlier")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            )
+            Text("\(offsetMinutes) min before Fajr")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(pulseConnector ? DawnColor.accent : .primary)
         }
         .scaleEffect(pulseConnector ? 1.08 : 1)
-        .accessibilityLabel("\(offsetMinutes) minutes earlier")
+        .accessibilityLabel("\(offsetMinutes) minutes before Fajr")
     }
 
     @ViewBuilder
@@ -820,8 +1031,8 @@ private struct OnboardingTimeCard: View {
                     .opacity(showRelationship ? 1 : 0)
                     .offset(y: showRelationship ? 0 : 4)
                 stackedRow(
-                    label: Strings.Onboarding.previewSuhoorLabel,
-                    value: preview.suhoorTimeText ?? Strings.Onboarding.previewSuhoorPlaceholder
+                    label: wakeLabel,
+                    value: preview.wakeTimeText ?? Strings.Onboarding.previewSuhoorPlaceholder
                 )
                 .opacity(showRelationship ? 1 : 0)
                 .offset(y: showRelationship ? 0 : 4)
@@ -845,8 +1056,8 @@ private struct OnboardingTimeCard: View {
                 }
                 GridRow {
                     connectedRow(
-                        label: Strings.Onboarding.previewSuhoorLabel,
-                        value: preview.suhoorTimeText ?? Strings.Onboarding.previewSuhoorPlaceholder
+                        label: wakeLabel,
+                        value: preview.wakeTimeText ?? Strings.Onboarding.previewSuhoorPlaceholder
                     )
                     .gridCellColumns(2)
                 }
@@ -985,8 +1196,10 @@ private struct OnboardingHeaderView: View {
 
 #if DEBUG
 @available(iOS 17.0, *)
-#Preview("Step 1 - Default") {
+#Preview("Fajr Value") {
     ValuePreviewStep(
+        title: OnboardingPath.fajr.valueTitle,
+        descriptionText: OnboardingPath.fajr.valueBody,
         preview: OnboardingTomorrowPreview(
             dateText: "Today",
             targetDate: Date(),
@@ -998,38 +1211,21 @@ private struct OnboardingHeaderView: View {
         ),
         offsetMinutes: 45,
         activationState: .idle,
-        primaryTitle: Strings.Onboarding.valuePrimaryActionToday,
+        primaryTitle: OnboardingPath.fajr.valuePrimaryActionTitle(for: "Today"),
+        wakeLabel: OnboardingPath.fajr.previewWakeLabel,
         onPrimary: {}
     )
     .padding(.horizontal, OnboardingSpacing.sidePadding)
 }
 
 @available(iOS 17.0, *)
-#Preview("Step 1 - XXL") {
-    ValuePreviewStep(
+#Preview("Ramadan Relationship") {
+    RelationshipStep(
+        title: OnboardingPath.ramadan.relationshipTitle,
+        descriptionText: OnboardingPath.ramadan.relationshipBody,
+        baseMinutes: .constant(45),
         preview: OnboardingTomorrowPreview(
-            dateText: "Today",
-            targetDate: Date(),
-            fajrDate: Date(),
-            suhoorDate: Date().addingTimeInterval(-60 * 60),
-            fajrTimeText: "6:02 AM",
-            suhoorTimeText: "5:02 AM",
-            statusText: nil
-        ),
-        offsetMinutes: 60,
-        activationState: .idle,
-        primaryTitle: Strings.Onboarding.valuePrimaryActionToday,
-        onPrimary: {}
-    )
-    .environment(\.dynamicTypeSize, .xxLarge)
-    .padding(.horizontal, OnboardingSpacing.sidePadding)
-}
-
-@available(iOS 17.0, *)
-#Preview("Step 1 - Accessibility1") {
-    ValuePreviewStep(
-        preview: OnboardingTomorrowPreview(
-            dateText: "Today",
+            dateText: "Tomorrow",
             targetDate: Date(),
             fajrDate: Date(),
             suhoorDate: Date().addingTimeInterval(-45 * 60),
@@ -1039,187 +1235,11 @@ private struct OnboardingHeaderView: View {
         ),
         offsetMinutes: 45,
         activationState: .idle,
-        primaryTitle: Strings.Onboarding.valuePrimaryActionToday,
-        onPrimary: {}
-    )
-    .environment(\.dynamicTypeSize, .accessibility1)
-    .padding(.horizontal, OnboardingSpacing.sidePadding)
-}
-
-@available(iOS 17.0, *)
-#Preview("Step 2 - Default") {
-    LocationStep(
-        locationMode: .auto,
-        locationState: .notDetermined,
-        locationName: nil,
-        hasFixedLocation: false,
-        isWorking: false,
-        showNextAction: false,
-        onRequestLocation: {},
-        onOpenSettings: {},
-        onChooseCity: {},
-        onNext: {}
-    )
-    .padding(.horizontal, OnboardingSpacing.sidePadding)
-}
-
-@available(iOS 17.0, *)
-#Preview("Step 2 - XXL") {
-    LocationStep(
-        locationMode: .fixed,
-        locationState: .authorized,
-        locationName: "San Francisco",
-        hasFixedLocation: true,
-        isWorking: false,
-        showNextAction: false,
-        onRequestLocation: {},
-        onOpenSettings: {},
-        onChooseCity: {},
-        onNext: {}
-    )
-    .environment(\.dynamicTypeSize, .xxLarge)
-    .padding(.horizontal, OnboardingSpacing.sidePadding)
-}
-
-@available(iOS 17.0, *)
-#Preview("Step 2 - Accessibility1") {
-    LocationStep(
-        locationMode: .auto,
-        locationState: .denied,
-        locationName: nil,
-        hasFixedLocation: false,
-        isWorking: false,
-        showNextAction: false,
-        onRequestLocation: {},
-        onOpenSettings: {},
-        onChooseCity: {},
-        onNext: {}
-    )
-    .environment(\.dynamicTypeSize, .accessibility1)
-    .padding(.horizontal, OnboardingSpacing.sidePadding)
-}
-
-@available(iOS 17.0, *)
-#Preview("Step 3 - Default") {
-    @Previewable @State var baseMinutes: Int = 45
-    return OffsetStep(
-        baseMinutes: $baseMinutes,
-        preview: OnboardingTomorrowPreview(
-            dateText: "Tomorrow",
-            targetDate: Date().addingTimeInterval(86400),
-            fajrDate: Date().addingTimeInterval(86400),
-            suhoorDate: Date().addingTimeInterval(86400 - 45 * 60),
-            fajrTimeText: "5:27 AM",
-            suhoorTimeText: "4:42 AM",
-            statusText: nil
-        ),
-        offsetMinutes: 45,
-        activationState: .idle,
+        wakeLabel: OnboardingPath.ramadan.previewWakeLabel,
+        presetLabels: OnboardingPath.ramadan.relationshipPresetLabels,
+        sentenceText: OnboardingPath.ramadan.relationshipSentence,
         onContinue: {}
     )
-    .padding(.horizontal, OnboardingSpacing.sidePadding)
-}
-
-@available(iOS 17.0, *)
-#Preview("Step 3 - XXL") {
-    @Previewable @State var baseMinutes: Int = 60
-    return OffsetStep(
-        baseMinutes: $baseMinutes,
-        preview: OnboardingTomorrowPreview(
-            dateText: "Tomorrow",
-            targetDate: Date().addingTimeInterval(86400),
-            fajrDate: Date().addingTimeInterval(86400),
-            suhoorDate: Date().addingTimeInterval(86400 - 60 * 60),
-            fajrTimeText: "5:27 AM",
-            suhoorTimeText: "4:27 AM",
-            statusText: nil
-        ),
-        offsetMinutes: 60,
-        activationState: .idle,
-        onContinue: {}
-    )
-    .environment(\.dynamicTypeSize, .xxLarge)
-    .padding(.horizontal, OnboardingSpacing.sidePadding)
-}
-
-@available(iOS 17.0, *)
-#Preview("Step 3 - Accessibility1") {
-    @Previewable @State var baseMinutes: Int = 75
-    return OffsetStep(
-        baseMinutes: $baseMinutes,
-        preview: OnboardingTomorrowPreview(
-            dateText: "Today",
-            targetDate: Date(),
-            fajrDate: Date(),
-            suhoorDate: Date().addingTimeInterval(-75 * 60),
-            fajrTimeText: "5:27 AM",
-            suhoorTimeText: "4:12 AM",
-            statusText: nil
-        ),
-        offsetMinutes: 75,
-        activationState: .idle,
-        onContinue: {}
-    )
-    .environment(\.dynamicTypeSize, .accessibility1)
-    .padding(.horizontal, OnboardingSpacing.sidePadding)
-}
-
-@available(iOS 17.0, *)
-#Preview("Step 6 - Default") {
-    SuccessStep(
-        preview: OnboardingTomorrowPreview(
-            dateText: "Tomorrow",
-            targetDate: Date().addingTimeInterval(86400),
-            fajrDate: Date().addingTimeInterval(86400),
-            suhoorDate: Date().addingTimeInterval(86400 - 60 * 60),
-            fajrTimeText: "5:27 AM",
-            suhoorTimeText: "4:27 AM",
-            statusText: nil
-        ),
-        offsetMinutes: 60,
-        title: "You’re ready for tomorrow.",
-        onDone: {}
-    )
-    .padding(.horizontal, OnboardingSpacing.sidePadding)
-}
-
-@available(iOS 17.0, *)
-#Preview("Step 6 - XXL") {
-    SuccessStep(
-        preview: OnboardingTomorrowPreview(
-            dateText: "Today",
-            targetDate: Date(),
-            fajrDate: Date(),
-            suhoorDate: Date().addingTimeInterval(-45 * 60),
-            fajrTimeText: "6:12 AM",
-            suhoorTimeText: "5:27 AM",
-            statusText: nil
-        ),
-        offsetMinutes: 45,
-        title: "You’re ready for today.",
-        onDone: {}
-    )
-    .environment(\.dynamicTypeSize, .xxLarge)
-    .padding(.horizontal, OnboardingSpacing.sidePadding)
-}
-
-@available(iOS 17.0, *)
-#Preview("Step 6 - Accessibility1") {
-    SuccessStep(
-        preview: OnboardingTomorrowPreview(
-            dateText: "Tomorrow",
-            targetDate: Date().addingTimeInterval(86400),
-            fajrDate: Date().addingTimeInterval(86400),
-            suhoorDate: Date().addingTimeInterval(86400 - 30 * 60),
-            fajrTimeText: "5:55 AM",
-            suhoorTimeText: "5:25 AM",
-            statusText: nil
-        ),
-        offsetMinutes: 30,
-        title: "You’re ready for tomorrow.",
-        onDone: {}
-    )
-    .environment(\.dynamicTypeSize, .accessibility1)
     .padding(.horizontal, OnboardingSpacing.sidePadding)
 }
 #endif
