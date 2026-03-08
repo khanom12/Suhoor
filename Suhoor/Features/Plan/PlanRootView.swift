@@ -57,7 +57,7 @@ struct PlanRootView: View {
                     NavigationLink(value: PlanDestination.sunnahPlanner) {
                         PlansFeatureRow(
                             title: "Sunnah opportunities",
-                            subtitle: "Browse upcoming observances and recurring fasting opportunities.",
+                            subtitle: "Browse recurring and upcoming fasting opportunities.",
                             systemImage: "sparkles",
                             color: DawnColor.lightGold200
                         )
@@ -250,7 +250,7 @@ private struct ConfiguredPlansCard: View {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("Upcoming special plans")
                             .font(.headline.weight(.semibold))
-                        Text("Overrides, Qada days, selected fasting days, and other non-default mornings.")
+                        Text("Upcoming non-default mornings.")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
@@ -281,7 +281,7 @@ private struct ConfiguredPlansCard: View {
                         }
                     }
                 } else {
-                    Text("No upcoming special mornings yet.")
+                    Text("No special mornings planned yet.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -297,7 +297,7 @@ private struct DatePlanningCard: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Plan by date")
                         .font(.headline.weight(.semibold))
-                    Text("Pick a date for a one-day change, fasting day, or Qada morning.")
+                    Text("Pick a date for a one-day change, fasting day, or Qada day.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -361,7 +361,7 @@ private struct CustomFastingCard: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Custom fasting days")
                         .font(.headline.weight(.semibold))
-                    Text("Plan selected fasting days and other non-recurring observances.")
+                    Text("Plan selected fasting days and other custom mornings.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }

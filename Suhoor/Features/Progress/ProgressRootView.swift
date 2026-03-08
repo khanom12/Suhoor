@@ -84,7 +84,7 @@ struct ProgressRootView: View {
             } header: {
                 Text("Wake Activity")
             } footer: {
-                Text("Recent wake activity still uses the current wake-event log until a dedicated wake history model replaces it.")
+                Text("Wake activity still uses the current wake-event log until a dedicated wake history model replaces it.")
             }
         }
         .navigationTitle("Progress")

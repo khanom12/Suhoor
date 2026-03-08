@@ -2,8 +2,8 @@ import SwiftUI
 import UIKit
 
 struct SettingsRootView: View {
+    @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var settingsStore: SuhoorSettingsStore
-    @EnvironmentObject private var alarmConfigStore: AlarmConfigStore
     @EnvironmentObject private var scheduleManager: ScheduleManager
     @EnvironmentObject private var locationService: LocationService
     @State private var showingCopiedAlert = false
@@ -36,7 +36,7 @@ struct SettingsRootView: View {
                 } label: {
                     SettingsSummaryRow(
                         title: "Morning planning",
-                        subtitle: SettingsSummaryFormatter.defaultAlarmsSummary(config: alarmConfigStore.defaults),
+                        subtitle: "Open Plans to edit your default morning plan.",
                         systemImage: "sun.horizon",
                         badgeText: nil,
                         badgeTone: .neutral
@@ -44,9 +44,9 @@ struct SettingsRootView: View {
                 }
                 .buttonStyle(.plain)
             } header: {
-                SettingsSectionHeader(title: "Planning")
+                SettingsSectionHeader(title: "Shortcut")
             } footer: {
-                Text("Morning intention and planning live in Plans. Settings only manages system configuration.")
+                Text("Planning lives in Plans. Settings only handles system setup and support.")
             }
 
             ForEach(SettingsDestinationGroup.allCases) { group in
@@ -105,6 +105,13 @@ struct SettingsRootView: View {
         .formStyle(.grouped)
         .navigationTitle(Strings.Settings.title)
         .navigationBarTitleDisplayMode(.large)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("Done") {
+                    dismiss()
+                }
+            }
+        }
         .alert("Copied", isPresented: $showingCopiedAlert) {
             Button("OK", role: .cancel) {}
         } message: {

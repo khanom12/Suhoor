@@ -5,7 +5,6 @@ enum RootTab: Hashable {
     case wake
     case plans
     case progress
-    case settings
 }
 
 enum SettingsRoute: Hashable {
@@ -17,6 +16,7 @@ struct RootTabView: View {
     @State private var settingsPath = NavigationPath()
     @State private var planPath = NavigationPath()
     @State private var isShowingQadaWizard = false
+    @State private var isShowingSettings = false
 
     var body: some View {
         TabView(selection: $selectedTab) {
@@ -77,7 +77,13 @@ struct RootTabView: View {
                 Label("Progress", systemImage: "chart.line.uptrend.xyaxis")
             }
             .tag(RootTab.progress)
-
+        }
+        .fullScreenCover(isPresented: $isShowingQadaWizard) {
+            NavigationStack {
+                QadaPlannerView()
+            }
+        }
+        .sheet(isPresented: $isShowingSettings) {
             NavigationStack(path: $settingsPath) {
                 SettingsRootView()
                     .navigationDestination(for: SettingsRoute.self) { destination in
@@ -86,15 +92,6 @@ struct RootTabView: View {
                             HijriCalendarSettingsView()
                         }
                     }
-            }
-            .tabItem {
-                Label("Settings", systemImage: "gearshape")
-            }
-            .tag(RootTab.settings)
-        }
-        .fullScreenCover(isPresented: $isShowingQadaWizard) {
-            NavigationStack {
-                QadaPlannerView()
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .switchToWakeTab)) { _ in
@@ -131,13 +128,13 @@ struct RootTabView: View {
             planPath.append(PlanDestination.sunnahPlanner)
         }
         .onReceive(NotificationCenter.default.publisher(for: .switchToSettingsTab)) { _ in
-            selectedTab = .settings
             settingsPath.removeLast(settingsPath.count)
+            isShowingSettings = true
         }
         .onReceive(NotificationCenter.default.publisher(for: .switchToHijriCorrections)) { _ in
-            selectedTab = .settings
             settingsPath.removeLast(settingsPath.count)
             settingsPath.append(SettingsRoute.hijriCorrections)
+            isShowingSettings = true
         }
     }
 }

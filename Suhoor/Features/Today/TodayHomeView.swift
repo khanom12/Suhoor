@@ -50,6 +50,16 @@ struct TodayHomeView: View {
                     .ignoresSafeArea()
             )
             .navigationTitle("Home")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        NotificationCenter.default.post(name: .switchToSettingsTab, object: nil)
+                    } label: {
+                        Image(systemName: "gearshape")
+                    }
+                    .accessibilityLabel("Open Settings")
+                }
+            }
             .onAppear { _ = scheduleManager.lastUpdated }
         }
     }
@@ -216,11 +226,18 @@ private struct TodayNextWakeHeroCard: View {
                             .font(DesignTokens.cardSubtitleFont)
                             .foregroundStyle(.secondary)
 
-                        Button("Set Morning Plan") {
-                            NotificationCenter.default.post(name: .openPlanDefaultMorningPlan, object: nil)
+                        HStack(spacing: DesignTokens.spacingS) {
+                            Button("Set Morning Plan") {
+                                NotificationCenter.default.post(name: .openPlanDefaultMorningPlan, object: nil)
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .tint(DawnColor.accent)
+
+                            Button("Settings") {
+                                NotificationCenter.default.post(name: .switchToSettingsTab, object: nil)
+                            }
+                            .buttonStyle(.bordered)
                         }
-                        .buttonStyle(.borderedProminent)
-                        .tint(DawnColor.accent)
                     }
                 }
             }

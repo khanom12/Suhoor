@@ -981,14 +981,24 @@ private struct AlarmRowView: View {
                 onSelect()
             }
 
-            VStack(alignment: .trailing, spacing: 10) {
-                Toggle("", isOn: dayActiveBinding)
-                    .labelsHidden()
-                    .tint(DawnColor.accent)
-                    .accessibilityLabel("Enable this wake plan day")
-                    .frame(minWidth: 51, alignment: .trailing)
+        VStack(alignment: .trailing, spacing: 10) {
+            if editMode?.wrappedValue.isEditing != true {
+                Button("Adjust") {
+                    onSelect()
+                }
+                .buttonStyle(.borderless)
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(DawnColor.accent)
+                .accessibilityLabel("Open one-day override")
             }
-            .frame(minWidth: 74, alignment: .trailing)
+
+            Toggle("", isOn: dayActiveBinding)
+                .labelsHidden()
+                .tint(DawnColor.accent)
+                .accessibilityLabel("Keep this morning active")
+                .frame(minWidth: 51, alignment: .trailing)
+        }
+        .frame(minWidth: 74, alignment: .trailing)
         }
         .padding(.vertical, 6)
         .onChange(of: entry.config) { _, newValue in
