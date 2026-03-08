@@ -118,6 +118,10 @@ struct AlarmDayDetailView: View {
         effectiveConfig.skipDay
     }
 
+    private var hasOneDayChanges: Bool {
+        alarmConfigStore.override(for: schedule.date, timeZone: timeZone) != nil
+    }
+
     private var userIntentSelection: FastIntentSelection {
         editorContext.userIntentSelection
     }
@@ -418,9 +422,21 @@ struct AlarmDayDetailView: View {
                             .foregroundStyle(.tertiary)
                     }
                 }
+                if canQuickMarkFastingDay {
+                    Button("Mark as Fasting Day") {
+                        fastTagStore.setSelection(
+                            FastIntentSelection(primaryIntent: .voluntary, secondaryTags: []),
+                            for: schedule.date,
+                            timeZone: timeZone
+                        )
+                        rebuildViewState()
+                    }
+                }
             } header: {
                 Text("Day Meaning")
                     .textCase(nil)
+            } footer: {
+                Text("Use this to make the date a fasting day, Qada day, or another special morning.")
             }
 
             Section {
@@ -429,7 +445,7 @@ struct AlarmDayDetailView: View {
                 Text("One-Day Override")
                     .textCase(nil)
             } footer: {
-                Text("Changes here only apply to this date.")
+                Text(hasOneDayChanges ? "This date is using one-day changes." : "This date is using your default morning plan.")
             }
             .animation(Motion.standard(reduceMotion: reduceMotion), value: dayToggleBinding.wrappedValue)
 
@@ -521,18 +537,18 @@ struct AlarmDayDetailView: View {
             .disabled(!dayToggleBinding.wrappedValue)
             .opacity(dayToggleBinding.wrappedValue ? 1.0 : 0.5)
 
-            Section {
-                Button(Strings.AlarmsTab.resetDay, role: .destructive) {
-                    showsResetConfirmation = true
+            if hasOneDayChanges {
+                Section {
+                    Button("Reset to Default", role: .destructive) {
+                        showsResetConfirmation = true
+                    }
+                } header: {
+                    Text("Reset to Default")
+                        .textCase(nil)
+                } footer: {
+                    Text(Strings.AlarmsTab.resetDayHelper)
                 }
-            } header: {
-                Text("Clear One-Day Changes")
-                    .textCase(nil)
-            } footer: {
-                Text(Strings.AlarmsTab.resetDayHelper)
             }
-            .disabled(!dayToggleBinding.wrappedValue)
-            .opacity(dayToggleBinding.wrappedValue ? 1.0 : 0.5)
 
             if !sourcePresentations.isEmpty {
                 Section {
@@ -713,6 +729,10 @@ struct AlarmDayDetailView: View {
     private func rebuildViewState() {
         cachedTagPickerSeeds = scheduleManager.activeWindowSnapshot.visibleDays.map(\.tagSeed)
         rebuildEditorContext()
+    }
+
+    private var canQuickMarkFastingDay: Bool {
+        intentWarnings.isEmpty && computedIntentSelection.primaryIntent == .other
     }
 
     private func buildEditorContext() -> DayAlarmEditorContext {

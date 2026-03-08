@@ -106,22 +106,13 @@ struct PlanRootView: View {
             ? "\(settingsStore.settings.snoozeMinutes) min after wake"
             : "Off"
 
-        var supportItems = [
-            defaults.wakeAlarmEnabledText,
-            reminderSummary,
-            "Follow-up \(followUpSummary)"
-        ]
-        if defaults.fajrEnabledDefault {
-            supportItems.append("Fajr notice on")
-        }
-        if defaults.iftarEnabledDefault {
-            supportItems.append("Iftar support on")
-        }
-
         return DefaultMorningPlanSummary(
-            wakeAnchor: "Fajr start",
             wakeRelation: wakeRelation,
-            supportItems: supportItems
+            reminder: reminderSummary,
+            followUp: followUpSummary,
+            fajrNotice: defaults.fajrEnabledDefault ? "On" : "Off",
+            fastingDaySupport: defaults.iftarEnabledDefault ? "Iftar support on" : "Wake-only support",
+            compatibilityNote: defaults.defaultSuhoorTimeMode == .fixedTime ? "Using fixed-time compatibility." : nil
         )
     }
 
@@ -200,9 +191,12 @@ struct PlanRootView: View {
 }
 
 private struct DefaultMorningPlanSummary {
-    let wakeAnchor: String
     let wakeRelation: String
-    let supportItems: [String]
+    let reminder: String
+    let followUp: String
+    let fajrNotice: String
+    let fastingDaySupport: String
+    let compatibilityNote: String?
 }
 
 private struct DefaultMorningPlanCard: View {
@@ -228,12 +222,17 @@ private struct DefaultMorningPlanCard: View {
                 }
 
                 VStack(alignment: .leading, spacing: DesignTokens.spacingS) {
-                    SummaryRow(label: "Wake anchor", value: summary.wakeAnchor)
-                    SummaryRow(label: "Wake relation", value: summary.wakeRelation)
-                    SummaryRow(
-                        label: "Support",
-                        value: summary.supportItems.joined(separator: " · ")
-                    )
+                    SummaryRow(label: "Wake relation to Fajr", value: summary.wakeRelation)
+                    SummaryRow(label: "Reminder", value: summary.reminder)
+                    SummaryRow(label: "Follow-up", value: summary.followUp)
+                    SummaryRow(label: "Fajr notice", value: summary.fajrNotice)
+                    SummaryRow(label: "Fasting-day support", value: summary.fastingDaySupport)
+                }
+
+                if let compatibilityNote = summary.compatibilityNote {
+                    Text(compatibilityNote)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                 }
             }
         }

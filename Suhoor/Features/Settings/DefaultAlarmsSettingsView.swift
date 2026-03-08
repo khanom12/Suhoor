@@ -12,9 +12,11 @@ struct DefaultAlarmsSettingsView: View {
     var body: some View {
         Form {
             Section {
-                LabeledContent("Wake anchor", value: "Fajr start")
-                LabeledContent("Wake relation", value: wakeSummaryText)
+                LabeledContent("Wake relation to Fajr", value: wakeSummaryText)
+                LabeledContent("Reminder", value: reminderSummaryText)
                 LabeledContent("Follow-up", value: followUpSummaryText)
+                LabeledContent("Fajr notice", value: fajrDefaultBinding.wrappedValue ? "On" : "Off")
+                LabeledContent("Fasting-day support", value: iftarDefaultBinding.wrappedValue ? "Iftar support on" : "Wake-only support")
 
                 if usesFixedTimeCompatibility {
                     Text("Fixed-time wake settings are preserved for compatibility. Fajr-relative planning is the long-term default.")
@@ -23,8 +25,8 @@ struct DefaultAlarmsSettingsView: View {
                 }
             } header: {
                 SettingsSectionHeader(
-                    title: "Morning plan",
-                    supportingText: "Set your default wake relationship to Fajr and the sequence that supports it."
+                    title: "Default Morning Plan",
+                    supportingText: "Choose your everyday wake relation to Fajr and the support around it."
                 )
             }
 
@@ -45,7 +47,7 @@ struct DefaultAlarmsSettingsView: View {
             } header: {
                 SettingsSectionHeader(
                     title: "Wake sequence",
-                    supportingText: "Choose which support events should be part of your default morning sequence."
+                    supportingText: "Turn the supporting wake events on or off."
                 )
             }
 
@@ -123,7 +125,7 @@ struct DefaultAlarmsSettingsView: View {
                 }
                 .padding(.vertical, 4)
             } header: {
-                SettingsSectionHeader(title: "Wake timing")
+                SettingsSectionHeader(title: "Timing")
             }
 
             Section {

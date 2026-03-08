@@ -2,6 +2,7 @@ import SwiftUI
 
 struct PlanCalendarView: View {
     @EnvironmentObject private var scheduleManager: ScheduleManager
+    @EnvironmentObject private var fastTagStore: FastTagStore
 
     @State private var displayedMonth = DateHelpers.startOfToday()
     @State private var selectedDate = DateHelpers.startOfToday()
@@ -41,6 +42,13 @@ struct PlanCalendarView: View {
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
+
+                    if let secondaryActionTitle {
+                        Button(secondaryActionTitle) {
+                            triggerSecondaryAction()
+                        }
+                        .buttonStyle(.bordered)
+                    }
                 }
                 .padding(.horizontal, DesignTokens.spacingL)
                 .padding(.bottom, DesignTokens.spacingL)
@@ -88,6 +96,38 @@ struct PlanCalendarView: View {
             return "Use this for one-day changes, fasting days, and Qada dates."
         }
         return "Open this morning to adjust its wake, meaning, or source."
+    }
+
+    private var secondaryActionTitle: String? {
+        guard detail.warnings.isEmpty else { return nil }
+        if detail.computedPrimaryIntent == .other {
+            return "Mark as Fasting Day"
+        }
+        return "Edit Day Meaning"
+    }
+
+    private func triggerSecondaryAction() {
+        if detail.computedPrimaryIntent == .other {
+            Task {
+                let selection = FastIntentSelection(primaryIntent: .voluntary, secondaryTags: [])
+                if existingSchedule != nil {
+                    fastTagStore.setSelection(selection, for: normalizedSelectedDate, timeZone: .current)
+                    selectedSchedule = scheduleManager.schedule(for: normalizedSelectedDate) ?? existingSchedule
+                } else {
+                    let result = await scheduleManager.addSingleScheduledDate(
+                        normalizedSelectedDate,
+                        selection: selection
+                    )
+                    if let date = result.addedDates.first {
+                        selectedSchedule = scheduleManager.schedule(for: date)
+                    }
+                }
+            }
+        } else if let existingSchedule {
+            selectedSchedule = existingSchedule
+        } else {
+            showsAddSheet = true
+        }
     }
 
     private var allowedRange: ClosedRange<Date> {

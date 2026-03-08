@@ -346,7 +346,7 @@ enum ProductSurfacePresentation {
 
         let title: String
         if hasOverride && nonDefaultProvenances.isEmpty && day.resolvedDayContext.primaryContext == .standard {
-            title = "Day-specific morning"
+            title = "Adjusted morning"
         } else if day.resolvedDayContext.primaryContext != .standard {
             title = primaryTitle
         } else if let firstProvenance = provenanceLabels.first {
@@ -363,7 +363,7 @@ enum ProductSurfacePresentation {
         ]
 
         if hasOverride && nonDefaultProvenances.isEmpty {
-            subtitleParts.append("Day-specific adjustment")
+            subtitleParts.append("Adjusted from default")
         } else if let firstProvenance = provenanceLabels.first {
             subtitleParts.append(firstProvenance)
         }
