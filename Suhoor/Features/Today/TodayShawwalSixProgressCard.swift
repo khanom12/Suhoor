@@ -11,48 +11,47 @@ struct TodayShawwalSixProgressCard: View {
 
     @State private var pulsePendingBar = false
     @State private var hasCelebratedCompletion = false
+    @State private var model: ShawwalSixProgressEngine.Model?
 
     private let shawwalColor = FastSecondaryVirtueTag.shawwalSix.style.color
 
     var body: some View {
-        let _ = fastTagStore.currentRevision
-        let _ = fastLogStore.currentRevision
-        let _ = scheduleManager.hijriAdjustmentChanges.count
+        Group {
+            if let model {
+                GlassCard(style: .header) {
+                    VStack(alignment: .leading, spacing: DesignTokens.dashboardCardInternalSpacing) {
+                        header(model: model)
+                        bars(model: model)
 
-        if let model = ShawwalSixProgressEngine.model(
-            now: Date(),
-            mode: mode,
-            scheduledEntries: currentMonthEntries,
-            selections: fastTagStore.selections,
-            logEntries: fastLogStore.entriesByDateKey
-        ) {
-            GlassCard(style: .header) {
-                VStack(alignment: .leading, spacing: DesignTokens.dashboardCardInternalSpacing) {
-                    header(model: model)
-                    bars(model: model)
-
-                    if model.isComplete {
-                        completionRow
-                    } else if mode == .live, model.hasPendingToday {
-                        Text("Today's Shawwal fast is in progress.")
-                            .font(DesignTokens.cardSubtitleFont)
-                            .foregroundStyle(.secondary)
-                    } else if model.hasTrackedDays == false {
-                        helperRow
+                        if model.isComplete {
+                            completionRow
+                        } else if mode == .live, model.hasPendingToday {
+                            Text("Today's Shawwal fast is in progress.")
+                                .font(DesignTokens.cardSubtitleFont)
+                                .foregroundStyle(.secondary)
+                        } else if model.hasTrackedDays == false {
+                            helperRow
+                        }
                     }
                 }
-            }
-            .onAppear {
-                updateCompletionState(for: model)
-                startPendingPulseIfNeeded(model)
-            }
-            .onChange(of: model.completedCount) { _, _ in
-                updateCompletionState(for: model)
-            }
-            .onChange(of: model.hasPendingToday) { _, _ in
-                startPendingPulseIfNeeded(model)
+                .onAppear {
+                    updateCompletionState(for: model)
+                    startPendingPulseIfNeeded(model)
+                }
+                .onChange(of: model.completedCount) { _, _ in
+                    updateCompletionState(for: model)
+                }
+                .onChange(of: model.hasPendingToday) { _, _ in
+                    startPendingPulseIfNeeded(model)
+                }
             }
         }
+        .onAppear(perform: refreshModel)
+        .onChange(of: mode) { _, _ in refreshModel() }
+        .onChange(of: alarmConfigStore.currentRevision) { _, _ in refreshModel() }
+        .onChange(of: fastTagStore.currentRevision) { _, _ in refreshModel() }
+        .onChange(of: fastLogStore.currentRevision) { _, _ in refreshModel() }
+        .onChange(of: scheduleManager.hijriAdjustmentChanges.count) { _, _ in refreshModel() }
     }
 
     private var currentMonthEntries: [ResolvedScheduledDateEntry] {
@@ -64,6 +63,16 @@ struct TodayShawwalSixProgressCard: View {
         return alarmConfigStore.resolvedScheduledEntries(
             forHijriMonth: targetMonth,
             timeZone: .current
+        )
+    }
+
+    private func refreshModel() {
+        model = ShawwalSixProgressEngine.model(
+            now: Date(),
+            mode: mode,
+            scheduledEntries: currentMonthEntries,
+            selections: fastTagStore.selections,
+            logEntries: fastLogStore.entriesByDateKey
         )
     }
 

@@ -1,13 +1,10 @@
 import SwiftUI
 
 private enum QadaWizardInfoSheet: Identifiable {
-    case estimate
     case protectedDays
 
     var id: String {
         switch self {
-        case .estimate:
-            return "estimate"
         case .protectedDays:
             return "protectedDays"
         }
@@ -174,29 +171,6 @@ struct QadaPlanWizardView: View {
                     HStack(alignment: .center) {
                         sectionLabel("Fasts to make up")
                         Spacer()
-                        Button {
-                            activeInfoSheet = .estimate
-                        } label: {
-                            Image(systemName: "info.circle")
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(.secondary)
-                        }
-                        .buttonStyle(.plain)
-                    }
-
-                    Picker("Count type", selection: Binding(
-                        get: { viewModel.draft.inputMode },
-                        set: viewModel.updateInputMode
-                    )) {
-                        ForEach(QadaPlanInputMode.allCases) { mode in
-                            Text(mode.title).tag(mode)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-
-                    HStack(alignment: .top, spacing: 12) {
-                        setupHint(title: "Exact", body: "Keep an exact remaining count.")
-                        setupHint(title: "Estimate", body: "Start with an estimate and adjust it later.")
                     }
 
                     Stepper(value: Binding(
@@ -216,9 +190,9 @@ struct QadaPlanWizardView: View {
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     } else {
-                        Text("You can adjust this later.")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
+                        Text("Start with the best total you know. You can adjust it later.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                     }
 
                     if let helper = viewModel.intakeSuggestionHelperText {
@@ -507,26 +481,6 @@ struct QadaPlanWizardView: View {
     @ViewBuilder
     private func infoSheet(_ sheet: QadaWizardInfoSheet) -> some View {
         switch sheet {
-        case .estimate:
-            VStack(alignment: .leading, spacing: DesignTokens.spacingL) {
-                Text("Not sure?")
-                    .font(.title3.weight(.semibold))
-                Text("Start with a simple estimate.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                Text("You can update the number later whenever you have a more precise count.")
-                    .font(.body)
-                    .foregroundStyle(.secondary)
-                Button("Done") {
-                    activeInfoSheet = nil
-                }
-                .buttonStyle(.plain)
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .padding(DesignTokens.spacingL)
-
         case .protectedDays:
             VStack(alignment: .leading, spacing: DesignTokens.spacingL) {
                 Text("Important Sunnah fasts")
@@ -577,18 +531,6 @@ struct QadaPlanWizardView: View {
     private func sectionLabel(_ text: String) -> some View {
         Text(text)
             .font(.headline.weight(.semibold))
-    }
-
-    private func setupHint(title: String, body: String) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-            Text(body)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func summaryChip(_ text: String) -> some View {

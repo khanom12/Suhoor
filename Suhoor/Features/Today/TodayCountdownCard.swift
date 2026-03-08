@@ -47,7 +47,7 @@ struct TodayCountdownCard: View {
                 .font(DesignTokens.cardTitleFont)
 
             if needsLocationPermission {
-                Text("Allow location access to calculate fasting times and countdowns.")
+                Text("Allow location access to calculate prayer windows and countdowns.")
                     .font(DesignTokens.cardSubtitleFont)
                     .foregroundStyle(.secondary)
                 Button("Open Settings") {
@@ -55,10 +55,10 @@ struct TodayCountdownCard: View {
                 }
                 .font(DesignTokens.cardMetaFont)
             } else if scheduleManager.activeWindowSnapshot.visibleDays.isEmpty {
-                Text("No upcoming fast days are scheduled yet.")
+                Text("No upcoming wake days are scheduled yet.")
                     .font(DesignTokens.cardSubtitleFont)
                     .foregroundStyle(.secondary)
-                Button("Add Days") {
+                Button("Open Schedule") {
                     NotificationCenter.default.post(name: .switchToAlarmTab, object: nil)
                 }
                 .font(DesignTokens.cardMetaFont)

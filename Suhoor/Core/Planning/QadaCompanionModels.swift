@@ -53,7 +53,6 @@ struct QadaBatchSnapshot: Equatable, Sendable {
     let targetCount: Int
     let completedCount: Int
     let remainingBacklog: Int
-    let inputMode: QadaPlanInputMode
     let nextPlannedDate: Date?
     let missedDate: Date?
     let pace: QadaPlanPace
@@ -65,12 +64,7 @@ struct QadaBatchSnapshot: Equatable, Sendable {
     }
 
     var remainingText: String {
-        switch inputMode {
-        case .exact:
-            return "Remaining: \(remainingBacklog)"
-        case .estimate:
-            return "About \(remainingBacklog) remaining"
-        }
+        "Remaining: \(remainingBacklog)"
     }
 }
 
@@ -124,7 +118,6 @@ enum QadaExperienceEngine {
             targetCount: batchState.targetCount,
             completedCount: completedKeys.count,
             remainingBacklog: progress.remaining,
-            inputMode: backlogState.inputMode,
             nextPlannedDate: nextPlannedDate,
             missedDate: missedDate,
             pace: batchState.pace,

@@ -5,8 +5,11 @@ import Combine
 final class AlarmConfigStore: ObservableObject {
     private static let latestMigrationVersion = 3
 
+    @Published private(set) var currentRevision: Int = 0
+
     @Published var defaults: DefaultAlarmConfig {
         didSet {
+            currentRevision += 1
             guard !isPersistenceSuspended else { return }
             persistDefaults()
         }
@@ -14,6 +17,7 @@ final class AlarmConfigStore: ObservableObject {
 
     @Published var overridesByDay: [String: DailyAlarmOverride] {
         didSet {
+            currentRevision += 1
             guard !isPersistenceSuspended else { return }
             persistOverrides()
         }
@@ -37,6 +41,8 @@ final class AlarmConfigStore: ObservableObject {
         delay: 0.2
     )
     private var isPersistenceSuspended = false
+
+    var storageDefaults: UserDefaults { defaultsStore }
 
     init(defaultsStore: UserDefaults = .standard, legacySettings: AppSettings? = nil) {
         self.defaultsStore = defaultsStore

@@ -18,6 +18,7 @@ struct AlarmDayDetailView: View {
     @State private var showsTagPicker = false
     @State private var selectedAbout: FastTagAbout?
     @State private var cachedEditorContext: DayAlarmEditorContext?
+    @State private var cachedTagPickerSeeds: [ActiveTagComputationSeed] = []
 
     var body: some View {
         configurationList
@@ -59,7 +60,7 @@ struct AlarmDayDetailView: View {
                     FastTagPickerSheet(
                         date: schedule.date,
                         initialSelection: userIntentSelection,
-                        seeds: scheduleManager.activeWindowSnapshot.visibleDays.map(\.tagSeed),
+                        seeds: cachedTagPickerSeeds,
                         selections: fastTagStore.selections,
                         onSave: { selection in
                             fastTagStore.setSelection(selection, for: schedule.date, timeZone: timeZone)
@@ -72,22 +73,19 @@ struct AlarmDayDetailView: View {
                 AboutTagSheet(about: about)
             }
             .task {
-                rebuildEditorContext()
+                rebuildViewState()
             }
-            .onChange(of: alarmConfigStore.defaults) { _, _ in
-                rebuildEditorContext()
+            .onChange(of: alarmConfigStore.currentRevision) { _, _ in
+                rebuildViewState()
             }
-            .onChange(of: alarmConfigStore.overridesByDay) { _, _ in
-                rebuildEditorContext()
+            .onChange(of: settingsStore.currentRevision) { _, _ in
+                rebuildViewState()
             }
-            .onChange(of: scheduleManager.activeWindowSnapshot) { _, _ in
-                rebuildEditorContext()
+            .onChange(of: scheduleManager.currentRevision) { _, _ in
+                rebuildViewState()
             }
-            .onChange(of: fastTagStore.selections) { _, _ in
-                rebuildEditorContext()
-            }
-            .onChange(of: settingsStore.settings.atFajrSoundSelectionGlobal) { _, _ in
-                rebuildEditorContext()
+            .onChange(of: fastTagStore.currentRevision) { _, _ in
+                rebuildViewState()
             }
     }
 
@@ -712,6 +710,11 @@ struct AlarmDayDetailView: View {
         PerformanceTrace.end(token)
     }
 
+    private func rebuildViewState() {
+        cachedTagPickerSeeds = scheduleManager.activeWindowSnapshot.visibleDays.map(\.tagSeed)
+        rebuildEditorContext()
+    }
+
     private func buildEditorContext() -> DayAlarmEditorContext {
         let summary = ruleEngine.ruleSummary(for: schedule.date)
         let effectiveConfig = alarmConfigStore.effectiveConfig(
@@ -1187,6 +1190,8 @@ private struct ScheduleSourcePresentation: Identifiable {
 
     private static func subtitle(for provenance: ResolvedScheduledDateProvenance) -> String {
         switch provenance.sourceOrigin {
+        case .defaultDailyPlan:
+            return "This date is included by your default daily morning plan."
         case .manualSingleDay:
             return Strings.AlarmsTab.sourceManualHelper
         case .defaultRamadan:
@@ -1216,6 +1221,8 @@ private struct SourceManagementActionPresentation {
 
     private static func subtitle(for provenance: ResolvedScheduledDateProvenance) -> String {
         switch provenance.sourceOrigin {
+        case .defaultDailyPlan:
+            return "Adjust the default daily morning plan from Settings."
         case .manualGregorianRange:
             return "Removes every date that came from this saved date range."
         case .recurringIslamic(let rule):

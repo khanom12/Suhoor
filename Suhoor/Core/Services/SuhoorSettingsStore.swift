@@ -3,8 +3,11 @@ import SwiftUI
 import Combine
 
 final class SuhoorSettingsStore: ObservableObject {
+    @Published private(set) var currentRevision: Int = 0
+
     @Published var settings: AppSettings {
         didSet {
+            currentRevision += 1
             guard !isPersistenceSuspended else { return }
             saveSettings()
         }

@@ -15,6 +15,8 @@ struct TodayHomeView: View {
         let hijriDateKey = seasonalAutoEnableDateKey(for: components)
         ScrollView {
             LazyVStack(spacing: DesignTokens.dashboardStackSpacing) {
+                TodayNextWakeHeroCard()
+
                 VStack(alignment: .leading, spacing: 2) {
                     Text(GregorianDateFormatter.shared.headerString(for: now))
                         .font(DesignTokens.cardSubtitleFont)
@@ -42,7 +44,7 @@ struct TodayHomeView: View {
             Color(.systemGroupedBackground)
                 .ignoresSafeArea()
         )
-        .navigationTitle("Today")
+        .navigationTitle("Home")
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
                 Button("Edit") { isEditingCards = true }
@@ -253,6 +255,89 @@ struct TodayHomeView: View {
             return components.month == .dhulHijjah && components.day == 10
         case .tashreeq:
             return components.month == .dhulHijjah && (11...13).contains(components.day)
+        }
+    }
+}
+
+private struct TodayNextWakeHeroCard: View {
+    @EnvironmentObject private var scheduleManager: ScheduleManager
+
+    var body: some View {
+        GlassCard(style: .header, tintColor: DawnColor.lightGold200, tintOpacity: 0.18) {
+            VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
+                Text("Next Wake Event")
+                    .font(DesignTokens.cardMetaFont)
+                    .foregroundStyle(.secondary)
+
+                if let summary = scheduleManager.nextWakeEventSummary {
+                    VStack(alignment: .leading, spacing: DesignTokens.spacingS) {
+                        Text(TimeFormatters.timeFormatter.string(from: summary.event.fireDate))
+                            .font(.system(size: 42, weight: .semibold, design: .rounded))
+                            .monospacedDigit()
+
+                        Text(summaryLabel(for: summary))
+                            .font(DesignTokens.cardTitleFont)
+
+                        Text(summary.relationText)
+                            .font(DesignTokens.cardSubtitleFont)
+                            .foregroundStyle(.secondary)
+
+                        contextChips(for: summary.day)
+
+                        Text(summary.day.resolvedDayContext.explanation.summary)
+                            .font(DesignTokens.cardMetaFont)
+                            .foregroundStyle(.secondary)
+                    }
+                } else {
+                    VStack(alignment: .leading, spacing: DesignTokens.spacingS) {
+                        Text("No wake event is scheduled yet.")
+                            .font(DesignTokens.cardTitleFont)
+                        Text("Set your location and morning plan to compute the next wake around Fajr.")
+                            .font(DesignTokens.cardSubtitleFont)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+    }
+
+    private func summaryLabel(for summary: NextWakeEventSummary) -> String {
+        let eventTitle: String
+        switch summary.event.type {
+        case .wakeReminder:
+            eventTitle = "Wake reminder"
+        case .wakeAlarm:
+            eventTitle = "Main wake"
+        case .wakeFollowUp:
+            eventTitle = "Wake follow-up"
+        case .fajrBoundaryNotice:
+            eventTitle = "Fajr notice"
+        case .iftarReminder:
+            eventTitle = "Iftar reminder"
+        }
+
+        let dayLabel = scheduleManager.dayLabel(for: summary.day.date)
+        return "\(eventTitle) for \(dayLabel)"
+    }
+
+    @ViewBuilder
+    private func contextChips(for day: ActiveAlarmDay) -> some View {
+        let labels = [day.resolvedDayContext.primaryContext.title] + day.resolvedDayContext.secondaryContexts.map(\.title)
+        if labels.isEmpty == false {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: DesignTokens.spacingS) {
+                    ForEach(labels, id: \.self) { label in
+                        Text(label)
+                            .font(.caption.weight(.semibold))
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(
+                                Capsule()
+                                    .fill(Color(.secondarySystemGroupedBackground))
+                            )
+                    }
+                }
+            }
         }
     }
 }

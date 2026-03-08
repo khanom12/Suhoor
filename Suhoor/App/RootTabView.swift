@@ -1,20 +1,20 @@
 import SwiftUI
 
 enum RootTab: Hashable {
-    case today
-    case plan
-    case alarms
-    case profile
+    case home
+    case schedule
+    case plans
+    case progress
+    case settings
 }
 
-enum ProfileDestination: Hashable {
-    case settings
+enum SettingsRoute: Hashable {
     case hijriCorrections
 }
 
 struct RootTabView: View {
-    @State private var selectedTab: RootTab = .today
-    @State private var profilePath = NavigationPath()
+    @State private var selectedTab: RootTab = .home
+    @State private var settingsPath = NavigationPath()
     @State private var planPath = NavigationPath()
     @State private var isShowingQadaWizard = false
 
@@ -24,17 +24,17 @@ struct RootTabView: View {
                 TodayHomeView()
             }
             .tabItem {
-                Label("Today", systemImage: "sparkles")
+                Label("Home", systemImage: "sparkles")
             }
-            .tag(RootTab.today)
+            .tag(RootTab.home)
 
             NavigationStack {
                 AlarmsHomeView()
             }
             .tabItem {
-                Label("Alarms", systemImage: "alarm")
+                Label("Schedule", systemImage: "alarm")
             }
-            .tag(RootTab.alarms)
+            .tag(RootTab.schedule)
 
             NavigationStack(path: $planPath) {
                 PlanRootView()
@@ -64,25 +64,31 @@ struct RootTabView: View {
                     }
             }
             .tabItem {
-                Label("Plan", systemImage: "calendar")
+                Label("Plans", systemImage: "calendar")
             }
-            .tag(RootTab.plan)
+            .tag(RootTab.plans)
 
-            NavigationStack(path: $profilePath) {
-                ProfileRootView()
-                    .navigationDestination(for: ProfileDestination.self) { destination in
+            NavigationStack {
+                ProgressRootView()
+            }
+            .tabItem {
+                Label("Progress", systemImage: "chart.line.uptrend.xyaxis")
+            }
+            .tag(RootTab.progress)
+
+            NavigationStack(path: $settingsPath) {
+                SettingsRootView()
+                    .navigationDestination(for: SettingsRoute.self) { destination in
                         switch destination {
-                        case .settings:
-                            SettingsRootView()
                         case .hijriCorrections:
                             HijriCalendarSettingsView()
                         }
                     }
             }
             .tabItem {
-                Label("Profile", systemImage: "person.crop.circle")
+                Label("Settings", systemImage: "gearshape")
             }
-            .tag(RootTab.profile)
+            .tag(RootTab.settings)
         }
         .fullScreenCover(isPresented: $isShowingQadaWizard) {
             NavigationStack {
@@ -90,40 +96,38 @@ struct RootTabView: View {
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .switchToAlarmTab)) { _ in
-            selectedTab = .alarms
+            selectedTab = .schedule
         }
         .onReceive(NotificationCenter.default.publisher(for: .switchToPlanTab)) { _ in
-            selectedTab = .plan
+            selectedTab = .plans
         }
         .onReceive(NotificationCenter.default.publisher(for: .openPlanHome)) { _ in
-            selectedTab = .plan
+            selectedTab = .plans
             planPath.removeLast(planPath.count)
         }
         .onReceive(NotificationCenter.default.publisher(for: .openPlanQada)) { _ in
-            selectedTab = .plan
+            selectedTab = .plans
             planPath.removeLast(planPath.count)
             isShowingQadaWizard = true
         }
         .onReceive(NotificationCenter.default.publisher(for: .openPlanShawwal)) { _ in
-            selectedTab = .plan
+            selectedTab = .plans
             planPath.removeLast(planPath.count)
             planPath.append(PlanDestination.shawwalPlanner)
         }
         .onReceive(NotificationCenter.default.publisher(for: .openPlanSunnah)) { _ in
-            selectedTab = .plan
+            selectedTab = .plans
             planPath.removeLast(planPath.count)
             planPath.append(PlanDestination.sunnahPlanner)
         }
         .onReceive(NotificationCenter.default.publisher(for: .switchToSettingsTab)) { _ in
-            selectedTab = .profile
-            profilePath.removeLast(profilePath.count)
-            profilePath.append(ProfileDestination.settings)
+            selectedTab = .settings
+            settingsPath.removeLast(settingsPath.count)
         }
         .onReceive(NotificationCenter.default.publisher(for: .switchToHijriCorrections)) { _ in
-            selectedTab = .profile
-            profilePath.removeLast(profilePath.count)
-            profilePath.append(ProfileDestination.settings)
-            profilePath.append(ProfileDestination.hijriCorrections)
+            selectedTab = .settings
+            settingsPath.removeLast(settingsPath.count)
+            settingsPath.append(SettingsRoute.hijriCorrections)
         }
     }
 }

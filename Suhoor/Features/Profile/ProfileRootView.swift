@@ -8,7 +8,9 @@ struct ProfileRootView: View {
     var body: some View {
         List {
             Section {
-                NavigationLink(value: ProfileDestination.settings) {
+                NavigationLink {
+                    SettingsRootView()
+                } label: {
                     Label("Settings", systemImage: "gearshape")
                 }
             }

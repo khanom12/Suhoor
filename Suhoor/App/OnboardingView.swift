@@ -75,7 +75,7 @@ struct OnboardingView: View {
             .onChange(of: scheduleManager.permissionSnapshot) { _, _ in
                 viewModel.updateFromSnapshot()
             }
-            .onChange(of: scheduleManager.activeWindowSnapshot) { _, _ in
+            .onChange(of: scheduleManager.currentRevision) { _, _ in
                 viewModel.updateScheduleReadiness()
             }
             .onChange(of: settingsStore.settings.locationMode) { _, _ in

@@ -8,7 +8,7 @@ enum SuhoorCalendarMode {
 private enum SuhoorCalendarMetrics {
     static let daySize: CGFloat = 34
     static let rowSpacing: CGFloat = 10
-    static let visibleWeekCount = 3
+    static let visibleWeekCount = 6
     static let verticalPadding: CGFloat = 4
 
     static var gridHeight: CGFloat {
@@ -104,6 +104,7 @@ struct SuhoorCalendarView: View {
 
             SuhoorCalendarWeekDeck(
                 weekStart: currentWeekDeckStart,
+                displayedMonth: displayedMonth,
                 focusedDate: focusedDate,
                 allowedDateRange: allowedDateRange,
                 mode: mode,
@@ -160,7 +161,13 @@ struct SuhoorCalendarView: View {
     }
 
     private var currentWeekDeckStart: Date {
-        clampedDeckStart(for: shiftWeek(currentWeekStart, by: -1) ?? currentWeekStart)
+        clampedDeckStart(
+            for: shiftWeek(currentWeekStart, by: -leadingContextWeeks) ?? currentWeekStart
+        )
+    }
+
+    private var leadingContextWeeks: Int {
+        max(0, (SuhoorCalendarMetrics.visibleWeekCount - 1) / 2)
     }
 
     private var minimumMonthStart: Date {
@@ -226,7 +233,6 @@ struct SuhoorCalendarView: View {
     }
 
     private func handleTap(state: CalendarDayState, isEnabledForToggle: Bool) {
-        guard state.isInDisplayedMonth else { return }
         focusedDate = state.date
         displayedMonth = normalizedMonthStart(for: state.date)
         onFocusDate?(state.date)
@@ -373,6 +379,7 @@ private struct SuhoorCalendarWeekDeck: View {
     @EnvironmentObject private var scheduleManager: ScheduleManager
 
     let weekStart: Date
+    let displayedMonth: Date
     let focusedDate: Date
     let allowedDateRange: ClosedRange<Date>
     let mode: SuhoorCalendarMode
@@ -391,6 +398,7 @@ private struct SuhoorCalendarWeekDeck: View {
             if !dayStates.isEmpty {
                 ForEach(Array(dayStates.enumerated()), id: \.offset) { _, state in
                     let key = DateHelpers.dayIdentifier(for: state.date, timeZone: .current)
+                    let isInDisplayedMonth = isDateInDisplayedMonth(state.date)
                     let isSelected = switch mode {
                     case .single:
                         if let selectedDate {
@@ -412,6 +420,7 @@ private struct SuhoorCalendarWeekDeck: View {
 
                     SuhoorCalendarDayCell(
                         state: state,
+                        isInDisplayedMonth: isInDisplayedMonth,
                         isSelected: isSelected,
                         isRecommended: isRecommended,
                         isUnavailable: isUnavailable,
@@ -432,7 +441,7 @@ private struct SuhoorCalendarWeekDeck: View {
         .onAppear(perform: refreshDayStates)
         .onChange(of: weekStart) { _, _ in refreshDayStates() }
         .onChange(of: focusedDate) { _, _ in refreshDayStates() }
-        .onChange(of: scheduleManager.lastUpdated) { _, _ in
+        .onChange(of: scheduleManager.currentRevision) { _, _ in
             refreshDayStates()
         }
     }
@@ -453,6 +462,16 @@ private struct SuhoorCalendarWeekDeck: View {
         return (0..<(SuhoorCalendarMetrics.visibleWeekCount * 7)).compactMap {
             calendar.date(byAdding: .day, value: $0, to: clampedWeekStart)
         }
+    }
+
+    private func isDateInDisplayedMonth(_ date: Date) -> Bool {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .current
+        return calendar.isDate(
+            date,
+            equalTo: DateHelpers.startOfDay(displayedMonth, in: .current),
+            toGranularity: .month
+        )
     }
 }
 
@@ -506,6 +525,7 @@ struct PlanMultiSelectCalendar: View {
 
 private struct SuhoorCalendarDayCell: View {
     let state: CalendarDayState
+    let isInDisplayedMonth: Bool
     let isSelected: Bool
     let isRecommended: Bool
     let isUnavailable: Bool
@@ -514,28 +534,20 @@ private struct SuhoorCalendarDayCell: View {
     let onSelect: () -> Void
 
     var body: some View {
-        if state.isInDisplayedMonth {
-            Button(action: onSelect) {
-                Text(state.dayNumberText)
-                    .font(.subheadline.weight(isSelected ? .semibold : .medium))
-                    .foregroundStyle(textColor)
-                    .frame(width: SuhoorCalendarMetrics.daySize, height: SuhoorCalendarMetrics.daySize)
-                    .background(baseBackground)
-                    .overlay(suggestedOutline)
-                    .overlay(todayRing)
-                    .overlay(unavailableSlash)
-                    .overlay(selectionOutline)
-                    .frame(maxWidth: .infinity)
-                    .opacity(opacity)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(accessibilityLabel)
-        } else {
-            Color.clear
+        Button(action: onSelect) {
+            Text(state.dayNumberText)
+                .font(.subheadline.weight(isSelected ? .semibold : .medium))
+                .foregroundStyle(textColor)
                 .frame(width: SuhoorCalendarMetrics.daySize, height: SuhoorCalendarMetrics.daySize)
+                .background(baseBackground)
+                .overlay(suggestedOutline)
+                .overlay(todayRing)
+                .overlay(unavailableSlash)
+                .overlay(selectionOutline)
                 .frame(maxWidth: .infinity)
-                .accessibilityHidden(true)
         }
+        .buttonStyle(.plain)
+        .accessibilityLabel(accessibilityLabel)
     }
 
     private var baseBackground: some View {
@@ -611,7 +623,10 @@ private struct SuhoorCalendarDayCell: View {
     }
 
     private var defaultTextColor: Color {
-        .primary
+        if !isInDisplayedMonth {
+            return .secondary
+        }
+        return .primary
     }
 
     private var dimmedTextColor: Color {
@@ -647,6 +662,9 @@ private struct SuhoorCalendarDayCell: View {
     }
 
     private var opacity: Double {
+        if !isInDisplayedMonth && !isSelected {
+            return 0.55
+        }
         if displayAsDimmed {
             return 0.35
         }

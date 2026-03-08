@@ -5,22 +5,6 @@ enum QadaPlanWizardStep: Hashable, Sendable {
     case review
 }
 
-enum QadaPlanInputMode: String, CaseIterable, Identifiable, Codable, Sendable {
-    case exact
-    case estimate
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .exact:
-            return "Exact"
-        case .estimate:
-            return "Estimate"
-        }
-    }
-}
-
 enum QadaPlanPace: String, CaseIterable, Identifiable, Codable, Sendable {
     case finishSooner
     case steady
@@ -75,7 +59,6 @@ enum QadaPlanPace: String, CaseIterable, Identifiable, Codable, Sendable {
 
 struct QadaPlanDraft: Equatable, Sendable {
     var baselineOwed: Int
-    var inputMode: QadaPlanInputMode
     var pace: QadaPlanPace
     var avoidShawwal: Bool
     var avoidImportantSunnah: Bool
@@ -83,7 +66,6 @@ struct QadaPlanDraft: Equatable, Sendable {
 
     static let empty = QadaPlanDraft(
         baselineOwed: 0,
-        inputMode: .exact,
         pace: .steady,
         avoidShawwal: true,
         avoidImportantSunnah: true,

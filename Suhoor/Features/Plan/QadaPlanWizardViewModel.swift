@@ -122,9 +122,7 @@ final class QadaPlanWizardViewModel: ObservableObject {
 
     var progressLineText: String? {
         guard progressSnapshot.baselineOwed > 0 || progressSnapshot.completed > 0 else { return nil }
-        let remainingText = draft.inputMode == .estimate
-            ? "About \(progressSnapshot.remaining) remaining"
-            : "Remaining: \(progressSnapshot.remaining)"
+        let remainingText = "Remaining: \(progressSnapshot.remaining)"
         guard progressSnapshot.completed > 0 else { return remainingText }
         return "Completed: \(progressSnapshot.completed)  •  \(remainingText)"
     }
@@ -211,7 +209,6 @@ final class QadaPlanWizardViewModel: ObservableObject {
         hasLoadedDefaults = true
 
         draft.baselineOwed = qadaBacklogStore.state.baselineOwed
-        draft.inputMode = qadaBacklogStore.state.inputMode
 
         if qadaBatchStore.state.targetCount > 0 {
             draft.pace = qadaBatchStore.state.pace
@@ -262,11 +259,6 @@ final class QadaPlanWizardViewModel: ObservableObject {
         refreshProgressSnapshot()
         clampPlanBatchCount()
         refreshPreviewData()
-    }
-
-    func updateInputMode(_ mode: QadaPlanInputMode) {
-        draft.inputMode = mode
-        persistBaseline()
     }
 
     func updatePace(_ pace: QadaPlanPace) {
@@ -441,7 +433,6 @@ final class QadaPlanWizardViewModel: ObservableObject {
         draft.pace = state.pace
         draft.avoidShawwal = state.avoidShawwal
         draft.avoidImportantSunnah = state.avoidImportantSunnah
-        draft.inputMode = state.backlogInputMode
         hasGeneratedPlan = true
         lastGeneratedDates = sortedSelectedDates
         step = .review
@@ -498,7 +489,6 @@ final class QadaPlanWizardViewModel: ObservableObject {
     private func persistBaseline() {
         qadaBacklogStore?.setBaseline(
             owed: draft.baselineOwed,
-            inputMode: draft.inputMode,
             trackingStartDateKey: qadaBacklogStore?.state.trackingStartDateKey
         )
     }

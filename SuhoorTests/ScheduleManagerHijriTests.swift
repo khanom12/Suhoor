@@ -105,9 +105,8 @@ struct ScheduleManagerHijriTests {
             Issue.record("Expected at least one quick-add date.")
             return
         }
-        let key = DateHelpers.dayIdentifier(for: targetDate, timeZone: timeZone)
-        guard let activeDay = manager.activeWindowSnapshot.byDateKey[key] else {
-            Issue.record("Expected quick-add date to appear in the active window.")
+        guard let activeDay = manager.activeDay(for: targetDate, timeZone: timeZone) else {
+            Issue.record("Expected quick-add date to resolve in the schedule manager.")
             return
         }
 
@@ -1115,6 +1114,171 @@ struct ScheduleManagerHijriTests {
         #expect(manager.activeWindowSnapshot.byDateKey[testDateKey] != nil)
     }
 
+    @Test
+    @MainActor
+    func morningPlanStoreSeedsLegacyCompatFromExistingPersistence() throws {
+        let suiteName = "ScheduleManagerHijriTests.MorningPlanLegacyCompat"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        defaults.set(try JSONEncoder().encode(AppSettings.default), forKey: "Suhoor.AppSettings")
+
+        let store = MorningPlanStore(
+            defaults: defaults,
+            legacySettings: .default,
+            defaultConfig: .default
+        )
+
+        #expect(store.state.activationMode == .legacyCompat)
+    }
+
+    @Test
+    @MainActor
+    func freshInstallUsesDefaultDailyPlanProvenance() {
+        let suiteName = "ScheduleManagerHijriTests.DailyPlanFreshInstall"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let date = Self.makeDate(year: 2026, month: 1, day: 10, timeZone: timeZone)
+
+        let settingsStore = SuhoorSettingsStore(defaults: defaults)
+        settingsStore.update { draft in
+            draft.locationMode = .fixed
+            draft.fixedLocation = FixedLocation(latitude: 43.6532, longitude: -79.3832)
+        }
+
+        let manager = ScheduleManager(
+            settingsStore: settingsStore,
+            locationService: LocationService(),
+            alarmConfigStore: AlarmConfigStore(defaultsStore: defaults),
+            hijriAdjustmentStore: HijriMonthAdjustmentStore(defaults: defaults),
+            cacheStore: ScheduleCacheStore(defaults: defaults)
+        )
+
+        let provenances = manager.provenance(for: date, timeZone: timeZone)
+        #expect(provenances.map(\.sourceOrigin).contains(.defaultDailyPlan))
+    }
+
+    @Test
+    @MainActor
+    func legacyCompatDoesNotInjectDailyPlanProvenanceForExistingUsers() throws {
+        let suiteName = "ScheduleManagerHijriTests.NoSurpriseDailyPlan"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        defaults.set(try JSONEncoder().encode(AppSettings.default), forKey: "Suhoor.AppSettings")
+        defaults.set(try JSONEncoder().encode(DefaultAlarmConfig.default), forKey: "Suhoor.DefaultAlarmConfig")
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let date = Self.makeDate(year: 2026, month: 1, day: 10, timeZone: timeZone)
+
+        let settingsStore = SuhoorSettingsStore(defaults: defaults)
+        settingsStore.update { draft in
+            draft.locationMode = .fixed
+            draft.fixedLocation = FixedLocation(latitude: 43.6532, longitude: -79.3832)
+        }
+
+        let manager = ScheduleManager(
+            settingsStore: settingsStore,
+            locationService: LocationService(),
+            alarmConfigStore: AlarmConfigStore(defaultsStore: defaults),
+            hijriAdjustmentStore: HijriMonthAdjustmentStore(defaults: defaults),
+            cacheStore: ScheduleCacheStore(defaults: defaults)
+        )
+
+        let provenances = manager.provenance(for: date, timeZone: timeZone)
+        #expect(provenances.map(\.sourceOrigin).contains(.defaultDailyPlan) == false)
+    }
+
+    @Test
+    @MainActor
+    func resolverProducesDecisionLogAndKeepsBoundaryOptional() {
+        let suiteName = "ScheduleManagerHijriTests.ResolverDecisionLog"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let date = Self.makeDate(year: 2026, month: 1, day: 10, timeZone: timeZone)
+        let settings = AppSettings.default
+        let defaultConfig = DefaultAlarmConfig.default
+        let planStore = MorningPlanStore(
+            defaults: defaults,
+            legacySettings: settings,
+            defaultConfig: defaultConfig
+        )
+        let effectiveConfig = Self.makeEffectiveConfig(
+            date: date,
+            settings: settings,
+            suhoorTimeMode: .relativeToFajrMinusMinutes,
+            suhoorOffsetMinutes: 30,
+            fajrEnabled: false
+        )
+        let dateKey = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
+        let input = MorningScheduleResolutionInput(
+            date: date,
+            dateKey: dateKey,
+            provenances: [Self.defaultDailyPlanProvenance()],
+            settings: settings,
+            defaultConfig: defaultConfig,
+            effectiveConfig: effectiveConfig,
+            tagResult: .empty,
+            coordinate: CLLocationCoordinate2D(latitude: 43.6532, longitude: -79.3832),
+            timeZone: timeZone,
+            locationDescription: "Toronto",
+            morningPlanState: planStore.state
+        )
+
+        let resolution = MorningScheduleResolver.resolve(input: input)
+
+        #expect(resolution != nil)
+        #expect(resolution?.decisionLog.dateKey == dateKey)
+        #expect(resolution?.decisionLog.materializedEvents.isEmpty == false)
+        #expect(resolution?.decisionLog.materializedEvents.contains(where: { $0.type == .fajrBoundaryNotice }) == false)
+        #expect(resolution?.resolvedDayContext.primaryContext == .standard)
+    }
+
+    @Test
+    @MainActor
+    func resolverMarksFixedTimeWakeAsCompatibilityOnly() {
+        let suiteName = "ScheduleManagerHijriTests.FixedTimeCompatibility"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let date = Self.makeDate(year: 2026, month: 1, day: 10, timeZone: timeZone)
+        var settings = AppSettings.default
+        settings.baseWakeOffsetMinutes = 45
+        var defaultConfig = DefaultAlarmConfig.default
+        defaultConfig.defaultSuhoorTimeMode = .fixedTime
+        defaultConfig.defaultSuhoorOffsetMinutes = 255
+        defaultConfig.fajrEnabledDefault = false
+        let planStore = MorningPlanStore(
+            defaults: defaults,
+            legacySettings: settings,
+            defaultConfig: defaultConfig
+        )
+        let effectiveConfig = Self.makeEffectiveConfig(
+            date: date,
+            settings: settings,
+            suhoorTimeMode: .fixedTime,
+            suhoorOffsetMinutes: 255,
+            fajrEnabled: false
+        )
+        let input = MorningScheduleResolutionInput(
+            date: date,
+            dateKey: DateHelpers.dayIdentifier(for: date, timeZone: timeZone),
+            provenances: [Self.defaultDailyPlanProvenance()],
+            settings: settings,
+            defaultConfig: defaultConfig,
+            effectiveConfig: effectiveConfig,
+            tagResult: .empty,
+            coordinate: CLLocationCoordinate2D(latitude: 43.6532, longitude: -79.3832),
+            timeZone: timeZone,
+            locationDescription: "Toronto",
+            morningPlanState: planStore.state
+        )
+
+        let resolution = MorningScheduleResolver.resolve(input: input)
+
+        #expect(resolution?.decisionLog.compatibilityNotes.contains("fixed_time_wake_compatibility") == true)
+        #expect(resolution?.resolvedDayContext.supportingTags.contains(.fixedTimeCompatibility) == true)
+    }
+
     private static func makeDate(
         year: Int,
         month: Int,
@@ -1165,6 +1329,46 @@ struct ScheduleManagerHijriTests {
         }
 
         return nil
+    }
+
+    private static func defaultDailyPlanProvenance() -> ResolvedScheduledDateProvenance {
+        ResolvedScheduledDateProvenance(
+            sourceID: DateHelpers.stableUUID(from: "suhoor.defaultDailyPlan"),
+            groupID: nil,
+            label: ScheduledDateSourceOrigin.defaultDailyPlan.label,
+            stopSeriesLabel: nil,
+            isExplicitOneOff: false,
+            sourceOrigin: .defaultDailyPlan
+        )
+    }
+
+    private static func makeEffectiveConfig(
+        date: Date,
+        settings: AppSettings,
+        suhoorTimeMode: SuhoorTimeMode,
+        suhoorOffsetMinutes: Int,
+        fajrEnabled: Bool
+    ) -> EffectiveDailyConfig {
+        EffectiveDailyConfig(
+            date: date,
+            defaultsActive: true,
+            skipDay: false,
+            suhoorEnabled: true,
+            reminderEnabled: true,
+            fajrEnabled: fajrEnabled,
+            iftarEnabled: false,
+            suhoorTimeMode: suhoorTimeMode,
+            suhoorOffsetMinutes: suhoorOffsetMinutes,
+            reminderTimeMode: .beforeFajr,
+            reminderMinutesBeforeFajr: settings.reminderMinutesBeforeFajrGlobal,
+            reminderFixedTimeMinutes: 0,
+            suhoorTimeOverrideMinutesFromMidnight: nil,
+            reminderTimeOverrideMinutesFromMidnight: nil,
+            fajrSoundChoice: settings.atFajrSoundSelectionGlobal,
+            iftarDelivery: .off,
+            iftarSoundChoice: .adhanSoft,
+            hasOverrides: false
+        )
     }
 
 }

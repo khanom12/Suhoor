@@ -6,59 +6,70 @@ struct TodayDhulHijjahProgressCard: View {
     @EnvironmentObject private var alarmConfigStore: AlarmConfigStore
     @EnvironmentObject private var fastTagStore: FastTagStore
     @EnvironmentObject private var fastLogStore: FastLogStore
+    @EnvironmentObject private var scheduleManager: ScheduleManager
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var pulsePendingBar = false
     @State private var celebrateCompletion = false
+    @State private var model: TodayTrackerProgressModel?
 
     private let accent = FastSecondaryVirtueTag.dhulHijjahFirstNine.style.color
 
     var body: some View {
-        if let model = progressModel {
-            GlassCard(style: .header) {
-                VStack(alignment: .leading, spacing: DesignTokens.dashboardCardInternalSpacing) {
-                    HStack(alignment: .center, spacing: DesignTokens.spacingS) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Dhul Hijjah \(String(model.hijriYear))")
-                                .font(DesignTokens.cardTitleFont)
+        Group {
+            if let model {
+                GlassCard(style: .header) {
+                    VStack(alignment: .leading, spacing: DesignTokens.dashboardCardInternalSpacing) {
+                        HStack(alignment: .center, spacing: DesignTokens.spacingS) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Dhul Hijjah \(String(model.hijriYear))")
+                                    .font(DesignTokens.cardTitleFont)
+                            }
+
+                            Spacer()
+
+                            TodayOpenScheduleButton(accent: accent)
+
+                            TodaySeasonalBadge(
+                                text: "\(model.completedCount)/9",
+                                accent: mode == .live && model.isComplete ? accent : nil
+                            )
                         }
 
-                        Spacer()
-
-                        TodayOpenScheduleButton(accent: accent)
-
-                        TodaySeasonalBadge(
-                            text: "\(model.completedCount)/9",
-                            accent: mode == .live && model.isComplete ? accent : nil
+                        TodayDiscreteProgressBars(
+                            totalCount: model.totalCount,
+                            completedCount: model.completedCount,
+                            hasPending: model.hasPendingToday,
+                            color: accent,
+                            pulsePending: pulsePendingBar,
+                            celebrate: celebrateCompletion
                         )
+                        .animation(Motion.spring(reduceMotion: reduceMotion), value: model.displayFilledCount)
+
+                        Text(summaryText(for: model))
+                            .font(DesignTokens.cardSubtitleFont)
+                            .foregroundStyle(.secondary)
                     }
-
-                    TodayDiscreteProgressBars(
-                        totalCount: model.totalCount,
-                        completedCount: model.completedCount,
-                        hasPending: model.hasPendingToday,
-                        color: accent,
-                        pulsePending: pulsePendingBar,
-                        celebrate: celebrateCompletion
-                    )
-                    .animation(Motion.spring(reduceMotion: reduceMotion), value: model.displayFilledCount)
-
-                    Text(summaryText(for: model))
-                        .font(DesignTokens.cardSubtitleFont)
-                        .foregroundStyle(.secondary)
                 }
+                .onAppear { updateAnimationState(for: model) }
+                .onChange(of: model.hasPendingToday) { _, _ in updateAnimationState(for: model) }
+                .onChange(of: model.completedCount) { _, _ in updateAnimationState(for: model) }
             }
-            .onAppear { updateAnimationState(for: model) }
-            .onChange(of: model.hasPendingToday) { _, _ in updateAnimationState(for: model) }
-            .onChange(of: model.completedCount) { _, _ in updateAnimationState(for: model) }
         }
+        .onAppear(perform: refreshModel)
+        .onChange(of: mode) { _, _ in refreshModel() }
+        .onChange(of: alarmConfigStore.currentRevision) { _, _ in refreshModel() }
+        .onChange(of: fastTagStore.currentRevision) { _, _ in refreshModel() }
+        .onChange(of: fastLogStore.currentRevision) { _, _ in refreshModel() }
+        .onChange(of: scheduleManager.hijriAdjustmentChanges.count) { _, _ in refreshModel() }
     }
 
-    private var progressModel: TodayTrackerProgressModel? {
+    private func refreshModel() {
         guard let targetMonthKey = TodayObservanceEngine.dhulHijjahTargetMonthKey(now: Date(), mode: mode) else {
-            return nil
+            model = nil
+            return
         }
-        return TodayObservanceEngine.trackerModel(
+        model = TodayObservanceEngine.trackerModel(
             now: Date(),
             mode: mode,
             targetMonthKey: targetMonthKey,

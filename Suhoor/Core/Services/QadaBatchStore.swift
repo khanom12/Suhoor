@@ -7,7 +7,6 @@ struct QadaBatchState: Codable, Equatable, Sendable {
     var pace: QadaPlanPace
     var avoidShawwal: Bool
     var avoidImportantSunnah: Bool
-    var backlogInputMode: QadaPlanInputMode
     var createdAt: Date?
     var updatedAt: Date?
 
@@ -17,7 +16,6 @@ struct QadaBatchState: Codable, Equatable, Sendable {
         pace: .steady,
         avoidShawwal: true,
         avoidImportantSunnah: true,
-        backlogInputMode: .exact,
         createdAt: nil,
         updatedAt: nil
     )
@@ -51,7 +49,6 @@ final class QadaBatchStore: ObservableObject {
         updated.pace = draft.pace
         updated.avoidShawwal = draft.avoidShawwal
         updated.avoidImportantSunnah = draft.avoidImportantSunnah
-        updated.backlogInputMode = draft.inputMode
         updated.createdAt = createdAt
         updated.updatedAt = now
         updateState(updated)

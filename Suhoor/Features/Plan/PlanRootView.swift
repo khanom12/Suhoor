@@ -53,7 +53,7 @@ struct PlanRootView: View {
             .padding(.horizontal, DesignTokens.spacingL)
             .padding(.vertical, DesignTokens.spacingL)
         }
-        .navigationTitle("Plan")
+        .navigationTitle("Plans")
         .navigationBarTitleDisplayMode(.large)
         .onAppear {
             refreshProgress()
@@ -76,12 +76,7 @@ struct PlanRootView: View {
     private func tiles(progress: QadaProgressSnapshot) -> [PlanTile] {
         let qadaStatus: String
         if progress.baselineOwed > 0 {
-            switch qadaBacklogStore.state.inputMode {
-            case .exact:
-                qadaStatus = "Remaining: \(progress.remaining)"
-            case .estimate:
-                qadaStatus = "About \(progress.remaining) remaining"
-            }
+            qadaStatus = "Remaining: \(progress.remaining)"
         } else {
             qadaStatus = "Plan your Qada"
         }

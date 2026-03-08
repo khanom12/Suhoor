@@ -4,33 +4,37 @@ struct TodayRamadanProgressCard: View {
     let mode: TodaySeasonalCardMode
 
     @EnvironmentObject private var scheduleManager: ScheduleManager
+    @State private var model: RamadanProgressEngine.Model?
 
     var body: some View {
-        let hijriChangeCount = scheduleManager.hijriAdjustmentChanges.count
-        if let model = RamadanProgressEngine.model(now: Date(), mode: mode, calendar: .shared, timeZone: .current) {
-            GlassCard(style: .header) {
-                VStack(alignment: .leading, spacing: DesignTokens.dashboardCardInternalSpacing) {
-                    VStack(alignment: .leading, spacing: DesignTokens.spacingS) {
-                        HStack(alignment: .center, spacing: DesignTokens.spacingS) {
-                            Text("Ramadan \(String(model.hijriYear))")
-                                .font(DesignTokens.cardTitleFont)
+        Group {
+            if let model {
+                GlassCard(style: .header) {
+                    VStack(alignment: .leading, spacing: DesignTokens.dashboardCardInternalSpacing) {
+                        VStack(alignment: .leading, spacing: DesignTokens.spacingS) {
+                            HStack(alignment: .center, spacing: DesignTokens.spacingS) {
+                                Text("Ramadan \(String(model.hijriYear))")
+                                    .font(DesignTokens.cardTitleFont)
 
-                            Spacer()
+                                Spacer()
 
-                            TodaySeasonalBadge(
-                                text: "Day \(model.dayNumber)",
-                                accent: nil
-                            )
+                                TodaySeasonalBadge(
+                                    text: "Day \(model.dayNumber)",
+                                    accent: nil
+                                )
+                            }
+
+                            progressRow(progress: model.progress)
                         }
-
-                        progressRow(progress: model.progress)
                     }
                 }
+            } else {
+                EmptyView()
             }
-            .onAppear { _ = hijriChangeCount }
-        } else {
-            EmptyView()
         }
+        .onAppear(perform: refreshModel)
+        .onChange(of: mode) { _, _ in refreshModel() }
+        .onChange(of: scheduleManager.hijriAdjustmentChanges.count) { _, _ in refreshModel() }
     }
 
     private func progressRow(progress: Double) -> some View {
@@ -67,12 +71,16 @@ struct TodayRamadanProgressCard: View {
     }
 
     private var progressAccessibilityValue: String {
-        guard let model = RamadanProgressEngine.model(now: Date(), mode: mode, calendar: .shared, timeZone: .current) else {
+        guard let model else {
             return "Progress unavailable"
         }
         guard shouldShowTotalDays, mode == .live else {
             return "Day \(model.dayNumber)"
         }
         return "Day \(model.dayNumber) of \(model.totalDays)"
+    }
+
+    private func refreshModel() {
+        model = RamadanProgressEngine.model(now: Date(), mode: mode, calendar: .shared, timeZone: .current)
     }
 }

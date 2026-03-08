@@ -196,6 +196,7 @@ enum ScheduledDateSourceKind: Codable, Equatable, Hashable, Sendable {
 }
 
 enum ScheduledDateSourceOrigin: Codable, Equatable, Hashable, Sendable {
+    case defaultDailyPlan
     case defaultRamadan
     case manualSingleDay
     case manualGregorianRange
@@ -211,6 +212,7 @@ enum ScheduledDateSourceOrigin: Codable, Equatable, Hashable, Sendable {
     }
 
     private enum OriginType: String, Codable {
+        case defaultDailyPlan
         case defaultRamadan
         case manualSingleDay
         case manualGregorianRange
@@ -223,6 +225,8 @@ enum ScheduledDateSourceOrigin: Codable, Equatable, Hashable, Sendable {
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         switch try container.decode(OriginType.self, forKey: .type) {
+        case .defaultDailyPlan:
+            self = .defaultDailyPlan
         case .defaultRamadan:
             self = .defaultRamadan
         case .manualSingleDay:
@@ -243,6 +247,8 @@ enum ScheduledDateSourceOrigin: Codable, Equatable, Hashable, Sendable {
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         switch self {
+        case .defaultDailyPlan:
+            try container.encode(OriginType.defaultDailyPlan, forKey: .type)
         case .defaultRamadan:
             try container.encode(OriginType.defaultRamadan, forKey: .type)
         case .manualSingleDay:
@@ -264,6 +270,8 @@ enum ScheduledDateSourceOrigin: Codable, Equatable, Hashable, Sendable {
 
     var label: String {
         switch self {
+        case .defaultDailyPlan:
+            return "Provided by your daily morning plan"
         case .defaultRamadan:
             return "Part of the Ramadan schedule"
         case .manualSingleDay:
@@ -283,6 +291,8 @@ enum ScheduledDateSourceOrigin: Codable, Equatable, Hashable, Sendable {
 
     var stopSeriesLabel: String? {
         switch self {
+        case .defaultDailyPlan:
+            return nil
         case .defaultRamadan:
             return nil
         case .manualSingleDay:
@@ -304,7 +314,7 @@ enum ScheduledDateSourceOrigin: Codable, Equatable, Hashable, Sendable {
         switch self {
         case .manualSingleDay:
             return true
-        default:
+        case .defaultDailyPlan, .defaultRamadan, .manualGregorianRange, .islamicQuickAdd, .recurringIslamic, .migratedLegacyAlways, .migratedLegacyDateRange:
             return false
         }
     }

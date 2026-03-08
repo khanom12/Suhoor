@@ -4,29 +4,14 @@ import Combine
 struct QadaBacklogState: Codable, Equatable, Sendable {
     var trackingStartDateKey: String
     var baselineOwed: Int
-    var inputMode: QadaPlanInputMode
-
-    enum CodingKeys: String, CodingKey {
-        case trackingStartDateKey
-        case baselineOwed
-        case inputMode
-    }
 
     static func empty(startDateKey: String) -> QadaBacklogState {
-        QadaBacklogState(trackingStartDateKey: startDateKey, baselineOwed: 0, inputMode: .exact)
+        QadaBacklogState(trackingStartDateKey: startDateKey, baselineOwed: 0)
     }
 
-    init(trackingStartDateKey: String, baselineOwed: Int, inputMode: QadaPlanInputMode) {
+    init(trackingStartDateKey: String, baselineOwed: Int) {
         self.trackingStartDateKey = trackingStartDateKey
         self.baselineOwed = baselineOwed
-        self.inputMode = inputMode
-    }
-
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        trackingStartDateKey = try container.decode(String.self, forKey: .trackingStartDateKey)
-        baselineOwed = try container.decode(Int.self, forKey: .baselineOwed)
-        inputMode = try container.decodeIfPresent(QadaPlanInputMode.self, forKey: .inputMode) ?? .exact
     }
 }
 
@@ -57,15 +42,11 @@ final class QadaBacklogStore: ObservableObject {
 
     func setBaseline(
         owed: Int,
-        inputMode: QadaPlanInputMode? = nil,
         trackingStartDateKey: String? = nil
     ) {
         let normalized = max(0, owed)
         var updated = state
         updated.baselineOwed = normalized
-        if let inputMode {
-            updated.inputMode = inputMode
-        }
         if let trackingStartDateKey {
             updated.trackingStartDateKey = trackingStartDateKey
         }
@@ -96,8 +77,7 @@ final class QadaBacklogStore: ObservableObject {
         }
         return QadaBacklogState(
             trackingStartDateKey: legacy.trackingStartDateKey,
-            baselineOwed: max(0, legacy.recentBaselineRemaining + legacy.olderBaselineRemaining),
-            inputMode: .exact
+            baselineOwed: max(0, legacy.recentBaselineRemaining + legacy.olderBaselineRemaining)
         )
     }
 }

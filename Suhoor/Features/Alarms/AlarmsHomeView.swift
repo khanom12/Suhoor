@@ -106,7 +106,7 @@ struct AlarmsHomeView: View {
             }
         }
         .listStyle(.insetGrouped)
-        .navigationTitle("Alarms")
+        .navigationTitle("Schedule")
         .navigationBarTitleDisplayMode(.large)
         .environment(\.editMode, $editMode)
         .toolbar {
@@ -218,19 +218,13 @@ struct AlarmsHomeView: View {
         .task {
             refreshListSnapshot(animated: false)
         }
-        .onChange(of: scheduleManager.activeWindowSnapshot) { _, _ in
+        .onChange(of: scheduleManager.currentRevision) { _, _ in
             refreshListSnapshot(animated: false)
         }
-        .onChange(of: alarmConfigStore.overridesByDay) { _, _ in
-            refreshListSnapshot(animated: false)
-        }
-        .onChange(of: alarmConfigStore.defaults) { _, _ in
+        .onChange(of: alarmConfigStore.currentRevision) { _, _ in
             refreshListSnapshot(animated: false)
         }
         .onChange(of: fastTagStore.currentRevision) { _, _ in
-            refreshListSnapshot(animated: false)
-        }
-        .onChange(of: scheduleManager.lastUpdated) { _, _ in
             refreshListSnapshot(animated: false)
         }
         .onChange(of: tagFilter) { _, _ in
