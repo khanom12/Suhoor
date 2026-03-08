@@ -216,15 +216,15 @@ private struct TodayNextWakeHeroCard: View {
                         Text(summaryLabel(for: summary))
                             .font(DesignTokens.cardTitleFont)
 
-                        Text("\(summary.relationText) • Fajr \(TimeFormatters.timeFormatter.string(from: summary.day.schedule.fajrDate))")
+                        Text("\(summary.relationText) · Fajr \(TimeFormatters.timeFormatter.string(from: summary.day.schedule.fajrDate))")
                             .font(DesignTokens.cardMetaFont)
                             .foregroundStyle(.secondary)
                     }
                 } else {
                     VStack(alignment: .leading, spacing: DesignTokens.spacingS) {
-                        Text("No wake yet.")
+                        Text("No wake yet")
                             .font(DesignTokens.cardTitleFont)
-                        Text("Set your morning plan to start waking around Fajr.")
+                        Text("Set your morning plan.")
                             .font(DesignTokens.cardSubtitleFont)
                             .foregroundStyle(.secondary)
 
@@ -243,9 +243,9 @@ private struct TodayNextWakeHeroCard: View {
         let eventTitle: String
         switch summary.event.type {
         case .wakeReminder:
-            eventTitle = "Wake reminder"
+            eventTitle = "Reminder"
         case .wakeAlarm:
-            eventTitle = "Main wake"
+            eventTitle = "Wake"
         case .wakeFollowUp:
             eventTitle = "Follow-up"
         case .fajrBoundaryNotice:
@@ -254,6 +254,6 @@ private struct TodayNextWakeHeroCard: View {
             eventTitle = "Iftar reminder"
         }
 
-        return "\(eventTitle) • \(scheduleManager.dayLabel(for: summary.day.date))"
+        return "\(eventTitle) · \(scheduleManager.dayLabel(for: summary.day.date))"
     }
 }

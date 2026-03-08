@@ -57,7 +57,7 @@ struct PlanRootView: View {
                     NavigationLink(value: PlanDestination.sunnahPlanner) {
                         PlansFeatureRow(
                             title: "Sunnah opportunities",
-                            subtitle: "Browse recurring and upcoming fasting opportunities.",
+                            subtitle: "Browse upcoming fasting opportunities.",
                             systemImage: "sparkles",
                             color: DawnColor.lightGold200
                         )
@@ -209,7 +209,7 @@ private struct DefaultMorningPlanCard: View {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("Default Morning Plan")
                             .font(.headline.weight(.semibold))
-                        Text("Your everyday wake setup around Fajr.")
+                        Text("Everyday around Fajr.")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
@@ -249,7 +249,7 @@ private struct ConfiguredPlansCard: View {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("Upcoming special plans")
                             .font(.headline.weight(.semibold))
-                        Text("Upcoming non-default mornings.")
+                        Text("Dates that differ from your default.")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
@@ -274,13 +274,13 @@ private struct ConfiguredPlansCard: View {
                         }
 
                         if snapshot.additionalSpecialMorningCount > 0 {
-                            Text("+\(snapshot.additionalSpecialMorningCount) more in Wake")
+                            Text("+\(snapshot.additionalSpecialMorningCount) more")
                                 .font(.footnote.weight(.semibold))
                                 .foregroundStyle(DawnColor.accent)
                         }
                     }
                 } else {
-                    Text("No special mornings planned yet.")
+                    Text("Nothing special planned yet.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -296,7 +296,7 @@ private struct DatePlanningCard: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Plan by date")
                         .font(.headline.weight(.semibold))
-                    Text("Pick a date for a one-day change, fasting day, or Qada day.")
+                    Text("Pick a date to adjust, fast, or plan Qada.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -340,9 +340,9 @@ private struct ConfiguredQadaCard: View {
 
     private var qadaDescription: String {
         if progress.baselineOwed > 0 {
-            return "Track remaining Qada obligations and planned Qada mornings."
+            return "Track remaining Qada and planned Qada days."
         }
-        return "Set up Qada obligations when you need them."
+        return "Set up Qada when you need it."
     }
 
     private var qadaValue: String {
@@ -360,7 +360,7 @@ private struct CustomFastingCard: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Custom fasting days")
                         .font(.headline.weight(.semibold))
-                    Text("Plan selected fasting days and other custom mornings.")
+                    Text("Plan custom fasting days.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }

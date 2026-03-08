@@ -45,6 +45,7 @@ struct TodayFajrCheckInCard: View {
                 }
                 .font(.footnote.weight(.semibold))
                 .foregroundStyle(DawnColor.accent)
+                .accessibilityLabel("Review Fajr later")
             }
         }
     }

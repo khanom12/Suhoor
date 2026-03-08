@@ -103,7 +103,7 @@ struct WakeProgressSnapshot: Equatable, Sendable {
         summaryTitle: nil,
         summaryDetail: nil,
         recentActivityLines: [],
-        emptyStateText: "Wake activity will appear after a few mornings."
+        emptyStateText: "Wake activity appears after a few mornings."
     )
 }
 
@@ -127,7 +127,7 @@ enum ProductSurfacePresentation {
     static func primaryContextTitle(_ context: MorningContextType) -> String {
         switch context {
         case .standard:
-            return "Default morning"
+            return "Daily plan"
         default:
             return context.title
         }
@@ -280,7 +280,7 @@ enum ProductSurfacePresentation {
         if qadaProgress.baselineOwed > 0 {
             qadaSummary = "\(qadaProgress.completed) completed · \(qadaProgress.remaining) remaining"
         } else {
-            qadaSummary = "No Qada obligation tracked yet"
+            qadaSummary = "No Qada tracked"
         }
 
         return ConfiguredPlansSnapshot(
@@ -298,7 +298,7 @@ enum ProductSurfacePresentation {
         let nonDefaultProvenances = day.provenances.filter { $0.sourceOrigin != .defaultDailyPlan }
         let provenanceText: String?
         if hasDayOverride && nonDefaultProvenances.isEmpty {
-            provenanceText = "Day-specific adjustment"
+            provenanceText = "Adjusted"
         } else if nonDefaultProvenances.isEmpty {
             provenanceText = nil
         } else {
@@ -337,8 +337,8 @@ enum ProductSurfacePresentation {
         let snoozedCount = wakeEvents.filter { $0.type == .snoozedSuhoor || $0.type == .scheduledSuhoorSnooze }.count
 
         let summaryTitle = firedCount > 0
-            ? "\(firedCount) recent wake event\(firedCount == 1 ? "" : "s") fired"
-            : "Wake activity is being tracked"
+            ? "\(firedCount) recent wake event\(firedCount == 1 ? "" : "s")"
+            : "Wake activity"
 
         var detailParts: [String] = []
         if dismissedCount > 0 {
@@ -350,7 +350,7 @@ enum ProductSurfacePresentation {
 
         return WakeProgressSnapshot(
             summaryTitle: summaryTitle,
-            summaryDetail: detailParts.isEmpty ? "Transitional activity based on recent wake events." : detailParts.joined(separator: " · "),
+            summaryDetail: detailParts.isEmpty ? "From recent wake events." : detailParts.joined(separator: " · "),
             recentActivityLines: Array(wakeEvents.prefix(4)).map(formatWakeEventLine),
             emptyStateText: nil
         )
@@ -442,7 +442,7 @@ enum ProductSurfacePresentation {
         return FajrHomeSupportPresentation(
             dateKey: DateHelpers.dayIdentifier(for: schedule.date, timeZone: .current),
             title: "Did you pray Fajr?",
-            detail: "Fajr was at \(TimeFormatters.timeFormatter.string(from: schedule.fajrDate)). You can log it now or review it later."
+            detail: "Fajr was at \(TimeFormatters.timeFormatter.string(from: schedule.fajrDate))."
         )
     }
 
@@ -468,9 +468,7 @@ enum ProductSurfacePresentation {
                     dateKey: dateKey,
                     intentSnapshot: intent,
                     title: isQada ? "Fasting for Qada today?" : "Fasting today?",
-                    detail: isQada
-                        ? "Mark this Qada day when you start, then confirm completion later."
-                        : "Mark this fasting day when you start, then confirm completion later.",
+                    detail: isQada ? "Start this Qada day now." : "Mark this day when you start.",
                     primaryActionTitle: isQada ? "Start Qada" : "Yes",
                     secondaryActionTitle: "Not today",
                     statusTitle: nil,
@@ -482,9 +480,7 @@ enum ProductSurfacePresentation {
                     dateKey: dateKey,
                     intentSnapshot: intent,
                     title: isQada ? "Qada fast in progress" : "Fasting today",
-                    detail: isQada
-                        ? "Keep going. Mark it completed after Maghrib."
-                        : "You're set for today. Mark it completed after Maghrib.",
+                    detail: isQada ? "Mark it completed after Maghrib." : "Mark it completed after Maghrib.",
                     primaryActionTitle: nil,
                     secondaryActionTitle: nil,
                     statusTitle: isQada ? "Qada in progress" : "Fasting in progress",
@@ -496,9 +492,7 @@ enum ProductSurfacePresentation {
                     dateKey: dateKey,
                     intentSnapshot: intent,
                     title: isQada ? "Qada fast completed" : "Fast completed",
-                    detail: isQada
-                        ? "This counts toward your Qada progress."
-                        : "Today's fast is logged.",
+                    detail: isQada ? "Counts toward your Qada progress." : "Logged for today.",
                     primaryActionTitle: nil,
                     secondaryActionTitle: nil,
                     statusTitle: isQada ? "Qada completed" : "Fast completed",
@@ -510,9 +504,7 @@ enum ProductSurfacePresentation {
                     dateKey: dateKey,
                     intentSnapshot: intent,
                     title: isQada ? "Qada fast not completed" : "Not fasting today",
-                    detail: isQada
-                        ? "This day stays in your Qada balance until a Qada fast is completed."
-                        : "You can log a different result later from Progress.",
+                    detail: isQada ? "Your Qada balance stays the same." : "You can change this later in Progress.",
                     primaryActionTitle: nil,
                     secondaryActionTitle: nil,
                     statusTitle: isQada ? "Not completed" : "Not fasting today",
@@ -527,9 +519,7 @@ enum ProductSurfacePresentation {
                     dateKey: dateKey,
                     intentSnapshot: intent,
                     title: isQada ? "Fasting for Qada today?" : "Fasting today?",
-                    detail: isQada
-                        ? "If this is your Qada day, mark it now and confirm completion after Maghrib."
-                        : "Mark this fasting day now and confirm completion after Maghrib.",
+                    detail: isQada ? "If this is your Qada day, mark it now." : "Mark this day if you're fasting.",
                     primaryActionTitle: isQada ? "Start Qada" : "Yes",
                     secondaryActionTitle: "Not today",
                     statusTitle: nil,
@@ -541,9 +531,7 @@ enum ProductSurfacePresentation {
                     dateKey: dateKey,
                     intentSnapshot: intent,
                     title: isQada ? "Qada fast in progress" : "Fasting today",
-                    detail: isQada
-                        ? "You've started this Qada day. Mark it completed after Maghrib."
-                        : "You're marked as fasting today. Confirm completion after Maghrib.",
+                    detail: isQada ? "Mark it completed after Maghrib." : "Confirm it after Maghrib.",
                     primaryActionTitle: nil,
                     secondaryActionTitle: nil,
                     statusTitle: isQada ? "Qada in progress" : "Fasting in progress",
@@ -555,9 +543,7 @@ enum ProductSurfacePresentation {
                     dateKey: dateKey,
                     intentSnapshot: intent,
                     title: isQada ? "Qada fast completed" : "Fast completed",
-                    detail: isQada
-                        ? "This counts toward your Qada progress."
-                        : "Today's fast is logged.",
+                    detail: isQada ? "Counts toward your Qada progress." : "Logged for today.",
                     primaryActionTitle: nil,
                     secondaryActionTitle: nil,
                     statusTitle: isQada ? "Qada completed" : "Fast completed",
@@ -569,9 +555,7 @@ enum ProductSurfacePresentation {
                     dateKey: dateKey,
                     intentSnapshot: intent,
                     title: isQada ? "Qada fast not completed" : "Not fasting today",
-                    detail: isQada
-                        ? "This day stays in your Qada balance until a Qada fast is completed."
-                        : "You can log a different result later from Progress.",
+                    detail: isQada ? "Your Qada balance stays the same." : "You can change this later in Progress.",
                     primaryActionTitle: nil,
                     secondaryActionTitle: nil,
                     statusTitle: isQada ? "Not completed" : "Not fasting today",
@@ -586,9 +570,7 @@ enum ProductSurfacePresentation {
                     dateKey: dateKey,
                     intentSnapshot: intent,
                     title: isQada ? "Did you complete the Qada fast?" : "Did you complete the fast?",
-                    detail: isQada
-                        ? "Completed Qada fasts reduce what you still owe."
-                        : "Log the result for this fasting day.",
+                    detail: isQada ? "Completed Qada fasts reduce what you owe." : "Log the result for today.",
                     primaryActionTitle: "Completed",
                     secondaryActionTitle: "Not completed",
                     statusTitle: nil,
@@ -600,9 +582,7 @@ enum ProductSurfacePresentation {
                     dateKey: dateKey,
                     intentSnapshot: intent,
                     title: isQada ? "Qada fast completed" : "Fast completed",
-                    detail: isQada
-                        ? "This counts toward your Qada progress."
-                        : "Today's fast is logged.",
+                    detail: isQada ? "Counts toward your Qada progress." : "Logged for today.",
                     primaryActionTitle: nil,
                     secondaryActionTitle: nil,
                     statusTitle: isQada ? "Qada completed" : "Fast completed",
@@ -614,9 +594,7 @@ enum ProductSurfacePresentation {
                     dateKey: dateKey,
                     intentSnapshot: intent,
                     title: isQada ? "Qada fast not completed" : "Fast not completed",
-                    detail: isQada
-                        ? "Your remaining Qada stays the same."
-                        : "You can update this later from Progress if needed.",
+                    detail: isQada ? "Your Qada balance stays the same." : "You can change this later in Progress.",
                     primaryActionTitle: nil,
                     secondaryActionTitle: nil,
                     statusTitle: "Not completed",
@@ -715,7 +693,7 @@ enum ProductSurfacePresentation {
         ]
 
         if hasOverride && nonDefaultProvenances.isEmpty {
-            subtitleParts.append("Adjusted from default")
+            subtitleParts.append("Adjusted")
         } else if let firstProvenance = provenanceLabels.first {
             subtitleParts.append(firstProvenance)
         }

@@ -69,7 +69,7 @@ struct AlarmsHomeView: View {
                                     if loadingSectionIDs.contains(section.id) {
                                         HStack {
                                             ProgressView()
-                                            Text("Loading month")
+                                            Text("Loading")
                                                 .foregroundStyle(.secondary)
                                         }
                                         .padding(.vertical, DesignTokens.spacingS)
@@ -944,10 +944,13 @@ private struct AlarmRowView: View {
                     }
                 }
 
-                Text("\(rowPresentation.relationText) • Fajr \(fajrTimeText)")
-                    .font(.callout)
-                    .foregroundStyle(isDisabled ? .tertiary : .secondary)
-                    .monospacedDigit()
+                HStack(spacing: 8) {
+                    Text(rowPresentation.relationText)
+                    Text("Fajr \(fajrTimeText)")
+                }
+                .font(.callout)
+                .foregroundStyle(isDisabled ? .tertiary : .secondary)
+                .monospacedDigit()
 
                 HStack(spacing: DesignTokens.spacingXS) {
                     ScheduleContextChip(
@@ -967,7 +970,7 @@ private struct AlarmRowView: View {
 
                 if let provenanceText = rowPresentation.provenanceText {
                     Text(provenanceText)
-                        .font(.footnote)
+                        .font(.caption)
                         .foregroundStyle(isDisabled ? .tertiary : .secondary)
                 }
             }
@@ -986,9 +989,15 @@ private struct AlarmRowView: View {
                 Button("Adjust") {
                     onSelect()
                 }
-                .buttonStyle(.borderless)
+                .buttonStyle(.plain)
                 .font(.footnote.weight(.semibold))
                 .foregroundStyle(DawnColor.accent)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(
+                    Capsule()
+                        .fill(DawnColor.accent.opacity(0.12))
+                )
                 .accessibilityLabel("Open one-day override")
             }
 

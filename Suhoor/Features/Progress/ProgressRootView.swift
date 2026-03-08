@@ -23,7 +23,7 @@ struct ProgressRootView: View {
             } header: {
                 Text("Fajr")
             } footer: {
-                Text("Log whether you prayed Fajr. This stays separate from fasting.")
+                Text("Prayer completion, separate from fasting.")
             }
 
             Section {
@@ -38,7 +38,7 @@ struct ProgressRootView: View {
             } header: {
                 Text("Fasts")
             } footer: {
-                Text("Use this only for fasting days. Qada days stay distinct through their Qada impact.")
+                Text("Only for fasting days.")
             }
 
             Section {
@@ -52,7 +52,7 @@ struct ProgressRootView: View {
             } header: {
                 Text("Qada Progress")
             } footer: {
-                Text("Completed Qada fasts reduce what you still owe.")
+                Text("Completed Qada fasts reduce what remains.")
             }
 
             Section {
@@ -80,7 +80,7 @@ struct ProgressRootView: View {
             } header: {
                 Text("Wake Activity")
             } footer: {
-                Text("This still uses the current wake-event log until a dedicated wake history model replaces it.")
+                Text("Technical wake history for now.")
             }
         }
         .navigationTitle("Progress")

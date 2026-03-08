@@ -134,14 +134,9 @@ struct TodayFastCheckInCard: View {
         NavigationLink {
             FastHistoryView()
         } label: {
-            Image(systemName: "clock.arrow.circlepath")
-                .font(DesignTokens.cardMetaFont.weight(.semibold))
+            Text("History")
+                .font(.footnote.weight(.semibold))
                 .foregroundStyle(DawnColor.accent)
-                .frame(width: 30, height: 30)
-                .background(
-                    Circle()
-                        .fill(Color(.secondarySystemGroupedBackground))
-                )
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Open fast completion history")
@@ -154,14 +149,9 @@ struct TodayFastCheckInCard: View {
                 fastLogStore.setStatus(.unknown, for: presentation.dateKey)
             }
         } label: {
-            Image(systemName: "arrow.uturn.backward")
-                .font(DesignTokens.cardMetaFont.weight(.semibold))
+            Text("Clear")
+                .font(.footnote.weight(.semibold))
                 .foregroundStyle(DawnColor.accent)
-                .frame(width: 30, height: 30)
-                .background(
-                    Circle()
-                        .fill(Color(.secondarySystemGroupedBackground))
-                )
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Clear fasting status")
