@@ -29,7 +29,11 @@ struct SuhoorApp: App {
             settingsStore: settingsStore,
             locationService: locationService,
             alarmConfigStore: alarmConfigStore,
-            fastTagStore: fastTagStore
+            fastTagStore: fastTagStore,
+            fastLogStore: fastLogStore,
+            fajrLogStore: fajrLogStore,
+            qadaBacklogStore: qadaBacklogStore,
+            qadaBatchStore: qadaBatchStore
         )
         _settingsStore = StateObject(wrappedValue: settingsStore)
         _alarmConfigStore = StateObject(wrappedValue: alarmConfigStore)

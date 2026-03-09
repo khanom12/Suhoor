@@ -5,23 +5,9 @@ struct MorningScheduleResolutionInput: Sendable {
     let date: Date
     let dateKey: String
     let provenances: [ResolvedScheduledDateProvenance]
-    let settings: AppSettings
-    let defaultConfig: DefaultAlarmConfig
     let effectiveConfig: EffectiveDailyConfig
     let tagResult: TagComputationResult
-    let coordinate: CLLocationCoordinate2D
-    let timeZone: TimeZone
-    let locationDescription: String
-    let morningPlanState: MorningPlanState
-}
-
-struct MorningScheduleResolution: Sendable {
-    let schedule: DaySchedule
-    let effectiveConfig: EffectiveDailyConfig
-    let resolvedDayContext: ResolvedDayContext
-    let materializedEvents: [ScheduledEvent]
-    let decisionLog: RuleDecisionLog
-    let primaryDisplay: PrimaryDisplay?
+    let stateSnapshot: MorningStateSnapshot
 }
 
 enum MorningScheduleResolver {
@@ -30,11 +16,17 @@ enum MorningScheduleResolver {
     static func resolve(
         input: MorningScheduleResolutionInput,
         calculator: PrayerTimeCalculator = PrayerTimeCalculator()
-    ) -> MorningScheduleResolution? {
+    ) -> ResolvedDaySnapshot? {
         let prayerWindow = resolvePrayerWindow(input: input, calculator: calculator)
         guard let prayerWindow else { return nil }
 
-        let planSelection = selectPlan(input: input)
+        let planSelection = MorningPlanResolver.resolve(
+            dateKey: input.dateKey,
+            provenances: input.provenances,
+            effectiveConfig: input.effectiveConfig,
+            tagResult: input.tagResult,
+            morningPlanState: input.stateSnapshot.morningPlanState
+        )
         let wakeAnchor = resolveWakeAnchor(
             prayerWindow: prayerWindow,
             anchorType: planSelection.selectedPlan.wakeAnchorType
@@ -44,11 +36,16 @@ enum MorningScheduleResolver {
             anchor: wakeAnchor,
             effectiveConfig: input.effectiveConfig,
             selectedPlan: planSelection.selectedPlan,
-            timeZone: input.timeZone
+            timeZone: input.stateSnapshot.timeZone
         )
         let wakeDelta = resolveWakeDelta(anchor: wakeAnchor, wakeTime: wakeTime)
-        let resolvedContext = resolveContext(
-            input: input,
+        let resolvedContext = ResolvedDayContextResolver.resolve(
+            date: input.date,
+            provenances: input.provenances,
+            tagResult: input.tagResult,
+            defaultConfig: input.stateSnapshot.defaultConfig,
+            effectiveConfig: input.effectiveConfig,
+            timeZone: input.stateSnapshot.timeZone,
             wakeTime: wakeTime
         )
         let behaviorProfile = resolveBehaviorProfile(
@@ -61,27 +58,10 @@ enum MorningScheduleResolver {
             input: input,
             wakeTime: wakeTime,
             anchor: wakeAnchor,
-            timeZone: input.timeZone
+            timeZone: input.stateSnapshot.timeZone
         )
         let iftarDate = behaviorProfile.iftarReminderEnabled ? prayerWindow.maghrib : nil
         let boundaryDate = behaviorProfile.fajrBoundaryNoticeEnabled ? prayerWindow.fajrStart : nil
-
-        let schedule = DaySchedule(
-            date: input.date,
-            fajrDate: prayerWindow.fajrStart,
-            maghribDate: prayerWindow.maghrib,
-            wakeDate: wakeTime,
-            reminderDate: behaviorProfile.reminderEnabled ? reminder : nil,
-            boundaryDate: boundaryDate,
-            iftarDate: iftarDate,
-            fajrSoundChoice: input.effectiveConfig.fajrSoundChoice,
-            iftarSoundChoice: input.effectiveConfig.iftarSoundChoice,
-            locationDescription: input.locationDescription,
-            offsetMinutes: max(0, Int(round(prayerWindow.fajrStart.timeIntervalSince(wakeTime) / 60))),
-            calculationMethodName: input.settings.calculationMethod.displayName,
-            timeZone: input.timeZone
-        )
-
         let materializedEvents = materializeEvents(
             input: input,
             prayerWindow: prayerWindow,
@@ -104,7 +84,6 @@ enum MorningScheduleResolver {
                 )
             }
         )
-        let primaryDisplay = resolvePrimaryDisplay(from: materializedEvents)
         let decisionLog = RuleDecisionLog(
             dateKey: input.dateKey,
             resolverVersion: resolverVersion,
@@ -115,7 +94,10 @@ enum MorningScheduleResolver {
                 events: materializedEvents
             ),
             prayerWindow: prayerWindow,
-            candidateContexts: candidateContexts(for: input.tagResult, provenances: input.provenances),
+            candidateContexts: ResolvedDayContextResolver.candidateContexts(
+                tagResult: input.tagResult,
+                provenances: input.provenances
+            ),
             resolvedDayContext: resolvedContext,
             candidatePlans: planSelection.candidates,
             selectedPlanID: planSelection.selectedPlan.id,
@@ -132,13 +114,19 @@ enum MorningScheduleResolver {
             )
         )
 
-        return MorningScheduleResolution(
-            schedule: schedule,
-            effectiveConfig: input.effectiveConfig,
+        return ResolvedDaySnapshot(
+            date: input.date,
+            dateKey: input.dateKey,
+            prayerWindow: prayerWindow,
             resolvedDayContext: resolvedContext,
+            selectedPlan: planSelection.selectedPlan,
+            resolvedBehaviorProfile: behaviorProfile,
             materializedEvents: materializedEvents,
             decisionLog: decisionLog,
-            primaryDisplay: primaryDisplay
+            completionRecords: CompletionSnapshotResolver.resolve(
+                for: input.dateKey,
+                completionRecords: input.stateSnapshot.completionRecords
+            )
         )
     }
 
@@ -148,24 +136,24 @@ enum MorningScheduleResolver {
     ) -> DailyPrayerWindow? {
         guard let fajrStart = calculator.fajrDate(
             for: input.date,
-            location: input.coordinate,
-            timeZone: input.timeZone,
-            method: input.settings.calculationMethod,
-            adjustmentMinutes: input.settings.fajrAdjustmentMinutes
+            location: input.stateSnapshot.coordinate,
+            timeZone: input.stateSnapshot.timeZone,
+            method: input.stateSnapshot.settings.calculationMethod,
+            adjustmentMinutes: input.stateSnapshot.settings.fajrAdjustmentMinutes
         ),
         let maghrib = calculator.maghribDate(
             for: input.date,
-            location: input.coordinate,
-            timeZone: input.timeZone,
-            adjustmentMinutes: input.settings.maghribAdjustmentMinutes
+            location: input.stateSnapshot.coordinate,
+            timeZone: input.stateSnapshot.timeZone,
+            adjustmentMinutes: input.stateSnapshot.settings.maghribAdjustmentMinutes
         ) else {
             return nil
         }
 
         let fajrEnd = calculator.sunriseDate(
             for: input.date,
-            location: input.coordinate,
-            timeZone: input.timeZone,
+            location: input.stateSnapshot.coordinate,
+            timeZone: input.stateSnapshot.timeZone,
             adjustmentMinutes: 0
         )
 
@@ -175,267 +163,6 @@ enum MorningScheduleResolver {
             fajrEnd: fajrEnd,
             maghrib: maghrib
         )
-    }
-
-    private static func candidateContexts(
-        for tagResult: TagComputationResult,
-        provenances: [ResolvedScheduledDateProvenance]
-    ) -> [MorningContextType] {
-        var contexts: [MorningContextType] = [.standard]
-        let meaningfulProvenances = provenances.filter { $0.sourceOrigin != .defaultDailyPlan }
-        switch tagResult.computedPrimaryIntent {
-        case .ramadanObligatory, .kaffarahExpiation, .vowNadhr:
-            contexts.append(.fasting)
-        case .qadaMakeup:
-            contexts.append(.qadaFast)
-        case .voluntary:
-            contexts.append(.sunnahFast)
-        case .forbidden, .other:
-            break
-        }
-
-        if meaningfulProvenances.contains(where: { $0.sourceOrigin == .defaultRamadan }) {
-            contexts.append(.fasting)
-        }
-        if !tagResult.computedSecondaryTags.isEmpty {
-            contexts.append(.specialDay)
-        }
-        return Array(NSOrderedSet(array: contexts).compactMap { $0 as? MorningContextType })
-    }
-
-    private static func resolveContext(
-        input: MorningScheduleResolutionInput,
-        wakeTime: Date
-    ) -> ResolvedDayContext {
-        let supportingTags = resolvedTags(input: input)
-        let warnings = FastIntentEngine.warnings(for: input.date, timeZone: input.timeZone)
-        let primaryContext: MorningContextType
-        switch input.tagResult.computedPrimaryIntent {
-        case .qadaMakeup:
-            primaryContext = .qadaFast
-        case .ramadanObligatory, .kaffarahExpiation, .vowNadhr:
-            primaryContext = .fasting
-        case .voluntary:
-            primaryContext = input.tagResult.computedSecondaryTags.isEmpty ? .fasting : .sunnahFast
-        case .forbidden, .other:
-            primaryContext = .standard
-        }
-
-        var secondaryContexts: [MorningContextType] = []
-        if wakeTime < input.date.addingTimeInterval(24 * 60 * 60),
-           wakeTime < input.date.addingTimeInterval(6 * 60 * 60) {
-            secondaryContexts.append(.suhoor)
-        }
-        if primaryContext == .standard,
-           input.provenances.contains(where: { $0.sourceOrigin == .defaultRamadan }) == false,
-           !warnings.isEmpty {
-            secondaryContexts.append(.specialDay)
-        }
-        if !input.tagResult.computedSecondaryTags.isEmpty || !warnings.isEmpty {
-            secondaryContexts.append(.specialDay)
-        }
-
-        let summary = contextSummary(primaryContext: primaryContext, supportingTags: supportingTags)
-        let details = contextDetails(input: input, supportingTags: supportingTags)
-
-        return ResolvedDayContext(
-            primaryContext: primaryContext,
-            secondaryContexts: Array(NSOrderedSet(array: secondaryContexts).compactMap { $0 as? MorningContextType }),
-            supportingTags: supportingTags,
-            explanation: ContextExplanation(summary: summary, details: details)
-        )
-    }
-
-    private static func contextSummary(
-        primaryContext: MorningContextType,
-        supportingTags: [DayTag]
-    ) -> String {
-        switch primaryContext {
-        case .standard:
-            return "Using the default morning plan."
-        case .fasting:
-            if supportingTags.contains(.ramadan) {
-                return "Ramadan context is shaping today's wake."
-            }
-            return "A fasting context is shaping today's wake."
-        case .qadaFast:
-            return "A Qada plan is shaping today's wake."
-        case .sunnahFast:
-            return "A Sunnah observance is shaping today's wake."
-        case .tahajjud:
-            return "Tahajjud context is shaping today's wake."
-        case .suhoor:
-            return "Suhoor context is shaping today's wake."
-        case .jamaah:
-            return "A jama'ah context is shaping today's wake."
-        case .specialDay:
-            return "A special-day context is shaping today's wake."
-        }
-    }
-
-    private static func contextDetails(
-        input: MorningScheduleResolutionInput,
-        supportingTags: [DayTag]
-    ) -> [String] {
-        var details: [String] = []
-        if input.provenances.contains(where: { $0.sourceOrigin == .defaultDailyPlan }) {
-            details.append("The daily morning plan applies to this date.")
-        }
-        if input.effectiveConfig.hasOverrides {
-            details.append("A date-specific override is active.")
-        }
-        for tag in supportingTags where tag != .dailyPlan && tag != .locationBased {
-            details.append("\(tag.title) contributes labels and progress metadata.")
-        }
-        if input.defaultConfig.defaultSuhoorTimeMode == .fixedTime || input.effectiveConfig.suhoorTimeMode == .fixedTime {
-            details.append("Fixed wake compatibility is being used for this date.")
-        }
-        return details
-    }
-
-    private static func resolvedTags(input: MorningScheduleResolutionInput) -> [DayTag] {
-        var tags: [DayTag] = [.locationBased]
-
-        if input.provenances.contains(where: { $0.sourceOrigin == .defaultDailyPlan }) {
-            tags.append(.dailyPlan)
-        }
-
-        for provenance in input.provenances {
-            switch provenance.sourceOrigin {
-            case .defaultRamadan:
-                tags.append(.ramadan)
-            case .manualSingleDay:
-                tags.append(.manualDay)
-            case .manualGregorianRange:
-                tags.append(.manualRange)
-            case .islamicQuickAdd, .recurringIslamic:
-                break
-            case .migratedLegacyAlways, .migratedLegacyDateRange:
-                break
-            case .defaultDailyPlan:
-                tags.append(.dailyPlan)
-            }
-        }
-
-        switch input.tagResult.computedPrimaryIntent {
-        case .ramadanObligatory:
-            tags.append(.ramadan)
-        case .qadaMakeup:
-            tags.append(.qada)
-        case .kaffarahExpiation:
-            tags.append(.kaffarah)
-        case .vowNadhr:
-            tags.append(.vow)
-        case .voluntary:
-            tags.append(.voluntary)
-        case .forbidden, .other:
-            break
-        }
-
-        for tag in input.tagResult.computedSecondaryTags {
-            switch tag {
-            case .shawwalSix:
-                tags.append(.shawwalSix)
-            case .arafah:
-                tags.append(.arafah)
-            case .ashura:
-                tags.append(.ashura)
-            case .whiteDays:
-                tags.append(.whiteDays)
-            case .mondayThursday:
-                tags.append(.mondayThursday)
-            case .dhulHijjahFirstNine:
-                tags.append(.dhulHijjahFirstNine)
-            }
-        }
-
-        if input.tagResult.computedPrimaryIntent == .forbidden {
-            let warnings = FastIntentEngine.warnings(for: input.date, timeZone: input.timeZone)
-            if warnings.contains(.eidAlFitr) || warnings.contains(.eidAlAdha) {
-                tags.append(.eid)
-            }
-            if warnings.contains(.tashreeq) {
-                tags.append(.tashreeq)
-            }
-        }
-
-        if input.defaultConfig.defaultSuhoorTimeMode == .fixedTime || input.effectiveConfig.suhoorTimeMode == .fixedTime {
-            tags.append(.fixedTimeCompatibility)
-        }
-
-        return Array(NSOrderedSet(array: tags).compactMap { $0 as? DayTag })
-    }
-
-    private static func selectPlan(
-        input: MorningScheduleResolutionInput
-    ) -> (selectedPlan: MorningPlan, candidates: [RulePlanCandidate], precedenceReason: String) {
-        let defaultPlan = input.morningPlanState.defaultDailyPlan
-        let meaningfulProvenances = input.provenances.filter { $0.sourceOrigin != .defaultDailyPlan }
-        var candidates = [
-            RulePlanCandidate(id: defaultPlan.id, title: defaultPlan.title, kind: defaultPlan.kind)
-        ]
-
-        if input.effectiveConfig.hasOverrides {
-            let overridePlan = MorningPlan(
-                id: "override-\(input.dateKey)",
-                title: "Date override",
-                kind: .explicitDateOverride,
-                wakeAnchorType: defaultPlan.wakeAnchorType,
-                wakeDelta: defaultPlan.wakeDelta,
-                fixedWakeTimeCompatibilityMinutesFromMidnight: defaultPlan.fixedWakeTimeCompatibilityMinutesFromMidnight,
-                reminderEnabled: input.effectiveConfig.reminderEnabled,
-                wakeAlarmEnabled: input.effectiveConfig.suhoorEnabled,
-                fajrBoundaryNoticeEnabled: input.effectiveConfig.fajrEnabled,
-                iftarReminderEnabled: input.effectiveConfig.iftarEnabled
-            )
-            candidates.insert(
-                RulePlanCandidate(id: overridePlan.id, title: overridePlan.title, kind: overridePlan.kind),
-                at: 0
-            )
-            return (overridePlan, candidates, "Explicit single-date override takes precedence.")
-        }
-
-        if input.tagResult.computedPrimaryIntent == .qadaMakeup {
-            let qadaPlan = MorningPlan(
-                id: "qada-\(input.dateKey)",
-                title: "Qada day",
-                kind: .qadaAssignment,
-                wakeAnchorType: defaultPlan.wakeAnchorType,
-                wakeDelta: defaultPlan.wakeDelta,
-                fixedWakeTimeCompatibilityMinutesFromMidnight: defaultPlan.fixedWakeTimeCompatibilityMinutesFromMidnight,
-                reminderEnabled: defaultPlan.reminderEnabled,
-                wakeAlarmEnabled: defaultPlan.wakeAlarmEnabled,
-                fajrBoundaryNoticeEnabled: defaultPlan.fajrBoundaryNoticeEnabled,
-                iftarReminderEnabled: true
-            )
-            candidates.insert(
-                RulePlanCandidate(id: qadaPlan.id, title: qadaPlan.title, kind: qadaPlan.kind),
-                at: 0
-            )
-            return (qadaPlan, candidates, "Qada context overrides the default daily plan.")
-        }
-
-        if meaningfulProvenances.isEmpty == false {
-            let overlayPlan = MorningPlan(
-                id: "overlay-\(input.dateKey)",
-                title: "Context overlay",
-                kind: .generatedObservance,
-                wakeAnchorType: defaultPlan.wakeAnchorType,
-                wakeDelta: defaultPlan.wakeDelta,
-                fixedWakeTimeCompatibilityMinutesFromMidnight: defaultPlan.fixedWakeTimeCompatibilityMinutesFromMidnight,
-                reminderEnabled: defaultPlan.reminderEnabled,
-                wakeAlarmEnabled: defaultPlan.wakeAlarmEnabled,
-                fajrBoundaryNoticeEnabled: defaultPlan.fajrBoundaryNoticeEnabled,
-                iftarReminderEnabled: defaultPlan.iftarReminderEnabled
-            )
-            candidates.insert(
-                RulePlanCandidate(id: overlayPlan.id, title: overlayPlan.title, kind: overlayPlan.kind),
-                at: 0
-            )
-            return (overlayPlan, candidates, "An observance or source overlay applies to this date.")
-        }
-
-        return (defaultPlan, candidates, "The default daily plan applies.")
     }
 
     private static func resolveWakeAnchor(
@@ -479,8 +206,7 @@ enum MorningScheduleResolver {
             relation: selectedPlan.wakeDelta.relation,
             minutes: max(0, effectiveConfig.suhoorOffsetMinutes)
         )
-        let signedMinutes = resolvedDelta.signedMinutes
-        return Calendar.current.date(byAdding: .minute, value: signedMinutes, to: anchor.date) ?? anchor.date
+        return Calendar.current.date(byAdding: .minute, value: resolvedDelta.signedMinutes, to: anchor.date) ?? anchor.date
     }
 
     private static func resolveWakeDelta(anchor: WakeAnchor, wakeTime: Date) -> WakeDelta {
@@ -506,7 +232,7 @@ enum MorningScheduleResolver {
             fixedWakeTimeCompatibilityMinutesFromMidnight: selectedPlan.fixedWakeTimeCompatibilityMinutesFromMidnight,
             reminderEnabled: input.effectiveConfig.reminderEnabled,
             wakeAlarmEnabled: input.effectiveConfig.suhoorEnabled,
-            wakeFollowUpEnabled: FeatureFlags.enableSnooze && input.settings.snoozeEnabled,
+            wakeFollowUpEnabled: FeatureFlags.enableSnooze && input.stateSnapshot.settings.snoozeEnabled,
             fajrBoundaryNoticeEnabled: input.effectiveConfig.fajrEnabled,
             iftarReminderEnabled: iftarReminderEnabled
         )
@@ -600,14 +326,14 @@ enum MorningScheduleResolver {
         }
 
         if behaviorProfile.wakeFollowUpEnabled {
-            let followUpDate = wakeTime.addingTimeInterval(TimeInterval(input.settings.snoozeMinutes * 60))
+            let followUpDate = wakeTime.addingTimeInterval(TimeInterval(input.stateSnapshot.settings.snoozeMinutes * 60))
             events.append(
                 ScheduledEvent(
                     id: "\(input.dateKey).wakeFollowUp",
                     type: .wakeFollowUp,
                     dateKey: input.dateKey,
                     fireDate: followUpDate,
-                    relativeTo: .wakeAlarm(offsetMinutes: input.settings.snoozeMinutes),
+                    relativeTo: .wakeAlarm(offsetMinutes: input.stateSnapshot.settings.snoozeMinutes),
                     isUserVisible: true,
                     affectsCompletion: false,
                     deliveryKinds: []
@@ -665,25 +391,6 @@ enum MorningScheduleResolver {
         return kinds
     }
 
-    private static func resolvePrimaryDisplay(from events: [ScheduledEvent]) -> PrimaryDisplay? {
-        for type in [ScheduledEventType.wakeAlarm, .wakeReminder, .fajrBoundaryNotice, .iftarReminder] {
-            guard let event = events.first(where: { $0.type == type }) else { continue }
-            switch event.type {
-            case .wakeAlarm:
-                return PrimaryDisplay(time: event.fireDate, kind: .suhoor)
-            case .wakeReminder:
-                return PrimaryDisplay(time: event.fireDate, kind: .reminder)
-            case .fajrBoundaryNotice:
-                return PrimaryDisplay(time: event.fireDate, kind: .fajr)
-            case .iftarReminder:
-                return PrimaryDisplay(time: event.fireDate, kind: .iftar)
-            case .wakeFollowUp:
-                break
-            }
-        }
-        return nil
-    }
-
     private static func compatibilityNotes(
         input: MorningScheduleResolutionInput,
         selectedPlan: MorningPlan
@@ -692,7 +399,7 @@ enum MorningScheduleResolver {
         if selectedPlan.fixedWakeTimeCompatibilityMinutesFromMidnight != nil {
             notes.append("fixed_time_wake_compatibility")
         }
-        if input.morningPlanState.activationMode == .legacyCompat {
+        if input.stateSnapshot.morningPlanState.activationMode == .legacyCompat {
             notes.append("legacy_compat_schedule_window")
         }
         if input.effectiveConfig.hasOverrides {

@@ -1210,18 +1210,31 @@ struct ScheduleManagerHijriTests {
             fajrEnabled: false
         )
         let dateKey = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
+        let stateSnapshot = MorningStateSnapshot(
+            settings: settings,
+            defaultConfig: defaultConfig,
+            morningPlanState: planStore.state,
+            dateAssignments: [PlanDateAssignment(dateKey: dateKey, planID: "default-daily")],
+            completionRecords: [],
+            qadaLedgerSnapshot: QadaLedgerSnapshot(
+                trackingStartDateKey: dateKey,
+                baselineOwed: 0,
+                completed: 0,
+                remaining: 0
+            ),
+            coordinate: CLLocationCoordinate2D(latitude: 43.6532, longitude: -79.3832),
+            timeZone: timeZone,
+            locationDescription: "Toronto",
+            fastTagSelections: [:],
+            overridesByDateKey: [:]
+        )
         let input = MorningScheduleResolutionInput(
             date: date,
             dateKey: dateKey,
             provenances: [Self.defaultDailyPlanProvenance()],
-            settings: settings,
-            defaultConfig: defaultConfig,
             effectiveConfig: effectiveConfig,
             tagResult: .empty,
-            coordinate: CLLocationCoordinate2D(latitude: 43.6532, longitude: -79.3832),
-            timeZone: timeZone,
-            locationDescription: "Toronto",
-            morningPlanState: planStore.state
+            stateSnapshot: stateSnapshot
         )
 
         let resolution = MorningScheduleResolver.resolve(input: input)
@@ -1259,24 +1272,128 @@ struct ScheduleManagerHijriTests {
             suhoorOffsetMinutes: 255,
             fajrEnabled: false
         )
-        let input = MorningScheduleResolutionInput(
-            date: date,
-            dateKey: DateHelpers.dayIdentifier(for: date, timeZone: timeZone),
-            provenances: [Self.defaultDailyPlanProvenance()],
+        let dateKey = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
+        let stateSnapshot = MorningStateSnapshot(
             settings: settings,
             defaultConfig: defaultConfig,
-            effectiveConfig: effectiveConfig,
-            tagResult: .empty,
+            morningPlanState: planStore.state,
+            dateAssignments: [PlanDateAssignment(dateKey: dateKey, planID: "default-daily")],
+            completionRecords: [],
+            qadaLedgerSnapshot: QadaLedgerSnapshot(
+                trackingStartDateKey: dateKey,
+                baselineOwed: 0,
+                completed: 0,
+                remaining: 0
+            ),
             coordinate: CLLocationCoordinate2D(latitude: 43.6532, longitude: -79.3832),
             timeZone: timeZone,
             locationDescription: "Toronto",
-            morningPlanState: planStore.state
+            fastTagSelections: [:],
+            overridesByDateKey: [:]
+        )
+        let input = MorningScheduleResolutionInput(
+            date: date,
+            dateKey: dateKey,
+            provenances: [Self.defaultDailyPlanProvenance()],
+            effectiveConfig: effectiveConfig,
+            tagResult: .empty,
+            stateSnapshot: stateSnapshot
         )
 
         let resolution = MorningScheduleResolver.resolve(input: input)
 
         #expect(resolution?.decisionLog.compatibilityNotes.contains("fixed_time_wake_compatibility") == true)
         #expect(resolution?.resolvedDayContext.supportingTags.contains(.fixedTimeCompatibility) == true)
+    }
+
+    @Test
+    func legacyCompletionAdapterMapsFajrFastAndQadaConsequences() {
+        let snapshot = LegacyCompletionAdapter.records(
+            fajrEntries: [
+                "2026-03-09": FajrLogEntry(
+                    dateKey: "2026-03-09",
+                    status: .completed,
+                    updatedAt: Date(timeIntervalSince1970: 10)
+                )
+            ],
+            fastEntries: [
+                "2026-03-09": FastLogEntry(
+                    dateKey: "2026-03-09",
+                    status: .completed,
+                    updatedAt: Date(timeIntervalSince1970: 20),
+                    intentSnapshot: FastIntentSnapshot(primaryIntent: .qadaMakeup, secondaryTags: [])
+                ),
+                "2026-03-10": FastLogEntry(
+                    dateKey: "2026-03-10",
+                    status: .inProgress,
+                    updatedAt: Date(timeIntervalSince1970: 30),
+                    intentSnapshot: FastIntentSnapshot(primaryIntent: .voluntary, secondaryTags: [])
+                )
+            ],
+            qadaBacklogState: QadaBacklogState(
+                trackingStartDateKey: "2026-03-01",
+                baselineOwed: 4
+            )
+        )
+
+        #expect(snapshot.records.count == 3)
+        #expect(snapshot.records.first(where: { $0.kind == .fajr })?.status == .completed)
+        #expect(snapshot.records.first(where: { $0.dateKey == "2026-03-10" && $0.kind == .fast })?.status == .unknown)
+        #expect(snapshot.qadaLedgerSnapshot.completed == 1)
+        #expect(snapshot.qadaLedgerSnapshot.remaining == 3)
+    }
+
+    @Test
+    func morningPlanResolverPrefersExplicitOverrideOverContextPlans() {
+        let defaultPlan = MorningPlan(
+            id: "default-daily",
+            title: "Daily morning plan",
+            kind: .defaultDaily,
+            wakeAnchorType: .fajrStart,
+            wakeDelta: WakeDelta(relation: .before, minutes: 45),
+            fixedWakeTimeCompatibilityMinutesFromMidnight: nil,
+            reminderEnabled: true,
+            wakeAlarmEnabled: true,
+            fajrBoundaryNoticeEnabled: false,
+            iftarReminderEnabled: false
+        )
+        let state = MorningPlanState(
+            schemaVersion: 1,
+            activationMode: .dailyActive,
+            defaultDailyPlan: defaultPlan,
+            lastMigrationAt: nil
+        )
+        let resolution = MorningPlanResolver.resolve(
+            dateKey: "2026-03-09",
+            provenances: [
+                ResolvedScheduledDateProvenance(
+                    sourceID: UUID(),
+                    groupID: nil,
+                    label: "Selected day",
+                    stopSeriesLabel: nil,
+                    isExplicitOneOff: true,
+                    sourceOrigin: .manualSingleDay,
+                )
+            ],
+            effectiveConfig: Self.makeEffectiveConfig(
+                date: Self.makeDate(year: 2026, month: 3, day: 9, timeZone: TimeZone(identifier: "America/Toronto") ?? .current),
+                settings: .default,
+                suhoorTimeMode: .relativeToFajrMinusMinutes,
+                suhoorOffsetMinutes: 30,
+                fajrEnabled: false,
+                hasOverrides: true
+            ),
+            tagResult: TagComputationResult(
+                computedPrimaryIntent: .qadaMakeup,
+                computedSecondaryTags: [],
+                secondaryDetails: [:],
+                suppressedSecondaryTags: []
+            ),
+            morningPlanState: state
+        )
+
+        #expect(resolution.selectedPlan.kind == MorningPlanKind.explicitDateOverride)
+        #expect(resolution.precedenceReason == "Explicit single-date override takes precedence.")
     }
 
     private static func makeDate(
@@ -1347,7 +1464,8 @@ struct ScheduleManagerHijriTests {
         settings: AppSettings,
         suhoorTimeMode: SuhoorTimeMode,
         suhoorOffsetMinutes: Int,
-        fajrEnabled: Bool
+        fajrEnabled: Bool,
+        hasOverrides: Bool = false
     ) -> EffectiveDailyConfig {
         EffectiveDailyConfig(
             date: date,
@@ -1367,7 +1485,7 @@ struct ScheduleManagerHijriTests {
             fajrSoundChoice: settings.atFajrSoundSelectionGlobal,
             iftarDelivery: .off,
             iftarSoundChoice: .adhanSoft,
-            hasOverrides: false
+            hasOverrides: hasOverrides
         )
     }
 

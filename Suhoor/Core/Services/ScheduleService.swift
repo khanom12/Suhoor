@@ -35,6 +35,10 @@ final class ScheduleManager: ObservableObject {
     private let morningPlanStore: MorningPlanStore
     private let locationService: LocationService
     private let fastTagStore: FastTagStore
+    private let fastLogStore: FastLogStore
+    private let fajrLogStore: FajrLogStore
+    private let qadaBacklogStore: QadaBacklogStore
+    private let qadaBatchStore: QadaBatchStore
     private let cacheStore: ScheduleCacheStore
     private let calculator = PrayerTimeCalculator()
     private let hijriAdjustmentStore: HijriMonthAdjustmentStore
@@ -69,6 +73,10 @@ final class ScheduleManager: ObservableObject {
         locationService: LocationService,
         alarmConfigStore: AlarmConfigStore,
         fastTagStore: FastTagStore = FastTagStore(),
+        fastLogStore: FastLogStore = FastLogStore(),
+        fajrLogStore: FajrLogStore = FajrLogStore(),
+        qadaBacklogStore: QadaBacklogStore = QadaBacklogStore(),
+        qadaBatchStore: QadaBatchStore = QadaBatchStore(),
         hijriAdjustmentStore: HijriMonthAdjustmentStore = HijriMonthAdjustmentStore(),
         hijriAdjustmentChangeStore: HijriAdjustmentChangeStore = HijriAdjustmentChangeStore(),
         cacheStore: ScheduleCacheStore = ScheduleCacheStore()
@@ -82,6 +90,10 @@ final class ScheduleManager: ObservableObject {
         )
         self.locationService = locationService
         self.fastTagStore = fastTagStore
+        self.fastLogStore = fastLogStore
+        self.fajrLogStore = fajrLogStore
+        self.qadaBacklogStore = qadaBacklogStore
+        self.qadaBatchStore = qadaBatchStore
         self.hijriAdjustmentStore = hijriAdjustmentStore
         self.hijriAdjustmentChangeStore = hijriAdjustmentChangeStore
         self.cacheStore = cacheStore
@@ -1048,6 +1060,40 @@ final class ScheduleManager: ObservableObject {
         return Array(NSOrderedSet(array: labels)).compactMap { $0 as? String }.joined(separator: " • ")
     }
 
+    private func buildMorningStateSnapshot(
+        settings: AppSettings,
+        coordinate: CLLocationCoordinate2D,
+        timeZone: TimeZone,
+        locationDescription: String,
+        provenancesByDateKey: [String: [ResolvedScheduledDateProvenance]]
+    ) -> MorningStateSnapshot {
+        let completionSnapshot = LegacyCompletionAdapter.records(
+            fajrEntries: fajrLogStore.entriesByDateKey,
+            fastEntries: fastLogStore.entriesByDateKey,
+            qadaBacklogState: qadaBacklogStore.state
+        )
+        let dateAssignments = LegacyDateAssignmentAdapter.assignments(
+            overridesByDay: alarmConfigStore.overridesByDay,
+            provenancesByDateKey: provenancesByDateKey,
+            fastTagSelections: fastTagStore.selections,
+            qadaBatchState: qadaBatchStore.state
+        )
+
+        return MorningStateSnapshot(
+            settings: settings,
+            defaultConfig: alarmConfigStore.defaults,
+            morningPlanState: LegacyMorningPlanAdapter.loadState(from: morningPlanStore),
+            dateAssignments: dateAssignments.assignments,
+            completionRecords: completionSnapshot.records,
+            qadaLedgerSnapshot: completionSnapshot.qadaLedgerSnapshot,
+            coordinate: coordinate,
+            timeZone: timeZone,
+            locationDescription: locationDescription,
+            fastTagSelections: fastTagStore.selections,
+            overridesByDateKey: alarmConfigStore.overridesByDay
+        )
+    }
+
     private func tagSummaryText(
         primaryIntent: FastPrimaryIntent,
         secondaryTags: Set<FastSecondaryVirtueTag>
@@ -1253,15 +1299,17 @@ final class ScheduleManager: ObservableObject {
                 timeZone: timeZone
             )
         }
-        let input = ScheduleComputationInput(
+        let provenancesByDateKey = Dictionary(uniqueKeysWithValues: resolvedEntries.map { ($0.dateKey, $0.provenances) })
+        let stateSnapshot = buildMorningStateSnapshot(
             settings: settings,
-            defaultConfig: alarmConfigStore.defaults,
-            overridesByDay: alarmConfigStore.overridesByDay,
-            morningPlanState: morningPlanStore.state,
-            location: coordinate,
-            timeZoneIdentifier: timeZone.identifier,
+            coordinate: CLLocationCoordinate2D(latitude: coordinate.latitude, longitude: coordinate.longitude),
+            timeZone: timeZone,
+            locationDescription: "Based on your location",
+            provenancesByDateKey: provenancesByDateKey
+        )
+        let input = ScheduleComputationInput(
+            stateSnapshot: stateSnapshot,
             resolvedEntries: resolvedEntries,
-            tagSelections: fastTagStore.selections,
             visibleHorizonDays: visibleActiveDayLimit,
             scheduledHorizonDays: scheduledActiveDayLimit
         )
@@ -2347,18 +2395,20 @@ final class ScheduleManager: ObservableObject {
             settings: settings,
             timeZone: timeZone
         )
+        let stateSnapshot = buildMorningStateSnapshot(
+            settings: settings,
+            coordinate: coordinate,
+            timeZone: timeZone,
+            locationDescription: "Based on your location",
+            provenancesByDateKey: [key: provenances]
+        )
         let resolutionInput = MorningScheduleResolutionInput(
             date: normalizedDate,
             dateKey: key,
             provenances: provenances,
-            settings: settings,
-            defaultConfig: alarmConfigStore.defaults,
             effectiveConfig: effectiveConfig,
             tagResult: tagResult,
-            coordinate: coordinate,
-            timeZone: timeZone,
-            locationDescription: "Based on your location",
-            morningPlanState: morningPlanStore.state
+            stateSnapshot: stateSnapshot
         )
         guard let resolution = MorningScheduleResolver.resolve(
             input: resolutionInput,
@@ -2367,20 +2417,17 @@ final class ScheduleManager: ObservableObject {
             return nil
         }
 
-        return ActiveAlarmDay(
-            date: normalizedDate,
-            dateKey: key,
-            schedule: resolution.schedule,
-            effectiveConfig: resolution.effectiveConfig,
+        return LegacyResolvedDayAdapter.makeActiveAlarmDay(
+            snapshot: resolution,
+            effectiveConfig: effectiveConfig,
             provenances: provenances,
             isImplicitRamadan: provenances.contains(where: { $0.sourceOrigin == .defaultRamadan }),
             isExplicitOneOff: !provenances.isEmpty && provenances.allSatisfy(\.isExplicitOneOff),
             tagResult: tagResult,
-            primaryDisplay: resolution.primaryDisplay,
             sourceSummaryText: ScheduleComputationEngine.sourceSummary(from: provenances),
-            resolvedDayContext: resolution.resolvedDayContext,
-            scheduledEvents: resolution.materializedEvents,
-            decisionLog: resolution.decisionLog
+            settings: settings,
+            locationDescription: stateSnapshot.locationDescription,
+            timeZone: timeZone
         )
     }
 
@@ -2690,15 +2737,17 @@ final class ScheduleManager: ObservableObject {
         guard !resolvedEntries.isEmpty else { return [] }
 
         syncMorningPlanState()
-        let input = ScheduleComputationInput(
+        let provenancesByDateKey = Dictionary(uniqueKeysWithValues: resolvedEntries.map { ($0.dateKey, $0.provenances) })
+        let stateSnapshot = buildMorningStateSnapshot(
             settings: settingsStore.settings,
-            defaultConfig: alarmConfigStore.defaults,
-            overridesByDay: alarmConfigStore.overridesByDay,
-            morningPlanState: morningPlanStore.state,
-            location: ScheduleLocationSnapshot(latitude: coordinate.latitude, longitude: coordinate.longitude),
-            timeZoneIdentifier: timeZone.identifier,
+            coordinate: coordinate,
+            timeZone: timeZone,
+            locationDescription: "Based on your location",
+            provenancesByDateKey: provenancesByDateKey
+        )
+        let input = ScheduleComputationInput(
+            stateSnapshot: stateSnapshot,
             resolvedEntries: resolvedEntries,
-            tagSelections: fastTagStore.selections,
             visibleHorizonDays: resolvedEntries.count,
             scheduledHorizonDays: resolvedEntries.count
         )
@@ -3329,14 +3378,8 @@ private struct ScheduleLocationSnapshot: Sendable {
 }
 
 private struct ScheduleComputationInput: Sendable {
-    let settings: AppSettings
-    let defaultConfig: DefaultAlarmConfig
-    let overridesByDay: [String: DailyAlarmOverride]
-    let morningPlanState: MorningPlanState
-    let location: ScheduleLocationSnapshot
-    let timeZoneIdentifier: String
+    let stateSnapshot: MorningStateSnapshot
     let resolvedEntries: [ResolvedScheduledDateEntry]
-    let tagSelections: [String: FastIntentSelection]
     let visibleHorizonDays: Int
     let scheduledHorizonDays: Int
 }
@@ -3347,9 +3390,9 @@ private struct ScheduleComputationResult: Sendable {
 
 private enum ScheduleComputationEngine {
     nonisolated static func compute(input: ScheduleComputationInput) -> ScheduleComputationResult {
-        let timeZone = TimeZone(identifier: input.timeZoneIdentifier) ?? .current
+        let timeZone = input.stateSnapshot.timeZone
         let calculator = PrayerTimeCalculator()
-        let coordinate = CLLocationCoordinate2D(latitude: input.location.latitude, longitude: input.location.longitude)
+        let coordinate = input.stateSnapshot.coordinate
         let sortedEntries = input.resolvedEntries.sorted { $0.date < $1.date }
         let tagSeeds = sortedEntries.map {
             ActiveTagComputationSeed(
@@ -3360,7 +3403,7 @@ private enum ScheduleComputationEngine {
         }
         let tagResults = TagComputationEngine.results(
             seeds: tagSeeds,
-            selections: input.tagSelections,
+            selections: input.stateSnapshot.fastTagSelections,
             ruleset: .strict,
             timeZone: timeZone
         )
@@ -3372,9 +3415,9 @@ private enum ScheduleComputationEngine {
             let date = resolvedEntry.date
             let config = effectiveConfig(
                 for: date,
-                settings: input.settings,
-                defaultConfig: input.defaultConfig,
-                overridesByDay: input.overridesByDay,
+                settings: input.stateSnapshot.settings,
+                defaultConfig: input.stateSnapshot.defaultConfig,
+                overridesByDay: input.stateSnapshot.overridesByDateKey,
                 timeZone: timeZone
             )
 
@@ -3383,14 +3426,9 @@ private enum ScheduleComputationEngine {
                 date: date,
                 dateKey: resolvedEntry.dateKey,
                 provenances: resolvedEntry.provenances,
-                settings: input.settings,
-                defaultConfig: input.defaultConfig,
                 effectiveConfig: config,
                 tagResult: tagResult,
-                coordinate: coordinate,
-                timeZone: timeZone,
-                locationDescription: "Based on your location",
-                morningPlanState: input.morningPlanState
+                stateSnapshot: input.stateSnapshot
             )
             guard let resolution = MorningScheduleResolver.resolve(
                 input: resolutionInput,
@@ -3401,20 +3439,17 @@ private enum ScheduleComputationEngine {
 
             let summary = sourceSummary(from: resolvedEntry.provenances)
             activeDays.append(
-                ActiveAlarmDay(
-                    date: date,
-                    dateKey: resolvedEntry.dateKey,
-                    schedule: resolution.schedule,
-                    effectiveConfig: resolution.effectiveConfig,
+                LegacyResolvedDayAdapter.makeActiveAlarmDay(
+                    snapshot: resolution,
+                    effectiveConfig: config,
                     provenances: resolvedEntry.provenances,
                     isImplicitRamadan: resolvedEntry.provenances.contains(where: { $0.sourceOrigin == .defaultRamadan }),
                     isExplicitOneOff: resolvedEntry.isExplicitOneOff,
                     tagResult: tagResult,
-                    primaryDisplay: resolution.primaryDisplay,
                     sourceSummaryText: summary,
-                    resolvedDayContext: resolution.resolvedDayContext,
-                    scheduledEvents: resolution.materializedEvents,
-                    decisionLog: resolution.decisionLog
+                    settings: input.stateSnapshot.settings,
+                    locationDescription: input.stateSnapshot.locationDescription,
+                    timeZone: timeZone
                 )
             )
         }
