@@ -18,7 +18,7 @@ struct ProgressRootView: View {
             } header: {
                 Text("Fajr")
             } footer: {
-                Text("Prayer completion, separate from fasting.")
+                Text("Prayer completion history.")
             }
 
             Section {
@@ -33,7 +33,7 @@ struct ProgressRootView: View {
             } header: {
                 Text("Fasts")
             } footer: {
-                Text("Only for fasting days.")
+                Text("Fasting-day completion history.")
             }
 
             Section {
@@ -75,7 +75,7 @@ struct ProgressRootView: View {
             } header: {
                 Text("Wake Activity")
             } footer: {
-                Text("Technical wake history for now.")
+                Text("Technical wake support only.")
             }
         }
         .navigationTitle("Progress")

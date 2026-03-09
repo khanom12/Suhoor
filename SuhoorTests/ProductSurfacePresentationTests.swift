@@ -385,6 +385,104 @@ struct ProductSurfacePresentationTests {
         #expect(snapshot.wakeProgress == .empty)
     }
 
+    @Test
+    func fajrHistoryProjectionUsesCanonicalPrayerCompletionOnly() {
+        let window = CompletionHistoryWindow(
+            resolvedDays: [
+                makeResolvedDay(
+                    day: 11,
+                    context: .standard,
+                    supportingTags: [.dailyPlan],
+                    prayerStatus: .completed,
+                    fastStatus: .notRequired
+                ),
+                makeResolvedDay(
+                    day: 10,
+                    context: .standard,
+                    supportingTags: [.dailyPlan],
+                    prayerStatus: .missed,
+                    fastStatus: .notRequired
+                ),
+            ],
+            dailyCompletions: []
+        )
+
+        let snapshot = CompletionHistoryProjectionBuilder.buildFajr(window: window)
+
+        #expect(snapshot.rows.count == 2)
+        #expect(snapshot.rows[0].status == .completed)
+        #expect(snapshot.rows[0].statusText == "Prayed")
+        #expect(snapshot.rows[1].status == .missed)
+        #expect(snapshot.summaryText == "1 prayed · 1 missed")
+    }
+
+    @Test
+    func fastHistoryProjectionShowsQadaEffectAndSkipsNonFastingDays() {
+        let qadaDay = makeResolvedDay(
+            day: 12,
+            context: .qadaFast,
+            supportingTags: [.qada],
+            prayerStatus: .completed,
+            fastStatus: .completed,
+            intentSnapshot: qadaFastIntent,
+            qadaEffect: QadaEffect(
+                countsTowardQada: true,
+                completedDelta: 1,
+                remainingAfterEffect: 2,
+                explanation: "Completed Qada fasts reduce what remains."
+            )
+        )
+        let standardDay = makeResolvedDay(
+            day: 11,
+            context: .standard,
+            supportingTags: [.dailyPlan],
+            prayerStatus: .completed,
+            fastStatus: .notRequired
+        )
+
+        let snapshot = CompletionHistoryProjectionBuilder.buildFast(
+            window: CompletionHistoryWindow(
+                resolvedDays: [qadaDay, standardDay],
+                dailyCompletions: []
+            )
+        )
+
+        #expect(snapshot.rows.count == 1)
+        #expect(snapshot.rows[0].meaningText == "Qada fast")
+        #expect(snapshot.rows[0].qadaEffectText == "Counts toward Qada · 2 remaining")
+        #expect(snapshot.rows[0].status == .completed)
+    }
+
+    @Test
+    @MainActor
+    func completionCommandGatewayWritesPrayerAndFastEditsThroughTypedIntents() {
+        let suiteName = "CompletionCommandGatewayTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        let fajrStore = FajrLogStore(defaults: defaults)
+        let fastStore = FastLogStore(defaults: defaults)
+        let gateway = CompletionCommandGateway(
+            fajrLogStore: fajrStore,
+            fastLogStore: fastStore
+        )
+        let dateKey = dayKey(day: 13)
+
+        gateway.perform(.setPrayerStatus(dateKey: dateKey, status: .completed), now: makeDate(day: 13, hour: 6, minute: 0))
+        gateway.perform(.setFastStatus(dateKey: dateKey, status: .notCompleted, intentSnapshot: qadaFastIntent), now: makeDate(day: 13, hour: 20, minute: 0))
+
+        #expect(fajrStore.status(for: dateKey) == .completed)
+        #expect(fastStore.status(for: dateKey) == .missed)
+        #expect(fastStore.entry(for: dateKey)?.intentSnapshot == qadaFastIntent)
+
+        gateway.perform(.clearPrayerStatus(dateKey: dateKey))
+        gateway.perform(.clearFastStatus(dateKey: dateKey))
+
+        #expect(fajrStore.status(for: dateKey) == .unknown)
+        #expect(fastStore.status(for: dateKey) == .unknown)
+
+        defaults.removePersistentDomain(forName: suiteName)
+    }
+
     private static var defaultDailyProvenance: ResolvedScheduledDateProvenance {
         ResolvedScheduledDateProvenance(
             sourceID: DateHelpers.stableUUID(from: "default-daily"),
@@ -496,5 +594,101 @@ struct ProductSurfacePresentationTests {
         components.minute = minute
         components.timeZone = TimeZone(identifier: "America/Toronto")
         return Calendar(identifier: .gregorian).date(from: components) ?? .distantPast
+    }
+
+    private func makeResolvedDay(
+        day: Int,
+        context: MorningContextType,
+        supportingTags: [DayTag],
+        prayerStatus: PrayerCompletionStatus,
+        fastStatus: FastCompletionStatus,
+        intentSnapshot: FastIntentSnapshot? = nil,
+        qadaEffect: QadaEffect = .none
+    ) -> ResolvedDaySnapshot {
+        let date = makeDate(day: day, hour: 0, minute: 0)
+        let prayerWindow = DailyPrayerWindow(
+            date: date,
+            fajrStart: makeDate(day: day, hour: 5, minute: 30),
+            fajrEnd: makeDate(day: day, hour: 6, minute: 45),
+            maghrib: makeDate(day: day, hour: 18, minute: 30)
+        )
+        let resolvedContext = ResolvedDayContext(
+            primaryContext: context,
+            secondaryContexts: [],
+            supportingTags: supportingTags,
+            explanation: .empty
+        )
+        let selectedPlan = MorningPlan(
+            id: "plan-\(day)",
+            title: "Daily plan",
+            kind: .defaultDaily,
+            wakeAnchorType: .fajrStart,
+            wakeDelta: WakeDelta(relation: .before, minutes: 30),
+            fixedWakeTimeCompatibilityMinutesFromMidnight: nil,
+            reminderEnabled: true,
+            wakeAlarmEnabled: true,
+            fajrBoundaryNoticeEnabled: true,
+            iftarReminderEnabled: fastStatus != .notRequired
+        )
+        let behavior = MorningBehaviorProfile(
+            wakeAnchorType: .fajrStart,
+            wakeDelta: WakeDelta(relation: .before, minutes: 30),
+            fixedWakeTimeCompatibilityMinutesFromMidnight: nil,
+            reminderEnabled: true,
+            wakeAlarmEnabled: true,
+            wakeFollowUpEnabled: false,
+            fajrBoundaryNoticeEnabled: true,
+            iftarReminderEnabled: fastStatus != .notRequired
+        )
+        let decisionLog = RuleDecisionLog(
+            dateKey: dayKey(day: day),
+            resolverVersion: 1,
+            decisionHash: "decision-\(day)",
+            prayerWindow: prayerWindow,
+            candidateContexts: [context],
+            resolvedDayContext: resolvedContext,
+            candidatePlans: [],
+            selectedPlanID: selectedPlan.id,
+            precedenceReason: "test",
+            resolvedBehaviorProfile: behavior,
+            resolvedAnchor: WakeAnchor(type: .fajrStart, date: prayerWindow.fajrStart, providerNotes: nil),
+            resolvedDelta: WakeDelta(relation: .before, minutes: 30),
+            resolvedWakeTime: makeDate(day: day, hour: 5, minute: 0),
+            resolvedSequenceTemplate: WakeSequenceTemplate(id: "sequence-\(day)", name: "Test", steps: []),
+            materializedEvents: [],
+            compatibilityNotes: []
+        )
+        let dailyCompletion = DailyCompletionSnapshot(
+            dateKey: dayKey(day: day),
+            prayer: PrayerCompletionState(
+                status: prayerStatus,
+                updatedAt: makeDate(day: day, hour: 6, minute: 0),
+                source: "test"
+            ),
+            fast: FastCompletionState(
+                status: fastStatus,
+                intentSnapshot: intentSnapshot,
+                updatedAt: makeDate(day: day, hour: 19, minute: 0),
+                source: "test"
+            ),
+            qadaEffect: qadaEffect,
+            wakeSupport: .none,
+            outstandingAction: nil,
+            isMeaningfullyResolved: prayerStatus != .unknown && fastStatus != .unknown
+        )
+
+        return ResolvedDaySnapshot(
+            date: date,
+            dateKey: dayKey(day: day),
+            prayerWindow: prayerWindow,
+            resolvedDayContext: resolvedContext,
+            selectedPlan: selectedPlan,
+            resolvedBehaviorProfile: behavior,
+            materializedEvents: [],
+            decisionLog: decisionLog,
+            completionRecords: [],
+            dailyCompletion: dailyCompletion,
+            completionSummary: nil
+        )
     }
 }

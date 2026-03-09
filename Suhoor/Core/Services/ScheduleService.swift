@@ -40,6 +40,8 @@ final class ScheduleManager: ObservableObject {
     private let qadaBacklogStore: QadaBacklogStore
     private let qadaBatchStore: QadaBatchStore
     private let cacheStore: ScheduleCacheStore
+    private let completionSurfaceProvider = CompletionSurfaceProvider()
+    private let completionCommandGateway: CompletionCommandGateway
     private let calculator = PrayerTimeCalculator()
     private let hijriAdjustmentStore: HijriMonthAdjustmentStore
     private let adjustedHijriCalendar: AdjustedHijriCalendar
@@ -97,6 +99,10 @@ final class ScheduleManager: ObservableObject {
         self.hijriAdjustmentStore = hijriAdjustmentStore
         self.hijriAdjustmentChangeStore = hijriAdjustmentChangeStore
         self.cacheStore = cacheStore
+        self.completionCommandGateway = CompletionCommandGateway(
+            fajrLogStore: fajrLogStore,
+            fastLogStore: fastLogStore
+        )
         let hijriCalendarService = HijriCalendarService(adjustmentStore: hijriAdjustmentStore)
         let adjustedHijriCalendar = AdjustedHijriCalendar(calendarService: hijriCalendarService)
         self.adjustedHijriCalendar = adjustedHijriCalendar
@@ -320,12 +326,37 @@ final class ScheduleManager: ObservableObject {
                 completionState: completionState
             )
 
-        return CompletionProjectionBuilder.buildProgress(
+        return completionSurfaceProvider.progressSurfaceSnapshot(
             todayCompletion: todayCompletion,
             recentDateKeys: recentDateKeys(days: 30),
             completionState: completionState,
             wakeProgress: wakeProgressSource.snapshot(limit: 20)
         )
+    }
+
+    func fajrHistorySurfaceSnapshot(
+        days: Int = 30,
+        now: Date = Date()
+    ) -> FajrHistorySurfaceSnapshot {
+        completionSurfaceProvider.fajrHistorySurfaceSnapshot(
+            window: completionHistoryWindow(days: days, now: now)
+        )
+    }
+
+    func fastHistorySurfaceSnapshot(
+        days: Int = 30,
+        now: Date = Date()
+    ) -> FastHistorySurfaceSnapshot {
+        completionSurfaceProvider.fastHistorySurfaceSnapshot(
+            window: completionHistoryWindow(days: days, now: now)
+        )
+    }
+
+    func performCompletionEdit(
+        _ intent: CompletionEditIntent,
+        now: Date = Date()
+    ) {
+        completionCommandGateway.perform(intent, now: now)
     }
 
     var currentHijriAdjustmentYear: Int {
@@ -1196,6 +1227,74 @@ final class ScheduleManager: ObservableObject {
         return CompletionStateAssembler.assemble(
             completionRecords: legacySnapshot.records,
             qadaLedgerSnapshot: legacySnapshot.qadaLedgerSnapshot
+        )
+    }
+
+    private func completionHistoryWindow(
+        days: Int,
+        now: Date
+    ) -> CompletionHistoryWindow {
+        CompletionHistoryWindowBuilder.build(
+            days: days,
+            now: now,
+            timeZone: .current
+        ) { date in
+            resolvedDaySnapshotForHistory(for: date)
+        }
+    }
+
+    private func resolvedDaySnapshotForHistory(
+        for date: Date,
+        timeZone: TimeZone = .current
+    ) -> ResolvedDaySnapshot? {
+        syncMorningPlanState()
+        guard let coordinate = currentCoordinate() else { return nil }
+
+        let normalizedDate = DateHelpers.startOfDay(date, in: timeZone)
+        let key = DateHelpers.dayIdentifier(for: normalizedDate, timeZone: timeZone)
+        let provenances = mergedProvenances(for: normalizedDate, timeZone: timeZone)
+        let settings = settingsStore.settings
+        let defaultPrimaryIntent = provenances.defaultFastPrimaryIntent()
+        let tagResult: TagComputationResult
+
+        if let shawwalKey = shawwalMonthKey(for: normalizedDate, timeZone: timeZone) {
+            let results = monthTagResults(for: shawwalKey, timeZone: timeZone)
+            tagResult = results[key] ?? tagPreviewResult(
+                for: normalizedDate,
+                defaultPrimaryIntent: defaultPrimaryIntent,
+                timeZone: timeZone
+            )
+        } else {
+            tagResult = tagPreviewResult(
+                for: normalizedDate,
+                defaultPrimaryIntent: defaultPrimaryIntent,
+                timeZone: timeZone
+            )
+        }
+
+        let effectiveConfig = ActiveWindowBuilder.effectiveConfig(
+            for: normalizedDate,
+            settings: settings,
+            defaultConfig: alarmConfigStore.defaults,
+            overridesByDay: alarmConfigStore.overridesByDay,
+            timeZone: timeZone
+        )
+        let stateSnapshot = buildMorningStateSnapshot(
+            settings: settings,
+            coordinate: coordinate,
+            timeZone: timeZone,
+            locationDescription: "Based on your location",
+            provenancesByDateKey: [key: provenances]
+        )
+
+        return ResolvedDayPipeline.resolve(
+            date: normalizedDate,
+            dateKey: key,
+            provenances: provenances,
+            effectiveConfig: effectiveConfig,
+            tagResult: tagResult,
+            stateSnapshot: stateSnapshot,
+            calculator: calculator
         )
     }
 

@@ -178,3 +178,55 @@ struct CompletionHistoryProjection: Equatable, Sendable {
     let recentFastMissedCount: Int
     let qadaProgress: QadaProgressSnapshot
 }
+
+struct CompletionHistoryWindow: Sendable {
+    let resolvedDays: [ResolvedDaySnapshot]
+    let dailyCompletions: [DailyCompletionSnapshot]
+}
+
+struct FajrHistoryRowSnapshot: Equatable, Identifiable, Sendable {
+    let dateKey: String
+    let gregorianText: String
+    let hijriText: String
+    let fajrTimeText: String?
+    let status: PrayerCompletionStatus
+    let statusText: String
+    let canClear: Bool
+
+    var id: String { dateKey }
+}
+
+struct FastHistoryRowSnapshot: Equatable, Identifiable, Sendable {
+    let dateKey: String
+    let gregorianText: String
+    let hijriText: String
+    let meaningText: String
+    let status: FastCompletionStatus
+    let statusText: String
+    let qadaEffectText: String?
+    let intentSnapshot: FastIntentSnapshot?
+    let canClear: Bool
+
+    var id: String { dateKey }
+}
+
+struct FajrHistorySurfaceSnapshot: Equatable, Sendable {
+    let summaryText: String
+    let rows: [FajrHistoryRowSnapshot]
+    let emptyText: String
+    let footerText: String
+}
+
+struct FastHistorySurfaceSnapshot: Equatable, Sendable {
+    let summaryText: String
+    let rows: [FastHistoryRowSnapshot]
+    let emptyText: String
+    let footerText: String
+}
+
+enum CompletionEditIntent: Equatable, Sendable {
+    case setPrayerStatus(dateKey: String, status: PrayerCompletionStatus)
+    case clearPrayerStatus(dateKey: String)
+    case setFastStatus(dateKey: String, status: FastCompletionStatus, intentSnapshot: FastIntentSnapshot?)
+    case clearFastStatus(dateKey: String)
+}
