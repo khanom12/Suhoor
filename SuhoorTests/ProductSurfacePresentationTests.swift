@@ -482,6 +482,93 @@ struct ProductSurfacePresentationTests {
     }
 
     @Test
+    func nextWakeEventResolverPrefersReminderWhenTimesMatchAndReturnsEarliestUpcoming() {
+        let firstDay = makeActiveDay(
+            day: 22,
+            context: .standard,
+            supportingTags: [.dailyPlan],
+            provenances: [Self.defaultDailyProvenance],
+            scheduledEvents: [
+                ScheduledEvent(
+                    id: "reminder",
+                    type: .wakeReminder,
+                    dateKey: dayKey(day: 22),
+                    fireDate: makeDate(day: 22, hour: 5, minute: 0),
+                    relativeTo: .wakeAnchor(type: .fajrStart, offsetMinutes: -30),
+                    isUserVisible: true,
+                    affectsCompletion: false,
+                    deliveryKinds: [.reminder]
+                ),
+                ScheduledEvent(
+                    id: "wake",
+                    type: .wakeAlarm,
+                    dateKey: dayKey(day: 22),
+                    fireDate: makeDate(day: 22, hour: 5, minute: 0),
+                    relativeTo: .wakeAnchor(type: .fajrStart, offsetMinutes: -30),
+                    isUserVisible: true,
+                    affectsCompletion: true,
+                    deliveryKinds: [.wake]
+                ),
+            ]
+        )
+        let secondDay = makeActiveDay(
+            day: 23,
+            context: .standard,
+            supportingTags: [.dailyPlan],
+            provenances: [Self.defaultDailyProvenance],
+            scheduledEvents: [
+                ScheduledEvent(
+                    id: "later",
+                    type: .wakeAlarm,
+                    dateKey: dayKey(day: 23),
+                    fireDate: makeDate(day: 23, hour: 5, minute: 0),
+                    relativeTo: .wakeAnchor(type: .fajrStart, offsetMinutes: -30),
+                    isUserVisible: true,
+                    affectsCompletion: true,
+                    deliveryKinds: [.wake]
+                )
+            ]
+        )
+
+        let resolved = NextWakeEventResolver().resolve(
+            activeWindowSnapshot: makeActiveWindowSnapshot(days: [firstDay, secondDay]),
+            now: makeDate(day: 22, hour: 4, minute: 30)
+        )
+
+        #expect(resolved?.day.dateKey == firstDay.dateKey)
+        #expect(resolved?.event.type == .wakeReminder)
+    }
+
+    @Test
+    func nextWakeEventResolverReturnsNilWhenNothingIsUpcoming() {
+        let pastDay = makeActiveDay(
+            day: 24,
+            context: .standard,
+            supportingTags: [.dailyPlan],
+            provenances: [Self.defaultDailyProvenance],
+            scheduledEvents: [
+                ScheduledEvent(
+                    id: "past",
+                    type: .wakeAlarm,
+                    dateKey: dayKey(day: 24),
+                    fireDate: makeDate(day: 24, hour: 5, minute: 0),
+                    relativeTo: .wakeAnchor(type: .fajrStart, offsetMinutes: -30),
+                    isUserVisible: true,
+                    affectsCompletion: true,
+                    deliveryKinds: [.wake]
+                )
+            ]
+        )
+
+        let resolved = NextWakeEventResolver().resolve(
+            activeWindowSnapshot: makeActiveWindowSnapshot(days: [pastDay]),
+            now: makeDate(day: 24, hour: 6, minute: 0)
+        )
+
+        #expect(resolved == nil)
+    }
+
+    @Test
     func wakeListSnapshotBuilderKeepsNextWakePinnedAndOutOfMonthSections() {
         let firstDay = makeActiveDay(
             day: 16,
@@ -504,7 +591,7 @@ struct ProductSurfacePresentationTests {
 
         let result = WakeListSnapshotBuilder.build(
             wakeSnapshot: wakeSnapshot,
-            tagFilter: AlarmTagFilter(),
+            tagFilter: WakeTagFilter(),
             pinnedEntryIDs: ["missing-id"],
             timeZone: .current,
             totalScheduledCount: { key in key == monthKey ? 2 : 0 },
@@ -519,6 +606,42 @@ struct ProductSurfacePresentationTests {
         #expect(result.snapshot.sections.count == 1)
         #expect(result.snapshot.sections[0].entries.map(\.id) == [secondDay.dateKey])
         #expect(result.snapshot.sections[0].entries.first?.hasDayOverride == true)
+    }
+
+    @Test
+    func homeSurfaceProviderPassesThroughCompletionDrivenSupportDecision() {
+        let currentDay = makeActiveDay(
+            day: 25,
+            context: .qadaFast,
+            supportingTags: [.qada],
+            provenances: [Self.manualProvenance(label: "Qada plan")]
+        )
+        let supportDecision = HomeSupportDecision(
+            presentation: .fajrCompletionPrompt(
+                FajrHomeSupportPresentation(
+                    dateKey: currentDay.dateKey,
+                    title: "Did you pray Fajr?",
+                    detail: "Check in when you are ready."
+                )
+            ),
+            reason: "Prayer is still unresolved.",
+            isDismissible: false
+        )
+
+        let snapshot = HomeSurfaceProvider().homeSurfaceSnapshot(
+            now: makeDate(day: 25, hour: 6, minute: 0),
+            currentDay: currentDay,
+            todaySchedule: currentDay.schedule,
+            nextWakeEventSummary: nil,
+            permissionSnapshot: .empty,
+            hijriComponents: nil,
+            supportDecision: supportDecision,
+            dayLabel: { _ in "Today" }
+        )
+
+        #expect(snapshot.dayLabel == "Today")
+        #expect(snapshot.primaryContextTitle == "Qada")
+        #expect(snapshot.supportDecision == supportDecision)
     }
 
     @Test
@@ -669,7 +792,8 @@ struct ProductSurfacePresentationTests {
         context: MorningContextType,
         supportingTags: [DayTag],
         provenances: [ResolvedScheduledDateProvenance],
-        dailyCompletion: DailyCompletionSnapshot? = nil
+        dailyCompletion: DailyCompletionSnapshot? = nil,
+        scheduledEvents: [ScheduledEvent] = []
     ) -> ActiveAlarmDay {
         let date = makeDate(day: day, hour: 0, minute: 0)
         let fajr = makeDate(day: day, hour: 5, minute: 30)
@@ -728,6 +852,7 @@ struct ProductSurfacePresentationTests {
             primaryDisplay: PrimaryDisplay(time: wake, kind: .suhoor),
             sourceSummaryText: provenances.map(\.label).joined(separator: " • "),
             resolvedDayContext: resolvedContext,
+            scheduledEvents: scheduledEvents,
             dailyCompletion: dailyCompletion
         )
     }

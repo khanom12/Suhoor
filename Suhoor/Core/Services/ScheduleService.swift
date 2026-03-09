@@ -43,6 +43,8 @@ final class ScheduleManager: ObservableObject {
     private let completionSurfaceProvider = CompletionSurfaceProvider()
     private let wakeSurfaceProvider = WakeSurfaceProvider()
     private let plansSurfaceProvider = PlansSurfaceProvider()
+    private let homeSurfaceProvider = HomeSurfaceProvider()
+    private let nextWakeEventResolver = NextWakeEventResolver()
     private let calendarPlanningProvider = CalendarPlanningProvider()
     private let quickAddPreviewProvider = QuickAddPreviewProvider()
     private let schedulingAuditProvider = SchedulingAuditProvider()
@@ -232,30 +234,10 @@ final class ScheduleManager: ObservableObject {
     }
 
     var nextWakeEventSummary: NextWakeEventSummary? {
-        let now = Date()
-        let priorityByType: [ScheduledEventType: Int] = [
-            .wakeReminder: 0,
-            .wakeAlarm: 1,
-            .wakeFollowUp: 2
-        ]
-
-        let candidates = activeWindowSnapshot.visibleDays.flatMap { day in
-            day.scheduledEvents.compactMap { event -> NextWakeEventSummary? in
-                guard let priority = priorityByType[event.type], event.fireDate >= now else { return nil }
-                return NextWakeEventSummary(
-                    day: day,
-                    event: event,
-                    priority: priority
-                )
-            }
-        }
-
-        return candidates.min {
-            if $0.event.fireDate == $1.event.fireDate {
-                return $0.priority < $1.priority
-            }
-            return $0.event.fireDate < $1.event.fireDate
-        }
+        nextWakeEventResolver.resolve(
+            activeWindowSnapshot: activeWindowSnapshot,
+            now: Date()
+        )
     }
 
     var wakeSurfaceSnapshot: WakeSurfaceSnapshot {
@@ -263,6 +245,37 @@ final class ScheduleManager: ObservableObject {
             activeWindowSnapshot: activeWindowSnapshot,
             nextWakeEventSummary: nextWakeEventSummary,
             overrideDateKeys: Set(alarmConfigStore.overridesByDay.keys)
+        )
+    }
+
+    func wakeListSnapshot(
+        tagFilter: WakeTagFilter,
+        pinnedEntryIDs: [String],
+        timeZone: TimeZone = .current
+    ) -> WakeListSnapshotBuildResult {
+        wakeSurfaceProvider.wakeListSnapshot(
+            wakeSnapshot: wakeSurfaceSnapshot,
+            tagFilter: tagFilter,
+            pinnedEntryIDs: pinnedEntryIDs,
+            timeZone: timeZone,
+            dependencies: WakeSurfaceProvider.Dependencies(
+                totalScheduledCount: { [weak self] key in
+                    self?.totalScheduledCount(for: key, timeZone: timeZone) ?? 0
+                },
+                rollingHijriMonths: { [weak self] in
+                    self?.rollingHijriMonths(count: 12, timeZone: timeZone) ?? []
+                },
+                monthPreview: { [weak self] yearMonth in
+                    self?.hijriMonthStartPreview(
+                        for: yearMonth.month,
+                        hijriYear: yearMonth.hijriYear,
+                        timeZone: timeZone
+                    )
+                },
+                cachedMonthEntries: { [weak self] key in
+                    self?.cachedMonthEntries(for: key)
+                }
+            )
         )
     }
 
@@ -285,7 +298,6 @@ final class ScheduleManager: ObservableObject {
         let todayKey = DateHelpers.dayIdentifier(for: now, timeZone: .current)
         let todayStart = DateHelpers.startOfDay(now, in: .current)
         let currentDay = activeWindowSnapshot.byDateKey[todayKey]
-        let contextDay = nextWakeEventSummary?.day ?? currentDay
         let todaySchedule = currentDay?.schedule ?? schedule(for: todayStart)
         let completionProjection = CompletionProjectionBuilder.buildHome(
             now: now,
@@ -296,18 +308,17 @@ final class ScheduleManager: ObservableObject {
             dismissedWarnings: dismissedWarnings
         )
 
-        return HomeSurfaceSnapshot(
-            gregorianText: GregorianDateFormatter.shared.headerString(for: now),
-            hijriText: HijriDateFormatter.shared.string(from: now),
-            dayLabel: contextDay.map { dayLabel(for: $0.date) },
-            primaryContextTitle: contextDay.map {
-                ProductSurfacePresentation.primaryContextTitle($0.resolvedDayContext.primaryContext)
-            },
-            secondaryContextTitles: contextDay.map {
-                ProductSurfacePresentation.meaningfulSecondaryContextTitles(from: $0.resolvedDayContext)
-            } ?? [],
+        return homeSurfaceProvider.homeSurfaceSnapshot(
+            now: now,
+            currentDay: currentDay,
+            todaySchedule: todaySchedule,
             nextWakeEventSummary: nextWakeEventSummary,
-            supportDecision: completionProjection.supportDecision
+            permissionSnapshot: permissionSnapshot,
+            hijriComponents: hijriComponents,
+            supportDecision: completionProjection.supportDecision,
+            dayLabel: { [weak self] date in
+                self?.dayLabel(for: date) ?? TimeFormatters.dayFormatter.string(from: date)
+            }
         )
     }
 
@@ -397,6 +408,17 @@ final class ScheduleManager: ObservableObject {
         if calendar.isDateInToday(date) { return "Today" }
         if calendar.isDateInTomorrow(date) { return "Tomorrow" }
         return TimeFormatters.dayFormatter.string(from: date)
+    }
+
+    private func totalScheduledCount(
+        for key: HijriMonthKey,
+        timeZone: TimeZone = .current
+    ) -> Int {
+        guard let month = HijriMonth(rawValue: key.month) else { return 0 }
+        return alarmConfigStore.resolvedScheduledEntries(
+            forHijriMonth: HijriYearMonth(hijriYear: key.year, month: month),
+            timeZone: timeZone
+        ).count
     }
 
     func hijriAdjustment(for month: HijriMonth) -> Int {
@@ -3094,7 +3116,7 @@ enum DuplicateDateStatus {
 struct NextWakeEventSummary: Equatable, Sendable {
     let day: ActiveAlarmDay
     let event: ScheduledEvent
-    fileprivate let priority: Int
+    let priority: Int
 
     var relationText: String {
         let delta = day.decisionLog.resolvedDelta
