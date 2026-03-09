@@ -303,6 +303,7 @@ final class ScheduleManager: ObservableObject {
             now: now,
             currentDay: currentDay,
             todaySchedule: todaySchedule,
+            settings: settingsStore.settings,
             permissionSnapshot: permissionSnapshot,
             hijriComponents: hijriComponents,
             dismissedWarnings: dismissedWarnings
@@ -313,6 +314,7 @@ final class ScheduleManager: ObservableObject {
             currentDay: currentDay,
             todaySchedule: todaySchedule,
             nextWakeEventSummary: nextWakeEventSummary,
+            settings: settingsStore.settings,
             permissionSnapshot: permissionSnapshot,
             hijriComponents: hijriComponents,
             supportDecision: completionProjection.supportDecision,
@@ -328,6 +330,7 @@ final class ScheduleManager: ObservableObject {
         return completionSurfaceProvider.progressSurfaceSnapshot(
             activeWindowSnapshot: activeWindowSnapshot,
             completionState: currentCompletionStateSnapshot(),
+            settings: settingsStore.settings,
             wakeProgress: wakeProgressSource.snapshot(limit: 20)
         )
     }

@@ -5,6 +5,7 @@ struct CompletionSurfaceProvider {
         activeWindowSnapshot: ActiveAlarmWindowSnapshot,
         now: Date = Date(),
         completionState: CompletionStateSnapshot,
+        settings: AppSettings,
         wakeProgress: WakeProgressSnapshot
     ) -> ProgressSurfaceSnapshot {
         let todayKey = DateHelpers.dayIdentifier(for: now, timeZone: .current)
@@ -18,6 +19,7 @@ struct CompletionSurfaceProvider {
             todayCompletion: todayCompletion,
             recentDateKeys: recentDateKeys(days: 30, now: now),
             completionState: completionState,
+            settings: settings,
             wakeProgress: wakeProgress
         )
     }

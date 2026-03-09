@@ -87,9 +87,9 @@ struct ConfiguredPlansSnapshot: Equatable, Sendable {
 
 struct ScheduleRowPresentation: Equatable, Sendable {
     let wakeTime: Date
-    let relationText: String
-    let primaryContextTitle: String
-    let secondaryContextTitles: [String]
+    let meaningText: String
+    let detailText: String
+    let chipTitles: [String]
     let provenanceText: String?
 }
 
@@ -103,7 +103,7 @@ struct WakeProgressSnapshot: Equatable, Sendable {
         summaryTitle: nil,
         summaryDetail: nil,
         recentActivityLines: [],
-        emptyStateText: "Wake activity appears after a few mornings."
+        emptyStateText: "Wake follow-through appears after a few mornings."
     )
 }
 
@@ -127,11 +127,13 @@ enum ProductSurfacePresentation {
     static func primaryContextTitle(_ context: MorningContextType) -> String {
         switch context {
         case .standard:
-            return "Daily plan"
+            return ordinaryDaySummaryText
         default:
             return context.title
         }
     }
+
+    static let ordinaryDaySummaryText = "Ordinary Fajr day"
 
     static func meaningfulSecondaryContextTitles(
         from resolvedDayContext: ResolvedDayContext,
@@ -150,6 +152,90 @@ enum ProductSurfacePresentation {
         }
 
         return titles
+    }
+
+    static func homeContextSummaryText(
+        for day: ActiveAlarmDay,
+        dayLabel: String?
+    ) -> String {
+        let meaning = dayMeaningText(for: day, style: .homeContext)
+        if let dayLabel, !dayLabel.isEmpty {
+            return "\(dayLabel) • \(meaning)"
+        }
+        return meaning
+    }
+
+    static func homeHeroMeaningText(for day: ActiveAlarmDay) -> String? {
+        let resolved = day.resolvedDayContext
+        let tags = Set(resolved.supportingTags)
+
+        if resolved.primaryContext == .standard && meaningfulSecondaryContextTitles(from: resolved).isEmpty {
+            return nil
+        }
+
+        if resolved.primaryContext == .qadaFast || tags.contains(.qada) {
+            return "Qada planned"
+        }
+        if resolved.primaryContext == .tahajjud {
+            return "Tahajjud planned"
+        }
+        if tags.contains(.ramadan) {
+            return "Fasting tomorrow"
+        }
+        if let observance = observanceTitle(from: resolved) {
+            return observance
+        }
+        if resolved.primaryContext == .fasting || resolved.primaryContext == .sunnahFast || resolved.primaryContext == .suhoor {
+            return "Fasting tomorrow"
+        }
+
+        return dayMeaningText(for: day, style: .homeContext)
+    }
+
+    static func scheduleChipTitles(
+        for day: ActiveAlarmDay,
+        hasDayOverride: Bool,
+        limit: Int = 2
+    ) -> [String] {
+        var titles = meaningfulSecondaryContextTitles(from: day.resolvedDayContext, limit: limit)
+        if hasDayOverride && titles.count < limit {
+            titles.append("Adjusted")
+        }
+        return Array(titles.prefix(limit))
+    }
+
+    static func dayMeaningText(
+        for day: ActiveAlarmDay,
+        style: DayMeaningStyle
+    ) -> String {
+        let resolved = day.resolvedDayContext
+        let tags = Set(resolved.supportingTags)
+
+        if resolved.primaryContext == .qadaFast || tags.contains(.qada) {
+            return style == .wakeRow ? "Qada planned" : "Qada fast"
+        }
+        if tags.contains(.ramadan) {
+            return "Ramadan fast"
+        }
+        if let observance = observanceTitle(from: resolved) {
+            return observance
+        }
+        switch resolved.primaryContext {
+        case .standard:
+            return ordinaryDaySummaryText
+        case .tahajjud:
+            return "Tahajjud planned"
+        case .suhoor, .fasting:
+            return style == .history ? "Fasting day" : "Fasting tomorrow"
+        case .sunnahFast:
+            return "Sunnah fast"
+        case .jamaah:
+            return "Jama'ah morning"
+        case .specialDay:
+            return "A meaningful day is coming up"
+        case .qadaFast:
+            return style == .wakeRow ? "Qada planned" : "Qada fast"
+        }
     }
 
     static func wakeRelationText(delta: WakeDelta, anchor: WakeAnchorType) -> String {
@@ -208,12 +294,10 @@ enum ProductSurfacePresentation {
         for day: ActiveAlarmDay,
         hasDayOverride: Bool
     ) -> ScheduleRowPresentation {
-        let secondaryContextTitles = meaningfulSecondaryContextTitles(from: day.resolvedDayContext)
+        let chipTitles = scheduleChipTitles(for: day, hasDayOverride: hasDayOverride)
         let nonDefaultProvenances = day.provenances.filter { $0.sourceOrigin != .defaultDailyPlan }
         let provenanceText: String?
-        if hasDayOverride && nonDefaultProvenances.isEmpty {
-            provenanceText = "Adjusted"
-        } else if nonDefaultProvenances.isEmpty {
+        if nonDefaultProvenances.isEmpty || day.resolvedDayContext.primaryContext != .standard {
             provenanceText = nil
         } else {
             let labels = Array(NSOrderedSet(array: nonDefaultProvenances.map(\.label))).compactMap { $0 as? String }
@@ -222,12 +306,9 @@ enum ProductSurfacePresentation {
 
         return ScheduleRowPresentation(
             wakeTime: day.schedule.wakeDate,
-            relationText: wakeRelationText(
-                delta: day.decisionLog.resolvedDelta,
-                anchor: day.decisionLog.resolvedAnchor.type
-            ),
-            primaryContextTitle: primaryContextTitle(day.resolvedDayContext.primaryContext),
-            secondaryContextTitles: secondaryContextTitles,
+            meaningText: dayMeaningText(for: day, style: .wakeRow),
+            detailText: "\(wakeRelationText(delta: day.decisionLog.resolvedDelta, anchor: day.decisionLog.resolvedAnchor.type)) · Fajr \(TimeFormatters.timeFormatter.string(from: day.schedule.fajrDate))",
+            chipTitles: chipTitles,
             provenanceText: provenanceText
         )
     }
@@ -264,7 +345,7 @@ enum ProductSurfacePresentation {
 
         return WakeProgressSnapshot(
             summaryTitle: summaryTitle,
-            summaryDetail: detailParts.isEmpty ? "From recent wake events." : detailParts.joined(separator: " · "),
+            summaryDetail: detailParts.isEmpty ? "From recent mornings." : detailParts.joined(separator: " · "),
             recentActivityLines: Array(wakeEvents.prefix(4)).map(formatWakeEventLine),
             emptyStateText: nil
         )
@@ -301,11 +382,11 @@ enum ProductSurfacePresentation {
     ) -> ConfiguredPlanItem {
         let nonDefaultProvenances = day.provenances.filter { $0.sourceOrigin != .defaultDailyPlan }
         let provenanceLabels = Array(NSOrderedSet(array: nonDefaultProvenances.map(\.label))).compactMap { $0 as? String }
-        let primaryTitle = primaryContextTitle(day.resolvedDayContext.primaryContext)
+        let primaryTitle = dayMeaningText(for: day, style: .history)
 
         let title: String
         if hasOverride && nonDefaultProvenances.isEmpty && day.resolvedDayContext.primaryContext == .standard {
-            title = "Adjusted morning"
+            title = "Adjusted"
         } else if day.resolvedDayContext.primaryContext != .standard {
             title = primaryTitle
         } else if let firstProvenance = provenanceLabels.first {
@@ -335,6 +416,31 @@ enum ProductSurfacePresentation {
         )
     }
 
+    private static func observanceTitle(
+        from resolvedDayContext: ResolvedDayContext
+    ) -> String? {
+        let tags = Set(resolvedDayContext.supportingTags)
+        if tags.contains(.arafah) {
+            return "Arafah fast"
+        }
+        if tags.contains(.ashura) {
+            return "Ashura fast"
+        }
+        if tags.contains(.whiteDays) {
+            return "White Days fast"
+        }
+        if tags.contains(.shawwalSix) {
+            return "Shawwal fast"
+        }
+        if tags.contains(.dhulHijjahFirstNine) {
+            return "Dhul Hijjah fast"
+        }
+        if tags.contains(.mondayThursday) {
+            return "Monday or Thursday fast"
+        }
+        return nil
+    }
+
     private static func formatWakeEventLine(_ event: DebugEvent) -> String {
         let formatter = TimeFormatters.shortDateTime
         let prefix: String
@@ -354,4 +460,10 @@ enum ProductSurfacePresentation {
         }
         return "\(prefix) · \(formatter.string(from: event.timestamp))"
     }
+}
+
+enum DayMeaningStyle {
+    case homeContext
+    case wakeRow
+    case history
 }

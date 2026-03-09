@@ -244,6 +244,7 @@ enum SettingsDestination: String, CaseIterable, Identifiable {
     case prayerTimes
     case hijriCalendarCorrections
     case permissionsReliability
+    case quietPeriod
     case about
 
     var id: String { rawValue }
@@ -258,6 +259,8 @@ enum SettingsDestination: String, CaseIterable, Identifiable {
             return Strings.Settings.hijriCalendarTitle
         case .permissionsReliability:
             return Strings.Settings.permissionsReliabilityTitle
+        case .quietPeriod:
+            return Strings.QuietPeriod.title
         case .about:
             return Strings.Settings.aboutSection
         }
@@ -273,6 +276,8 @@ enum SettingsDestination: String, CaseIterable, Identifiable {
             return "calendar.badge.clock"
         case .permissionsReliability:
             return "checkmark.shield"
+        case .quietPeriod:
+            return "moon.circle"
         case .about:
             return "info.circle"
         }
@@ -311,7 +316,7 @@ enum SettingsDestinationGroup: CaseIterable, Identifiable {
         case .calendarTimes:
             return [.location, .prayerTimes, .hijriCalendarCorrections]
         case .appHealth:
-            return [.permissionsReliability]
+            return [.permissionsReliability, .quietPeriod]
         case .about:
             return [.about]
         }

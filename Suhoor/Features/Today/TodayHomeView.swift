@@ -97,23 +97,16 @@ private struct TodayDateContextStrip: View {
                     .foregroundStyle(.secondary)
             }
 
-            if let primaryContextTitle = snapshot.primaryContextTitle {
-                HStack(alignment: .center, spacing: DesignTokens.spacingS) {
-                    if let dayLabel = snapshot.dayLabel {
-                        Text(dayLabel)
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                    }
-
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: DesignTokens.spacingXS) {
-                            ContextChip(
-                                title: primaryContextTitle,
-                                prominence: .primary
-                            )
-
-                            ForEach(snapshot.secondaryContextTitles, id: \.self) { title in
-                                ContextChip(title: title, prominence: .secondary)
+            if let contextSummaryText = snapshot.contextSummaryText {
+                VStack(alignment: .leading, spacing: DesignTokens.spacingXS) {
+                    Text(contextSummaryText)
+                        .font(.subheadline.weight(.semibold))
+                    if !snapshot.secondaryContextTitles.isEmpty {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: DesignTokens.spacingXS) {
+                                ForEach(snapshot.secondaryContextTitles, id: \.self) { title in
+                                    ContextChip(title: title)
+                                }
                             }
                         }
                     }
@@ -125,27 +118,17 @@ private struct TodayDateContextStrip: View {
 }
 
 private struct ContextChip: View {
-    enum Prominence {
-        case primary
-        case secondary
-    }
-
     let title: String
-    let prominence: Prominence
 
     var body: some View {
         Text(title)
             .font(.caption.weight(.semibold))
-            .foregroundStyle(prominence == .primary ? DawnColor.accent : Color.secondary)
+            .foregroundStyle(Color.secondary)
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
             .background(
                 Capsule()
-                    .fill(
-                        prominence == .primary
-                            ? DawnColor.accent.opacity(0.12)
-                            : Color(.secondarySystemGroupedBackground)
-                    )
+                    .fill(Color(.secondarySystemGroupedBackground))
             )
     }
 }
@@ -177,39 +160,40 @@ private struct TodayBlockingIssueCard: View {
 
 private struct TodayNextWakeHeroCard: View {
     @EnvironmentObject private var appNavigator: AppNavigator
-    @EnvironmentObject private var scheduleManager: ScheduleManager
 
     let summary: NextWakeEventSummary?
 
     var body: some View {
         GlassCard(style: .header, tintColor: DawnColor.lightGold200, tintOpacity: 0.18) {
             VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
-                Text("Next wake")
+                Text(Strings.HomeSurface.heroTitle)
                     .font(DesignTokens.cardMetaFont)
                     .foregroundStyle(.secondary)
 
                 if let summary {
                     VStack(alignment: .leading, spacing: DesignTokens.spacingS) {
-                        Text(TimeFormatters.timeFormatter.string(from: summary.event.fireDate))
+                        Text(TimeFormatters.timeFormatter.string(from: summary.day.schedule.wakeDate))
                             .font(.system(size: 42, weight: .semibold, design: .rounded))
                             .monospacedDigit()
 
-                        Text(summaryLabel(for: summary))
+                        Text(heroLine(for: summary))
                             .font(DesignTokens.cardTitleFont)
 
-                        Text("\(summary.relationText) · Fajr \(TimeFormatters.timeFormatter.string(from: summary.day.schedule.fajrDate))")
-                            .font(DesignTokens.cardMetaFont)
-                            .foregroundStyle(.secondary)
+                        Button(Strings.HomeSurface.heroAction) {
+                            appNavigator.switchToWake()
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(DawnColor.accent)
                     }
                 } else {
                     VStack(alignment: .leading, spacing: DesignTokens.spacingS) {
-                        Text("No wake yet")
+                        Text(Strings.HomeSurface.heroEmptyTitle)
                             .font(DesignTokens.cardTitleFont)
-                        Text("Set your morning plan.")
-                            .font(DesignTokens.cardSubtitleFont)
+                        Text(Strings.HomeSurface.heroEmptyBody)
+                            .font(DesignTokens.cardMetaFont)
                             .foregroundStyle(.secondary)
 
-                        Button("Set Morning Plan") {
+                        Button(Strings.HomeSurface.heroEmptyAction) {
                             appNavigator.openDefaultMorningPlan()
                         }
                         .buttonStyle(.borderedProminent)
@@ -220,21 +204,11 @@ private struct TodayNextWakeHeroCard: View {
         }
     }
 
-    private func summaryLabel(for summary: NextWakeEventSummary) -> String {
-        let eventTitle: String
-        switch summary.event.type {
-        case .wakeReminder:
-            eventTitle = "Reminder"
-        case .wakeAlarm:
-            eventTitle = "Wake"
-        case .wakeFollowUp:
-            eventTitle = "Follow-up"
-        case .fajrBoundaryNotice:
-            eventTitle = "Fajr notice"
-        case .iftarReminder:
-            eventTitle = "Iftar reminder"
+    private func heroLine(for summary: NextWakeEventSummary) -> String {
+        let fajrText = "Fajr at \(TimeFormatters.timeFormatter.string(from: summary.day.schedule.fajrDate))"
+        if let meaning = ProductSurfacePresentation.homeHeroMeaningText(for: summary.day) {
+            return "\(meaning) • \(fajrText)"
         }
-
-        return "\(eventTitle) · \(scheduleManager.dayLabel(for: summary.day.date))"
+        return "For \(fajrText)"
     }
 }

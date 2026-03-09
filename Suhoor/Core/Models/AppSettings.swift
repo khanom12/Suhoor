@@ -19,6 +19,9 @@ struct AppSettings: Codable, Equatable, Sendable {
     var lastScheduledDate: Date?
     var lastSchedulingMode: SchedulingMode
     var hijriSpecialDaySettings: HijriSpecialDaySettings
+    var quietPeriodEnabled: Bool
+    var pausePrayerPrompts: Bool
+    var pauseFastingPrompts: Bool
 
     static let `default` = AppSettings(
         isConfigured: false,
@@ -38,7 +41,10 @@ struct AppSettings: Codable, Equatable, Sendable {
         fixedLocation: nil,
         lastScheduledDate: nil,
         lastSchedulingMode: .none,
-        hijriSpecialDaySettings: .default
+        hijriSpecialDaySettings: .default,
+        quietPeriodEnabled: false,
+        pausePrayerPrompts: false,
+        pauseFastingPrompts: false
     )
 }
 
@@ -86,6 +92,9 @@ extension AppSettings {
         case hijriSpecialDaySettings
         case snoozeEnabled
         case snoozeMinutes
+        case quietPeriodEnabled
+        case pausePrayerPrompts
+        case pauseFastingPrompts
 
         case hasCompletedOnboarding
         case alarmEnabled
@@ -143,6 +152,9 @@ extension AppSettings {
         lastScheduledDate = try container.decodeIfPresent(Date.self, forKey: .lastScheduledDate)
         lastSchedulingMode = try container.decodeIfPresent(SchedulingMode.self, forKey: .lastSchedulingMode) ?? .none
         hijriSpecialDaySettings = try container.decodeIfPresent(HijriSpecialDaySettings.self, forKey: .hijriSpecialDaySettings) ?? .default
+        quietPeriodEnabled = try container.decodeIfPresent(Bool.self, forKey: .quietPeriodEnabled) ?? false
+        pausePrayerPrompts = try container.decodeIfPresent(Bool.self, forKey: .pausePrayerPrompts) ?? false
+        pauseFastingPrompts = try container.decodeIfPresent(Bool.self, forKey: .pauseFastingPrompts) ?? false
     }
 
     func encode(to encoder: Encoder) throws {
@@ -165,6 +177,9 @@ extension AppSettings {
         try container.encodeIfPresent(lastScheduledDate, forKey: .lastScheduledDate)
         try container.encode(lastSchedulingMode, forKey: .lastSchedulingMode)
         try container.encode(hijriSpecialDaySettings, forKey: .hijriSpecialDaySettings)
+        try container.encode(quietPeriodEnabled, forKey: .quietPeriodEnabled)
+        try container.encode(pausePrayerPrompts, forKey: .pausePrayerPrompts)
+        try container.encode(pauseFastingPrompts, forKey: .pauseFastingPrompts)
     }
 }
 

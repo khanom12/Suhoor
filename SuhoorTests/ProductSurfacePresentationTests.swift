@@ -52,9 +52,9 @@ struct ProductSurfacePresentationTests {
         )
 
         #expect(snapshot.upcomingSpecialMornings.count == 3)
-        #expect(snapshot.upcomingSpecialMornings.contains(where: { $0.title == "Adjusted morning" }))
-        #expect(snapshot.upcomingSpecialMornings.contains(where: { $0.title == "Qada" }))
-        #expect(snapshot.upcomingSpecialMornings.contains(where: { $0.title == "Fasting" }))
+        #expect(snapshot.upcomingSpecialMornings.contains(where: { $0.title == "Adjusted" }))
+        #expect(snapshot.upcomingSpecialMornings.contains(where: { $0.title == "Qada fast" }))
+        #expect(snapshot.upcomingSpecialMornings.contains(where: { $0.title == "Fasting day" }))
         #expect(snapshot.qadaSummary == "2 completed · 4 remaining")
     }
 
@@ -106,6 +106,7 @@ struct ProductSurfacePresentationTests {
             now: makeDate(day: 5, hour: 6, minute: 0),
             currentDay: currentDay,
             todaySchedule: currentDay.schedule,
+            settings: .default,
             permissionSnapshot: permissionSnapshot,
             hijriComponents: components,
             dismissedWarnings: []
@@ -136,6 +137,7 @@ struct ProductSurfacePresentationTests {
             now: makeDate(day: 5, hour: 6, minute: 30),
             currentDay: currentDay,
             todaySchedule: currentDay.schedule,
+            settings: .default,
             permissionSnapshot: PermissionSnapshot(
                 summaryText: "",
                 alarmAuthorizationText: "",
@@ -176,6 +178,7 @@ struct ProductSurfacePresentationTests {
             now: makeDate(day: 5, hour: 14, minute: 0),
             currentDay: currentDay,
             todaySchedule: currentDay.schedule,
+            settings: .default,
             permissionSnapshot: PermissionSnapshot(
                 summaryText: "",
                 alarmAuthorizationText: "",
@@ -216,6 +219,7 @@ struct ProductSurfacePresentationTests {
             now: makeDate(day: 5, hour: 19, minute: 15),
             currentDay: currentDay,
             todaySchedule: currentDay.schedule,
+            settings: .default,
             permissionSnapshot: PermissionSnapshot(
                 summaryText: "",
                 alarmAuthorizationText: "",
@@ -229,7 +233,7 @@ struct ProductSurfacePresentationTests {
         switch result {
         case .fasting(let presentation):
             #expect(presentation.phase == .fastCompletionPrompt)
-            #expect(presentation.title == "Did you complete the Qada fast?")
+            #expect(presentation.title == "How did today go?")
         default:
             Issue.record("Expected fast completion prompt after Maghrib.")
         }
@@ -257,12 +261,47 @@ struct ProductSurfacePresentationTests {
             now: makeDate(day: 6, hour: 13, minute: 0),
             currentDay: currentDay,
             todaySchedule: currentDay.schedule,
+            settings: .default,
             permissionSnapshot: PermissionSnapshot(
                 summaryText: "",
                 alarmAuthorizationText: "",
                 notificationAuthorizationText: "",
                 presentations: [:]
             ),
+            hijriComponents: nil,
+            dismissedWarnings: []
+        )
+
+        #expect(result.supportDecision == nil)
+    }
+
+    @Test
+    func homeSupportDecisionSuppressesPrayerPromptDuringQuietPeriod() {
+        let currentDay = makeActiveDay(
+            day: 6,
+            context: .standard,
+            supportingTags: [.dailyPlan],
+            provenances: [defaultDailyProvenance],
+            dailyCompletion: .init(
+                dateKey: dayKey(day: 6),
+                prayer: .empty,
+                fast: .notRequired,
+                qadaEffect: .none,
+                wakeSupport: .none,
+                outstandingAction: .prayerCheckIn,
+                isMeaningfullyResolved: false
+            )
+        )
+        var settings = AppSettings.default
+        settings.quietPeriodEnabled = true
+        settings.pausePrayerPrompts = true
+
+        let result = CompletionProjectionBuilder.buildHome(
+            now: makeDate(day: 6, hour: 6, minute: 15),
+            currentDay: currentDay,
+            todaySchedule: currentDay.schedule,
+            settings: settings,
+            permissionSnapshot: .empty,
             hijriComponents: nil,
             dismissedWarnings: []
         )
@@ -376,11 +415,13 @@ struct ProductSurfacePresentationTests {
             todayCompletion: todayCompletion,
             recentDateKeys: [todayKey],
             completionState: completionState,
+            settings: .default,
             wakeProgress: .empty
         )
 
-        #expect(snapshot.fajrTodaySummary == "Made Fajr")
+        #expect(snapshot.fajrTodaySummary == "Fajr completed")
         #expect(snapshot.fastTodaySummary == "Completed")
+        #expect(snapshot.headlineText == "You're making progress on Qada.")
         #expect(snapshot.qadaProgress.remaining == 1)
         #expect(snapshot.wakeProgress == .empty)
     }
@@ -633,14 +674,14 @@ struct ProductSurfacePresentationTests {
             currentDay: currentDay,
             todaySchedule: currentDay.schedule,
             nextWakeEventSummary: nil,
+            settings: .default,
             permissionSnapshot: .empty,
             hijriComponents: nil,
             supportDecision: supportDecision,
             dayLabel: { _ in "Today" }
         )
 
-        #expect(snapshot.dayLabel == "Today")
-        #expect(snapshot.primaryContextTitle == "Qada")
+        #expect(snapshot.contextSummaryText == "Today • Qada fast")
         #expect(snapshot.supportDecision == supportDecision)
     }
 

@@ -82,26 +82,24 @@ struct WakeRowView: View {
                 }
 
                 HStack(spacing: 8) {
-                    Text(entry.rowPresentation.relationText)
-                    Text("Fajr \(fajrTimeText)")
+                    Text(entry.rowPresentation.meaningText)
                 }
-                .font(.callout)
-                .foregroundStyle(isDisabled ? .tertiary : .secondary)
-                .monospacedDigit()
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(isDisabled ? .tertiary : .primary)
 
-                HStack(spacing: DesignTokens.spacingXS) {
-                    WakeContextChip(
-                        title: entry.rowPresentation.primaryContextTitle,
-                        prominence: .primary,
-                        isDisabled: isDisabled
-                    )
+                Text(entry.rowPresentation.detailText)
+                    .font(.callout)
+                    .foregroundStyle(isDisabled ? .tertiary : .secondary)
+                    .monospacedDigit()
 
-                    ForEach(entry.rowPresentation.secondaryContextTitles, id: \.self) { title in
-                        WakeContextChip(
-                            title: title,
-                            prominence: .secondary,
-                            isDisabled: isDisabled
-                        )
+                if !entry.rowPresentation.chipTitles.isEmpty {
+                    HStack(spacing: DesignTokens.spacingXS) {
+                        ForEach(entry.rowPresentation.chipTitles, id: \.self) { title in
+                            WakeContextChip(
+                                title: title,
+                                isDisabled: isDisabled
+                            )
+                        }
                     }
                 }
 
@@ -123,7 +121,7 @@ struct WakeRowView: View {
 
             VStack(alignment: .trailing, spacing: 10) {
                 if editMode?.wrappedValue.isEditing != true {
-                    Button("Adjust") {
+                    Button("Adjust this date") {
                         onSelect()
                     }
                     .buttonStyle(.plain)
@@ -132,7 +130,7 @@ struct WakeRowView: View {
                     .padding(.horizontal, 10)
                     .padding(.vertical, 6)
                     .background(Capsule().fill(DawnColor.accent.opacity(0.12)))
-                    .accessibilityLabel("Open one-day override")
+                    .accessibilityLabel("Adjust this date")
                 }
 
                 Toggle("", isOn: Binding(
@@ -159,10 +157,6 @@ struct WakeRowView: View {
         editMode?.wrappedValue.isEditing == true && deleteCapability == .ramadan
     }
 
-    private var fajrTimeText: String {
-        TimeFormatters.timeFormatter.string(from: entry.schedule.fajrDate)
-    }
-
     private var primaryTimeMain: String {
         Self.timeMainFormatter.string(from: entry.schedule.wakeDate)
     }
@@ -176,9 +170,9 @@ struct WakeRowView: View {
     }
 
     private var accessibilitySummary: String {
-        var summary = "\(WakeRowPresentation.accessibilityDateLabel(for: entry.schedule.date)). Wake at \(primaryTimeText). \(entry.rowPresentation.relationText). \(entry.rowPresentation.primaryContextTitle)."
-        if !entry.rowPresentation.secondaryContextTitles.isEmpty {
-            summary += " \(entry.rowPresentation.secondaryContextTitles.joined(separator: ", "))."
+        var summary = "\(WakeRowPresentation.accessibilityDateLabel(for: entry.schedule.date)). Wake at \(primaryTimeText). \(entry.rowPresentation.meaningText). \(entry.rowPresentation.detailText)."
+        if !entry.rowPresentation.chipTitles.isEmpty {
+            summary += " \(entry.rowPresentation.chipTitles.joined(separator: ", "))."
         }
         if let provenanceText = entry.rowPresentation.provenanceText {
             summary += " \(provenanceText)."
@@ -194,28 +188,18 @@ struct WakeRowView: View {
 }
 
 struct WakeContextChip: View {
-    enum Prominence {
-        case primary
-        case secondary
-    }
-
     let title: String
-    let prominence: Prominence
     let isDisabled: Bool
 
     var body: some View {
         Text(title)
             .font(.caption.weight(.semibold))
-            .foregroundStyle(prominence == .primary ? DawnColor.accent : Color.secondary)
+            .foregroundStyle(Color.secondary)
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
             .background(
                 Capsule()
-                    .fill(
-                        prominence == .primary
-                            ? DawnColor.accent.opacity(0.14)
-                            : Color(.secondarySystemGroupedBackground)
-                    )
+                    .fill(Color(.secondarySystemGroupedBackground))
             )
             .opacity(isDisabled ? 0.55 : 1.0)
     }

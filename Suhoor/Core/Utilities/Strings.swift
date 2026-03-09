@@ -4,7 +4,7 @@ enum Strings {
     enum AlarmList {
         static let title = "Wake"
         static let routineTitle = "Morning plan"
-        static let notSetUp = "Morning plan not set up"
+        static let notSetUp = "Tomorrow is shown below"
         static let turnOnFooter = "Turn on to schedule."
         static let wakeTitle = "Wake"
         static let reminderTitle = "Reminder"
@@ -56,8 +56,8 @@ enum Strings {
         }
         static let listRangeTitle = "Wake list range"
         static let listRangeHelper = "Controls how many days are shown in the Wake tab list."
-        static let emptyTitle = "No wake events yet"
-        static let emptySubtitle = "Set your morning plan in Plans."
+        static let emptyTitle = "No upcoming wakes yet"
+        static let emptySubtitle = "Shape your daily plan in Plans."
         static let customizedBadge = "Customized"
         static let skippedBadge = "Skipped"
         static let todayLabel = "Today"
@@ -106,17 +106,17 @@ enum Strings {
         static let activationMode = "Activation mode"
         static let activeStartDate = "Start date"
         static let activeEndDate = "End date"
-        static let emptyMonth = "No scheduled mornings in this month yet."
-        static let emptyFilteredMonth = "No scheduled mornings match the selected filters yet."
+        static let emptyMonth = "No mornings in this month yet."
+        static let emptyFilteredMonth = "No mornings match these filters yet."
         static let nextAlarmSectionTitle = "Up next"
-        static let filterTitle = "Filter Context & Tags"
+        static let filterTitle = "Filter days"
         static let filterApply = "Apply"
         static let filterClear = "Clear"
         static let filteringLabel = "Filtered by"
-        static let filterPurposeSection = "Purpose"
+        static let filterPurposeSection = "Meaning"
         static let filterAnyPurpose = "Any purpose"
-        static let filterObservancesSection = "Sunnah Observances"
-        static let filterMatchAllFooter = "Shows only scheduled mornings that match all selected tags."
+        static let filterObservancesSection = "Observances"
+        static let filterMatchAllFooter = "Shows only mornings that match your selections."
         static let filterVoluntaryOnlyHelper = "Only available with Voluntary purpose."
         static func filterIncompatibleTagHelper(_ titles: String) -> String {
             "Can’t combine with \(titles)."
@@ -510,5 +510,57 @@ enum Strings {
         static let blockedModeMessage = "Suhoor still needs permission before it can deliver reminders or wake you up reliably."
         static let educationTitle = "Reliability basics"
         static let educationBody = "AlarmKit is preferred when available. If alarms are unavailable or not allowed, Suhoor falls back to notifications. If alerts are too quiet, check your device's Ringtone & Alerts volume."
+    }
+
+    enum HomeSurface {
+        static let heroTitle = "Next wake"
+        static let heroEmptyTitle = "Set up your mornings"
+        static let heroEmptyBody = "Start with your daily plan."
+        static let heroEmptyAction = "Start with Plans"
+        static let heroAction = "View tomorrow"
+        static let fajrPromptTitle = "Did you pray Fajr?"
+        static let fajrPromptBody = "Record today before you move on."
+        static let fajrPromptPrimary = "Yes, I did"
+        static let fajrPromptSecondary = "Not today"
+        static let fajrPromptLater = "Later"
+        static let fastCompletionTitle = "How did today go?"
+        static let fastCompletionBody = "Mark your fast so your progress stays accurate."
+    }
+
+    enum PlansSurface {
+        static let defaultSubtitle = "Your usual Fajr-centered wake rhythm"
+        static let upcomingSubtitle = "Dates that differ from your usual plan"
+        static let upcomingEmptyTitle = "Nothing special is planned yet"
+        static let upcomingEmptyBody = "Your regular Fajr mornings are still set."
+        static let planByDateSubtitle = "Choose a date and shape it directly"
+        static let qadaReady = "Plan a day when you're ready."
+        static let qadaSetup = "Set up Qada when you need it."
+        static let customFastingSubtitle = "Shape a fasting day directly."
+        static let opportunitiesSubtitle = "Meaningful days you can act on"
+    }
+
+    enum ProgressSurface {
+        static let fajrFooter = "Your recent prayer record."
+        static let fastFooter = "Completed and missed fasts."
+        static let qadaFooter = "Completed Qada fasts reduce what remains."
+        static let wakeFooter = "Supportive wake follow-through."
+        static let qadaEnablePrompt = "Add Qada from Plans when you need it."
+    }
+
+    enum HistorySurface {
+        static let fajrFooter = "You can update any day when you need to."
+        static let fastFooter = "You can update any day when you need to."
+    }
+
+    enum QuietPeriod {
+        static let title = "Quiet period"
+        static let body = "Reduce prayer and fasting prompts for now. You can turn them back on whenever you want."
+        static let masterToggle = "Quiet period"
+        static let prayerToggle = "Reduce prayer check-ins"
+        static let fastingToggle = "Reduce fasting prompts"
+        static let footer = "Wake delivery stays the same. Quiet period only softens in-app prompts in this phase."
+        static let summaryOff = "Off"
+        static let summaryOn = "Prayer and fasting prompts are softer."
+        static let summaryPartial = "Some in-app prompts are softer."
     }
 }

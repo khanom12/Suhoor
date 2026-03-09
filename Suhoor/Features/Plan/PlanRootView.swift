@@ -54,7 +54,7 @@ struct PlanRootView: View {
                     NavigationLink(value: PlanDestination.sunnahPlanner) {
                         PlansFeatureRow(
                             title: "Sunnah opportunities",
-                            subtitle: "Browse upcoming fasting opportunities.",
+                            subtitle: Strings.PlansSurface.opportunitiesSubtitle,
                             systemImage: "sparkles",
                             color: DawnColor.lightGold200
                         )
@@ -136,7 +136,7 @@ private struct DefaultMorningPlanCard: View {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("Default Morning Plan")
                             .font(.headline.weight(.semibold))
-                        Text("Everyday around Fajr.")
+                        Text(Strings.PlansSurface.defaultSubtitle)
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
@@ -176,7 +176,7 @@ private struct ConfiguredPlansCard: View {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("Upcoming special plans")
                             .font(.headline.weight(.semibold))
-                        Text("Dates that differ from your default.")
+                        Text(Strings.PlansSurface.upcomingSubtitle)
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
@@ -207,9 +207,13 @@ private struct ConfiguredPlansCard: View {
                         }
                     }
                 } else {
-                    Text("Nothing special planned yet.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(Strings.PlansSurface.upcomingEmptyTitle)
+                            .font(.footnote.weight(.semibold))
+                        Text(Strings.PlansSurface.upcomingEmptyBody)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
         }
@@ -223,7 +227,7 @@ private struct DatePlanningCard: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Plan by date")
                         .font(.headline.weight(.semibold))
-                    Text("Pick a date to adjust, fast, or plan Qada.")
+                    Text(Strings.PlansSurface.planByDateSubtitle)
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -246,7 +250,7 @@ private struct ConfiguredQadaCard: View {
             VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
                 HStack(alignment: .top, spacing: DesignTokens.spacingM) {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("Qada")
+                        Text("Qada remaining")
                             .font(.headline.weight(.semibold))
                         Text(qadaDescription)
                             .font(.footnote)
@@ -260,16 +264,16 @@ private struct ConfiguredQadaCard: View {
                         .foregroundStyle(FastPrimaryIntent.qadaMakeup.style.color)
                 }
 
-                SummaryRow(label: "Qada", value: qadaValue)
+                SummaryRow(label: "Progress", value: qadaValue)
             }
         }
     }
 
     private var qadaDescription: String {
         if progress.baselineOwed > 0 {
-            return "Track remaining Qada and planned Qada days."
+            return Strings.PlansSurface.qadaReady
         }
-        return "Set up Qada when you need it."
+        return Strings.PlansSurface.qadaSetup
     }
 
     private var qadaValue: String {
@@ -287,7 +291,7 @@ private struct CustomFastingCard: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Custom fasting days")
                         .font(.headline.weight(.semibold))
-                    Text("Plan custom fasting days.")
+                    Text(Strings.PlansSurface.customFastingSubtitle)
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -312,9 +316,9 @@ private struct PlansFeatureRow: View {
         GlassCard(tintColor: color, tintOpacity: 0.12) {
             HStack(alignment: .top, spacing: DesignTokens.spacingM) {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(title)
-                        .font(.headline.weight(.semibold))
-                    Text(subtitle)
+                        Text(title)
+                            .font(.headline.weight(.semibold))
+                        Text(subtitle)
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -340,7 +344,6 @@ private struct SectionTitle: View {
         Text(title)
             .font(.caption.weight(.semibold))
             .foregroundStyle(.secondary)
-            .textCase(.uppercase)
     }
 }
 

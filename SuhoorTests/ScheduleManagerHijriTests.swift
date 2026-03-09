@@ -1601,7 +1601,7 @@ struct ScheduleManagerHijriTests {
         #expect(plansSnapshot.configuredPlansSnapshot.upcomingSpecialMornings.contains(where: {
             DateHelpers.dayIdentifier(for: $0.date, timeZone: timeZone) == tomorrowKey
         }))
-        #expect(progressSnapshot.fajrTodaySummary == FajrCompletionStatus.completed.title)
+        #expect(progressSnapshot.fajrTodaySummary == "Fajr completed")
         #expect(progressSnapshot.fastTodaySummary == "Qada completed")
         #expect(progressSnapshot.qadaProgress.remaining == 1)
         #expect(progressSnapshot.wakeProgress.summaryTitle == "Wake activity")

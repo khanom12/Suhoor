@@ -3,8 +3,7 @@ import Foundation
 struct HomeSurfaceSnapshot: Equatable, Sendable {
     let gregorianText: String
     let hijriText: String
-    let dayLabel: String?
-    let primaryContextTitle: String?
+    let contextSummaryText: String?
     let secondaryContextTitles: [String]
     let nextWakeEventSummary: NextWakeEventSummary?
     let supportDecision: HomeSupportDecision?
@@ -36,6 +35,7 @@ struct PlansSurfaceSnapshot: Equatable, Sendable {
 }
 
 struct ProgressSurfaceSnapshot: Equatable, Sendable {
+    let headlineText: String?
     let fajrTodaySummary: String
     let fajrSummary: String
     let fastTodaySummary: String

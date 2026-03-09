@@ -142,6 +142,14 @@ struct SettingsRootView: View {
                 schedulingMode: scheduleManager.schedulingMode,
                 presentations: permissionPresentations
             )
+        case .quietPeriod:
+            if !settingsStore.settings.quietPeriodEnabled {
+                return Strings.QuietPeriod.summaryOff
+            }
+            if settingsStore.settings.pausePrayerPrompts && settingsStore.settings.pauseFastingPrompts {
+                return Strings.QuietPeriod.summaryOn
+            }
+            return Strings.QuietPeriod.summaryPartial
         case .about:
             return SettingsSummaryFormatter.aboutSummary(version: appVersion)
         }
@@ -151,6 +159,8 @@ struct SettingsRootView: View {
         switch destination {
         case .prayerTimes, .hijriCalendarCorrections, .about:
             return nil
+        case .quietPeriod:
+            return settingsStore.settings.quietPeriodEnabled ? "On" : nil
         case .location:
             guard hasLoadedPermissions else { return nil }
             if issues.contains(where: { $0.destination == .location }) {
@@ -189,6 +199,8 @@ struct SettingsRootView: View {
             return .neutral
         case .prayerTimes, .hijriCalendarCorrections, .about:
             return .neutral
+        case .quietPeriod:
+            return settingsStore.settings.quietPeriodEnabled ? .warning : .neutral
         }
     }
 
@@ -212,6 +224,8 @@ struct SettingsRootView: View {
             HijriCalendarSettingsView()
         case .permissionsReliability:
             PermissionsReliabilityView()
+        case .quietPeriod:
+            QuietPeriodSettingsView()
         case .about:
             AboutSettingsView()
         }

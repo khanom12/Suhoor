@@ -6,6 +6,15 @@ struct ProgressRootView: View {
     var body: some View {
         let snapshot = scheduleManager.progressSurfaceSnapshot()
         List {
+            if let headlineText = snapshot.headlineText {
+                Section {
+                    Text(headlineText)
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .padding(.vertical, DesignTokens.spacingXS)
+                }
+            }
+
             Section {
                 NavigationLink {
                     FajrHistoryView()
@@ -18,7 +27,7 @@ struct ProgressRootView: View {
             } header: {
                 Text("Fajr")
             } footer: {
-                Text("Prayer completion history.")
+                Text(Strings.ProgressSurface.fajrFooter)
             }
 
             Section {
@@ -33,21 +42,21 @@ struct ProgressRootView: View {
             } header: {
                 Text("Fasts")
             } footer: {
-                Text("Fasting-day completion history.")
+                Text(Strings.ProgressSurface.fastFooter)
             }
 
             Section {
                 LabeledContent("Completed", value: "\(snapshot.qadaProgress.completed)")
                 LabeledContent("Remaining", value: "\(snapshot.qadaProgress.remaining)")
                 if snapshot.qadaProgress.baselineOwed == 0 {
-                    Text("Add Qada obligations from Plans when you need them.")
+                    Text(Strings.ProgressSurface.qadaEnablePrompt)
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
             } header: {
                 Text("Qada Progress")
             } footer: {
-                Text("Completed Qada fasts reduce what remains.")
+                Text(Strings.ProgressSurface.qadaFooter)
             }
 
             Section {
@@ -75,7 +84,7 @@ struct ProgressRootView: View {
             } header: {
                 Text("Wake Activity")
             } footer: {
-                Text("Technical wake support only.")
+                Text(Strings.ProgressSurface.wakeFooter)
             }
         }
         .navigationTitle("Progress")

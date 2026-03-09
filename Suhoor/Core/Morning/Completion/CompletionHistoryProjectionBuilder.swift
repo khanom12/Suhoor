@@ -23,7 +23,7 @@ enum CompletionHistoryProjectionBuilder {
             ),
             rows: rows,
             emptyText: "No mornings available yet.",
-            footerText: "Update a morning any time. Clear removes the log."
+            footerText: Strings.HistorySurface.fajrFooter
         )
     }
 
@@ -61,7 +61,7 @@ enum CompletionHistoryProjectionBuilder {
             summaryText: fastSummary,
             rows: rows,
             emptyText: "No fasting days in the last 30 days.",
-            footerText: "Completed Qada fasts reduce what remains. Clear removes the log."
+            footerText: Strings.HistorySurface.fastFooter
         )
     }
 
@@ -72,7 +72,7 @@ enum CompletionHistoryProjectionBuilder {
         case .completed:
             return "Prayed"
         case .missed:
-            return "Missed"
+            return "Not prayed"
         }
     }
 

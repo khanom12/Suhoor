@@ -6,27 +6,30 @@ struct HomeSurfaceProvider {
         currentDay: ActiveAlarmDay?,
         todaySchedule: DaySchedule?,
         nextWakeEventSummary: NextWakeEventSummary?,
+        settings: AppSettings,
         permissionSnapshot: PermissionSnapshot,
         hijriComponents: AdjustedHijriDateComponents?,
         supportDecision: HomeSupportDecision?,
         dayLabel: (Date) -> String
     ) -> HomeSurfaceSnapshot {
         let contextDay = nextWakeEventSummary?.day ?? currentDay
+        let contextDate = contextDay?.date ?? now
+        let contextDayLabel = contextDay.map { dayLabel($0.date) }
 
         return HomeSurfaceSnapshot(
-            gregorianText: GregorianDateFormatter.shared.headerString(for: now),
-            hijriText: HijriDateFormatter.shared.string(from: now),
-            dayLabel: contextDay.map { dayLabel($0.date) },
-            primaryContextTitle: contextDay.map {
-                ProductSurfacePresentation.primaryContextTitle($0.resolvedDayContext.primaryContext)
+            gregorianText: GregorianDateFormatter.shared.headerString(for: contextDate),
+            hijriText: HijriDateFormatter.shared.string(from: contextDate),
+            contextSummaryText: contextDay.map {
+                ProductSurfacePresentation.homeContextSummaryText(for: $0, dayLabel: contextDayLabel)
             },
             secondaryContextTitles: contextDay.map {
-                ProductSurfacePresentation.meaningfulSecondaryContextTitles(from: $0.resolvedDayContext)
+                ProductSurfacePresentation.scheduleChipTitles(for: $0, hasDayOverride: false)
             } ?? [],
             nextWakeEventSummary: nextWakeEventSummary,
             supportDecision: supportDecision ?? fallbackSupportDecision(
                 currentDay: currentDay,
                 todaySchedule: todaySchedule,
+                settings: settings,
                 permissionSnapshot: permissionSnapshot,
                 hijriComponents: hijriComponents,
                 now: now
@@ -37,6 +40,7 @@ struct HomeSurfaceProvider {
     private func fallbackSupportDecision(
         currentDay: ActiveAlarmDay?,
         todaySchedule: DaySchedule?,
+        settings: AppSettings,
         permissionSnapshot: PermissionSnapshot,
         hijriComponents: AdjustedHijriDateComponents?,
         now: Date
@@ -45,6 +49,7 @@ struct HomeSurfaceProvider {
             now: now,
             currentDay: currentDay,
             todaySchedule: todaySchedule,
+            settings: settings,
             permissionSnapshot: permissionSnapshot,
             hijriComponents: hijriComponents,
             dismissedWarnings: []

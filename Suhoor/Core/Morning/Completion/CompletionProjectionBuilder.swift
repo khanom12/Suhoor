@@ -19,6 +19,7 @@ enum CompletionProjectionBuilder {
         now: Date,
         currentDay: ActiveAlarmDay?,
         todaySchedule: DaySchedule?,
+        settings: AppSettings,
         permissionSnapshot: PermissionSnapshot,
         hijriComponents: AdjustedHijriDateComponents?,
         dismissedWarnings: Set<FastWarning>
@@ -62,11 +63,13 @@ enum CompletionProjectionBuilder {
                 dailyCompletion: day.dailyCompletion
             )
         }
+        let prayerPromptsSuppressed = settings.quietPeriodEnabled && settings.pausePrayerPrompts
+        let fastingPromptsSuppressed = settings.quietPeriodEnabled && settings.pauseFastingPrompts
 
         if let todaySchedule {
             switch dayPhase(now: now, schedule: todaySchedule) {
             case .beforeFajr:
-                if let forbiddenWarning {
+                if let forbiddenWarning, !fastingPromptsSuppressed {
                     return HomeCompletionProjection(
                         dailyCompletion: dailyCompletion,
                         supportDecision: HomeSupportDecision(
@@ -76,7 +79,7 @@ enum CompletionProjectionBuilder {
                         )
                     )
                 }
-                if let fastingPresentation {
+                if let fastingPresentation, !fastingPromptsSuppressed {
                     return HomeCompletionProjection(
                         dailyCompletion: dailyCompletion,
                         supportDecision: HomeSupportDecision(
@@ -87,7 +90,7 @@ enum CompletionProjectionBuilder {
                     )
                 }
             case .fajrMorning:
-                if let fajrPrompt {
+                if let fajrPrompt, !prayerPromptsSuppressed {
                     return HomeCompletionProjection(
                         dailyCompletion: dailyCompletion,
                         supportDecision: HomeSupportDecision(
@@ -97,7 +100,7 @@ enum CompletionProjectionBuilder {
                         )
                     )
                 }
-                if let forbiddenWarning {
+                if let forbiddenWarning, !fastingPromptsSuppressed {
                     return HomeCompletionProjection(
                         dailyCompletion: dailyCompletion,
                         supportDecision: HomeSupportDecision(
@@ -107,7 +110,7 @@ enum CompletionProjectionBuilder {
                         )
                     )
                 }
-                if let fastingPresentation {
+                if let fastingPresentation, !fastingPromptsSuppressed {
                     return HomeCompletionProjection(
                         dailyCompletion: dailyCompletion,
                         supportDecision: HomeSupportDecision(
@@ -118,7 +121,7 @@ enum CompletionProjectionBuilder {
                     )
                 }
             case .daytime:
-                if let forbiddenWarning {
+                if let forbiddenWarning, !fastingPromptsSuppressed {
                     return HomeCompletionProjection(
                         dailyCompletion: dailyCompletion,
                         supportDecision: HomeSupportDecision(
@@ -128,7 +131,7 @@ enum CompletionProjectionBuilder {
                         )
                     )
                 }
-                if let fastingPresentation {
+                if let fastingPresentation, !fastingPromptsSuppressed {
                     return HomeCompletionProjection(
                         dailyCompletion: dailyCompletion,
                         supportDecision: HomeSupportDecision(
@@ -138,7 +141,7 @@ enum CompletionProjectionBuilder {
                         )
                     )
                 }
-                if let fajrPrompt {
+                if let fajrPrompt, !prayerPromptsSuppressed {
                     return HomeCompletionProjection(
                         dailyCompletion: dailyCompletion,
                         supportDecision: HomeSupportDecision(
@@ -149,7 +152,7 @@ enum CompletionProjectionBuilder {
                     )
                 }
             case .afterMaghrib:
-                if let fastingPresentation {
+                if let fastingPresentation, !fastingPromptsSuppressed {
                     return HomeCompletionProjection(
                         dailyCompletion: dailyCompletion,
                         supportDecision: HomeSupportDecision(
@@ -159,7 +162,7 @@ enum CompletionProjectionBuilder {
                         )
                     )
                 }
-                if let fajrPrompt {
+                if let fajrPrompt, !prayerPromptsSuppressed {
                     return HomeCompletionProjection(
                         dailyCompletion: dailyCompletion,
                         supportDecision: HomeSupportDecision(
@@ -172,7 +175,7 @@ enum CompletionProjectionBuilder {
             }
         }
 
-        if let forbiddenWarning {
+        if let forbiddenWarning, !fastingPromptsSuppressed {
             return HomeCompletionProjection(
                 dailyCompletion: dailyCompletion,
                 supportDecision: HomeSupportDecision(
@@ -193,6 +196,7 @@ enum CompletionProjectionBuilder {
         todayCompletion: DailyCompletionSnapshot,
         recentDateKeys: [String],
         completionState: CompletionStateSnapshot,
+        settings: AppSettings,
         wakeProgress: WakeProgressSnapshot
     ) -> ProgressSurfaceSnapshot {
         let recentRecords = recentDateKeys.flatMap { completionState.records(for: $0) }
@@ -215,7 +219,12 @@ enum CompletionProjectionBuilder {
         )
 
         return ProgressSurfaceSnapshot(
-            fajrTodaySummary: history.todayCompletion.prayer.status.title,
+            headlineText: progressHeadline(
+                history: history,
+                settings: settings,
+                wakeProgress: wakeProgress
+            ),
+            fajrTodaySummary: prayerTodaySummary(history.todayCompletion.prayer.status),
             fajrSummary: historySummary(
                 completed: history.recentFajrCompletedCount,
                 missed: history.recentFajrMissedCount,
@@ -232,6 +241,31 @@ enum CompletionProjectionBuilder {
             qadaProgress: history.qadaProgress,
             wakeProgress: wakeProgress
         )
+    }
+
+    private static func progressHeadline(
+        history: CompletionHistoryProjection,
+        settings: AppSettings,
+        wakeProgress: WakeProgressSnapshot
+    ) -> String? {
+        if settings.quietPeriodEnabled {
+            return "Quiet period is on. You can keep going gently."
+        }
+        if history.qadaProgress.baselineOwed > 0 && history.qadaProgress.completed > 0 {
+            return "You're making progress on Qada."
+        }
+        if history.recentFastCompletedCount > 0 {
+            return history.recentFastCompletedCount == 1
+                ? "One completed fast recently."
+                : "\(history.recentFastCompletedCount) completed fasts recently."
+        }
+        if history.recentFajrCompletedCount > history.recentFajrMissedCount && history.recentFajrCompletedCount > 0 {
+            return "You've been steadier with Fajr lately."
+        }
+        if wakeProgress.summaryTitle != nil {
+            return "Your mornings are becoming more intentional."
+        }
+        return nil
     }
 
     private static func fastTodaySummary(
@@ -255,6 +289,19 @@ enum CompletionProjectionBuilder {
             return isQada ? "Qada completed" : "Completed"
         case .notCompleted:
             return isQada ? "Qada not completed" : "Not completed"
+        }
+    }
+
+    private static func prayerTodaySummary(
+        _ status: PrayerCompletionStatus
+    ) -> String {
+        switch status {
+        case .unknown:
+            return "Not logged"
+        case .completed:
+            return "Fajr completed"
+        case .missed:
+            return "Not prayed"
         }
     }
 
@@ -333,8 +380,8 @@ enum CompletionProjectionBuilder {
 
         return FajrHomeSupportPresentation(
             dateKey: dailyCompletion.dateKey,
-            title: "Did you pray Fajr?",
-            detail: "Fajr was at \(TimeFormatters.timeFormatter.string(from: schedule.fajrDate))."
+            title: Strings.HomeSurface.fajrPromptTitle,
+            detail: Strings.HomeSurface.fajrPromptBody
         )
     }
 
@@ -359,9 +406,9 @@ enum CompletionProjectionBuilder {
                     phase: .fastingStatusPrompt,
                     dateKey: dateKey,
                     intentSnapshot: intent,
-                    title: isQada ? "Fasting for Qada today?" : "Fasting today?",
-                    detail: isQada ? "Start this Qada day now." : "Mark this day when you start.",
-                    primaryActionTitle: isQada ? "Start Qada" : "Yes",
+                    title: isQada ? "Qada fast today?" : "Fasting today?",
+                    detail: isQada ? "Mark it when you start. Completed Qada days count toward what remains." : "Mark it when you start.",
+                    primaryActionTitle: isQada ? "Start Qada" : "Yes, fasting",
                     secondaryActionTitle: "Not today",
                     statusTitle: nil,
                     showsUndo: false
@@ -383,8 +430,8 @@ enum CompletionProjectionBuilder {
                     phase: .fastCompletionLogged,
                     dateKey: dateKey,
                     intentSnapshot: intent,
-                    title: isQada ? "Qada fast completed" : "Fast completed",
-                    detail: isQada ? "Counts toward what you still owe." : "Logged for today.",
+                    title: isQada ? "Qada counted" : "Fast completed",
+                    detail: isQada ? "Your remaining total has been updated." : "Logged for today.",
                     primaryActionTitle: nil,
                     secondaryActionTitle: nil,
                     statusTitle: isQada ? "Qada completed" : "Fast completed",
@@ -412,10 +459,10 @@ enum CompletionProjectionBuilder {
                     phase: .fastCompletionPrompt,
                     dateKey: dateKey,
                     intentSnapshot: intent,
-                    title: isQada ? "Did you complete the Qada fast?" : "Did you complete the fast?",
-                    detail: isQada ? "Completed Qada fasts reduce what remains." : "Log the result for today.",
-                    primaryActionTitle: "Completed",
-                    secondaryActionTitle: "Not completed",
+                    title: Strings.HomeSurface.fastCompletionTitle,
+                    detail: isQada ? "Mark your fast so your Qada progress stays accurate." : Strings.HomeSurface.fastCompletionBody,
+                    primaryActionTitle: "Fast completed",
+                    secondaryActionTitle: "Didn't complete it",
                     statusTitle: nil,
                     showsUndo: false
                 )
@@ -424,8 +471,8 @@ enum CompletionProjectionBuilder {
                     phase: .fastCompletionLogged,
                     dateKey: dateKey,
                     intentSnapshot: intent,
-                    title: isQada ? "Qada fast completed" : "Fast completed",
-                    detail: isQada ? "Counts toward what you still owe." : "Logged for today.",
+                    title: isQada ? "Qada counted" : "Fast completed",
+                    detail: isQada ? "Your remaining total has been updated." : "Logged for today.",
                     primaryActionTitle: nil,
                     secondaryActionTitle: nil,
                     statusTitle: isQada ? "Qada completed" : "Fast completed",

@@ -22,7 +22,7 @@ struct TodayFajrCheckInCard: View {
                             fajrLogStore.setStatus(.completed, for: presentation.dateKey, now: Date())
                         }
                     } label: {
-                        Text("Prayed")
+                        Text(Strings.HomeSurface.fajrPromptPrimary)
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.borderedProminent)
@@ -33,19 +33,16 @@ struct TodayFajrCheckInCard: View {
                             fajrLogStore.setStatus(.missed, for: presentation.dateKey, now: Date())
                         }
                     } label: {
-                        Text("Missed")
+                        Text(Strings.HomeSurface.fajrPromptSecondary)
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.bordered)
                     .tint(.secondary)
                 }
 
-                NavigationLink("Review later") {
-                    FajrHistoryView()
-                }
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(DawnColor.accent)
-                .accessibilityLabel("Review Fajr later")
+                Text(Strings.HomeSurface.fajrPromptLater)
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(DawnColor.accent)
             }
         }
     }

@@ -134,7 +134,7 @@ struct TodayFastCheckInCard: View {
         NavigationLink {
             FastHistoryView()
         } label: {
-            Text("History")
+            Text("View history")
                 .font(.footnote.weight(.semibold))
                 .foregroundStyle(DawnColor.accent)
         }
