@@ -1709,6 +1709,65 @@ struct ScheduleManagerHijriTests {
 
     @Test
     @MainActor
+    func historySurfaceSnapshotsResolveCompletedDayThroughManagerResolver() async {
+        let suiteName = "ScheduleManagerHijriTests.HistorySurfaceResolver"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let today = DateHelpers.startOfToday(in: timeZone)
+        let todayKey = DateHelpers.dayIdentifier(for: today, timeZone: timeZone)
+
+        let settingsStore = SuhoorSettingsStore(defaults: defaults)
+        settingsStore.update { draft in
+            draft.locationMode = .fixed
+            draft.fixedLocation = FixedLocation(latitude: 43.6532, longitude: -79.3832)
+        }
+
+        let alarmConfigStore = AlarmConfigStore(defaultsStore: defaults)
+        alarmConfigStore.addSingleDaySource(today, timeZone: timeZone)
+        let fastTagStore = FastTagStore(defaults: defaults)
+        fastTagStore.setSelection(
+            FastIntentSelection(primaryIntent: .qadaMakeup, secondaryTags: []),
+            for: today,
+            timeZone: timeZone
+        )
+        let fastLogStore = FastLogStore(defaults: defaults)
+        fastLogStore.setStatus(
+            .completed,
+            for: todayKey,
+            intentSnapshot: FastIntentSnapshot(primaryIntent: .qadaMakeup, secondaryTags: [])
+        )
+        let fajrLogStore = FajrLogStore(defaults: defaults)
+        fajrLogStore.setStatus(.completed, for: todayKey)
+
+        let manager = ScheduleManager(
+            settingsStore: settingsStore,
+            locationService: LocationService(),
+            alarmConfigStore: alarmConfigStore,
+            fastTagStore: fastTagStore,
+            fastLogStore: fastLogStore,
+            fajrLogStore: fajrLogStore,
+            hijriAdjustmentStore: HijriMonthAdjustmentStore(defaults: defaults),
+            cacheStore: ScheduleCacheStore(defaults: defaults)
+        )
+
+        await manager.refreshSchedules(force: true)
+
+        let now = today.addingTimeInterval(12 * 60 * 60)
+        let fajrSnapshot = manager.fajrHistorySurfaceSnapshot(days: 1, now: now)
+        let fastSnapshot = manager.fastHistorySurfaceSnapshot(days: 1, now: now)
+
+        #expect(fajrSnapshot.rows.count == 1)
+        #expect(fajrSnapshot.rows.first?.dateKey == todayKey)
+        #expect(fajrSnapshot.rows.first?.status == .completed)
+        #expect(fastSnapshot.rows.count == 1)
+        #expect(fastSnapshot.rows.first?.dateKey == todayKey)
+        #expect(fastSnapshot.rows.first?.status == .completed)
+        #expect(fastSnapshot.rows.first?.intentSnapshot?.primaryIntent == .qadaMakeup)
+    }
+
+    @Test
+    @MainActor
     func wakeRowPresentationUsesMeaningFirstDetailWithoutChips() async {
         let suiteName = "ScheduleManagerHijriTests.WakeRowPresentation"
         let defaults = UserDefaults(suiteName: suiteName)!

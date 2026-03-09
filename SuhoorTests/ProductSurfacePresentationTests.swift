@@ -670,15 +670,16 @@ struct ProductSurfacePresentationTests {
         )
 
         let snapshot = HomeSurfaceProvider().homeSurfaceSnapshot(
-            now: makeDate(day: 25, hour: 6, minute: 0),
-            currentDay: currentDay,
-            todaySchedule: currentDay.schedule,
-            nextWakeEventSummary: nil,
+            input: HomeSurfaceProvider.Input(
+                now: makeDate(day: 25, hour: 6, minute: 0),
+                currentDay: currentDay,
+                todaySchedule: currentDay.schedule,
+                nextWakeEventSummary: nil,
+                hijriComponents: nil,
+                supportDecision: supportDecision
+            ),
             settings: .default,
-            permissionSnapshot: .empty,
-            hijriComponents: nil,
-            supportDecision: supportDecision,
-            dayLabel: { _ in "Today" }
+            permissionSnapshot: .empty
         )
 
         #expect(snapshot.contextSummaryText == "Today • Qada fast")

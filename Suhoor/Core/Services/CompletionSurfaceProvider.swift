@@ -29,7 +29,7 @@ struct CompletionSurfaceProvider {
     func fajrHistorySurfaceSnapshot(
         days: Int = 30,
         now: Date = Date(),
-        resolver: (Date, TimeZone) -> ResolvedDaySnapshot?
+        resolver: CompletionHistoryResolver
     ) -> FajrHistorySurfaceSnapshot {
         let window = completionHistoryWindow(
             days: days,
@@ -42,7 +42,7 @@ struct CompletionSurfaceProvider {
     func fastHistorySurfaceSnapshot(
         days: Int = 30,
         now: Date = Date(),
-        resolver: (Date, TimeZone) -> ResolvedDaySnapshot?
+        resolver: CompletionHistoryResolver
     ) -> FastHistorySurfaceSnapshot {
         let window = completionHistoryWindow(
             days: days,
@@ -55,14 +55,14 @@ struct CompletionSurfaceProvider {
     private func completionHistoryWindow(
         days: Int,
         now: Date,
-        resolver: (Date, TimeZone) -> ResolvedDaySnapshot?
+        resolver: CompletionHistoryResolver
     ) -> CompletionHistoryWindow {
         CompletionHistoryWindowBuilder.build(
             days: days,
             now: now,
             timeZone: .current
         ) { date in
-            resolver(date, .current)
+            resolver.resolveDaySnapshot(for: date, timeZone: .current)
         }
     }
 

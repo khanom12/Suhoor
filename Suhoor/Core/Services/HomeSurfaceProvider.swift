@@ -1,35 +1,38 @@
 import Foundation
 
 struct HomeSurfaceProvider {
+    struct Input {
+        let now: Date
+        let currentDay: ActiveAlarmDay?
+        let todaySchedule: DaySchedule?
+        let nextWakeEventSummary: NextWakeEventSummary?
+        let hijriComponents: AdjustedHijriDateComponents?
+        let supportDecision: HomeSupportDecision?
+    }
+
+    @MainActor
     func homeSurfaceSnapshot(
-        now: Date,
-        currentDay: ActiveAlarmDay?,
-        todaySchedule: DaySchedule?,
-        nextWakeEventSummary: NextWakeEventSummary?,
+        input: Input,
         settings: AppSettings,
-        permissionSnapshot: PermissionSnapshot,
-        hijriComponents: AdjustedHijriDateComponents?,
-        supportDecision: HomeSupportDecision?,
-        dayLabel: (Date) -> String
+        permissionSnapshot: PermissionSnapshot
     ) -> HomeSurfaceSnapshot {
-        _ = dayLabel
-        let contextDay = nextWakeEventSummary?.day ?? currentDay
-        let contextDate = contextDay?.date ?? now
-        let heroDay = nextWakeEventSummary?.day
+        let contextDay = input.nextWakeEventSummary?.day ?? input.currentDay
+        let contextDate = contextDay?.date ?? input.now
+        let heroDay = input.nextWakeEventSummary?.day
 
         return HomeSurfaceSnapshot(
             gregorianText: GregorianDateFormatter.shared.headerString(for: contextDate),
             hijriText: HijriDateFormatter.shared.string(from: contextDate),
             heroLabel: heroDay.map(ProductSurfacePresentation.homeHeroLabel(for:)),
             heroSubline: heroDay.map(ProductSurfacePresentation.homeHeroSubline(for:)),
-            nextWakeEventSummary: nextWakeEventSummary,
-            supportDecision: supportDecision ?? fallbackSupportDecision(
-                currentDay: currentDay,
-                todaySchedule: todaySchedule,
+            nextWakeEventSummary: input.nextWakeEventSummary,
+            supportDecision: input.supportDecision ?? fallbackSupportDecision(
+                currentDay: input.currentDay,
+                todaySchedule: input.todaySchedule,
                 settings: settings,
                 permissionSnapshot: permissionSnapshot,
-                hijriComponents: hijriComponents,
-                now: now
+                hijriComponents: input.hijriComponents,
+                now: input.now
             )
         )
     }

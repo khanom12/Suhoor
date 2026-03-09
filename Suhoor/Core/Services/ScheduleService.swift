@@ -48,6 +48,7 @@ final class ScheduleManager: ObservableObject {
     private let calendarPlanningProvider = CalendarPlanningProvider()
     private let quickAddPreviewProvider = QuickAddPreviewProvider()
     private let schedulingAuditProvider = SchedulingAuditProvider()
+    private let homeSurfaceAssembler = HomeSurfaceAssembler()
     private let completionCommandGateway: CompletionCommandGateway
     private let calculator = PrayerTimeCalculator()
     private let hijriAdjustmentStore: HijriMonthAdjustmentStore
@@ -68,14 +69,89 @@ final class ScheduleManager: ObservableObject {
     private let alarmEventRouter: AlarmEventRouter?
     private let visibleActiveDayLimit = 60
     private let scheduledActiveDayLimit = 30
-    private var expandedMonthSnapshots: [String: ExpandedMonthSnapshot] = [:]
-    private var expandedMonthInvalidationToken: Int = 0
-    private var tagResultMonthCache: [HijriMonthKey: MonthTagCache] = [:]
     private var activeTagSelectionRevision: Int = -1
-    private var queuedRefresh: PendingScheduleRefresh?
-    private var refreshTask: Task<Void, Never>?
     private var pendingDayRescheduleTasks: [String: Task<Void, Never>] = [:]
     private var cancellables: Set<AnyCancellable> = []
+    private lazy var wakeListDataProvider = WakeListDataProvider(
+        alarmConfigStore: alarmConfigStore,
+        adjustedHijriCalendar: adjustedHijriCalendar,
+        fastTagStore: fastTagStore,
+        dependencies: .init(
+            syncMorningPlanState: { [unowned self] in
+                syncMorningPlanState()
+            },
+            currentCoordinate: { [unowned self] in
+                currentCoordinate()
+            },
+            resolvedEntriesForHijriMonth: { [unowned self] key, timeZone in
+                resolvedEntriesForHijriMonth(key, timeZone: timeZone)
+            },
+            activeDays: { [unowned self] entries, coordinate, timeZone in
+                activeDays(from: entries, coordinate: coordinate, timeZone: timeZone)
+            }
+        )
+    )
+    private lazy var monthTagResultProvider = MonthTagResultProvider(
+        dependencies: .init(
+            currentRevision: { [unowned self] in
+                fastTagStore.currentRevision
+            },
+            selections: { [unowned self] in
+                fastTagStore.selections
+            },
+            resolvedEntriesForHijriMonth: { [unowned self] key, timeZone in
+                syncMorningPlanState()
+                return resolvedEntriesForHijriMonth(key, timeZone: timeZone)
+            },
+            replaceActiveDayTagResult: { [unowned self] day, tagResult, timeZone in
+                replacingTagResult(day, with: tagResult, timeZone: timeZone)
+            }
+        )
+    )
+    private lazy var completionHistoryResolver = CompletionHistoryResolver(
+        dependencies: .init(
+            syncMorningPlanState: { [unowned self] in
+                syncMorningPlanState()
+            },
+            currentCoordinate: { [unowned self] in
+                currentCoordinate()
+            },
+            settings: { [unowned self] in
+                settingsStore.settings
+            },
+            mergedProvenances: { [unowned self] date, timeZone in
+                mergedProvenances(for: date, timeZone: timeZone)
+            },
+            tagPreviewResult: { [unowned self] date, overrideSelection, defaultPrimaryIntent, timeZone in
+                tagPreviewResult(
+                    for: date,
+                    overrideSelection: overrideSelection,
+                    defaultPrimaryIntent: defaultPrimaryIntent,
+                    timeZone: timeZone
+                )
+            },
+            buildMorningStateSnapshot: { [unowned self] settings, coordinate, timeZone, locationDescription, provenancesByDateKey in
+                buildMorningStateSnapshot(
+                    settings: settings,
+                    coordinate: coordinate,
+                    timeZone: timeZone,
+                    locationDescription: locationDescription,
+                    provenancesByDateKey: provenancesByDateKey
+                )
+            },
+            monthTagResultProvider: monthTagResultProvider,
+            defaultConfig: { [unowned self] in
+                alarmConfigStore.defaults
+            },
+            overridesByDay: { [unowned self] in
+                alarmConfigStore.overridesByDay
+            },
+            calculator: calculator
+        )
+    )
+    private lazy var refreshCoordinator = ScheduleRefreshCoordinator { [weak self] request in
+        await self?.ensureScheduleWindow(reason: request.reason)
+    }
 
     init(
         settingsStore: SuhoorSettingsStore,
@@ -258,24 +334,7 @@ final class ScheduleManager: ObservableObject {
             tagFilter: tagFilter,
             pinnedEntryIDs: pinnedEntryIDs,
             timeZone: timeZone,
-            dependencies: WakeSurfaceProvider.Dependencies(
-                totalScheduledCount: { [weak self] key in
-                    self?.totalScheduledCount(for: key, timeZone: timeZone) ?? 0
-                },
-                rollingHijriMonths: { [weak self] in
-                    self?.rollingHijriMonths(count: 12, timeZone: timeZone) ?? []
-                },
-                monthPreview: { [weak self] yearMonth in
-                    self?.hijriMonthStartPreview(
-                        for: yearMonth.month,
-                        hijriYear: yearMonth.hijriYear,
-                        timeZone: timeZone
-                    )
-                },
-                cachedMonthEntries: { [weak self] key in
-                    self?.cachedMonthEntries(for: key)
-                }
-            )
+            dependencies: wakeListDataProvider.wakeDependencies(timeZone: timeZone)
         )
     }
 
@@ -294,33 +353,23 @@ final class ScheduleManager: ObservableObject {
         now: Date,
         dismissedWarnings: Set<FastWarning>
     ) -> HomeSurfaceSnapshot {
-        let hijriComponents = AdjustedHijriCalendar.shared.adjustedComponents(for: now, timeZone: .current)
-        let todayKey = DateHelpers.dayIdentifier(for: now, timeZone: .current)
-        let todayStart = DateHelpers.startOfDay(now, in: .current)
-        let currentDay = activeWindowSnapshot.byDateKey[todayKey]
-        let todaySchedule = currentDay?.schedule ?? schedule(for: todayStart)
-        let completionProjection = CompletionProjectionBuilder.buildHome(
+        let input = homeSurfaceAssembler.makeInput(
             now: now,
-            currentDay: currentDay,
-            todaySchedule: todaySchedule,
-            settings: settingsStore.settings,
-            permissionSnapshot: permissionSnapshot,
-            hijriComponents: hijriComponents,
-            dismissedWarnings: dismissedWarnings
-        )
-
-        return homeSurfaceProvider.homeSurfaceSnapshot(
-            now: now,
-            currentDay: currentDay,
-            todaySchedule: todaySchedule,
+            dismissedWarnings: dismissedWarnings,
+            activeWindowSnapshot: activeWindowSnapshot,
             nextWakeEventSummary: nextWakeEventSummary,
             settings: settingsStore.settings,
             permissionSnapshot: permissionSnapshot,
-            hijriComponents: hijriComponents,
-            supportDecision: completionProjection.supportDecision,
-            dayLabel: { [weak self] date in
-                self?.dayLabel(for: date) ?? TimeFormatters.dayFormatter.string(from: date)
+            adjustedHijriCalendar: adjustedHijriCalendar,
+            scheduleLookup: { [unowned self] date in
+                schedule(for: date)
             }
+        )
+
+        return homeSurfaceProvider.homeSurfaceSnapshot(
+            input: input,
+            settings: settingsStore.settings,
+            permissionSnapshot: permissionSnapshot
         )
     }
 
@@ -341,10 +390,9 @@ final class ScheduleManager: ObservableObject {
     ) -> FajrHistorySurfaceSnapshot {
         completionSurfaceProvider.fajrHistorySurfaceSnapshot(
             days: days,
-            now: now
-        ) { [weak self] date, timeZone in
-            self?.resolvedDaySnapshotForHistory(for: date, timeZone: timeZone)
-        }
+            now: now,
+            resolver: completionHistoryResolver
+        )
     }
 
     func fastHistorySurfaceSnapshot(
@@ -353,10 +401,9 @@ final class ScheduleManager: ObservableObject {
     ) -> FastHistorySurfaceSnapshot {
         completionSurfaceProvider.fastHistorySurfaceSnapshot(
             days: days,
-            now: now
-        ) { [weak self] date, timeZone in
-            self?.resolvedDaySnapshotForHistory(for: date, timeZone: timeZone)
-        }
+            now: now,
+            resolver: completionHistoryResolver
+        )
     }
 
     func performCompletionEdit(
@@ -406,22 +453,7 @@ final class ScheduleManager: ObservableObject {
     }
 
     func dayLabel(for date: Date) -> String {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = .current
-        if calendar.isDateInToday(date) { return "Today" }
-        if calendar.isDateInTomorrow(date) { return "Tomorrow" }
-        return TimeFormatters.dayFormatter.string(from: date)
-    }
-
-    private func totalScheduledCount(
-        for key: HijriMonthKey,
-        timeZone: TimeZone = .current
-    ) -> Int {
-        guard let month = HijriMonth(rawValue: key.month) else { return 0 }
-        return alarmConfigStore.resolvedScheduledEntries(
-            forHijriMonth: HijriYearMonth(hijriYear: key.year, month: month),
-            timeZone: timeZone
-        ).count
+        SurfaceDateLabelFormatter.dayLabel(for: date)
     }
 
     func hijriAdjustment(for month: HijriMonth) -> Int {
@@ -468,11 +500,19 @@ final class ScheduleManager: ObservableObject {
     }
 
     func hijriMonthStartPreview(for month: HijriMonth, timeZone: TimeZone = .current) -> HijriMonthStartPreview? {
-        hijriMonthStartPreview(for: month, hijriYear: currentHijriAdjustmentYear, timeZone: timeZone)
+        wakeListDataProvider.hijriMonthStartPreview(
+            for: month,
+            hijriYear: currentHijriAdjustmentYear,
+            timeZone: timeZone
+        )
     }
 
     func hijriMonthStartPreview(for month: HijriMonth, hijriYear: Int, timeZone: TimeZone = .current) -> HijriMonthStartPreview? {
-        adjustedHijriCalendar.monthStartPreview(for: HijriYearMonth(hijriYear: hijriYear, month: month), timeZone: timeZone)
+        wakeListDataProvider.hijriMonthStartPreview(
+            for: month,
+            hijriYear: hijriYear,
+            timeZone: timeZone
+        )
     }
 
     func acknowledgeHijriAdjustmentChanges() {
@@ -481,31 +521,11 @@ final class ScheduleManager: ObservableObject {
     }
 
     func currentHijriYearMonth(timeZone: TimeZone = .current, date: Date = Date()) -> HijriYearMonth? {
-        if let components = adjustedHijriCalendar.adjustedComponents(for: date, timeZone: timeZone) {
-            return HijriYearMonth(hijriYear: components.hijriYear, month: components.month)
-        }
-        var fallbackCalendar = Calendar(identifier: .islamicUmmAlQura)
-        fallbackCalendar.timeZone = timeZone
-        let fallback = fallbackCalendar.dateComponents([.year, .month], from: date)
-        guard
-            let year = fallback.year,
-            let monthValue = fallback.month,
-            let month = HijriMonth(rawValue: monthValue)
-        else {
-            return nil
-        }
-        return HijriYearMonth(hijriYear: year, month: month)
+        wakeListDataProvider.currentHijriYearMonth(timeZone: timeZone, date: date)
     }
 
     func rollingHijriMonths(count: Int = 12, timeZone: TimeZone = .current, date: Date = Date()) -> [HijriYearMonth] {
-        guard let start = currentHijriYearMonth(timeZone: timeZone, date: date), count > 0 else { return [] }
-        return (0..<count).compactMap { offset in
-            let rawMonth = start.month.rawValue - 1 + offset
-            let monthValue = (rawMonth % 12) + 1
-            let yearOffset = rawMonth / 12
-            guard let month = HijriMonth(rawValue: monthValue) else { return nil }
-            return HijriYearMonth(hijriYear: start.hijriYear + yearOffset, month: month)
-        }
+        wakeListDataProvider.rollingHijriMonths(count: count, timeZone: timeZone, date: date)
     }
 
     func hasRecurringIslamicSchedules() -> Bool {
@@ -513,58 +533,16 @@ final class ScheduleManager: ObservableObject {
     }
 
     func cachedMonthEntries(for key: HijriMonthKey) -> [ActiveAlarmDay]? {
-        let identifier = expandedMonthIdentifier(for: key)
-        guard let cached = expandedMonthSnapshots[identifier],
-              cached.invalidationToken == expandedMonthInvalidationToken,
-              cached.tagSelectionRevision == fastTagStore.currentRevision else {
-            return nil
-        }
-        return cached.entries
+        wakeListDataProvider.cachedMonthEntries(for: key)
     }
 
     func monthEntries(for key: HijriMonthKey, timeZone: TimeZone = .current) async -> [ActiveAlarmDay] {
-        let identifier = expandedMonthIdentifier(for: key)
-        if let cached = expandedMonthSnapshots[identifier],
-           cached.invalidationToken == expandedMonthInvalidationToken,
-           cached.tagSelectionRevision == fastTagStore.currentRevision {
-            return cached.entries
-        }
-
-        guard let coordinate = currentCoordinate() else { return [] }
-        guard let month = HijriMonth(rawValue: key.month) else { return [] }
-
-        syncMorningPlanState()
-        let resolvedEntries = resolvedEntriesForHijriMonth(
-            HijriYearMonth(hijriYear: key.year, month: month),
-            timeZone: timeZone
-        )
-        let entries = activeDays(
-            from: resolvedEntries,
-            coordinate: coordinate,
-            timeZone: timeZone
-        )
-
-        expandedMonthSnapshots[identifier] = ExpandedMonthSnapshot(
-            key: key,
-            generatedAt: Date(),
-            invalidationToken: expandedMonthInvalidationToken,
-            tagSelectionRevision: fastTagStore.currentRevision,
-            entries: entries
-        )
-        return entries
+        wakeListDataProvider.monthEntries(for: key, timeZone: timeZone)
     }
 
     func invalidateExpandedMonthSnapshots(reason: String? = nil) {
-        expandedMonthInvalidationToken += 1
-        expandedMonthSnapshots.removeAll()
-        invalidateTagResultMonthCache()
-        if let reason {
-            Logging.diagnostics.debug("[cache] invalidated expanded month snapshots: \(reason, privacy: .public)")
-        }
-    }
-
-    private func invalidateTagResultMonthCache() {
-        tagResultMonthCache.removeAll()
+        wakeListDataProvider.invalidate(reason: reason)
+        monthTagResultProvider.invalidate()
     }
 
     func upcomingResolvedEntries(limit: Int = 60, timeZone: TimeZone = .current) -> [ResolvedScheduledDateEntry] {
@@ -630,11 +608,9 @@ final class ScheduleManager: ObservableObject {
         let key = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
         if overrideSelection == nil,
            alarmConfigStore.provenance(for: date, timeZone: timeZone).isEmpty == false,
-           let shawwalKey = shawwalMonthKey(for: date, timeZone: timeZone) {
-            let results = monthTagResults(for: shawwalKey, timeZone: timeZone)
-            if let monthResult = results[key] {
-                return monthResult
-            }
+           let monthResult = monthTagResultProvider.shawwalMonthKey(for: date, timeZone: timeZone)
+            .flatMap({ monthTagResultProvider.monthTagResults(for: $0, timeZone: timeZone)[key] }) {
+            return monthResult
         }
         var seeds = activeWindowSnapshot.visibleDays.map(\.tagSeed)
         if defaultPrimaryIntent != nil, seeds.contains(where: { $0.dateKey == key }) == false {
@@ -654,110 +630,6 @@ final class ScheduleManager: ObservableObject {
             timeZone: timeZone,
             overrideSelection: overrideSelection
         )
-    }
-
-    private func monthTagResults(for key: HijriMonthKey, timeZone: TimeZone) -> [String: TagComputationResult] {
-        if let cached = tagResultMonthCache[key],
-           cached.revision == fastTagStore.currentRevision {
-            return cached.results
-        }
-
-        guard let month = HijriMonth(rawValue: key.month) else { return [:] }
-        syncMorningPlanState()
-        let resolvedEntries = resolvedEntriesForHijriMonth(
-            HijriYearMonth(hijriYear: key.year, month: month),
-            timeZone: timeZone
-        )
-        let seeds = resolvedEntries.map {
-            ActiveTagComputationSeed(
-                date: $0.date,
-                dateKey: $0.dateKey,
-                defaultPrimaryIntent: $0.provenances.defaultFastPrimaryIntent()
-            )
-        }
-        let results = TagComputationEngine.results(
-            seeds: seeds,
-            selections: fastTagStore.selections,
-            ruleset: .strict,
-            timeZone: timeZone
-        )
-        tagResultMonthCache[key] = MonthTagCache(
-            revision: fastTagStore.currentRevision,
-            results: results
-        )
-        return results
-    }
-
-    private func applyShawwalTagResults(
-        to days: [ActiveAlarmDay],
-        timeZone: TimeZone
-    ) -> [ActiveAlarmDay] {
-        guard days.contains(where: { shawwalMonthKey(for: $0.date, timeZone: timeZone) != nil }) else {
-            return days
-        }
-
-        var resultsByMonth: [HijriMonthKey: [String: TagComputationResult]] = [:]
-        var updated: [ActiveAlarmDay] = []
-        updated.reserveCapacity(days.count)
-        var didChange = false
-
-        for day in days {
-            guard let monthKey = shawwalMonthKey(for: day.date, timeZone: timeZone) else {
-                updated.append(day)
-                continue
-            }
-            let results = resultsByMonth[monthKey] ?? monthTagResults(for: monthKey, timeZone: timeZone)
-            resultsByMonth[monthKey] = results
-            if let monthResult = results[day.dateKey], monthResult != day.tagResult {
-                didChange = true
-                updated.append(replacingTagResult(day, with: monthResult))
-            } else {
-                updated.append(day)
-            }
-        }
-
-        return didChange ? updated : days
-    }
-
-    private func replacingTagResult(
-        _ day: ActiveAlarmDay,
-        with tagResult: TagComputationResult
-    ) -> ActiveAlarmDay {
-        guard let coordinate = currentCoordinate() else {
-            return ActiveAlarmDay(
-                date: day.date,
-                dateKey: day.dateKey,
-                schedule: day.schedule,
-                effectiveConfig: day.effectiveConfig,
-                provenances: day.provenances,
-                isImplicitRamadan: day.isImplicitRamadan,
-                isExplicitOneOff: day.isExplicitOneOff,
-                tagResult: tagResult,
-                primaryDisplay: day.primaryDisplay,
-                sourceSummaryText: day.sourceSummaryText,
-                resolvedDayContext: day.resolvedDayContext,
-                scheduledEvents: day.scheduledEvents,
-                decisionLog: day.decisionLog,
-                dailyCompletion: day.dailyCompletion
-            )
-        }
-
-        return resolveActiveDay(
-            for: day.date,
-            provenances: day.provenances,
-            tagResult: tagResult,
-            coordinate: coordinate,
-            settings: settingsStore.settings,
-            timeZone: .current
-        ) ?? day
-    }
-
-    private func shawwalMonthKey(for date: Date, timeZone: TimeZone) -> HijriMonthKey? {
-        guard let components = FastIntentEngine.adjustedComponents(for: date, timeZone: timeZone),
-              components.month == .shawwal else {
-            return nil
-        }
-        return FastIntentEngine.hijriMonthKey(for: date, timeZone: timeZone)
     }
 
     func previewIslamicQuickAdd(
@@ -1039,10 +911,7 @@ final class ScheduleManager: ObservableObject {
     }
 
     func requestRefresh(reason: ScheduleRefreshReason, force: Bool = true) {
-        let request = PendingScheduleRefresh(reason: reason, force: force)
-        queuedRefresh = queuedRefresh?.merged(with: request) ?? request
-        guard refreshTask == nil else { return }
-        scheduleQueuedRefresh()
+        refreshCoordinator.requestRefresh(reason: reason, force: force)
     }
 
     private func applyAddFlowSelection(_ selection: FastIntentSelection?, for date: Date) {
@@ -1124,85 +993,6 @@ final class ScheduleManager: ObservableObject {
         )
     }
 
-    private func resolvedDaySnapshotForHistory(
-        for date: Date,
-        timeZone: TimeZone = .current
-    ) -> ResolvedDaySnapshot? {
-        syncMorningPlanState()
-        guard let coordinate = currentCoordinate() else { return nil }
-
-        let normalizedDate = DateHelpers.startOfDay(date, in: timeZone)
-        let key = DateHelpers.dayIdentifier(for: normalizedDate, timeZone: timeZone)
-        let provenances = mergedProvenances(for: normalizedDate, timeZone: timeZone)
-        let settings = settingsStore.settings
-        let defaultPrimaryIntent = provenances.defaultFastPrimaryIntent()
-        let tagResult: TagComputationResult
-
-        if let shawwalKey = shawwalMonthKey(for: normalizedDate, timeZone: timeZone) {
-            let results = monthTagResults(for: shawwalKey, timeZone: timeZone)
-            tagResult = results[key] ?? tagPreviewResult(
-                for: normalizedDate,
-                defaultPrimaryIntent: defaultPrimaryIntent,
-                timeZone: timeZone
-            )
-        } else {
-            tagResult = tagPreviewResult(
-                for: normalizedDate,
-                defaultPrimaryIntent: defaultPrimaryIntent,
-                timeZone: timeZone
-            )
-        }
-
-        let effectiveConfig = ActiveWindowBuilder.effectiveConfig(
-            for: normalizedDate,
-            settings: settings,
-            defaultConfig: alarmConfigStore.defaults,
-            overridesByDay: alarmConfigStore.overridesByDay,
-            timeZone: timeZone
-        )
-        let stateSnapshot = buildMorningStateSnapshot(
-            settings: settings,
-            coordinate: coordinate,
-            timeZone: timeZone,
-            locationDescription: "Based on your location",
-            provenancesByDateKey: [key: provenances]
-        )
-
-        return ResolvedDayPipeline.resolve(
-            date: normalizedDate,
-            dateKey: key,
-            provenances: provenances,
-            effectiveConfig: effectiveConfig,
-            tagResult: tagResult,
-            stateSnapshot: stateSnapshot,
-            calculator: calculator
-        )
-    }
-
-    private func tagSummaryText(
-        primaryIntent: FastPrimaryIntent,
-        secondaryTags: Set<FastSecondaryVirtueTag>
-    ) -> String {
-        var parts: [String] = [primaryIntent.shortTitle]
-        let secondary = secondaryTags.sorted { $0.title < $1.title }
-        if !secondary.isEmpty {
-            parts.append(secondary.map(\.shortTitle).joined(separator: ", "))
-        }
-        return parts.joined(separator: " • ")
-    }
-
-    private func reorderedWeekdaySymbols(calendar: Calendar) -> [String] {
-        let symbols = calendar.veryShortStandaloneWeekdaySymbols
-        let prefixIndex = max(0, calendar.firstWeekday - 1)
-        return Array(symbols[prefixIndex...]) + Array(symbols[..<prefixIndex])
-    }
-
-    private func firstVisibleDate(in monthStart: Date, calendar: Calendar) -> Date {
-        let weekday = calendar.component(.weekday, from: monthStart)
-        let offset = (weekday - calendar.firstWeekday + 7) % 7
-        return calendar.date(byAdding: .day, value: -offset, to: monthStart) ?? monthStart
-    }
-
     func requestRescheduleDay(_ date: Date, debounce: TimeInterval = 0.18) {
         let normalizedDate = DateHelpers.startOfDay(date, in: .current)
         let key = DateHelpers.dayIdentifier(for: normalizedDate, timeZone: .current)
@@ -1245,7 +1035,10 @@ final class ScheduleManager: ObservableObject {
                 await refreshSchedules(force: true)
                 return
             }
-            let adjustedVisibleDays = applyShawwalTagResults(to: activeWindowSnapshot.visibleDays, timeZone: .current)
+            let adjustedVisibleDays = monthTagResultProvider.applyShawwalTagResults(
+                to: activeWindowSnapshot.visibleDays,
+                timeZone: .current
+            )
             if adjustedVisibleDays != activeWindowSnapshot.visibleDays {
                 activeWindowSnapshot = ActiveAlarmWindowSnapshot(
                     generatedAt: activeWindowSnapshot.generatedAt,
@@ -1406,7 +1199,10 @@ final class ScheduleManager: ObservableObject {
                 ActiveWindowBuilder.build(input: input)
             }.value
         }
-        let adjustedVisibleDays = applyShawwalTagResults(to: result.visibleDays, timeZone: timeZone)
+        let adjustedVisibleDays = monthTagResultProvider.applyShawwalTagResults(
+            to: result.visibleDays,
+            timeZone: timeZone
+        )
         let adjustedSnapshot: ActiveAlarmWindowSnapshot
         if adjustedVisibleDays != result.visibleDays {
             adjustedSnapshot = ActiveAlarmWindowSnapshot(
@@ -1795,9 +1591,7 @@ final class ScheduleManager: ObservableObject {
     }
 
     func resetAll() async {
-        refreshTask?.cancel()
-        refreshTask = nil
-        queuedRefresh = nil
+        refreshCoordinator.cancelAll()
         pendingDayRescheduleTasks.values.forEach { $0.cancel() }
         pendingDayRescheduleTasks.removeAll()
         await cancelAll()
@@ -1985,7 +1779,7 @@ final class ScheduleManager: ObservableObject {
                 now: now,
                 timeZone: timeZone,
                 dayLabel: { date in
-                    self.dayLabel(for: date)
+                    SurfaceDateLabelFormatter.dayLabel(for: date)
                 },
                 dateParticipatesInWakePlan: { date, timeZone in
                     self.dateParticipatesInWakePlan(date, timeZone: timeZone)
@@ -2383,6 +2177,40 @@ final class ScheduleManager: ObservableObject {
         )
     }
 
+    private func replacingTagResult(
+        _ day: ActiveAlarmDay,
+        with tagResult: TagComputationResult,
+        timeZone: TimeZone
+    ) -> ActiveAlarmDay {
+        guard let coordinate = currentCoordinate() else {
+            return ActiveAlarmDay(
+                date: day.date,
+                dateKey: day.dateKey,
+                schedule: day.schedule,
+                effectiveConfig: day.effectiveConfig,
+                provenances: day.provenances,
+                isImplicitRamadan: day.isImplicitRamadan,
+                isExplicitOneOff: day.isExplicitOneOff,
+                tagResult: tagResult,
+                primaryDisplay: day.primaryDisplay,
+                sourceSummaryText: day.sourceSummaryText,
+                resolvedDayContext: day.resolvedDayContext,
+                scheduledEvents: day.scheduledEvents,
+                decisionLog: day.decisionLog,
+                dailyCompletion: day.dailyCompletion
+            )
+        }
+
+        return resolveActiveDay(
+            for: day.date,
+            provenances: day.provenances,
+            tagResult: tagResult,
+            coordinate: coordinate,
+            settings: settingsStore.settings,
+            timeZone: timeZone
+        ) ?? day
+    }
+
     private func scheduleAndConfig(for date: Date) -> (schedule: DaySchedule, config: EffectiveDailyConfig)? {
         guard let coordinate = currentCoordinate() else { return nil }
 
@@ -2408,34 +2236,6 @@ final class ScheduleManager: ObservableObject {
         }
 
         return (schedule: activeDay.schedule, config: activeDay.effectiveConfig)
-    }
-
-    private func scheduleQueuedRefresh() {
-        guard let request = queuedRefresh else { return }
-        queuedRefresh = nil
-        refreshTask = Task { [weak self] in
-            guard let self else { return }
-            let delay = request.reason.debounceDurationNanoseconds
-            if delay > 0 {
-                try? await Task.sleep(nanoseconds: delay)
-            }
-            guard !Task.isCancelled else {
-                await MainActor.run {
-                    self.refreshTask = nil
-                    if self.queuedRefresh != nil {
-                        self.scheduleQueuedRefresh()
-                    }
-                }
-                return
-            }
-            await self.ensureScheduleWindow(reason: request.reason)
-            await MainActor.run {
-                self.refreshTask = nil
-                if self.queuedRefresh != nil {
-                    self.scheduleQueuedRefresh()
-                }
-            }
-        }
     }
 
     private func statusLabel(for state: AppPermissionState) -> String {
@@ -2612,9 +2412,12 @@ final class ScheduleManager: ObservableObject {
             timeZone: timeZone
         )
         let visibleDays = activeWindowSnapshot.visibleDays.map { day in
-            replacingTagResult(day, with: tagResults[day.dateKey] ?? .empty)
+            replacingTagResult(day, with: tagResults[day.dateKey] ?? .empty, timeZone: timeZone)
         }
-        let adjustedVisibleDays = applyShawwalTagResults(to: visibleDays, timeZone: timeZone)
+        let adjustedVisibleDays = monthTagResultProvider.applyShawwalTagResults(
+            to: visibleDays,
+            timeZone: timeZone
+        )
         activeWindowSnapshot = ActiveAlarmWindowSnapshot(
             generatedAt: Date(),
             visibleDays: adjustedVisibleDays,
@@ -2655,21 +2458,16 @@ final class ScheduleManager: ObservableObject {
         let provenances = mergedProvenances(for: normalizedDate, timeZone: timeZone)
 
         let settings = settingsStore.settings
-        let tagResult: TagComputationResult
-        if let shawwalKey = shawwalMonthKey(for: normalizedDate, timeZone: timeZone) {
-            let results = monthTagResults(for: shawwalKey, timeZone: timeZone)
-            tagResult = results[key] ?? tagPreviewResult(
+        let tagResult = monthTagResultProvider.resolvedTagResult(
+            for: normalizedDate,
+            dateKey: key,
+            fallback: tagPreviewResult(
                 for: normalizedDate,
                 defaultPrimaryIntent: provenances.defaultFastPrimaryIntent(),
                 timeZone: timeZone
-            )
-        } else {
-            tagResult = tagPreviewResult(
-                for: normalizedDate,
-                defaultPrimaryIntent: provenances.defaultFastPrimaryIntent(),
-                timeZone: timeZone
-            )
-        }
+            ),
+            timeZone: timeZone
+        )
 
         return resolveActiveDay(
             for: normalizedDate,
@@ -2764,23 +2562,6 @@ final class ScheduleManager: ObservableObject {
                 .notifications: notifications
             ]
         )
-    }
-
-    private func permissionSummaryText() async -> String {
-        let location = await uncachedPermissionPresentation(for: .location)
-        let alarms = await uncachedPermissionPresentation(for: .alarmKit)
-        let notifications = await uncachedPermissionPresentation(for: .notifications)
-        let mode = await effectiveSchedulingChannel()
-        let modeText: String
-        switch mode {
-        case .alarmKit:
-            modeText = "AlarmKit"
-        case .notifications:
-            modeText = "Notifications"
-        case .none:
-            modeText = "Blocked"
-        }
-        return "\(location.title): \(location.statusText) · \(alarms.title): \(alarms.statusText) · \(notifications.title): \(notifications.statusText) · Mode: \(modeText)"
     }
 
     private func updateBootstrapState() {
@@ -2951,35 +2732,6 @@ final class ScheduleManager: ObservableObject {
         )
     }
 
-    private func generateSchedules(
-        for dates: [Date],
-        coordinate: CLLocationCoordinate2D,
-        timeZone: TimeZone,
-        method: CalculationMethod,
-        adjustmentMinutes: Int,
-        maghribAdjustmentMinutes: Int,
-        effectiveConfigProvider: (Date) -> EffectiveDailyConfig,
-        locationDescription: String
-    ) -> [(DaySchedule, EffectiveDailyConfig)] {
-        var results: [(DaySchedule, EffectiveDailyConfig)] = []
-        for day in dates {
-            let config = effectiveConfigProvider(day)
-            if let schedule = buildSchedule(
-                for: day,
-                coordinate: coordinate,
-                timeZone: timeZone,
-                method: method,
-                adjustmentMinutes: adjustmentMinutes,
-                maghribAdjustmentMinutes: maghribAdjustmentMinutes,
-                effectiveConfig: config,
-                locationDescription: locationDescription
-            ) {
-                results.append((schedule, config))
-            }
-        }
-        return results
-    }
-
     private func resolvedSuhoorDate(
         for day: Date,
         fajr: Date,
@@ -3042,47 +2794,6 @@ final class ScheduleManager: ObservableObject {
         return calendar.date(byAdding: .minute, value: minutes, to: start) ?? start
     }
 
-    private func recentDateKeys(days: Int, timeZone: TimeZone = .current) -> [String] {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = timeZone
-        let today = calendar.startOfDay(for: Date())
-        return (0..<days).compactMap { offset in
-            let date = calendar.date(byAdding: .day, value: -offset, to: today) ?? today
-            return DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
-        }
-    }
-
-    private func scheduledDates(
-        startingFrom startDate: Date,
-        days: Int,
-        timeZone: TimeZone
-    ) -> [Date] {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = timeZone
-        let normalizedStart = calendar.startOfDay(for: startDate)
-        return DateHelpers.dates(startingFrom: normalizedStart, count: days, calendar: calendar)
-    }
-
-    private func expandedMonthIdentifier(for key: HijriMonthKey) -> String {
-        "\(key.year)-\(key.month)"
-    }
-}
-
-enum ScheduleRefreshReason: Sendable {
-    case appLaunch
-    case foreground
-    case settingsChanged
-    case locationUpdated
-    case manual
-}
-
-private struct PendingScheduleRefresh {
-    let reason: ScheduleRefreshReason
-    let force: Bool
-
-    func merged(with other: PendingScheduleRefresh) -> PendingScheduleRefresh {
-        PendingScheduleRefresh(reason: other.reason, force: force || other.force)
-    }
 }
 
 struct PermissionSnapshot: Equatable, Sendable {
@@ -3336,11 +3047,6 @@ struct ExpandedMonthSnapshot: Equatable, Sendable {
     let entries: [ActiveAlarmDay]
 }
 
-private struct MonthTagCache: Equatable, Sendable {
-    let revision: Int
-    let results: [String: TagComputationResult]
-}
-
 private struct ScheduleLocationSnapshot: Sendable {
     let latitude: Double
     let longitude: Double
@@ -3409,20 +3115,5 @@ private extension ScheduleManager {
             visibleHorizonDays: visibleHorizonDays,
             scheduledHorizonDays: scheduledHorizonDays
         )
-    }
-}
-
-private extension ScheduleRefreshReason {
-    var debounceDurationNanoseconds: UInt64 {
-        switch self {
-        case .appLaunch, .foreground:
-            return 0
-        case .settingsChanged:
-            return 200_000_000
-        case .locationUpdated:
-            return 100_000_000
-        case .manual:
-            return 0
-        }
     }
 }
