@@ -4,6 +4,7 @@ import CoreLocation
 import os
 
 struct AlarmsHomeView: View {
+    @EnvironmentObject private var appNavigator: AppNavigator
     @EnvironmentObject private var scheduleManager: ScheduleManager
     @EnvironmentObject private var locationService: LocationService
     @EnvironmentObject private var fastTagStore: FastTagStore
@@ -118,7 +119,7 @@ struct AlarmsHomeView: View {
             ToolbarItemGroup(placement: .topBarTrailing) {
                 if showsAddButton {
                     Button {
-                        NotificationCenter.default.post(name: .openPlanHome, object: nil)
+                        appNavigator.switchToPlans()
                     } label: {
                         Image(systemName: "plus")
                     }
@@ -288,11 +289,12 @@ struct AlarmsHomeView: View {
     }
 
     private func rebuildListSnapshot() {
-        let token = PerformanceTrace.begin("alarms.home.snapshot", metadata: "visible=\(scheduleManager.activeWindowSnapshot.visibleDays.count)")
+        let wakeSnapshot = scheduleManager.wakeSurfaceSnapshot
+        let token = PerformanceTrace.begin("alarms.home.snapshot", metadata: "visible=\(wakeSnapshot.visibleDays.count)")
         defer { PerformanceTrace.end(token) }
 
         let timeZone = TimeZone.current
-        let nearTermEntries = scheduleManager.activeWindowSnapshot.visibleDays.map(AlarmRowEntry.init)
+        let nearTermEntries = wakeSnapshot.visibleDays.map(AlarmRowEntry.init)
         var totalCountCache: [HijriMonthKey: Int] = [:]
 
         func totalCount(for key: HijriMonthKey) -> Int {
@@ -381,7 +383,7 @@ struct AlarmsHomeView: View {
         }
 
         let extraSectionKeys = Set(nearTermGrouped.keys)
-            .union(scheduleManager.activeWindowSnapshot.visibleDays.compactMap {
+            .union(wakeSnapshot.visibleDays.compactMap {
                 FastIntentEngine.hijriMonthKey(for: $0.schedule.date, timeZone: timeZone)
             })
         let extraSections: [HijriMonthSection] = extraSectionKeys

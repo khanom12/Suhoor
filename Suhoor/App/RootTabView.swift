@@ -1,3 +1,4 @@
+import Combine
 import SwiftUI
 
 enum RootTab: Hashable {
@@ -12,6 +13,7 @@ enum SettingsRoute: Hashable {
 }
 
 struct RootTabView: View {
+    @EnvironmentObject private var appNavigator: AppNavigator
     @State private var selectedTab: RootTab = .home
     @State private var settingsPath = NavigationPath()
     @State private var planPath = NavigationPath()
@@ -94,47 +96,8 @@ struct RootTabView: View {
                     }
             }
         }
-        .onReceive(NotificationCenter.default.publisher(for: .switchToWakeTab)) { _ in
-            selectedTab = .wake
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .switchToAlarmTab)) { _ in
-            selectedTab = .wake
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .switchToPlanTab)) { _ in
-            selectedTab = .plans
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .openPlanHome)) { _ in
-            selectedTab = .plans
-            planPath.removeLast(planPath.count)
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .openPlanDefaultMorningPlan)) { _ in
-            selectedTab = .plans
-            planPath.removeLast(planPath.count)
-            planPath.append(PlanDestination.defaultMorningPlan)
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .openPlanQada)) { _ in
-            selectedTab = .plans
-            planPath.removeLast(planPath.count)
-            isShowingQadaWizard = true
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .openPlanShawwal)) { _ in
-            selectedTab = .plans
-            planPath.removeLast(planPath.count)
-            planPath.append(PlanDestination.shawwalPlanner)
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .openPlanSunnah)) { _ in
-            selectedTab = .plans
-            planPath.removeLast(planPath.count)
-            planPath.append(PlanDestination.sunnahPlanner)
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .switchToSettingsTab)) { _ in
-            // Compatibility alias: legacy callers still post this notification name,
-            // but Settings is now presented as a utility destination, not selected as a tab.
-            presentSettings()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .switchToHijriCorrections)) { _ in
-            // Compatibility alias for directly opening Hijri corrections inside Settings.
-            presentSettings(route: .hijriCorrections)
+        .onReceive(appNavigator.$latestRequest.compactMap { $0 }) { request in
+            handle(request.intent)
         }
     }
 
@@ -144,5 +107,35 @@ struct RootTabView: View {
             settingsPath.append(route)
         }
         isShowingSettings = true
+    }
+
+    private func handle(_ intent: AppNavigationIntent) {
+        switch intent {
+        case .switchToWake:
+            selectedTab = .wake
+        case .switchToPlans:
+            selectedTab = .plans
+            planPath.removeLast(planPath.count)
+        case .openSettings:
+            presentSettings()
+        case .openHijriCorrections:
+            presentSettings(route: .hijriCorrections)
+        case .openDefaultMorningPlan:
+            selectedTab = .plans
+            planPath.removeLast(planPath.count)
+            planPath.append(PlanDestination.defaultMorningPlan)
+        case .openQadaPlanner:
+            selectedTab = .plans
+            planPath.removeLast(planPath.count)
+            isShowingQadaWizard = true
+        case .openShawwalPlanner:
+            selectedTab = .plans
+            planPath.removeLast(planPath.count)
+            planPath.append(PlanDestination.shawwalPlanner)
+        case .openSunnahPlanner:
+            selectedTab = .plans
+            planPath.removeLast(planPath.count)
+            planPath.append(PlanDestination.sunnahPlanner)
+        }
     }
 }

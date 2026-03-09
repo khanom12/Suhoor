@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct EditSuhoorView: View {
+    @EnvironmentObject private var appNavigator: AppNavigator
     @EnvironmentObject private var settingsStore: SuhoorSettingsStore
     @EnvironmentObject private var scheduleManager: ScheduleManager
     @Environment(\.dismiss) private var dismiss
@@ -86,7 +87,7 @@ struct EditSuhoorView: View {
     private var alertDefaultsSection: some View {
         Section(Strings.AlarmDetail.alertDefaultsSection) {
             Button(Strings.AlarmDetail.editAlertDefaults) {
-                NotificationCenter.default.post(name: .openPlanDefaultMorningPlan, object: nil)
+                appNavigator.openDefaultMorningPlan()
                 dismiss()
             }
             .frame(maxWidth: .infinity, alignment: .center)
@@ -124,7 +125,7 @@ struct EditSuhoorView: View {
     private var scheduleSection: some View {
         Section {
             Button(Strings.AlarmDetail.viewSchedule) {
-                NotificationCenter.default.post(name: .switchToWakeTab, object: nil)
+                appNavigator.switchToWake()
                 dismiss()
             }
             .frame(maxWidth: .infinity, alignment: .center)

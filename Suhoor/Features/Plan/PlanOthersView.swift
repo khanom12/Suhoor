@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct PlanOthersView: View {
+    @EnvironmentObject private var appNavigator: AppNavigator
     @EnvironmentObject private var scheduleManager: ScheduleManager
     @Environment(\.dismiss) private var dismiss
 
@@ -109,7 +110,7 @@ struct PlanOthersView: View {
         let dates = selectedKeys.compactMap { DateHelpers.date(fromDayIdentifier: $0, timeZone: .current) }
         let selection = FastIntentSelection(primaryIntent: purpose, secondaryTags: [])
         _ = await scheduleManager.planDates(dates, selection: selection, groupID: nil)
-        NotificationCenter.default.post(name: .switchToWakeTab, object: nil)
+        appNavigator.switchToWake()
         dismiss()
     }
 

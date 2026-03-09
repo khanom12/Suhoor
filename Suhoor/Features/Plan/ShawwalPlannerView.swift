@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct ShawwalPlannerView: View {
+    @EnvironmentObject private var appNavigator: AppNavigator
     @EnvironmentObject private var scheduleManager: ScheduleManager
     @EnvironmentObject private var alarmConfigStore: AlarmConfigStore
     @EnvironmentObject private var fastTagStore: FastTagStore
@@ -197,7 +198,7 @@ struct ShawwalPlannerView: View {
         let dates = selectedKeys.compactMap { DateHelpers.date(fromDayIdentifier: $0, timeZone: .current) }
         let selection = FastIntentSelection(primaryIntent: .voluntary, secondaryTags: [])
         _ = await scheduleManager.planDates(dates, selection: selection, groupID: nil)
-        NotificationCenter.default.post(name: .switchToWakeTab, object: nil)
+        appNavigator.switchToWake()
         dismiss()
     }
 

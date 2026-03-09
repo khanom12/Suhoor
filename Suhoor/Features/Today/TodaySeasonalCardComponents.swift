@@ -57,11 +57,12 @@ struct TodayDiscreteProgressBars: View {
 }
 
 struct TodayOpenScheduleButton: View {
+    @EnvironmentObject private var appNavigator: AppNavigator
     let accent: Color?
 
     var body: some View {
         Button {
-            NotificationCenter.default.post(name: .switchToWakeTab, object: nil)
+            appNavigator.switchToWake()
         } label: {
             Image(systemName: "calendar.badge.clock")
                 .font(DesignTokens.cardMetaFont.weight(.semibold))

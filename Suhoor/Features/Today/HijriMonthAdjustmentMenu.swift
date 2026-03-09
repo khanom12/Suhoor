@@ -5,6 +5,7 @@ struct HijriMonthAdjustmentMenu: View {
     let iconSystemName: String
     let accent: Color
 
+    @EnvironmentObject private var appNavigator: AppNavigator
     @EnvironmentObject private var scheduleManager: ScheduleManager
 
     var body: some View {
@@ -48,7 +49,7 @@ struct HijriMonthAdjustmentMenu: View {
             Divider()
 
             Button("Open Hijri Calendar Settings") {
-                NotificationCenter.default.post(name: .switchToHijriCorrections, object: nil)
+                appNavigator.openHijriCorrections()
             }
         } label: {
             Image(systemName: iconSystemName)

@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct TodayCountdownCard: View {
+    @EnvironmentObject private var appNavigator: AppNavigator
     @EnvironmentObject private var alarmConfigStore: AlarmConfigStore
     @EnvironmentObject private var scheduleManager: ScheduleManager
     private let contentSpacing = DesignTokens.dashboardCardInternalSpacing
@@ -51,7 +52,7 @@ struct TodayCountdownCard: View {
                     .font(DesignTokens.cardSubtitleFont)
                     .foregroundStyle(.secondary)
                 Button("Open Settings") {
-                    NotificationCenter.default.post(name: .switchToSettingsTab, object: nil)
+                    appNavigator.openSettings()
                 }
                 .font(DesignTokens.cardMetaFont)
             } else if scheduleManager.activeWindowSnapshot.visibleDays.isEmpty {
@@ -59,7 +60,7 @@ struct TodayCountdownCard: View {
                     .font(DesignTokens.cardSubtitleFont)
                     .foregroundStyle(.secondary)
                 Button("Open Wake") {
-                    NotificationCenter.default.post(name: .switchToWakeTab, object: nil)
+                    appNavigator.switchToWake()
                 }
                 .font(DesignTokens.cardMetaFont)
             } else {
@@ -67,7 +68,7 @@ struct TodayCountdownCard: View {
                     .font(DesignTokens.cardSubtitleFont)
                     .foregroundStyle(.secondary)
                 Button("Open Settings") {
-                    NotificationCenter.default.post(name: .switchToSettingsTab, object: nil)
+                    appNavigator.openSettings()
                 }
                 .font(DesignTokens.cardMetaFont)
             }

@@ -1396,6 +1396,217 @@ struct ScheduleManagerHijriTests {
         #expect(resolution.precedenceReason == "Explicit single-date override takes precedence.")
     }
 
+    @Test
+    @MainActor
+    func morningStateAssemblerBuildsCanonicalSnapshotFromLegacyInputs() {
+        let suiteName = "ScheduleManagerHijriTests.MorningStateAssembler"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+
+        var settings = AppSettings.default
+        settings.isConfigured = true
+        settings.locationMode = .fixed
+        settings.fixedLocation = FixedLocation(latitude: 43.6532, longitude: -79.3832)
+        settings.baseWakeOffsetMinutes = 35
+
+        var defaultConfig = DefaultAlarmConfig.default
+        defaultConfig.defaultSuhoorTimeMode = .fixedTime
+        defaultConfig.defaultSuhoorOffsetMinutes = 305
+
+        let morningPlanStore = MorningPlanStore(
+            defaults: defaults,
+            legacySettings: settings,
+            defaultConfig: defaultConfig
+        )
+
+        let overrideDate = Self.makeDate(year: 2026, month: 3, day: 10, timeZone: timeZone)
+        let qadaDate = Self.makeDate(year: 2026, month: 3, day: 11, timeZone: timeZone)
+        let sourceDate = Self.makeDate(year: 2026, month: 3, day: 12, timeZone: timeZone)
+        let forbiddenDate = Self.makeDate(year: 2026, month: 3, day: 13, timeZone: timeZone)
+
+        var override = DailyAlarmOverride(date: overrideDate, timeZone: timeZone)
+        override.suhoorOffsetOverrideMinutes = 20
+
+        let overrideKey = DateHelpers.dayIdentifier(for: overrideDate, timeZone: timeZone)
+        let qadaKey = DateHelpers.dayIdentifier(for: qadaDate, timeZone: timeZone)
+        let sourceKey = DateHelpers.dayIdentifier(for: sourceDate, timeZone: timeZone)
+        let forbiddenKey = DateHelpers.dayIdentifier(for: forbiddenDate, timeZone: timeZone)
+
+        let snapshot = MorningStateAssembler.assemble(
+            settings: settings,
+            defaultConfig: defaultConfig,
+            morningPlanStore: morningPlanStore,
+            fastTagSelections: [
+                qadaKey: FastIntentSelection(primaryIntent: .qadaMakeup, secondaryTags: []),
+                forbiddenKey: FastIntentSelection(primaryIntent: .forbidden, secondaryTags: [])
+            ],
+            fastLogEntries: [
+                qadaKey: FastLogEntry(
+                    dateKey: qadaKey,
+                    status: .completed,
+                    updatedAt: Date(timeIntervalSince1970: 200),
+                    intentSnapshot: FastIntentSnapshot(primaryIntent: .qadaMakeup, secondaryTags: [])
+                )
+            ],
+            fajrLogEntries: [
+                overrideKey: FajrLogEntry(
+                    dateKey: overrideKey,
+                    status: .completed,
+                    updatedAt: Date(timeIntervalSince1970: 100)
+                )
+            ],
+            qadaBacklogState: QadaBacklogState(
+                trackingStartDateKey: "2026-03-01",
+                baselineOwed: 3
+            ),
+            qadaBatchState: QadaBatchState(
+                plannedDateKeys: [qadaKey],
+                targetCount: 1,
+                pace: .steady,
+                avoidShawwal: true,
+                avoidImportantSunnah: true,
+                createdAt: nil,
+                updatedAt: nil
+            ),
+            overridesByDateKey: [overrideKey: override],
+            coordinate: CLLocationCoordinate2D(latitude: 43.6532, longitude: -79.3832),
+            timeZone: timeZone,
+            locationDescription: "Toronto",
+            provenancesByDateKey: [
+                sourceKey: [
+                    ResolvedScheduledDateProvenance(
+                        sourceID: UUID(),
+                        groupID: nil,
+                        label: "Selected day",
+                        stopSeriesLabel: nil,
+                        isExplicitOneOff: true,
+                        sourceOrigin: .manualSingleDay
+                    )
+                ]
+            ]
+        )
+
+        #expect(snapshot.morningPlanState.defaultDailyPlan.id == "default-daily")
+        #expect(snapshot.morningPlanState.defaultDailyPlan.fixedWakeTimeCompatibilityMinutesFromMidnight == 305)
+        #expect(snapshot.dateAssignments.contains(where: { $0.dateKey == overrideKey && $0.planID == "override-\(overrideKey)" }))
+        #expect(snapshot.dateAssignments.contains(where: { $0.dateKey == qadaKey && $0.planID == "qada-\(qadaKey)" }))
+        #expect(snapshot.dateAssignments.contains(where: { $0.dateKey == forbiddenKey && $0.planID == "context-\(forbiddenKey)" }))
+        #expect(snapshot.dateAssignments.contains(where: { $0.dateKey == sourceKey && $0.planID == "source-\(sourceKey)" }))
+        #expect(snapshot.completionRecords.count == 2)
+        let overrideFajrRecord = snapshot.completionRecords.first {
+            $0.dateKey == overrideKey && $0.kind == .fajr
+        }
+        let qadaFastRecord = snapshot.completionRecords.first {
+            $0.dateKey == qadaKey && $0.kind == .fast
+        }
+        #expect(overrideFajrRecord?.status == .completed)
+        #expect(qadaFastRecord?.status == .completed)
+        #expect(snapshot.qadaLedgerSnapshot.completed == 1)
+        #expect(snapshot.qadaLedgerSnapshot.remaining == 2)
+    }
+
+    @Test
+    @MainActor
+    func appNavigatorBridgesLegacyNotificationsIntoTypedNavigation() {
+        let notificationCenter = NotificationCenter()
+        let navigator = AppNavigator(notificationCenter: notificationCenter)
+
+        notificationCenter.post(name: .switchToAlarmTab, object: nil)
+        #expect(navigator.latestRequest?.intent == .switchToWake)
+
+        AppNavigationBridge.send(.openQadaPlanner, notificationCenter: notificationCenter)
+        #expect(navigator.latestRequest?.intent == .openQadaPlanner)
+
+        notificationCenter.post(name: .openPlanHome, object: nil)
+        #expect(navigator.latestRequest?.intent == .switchToPlans)
+
+        AppNavigationBridge.send(.openHijriCorrections, notificationCenter: notificationCenter)
+        #expect(navigator.latestRequest?.intent == .openHijriCorrections)
+    }
+
+    @Test
+    @MainActor
+    func scheduleManagerSurfaceSnapshotsReflectCanonicalRuntimeState() async {
+        let suiteName = "ScheduleManagerHijriTests.SurfaceSnapshots"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+
+        let settingsStore = SuhoorSettingsStore(defaults: defaults)
+        settingsStore.update { draft in
+            draft.isConfigured = true
+            draft.locationMode = .fixed
+            draft.fixedLocation = FixedLocation(latitude: 43.6532, longitude: -79.3832)
+        }
+
+        let alarmConfigStore = AlarmConfigStore(defaultsStore: defaults)
+        let fastTagStore = FastTagStore(defaults: defaults)
+        let fastLogStore = FastLogStore(defaults: defaults)
+        let fajrLogStore = FajrLogStore(defaults: defaults)
+        let qadaBacklogStore = QadaBacklogStore(defaults: defaults)
+        let qadaBatchStore = QadaBatchStore(defaults: defaults)
+
+        let calendar = Calendar(identifier: .gregorian)
+        let now = Date()
+        let today = DateHelpers.startOfDay(now, in: timeZone)
+        let tomorrow = calendar.date(byAdding: .day, value: 1, to: today) ?? today
+        let todayKey = DateHelpers.dayIdentifier(for: today, timeZone: timeZone)
+        let tomorrowKey = DateHelpers.dayIdentifier(for: tomorrow, timeZone: timeZone)
+
+        alarmConfigStore.addSingleDaySource(tomorrow, timeZone: timeZone)
+        alarmConfigStore.updateOverride(for: tomorrow, timeZone: timeZone) { draft in
+            draft.suhoorOffsetOverrideMinutes = 25
+        }
+        fastTagStore.setSelection(
+            FastIntentSelection(primaryIntent: .qadaMakeup, secondaryTags: []),
+            for: tomorrow,
+            timeZone: timeZone
+        )
+        fastLogStore.setStatus(
+            .completed,
+            for: todayKey,
+            intentSnapshot: FastIntentSnapshot(primaryIntent: .qadaMakeup, secondaryTags: [])
+        )
+        fajrLogStore.setStatus(.completed, for: todayKey)
+        qadaBacklogStore.setBaseline(owed: 2, trackingStartDateKey: todayKey)
+        qadaBatchStore.saveBatch(
+            dateKeys: [tomorrowKey],
+            draft: .empty
+        )
+
+        let manager = ScheduleManager(
+            settingsStore: settingsStore,
+            locationService: LocationService(),
+            alarmConfigStore: alarmConfigStore,
+            fastTagStore: fastTagStore,
+            fastLogStore: fastLogStore,
+            fajrLogStore: fajrLogStore,
+            qadaBacklogStore: qadaBacklogStore,
+            qadaBatchStore: qadaBatchStore,
+            hijriAdjustmentStore: HijriMonthAdjustmentStore(defaults: defaults),
+            cacheStore: ScheduleCacheStore(defaults: defaults)
+        )
+
+        await manager.refreshSchedules(force: true)
+
+        let wakeSnapshot = manager.wakeSurfaceSnapshot
+        let plansSnapshot = manager.plansSurfaceSnapshot
+        let progressSnapshot = manager.progressSurfaceSnapshot(
+            wakeProgressSource: FixedWakeProgressSource()
+        )
+
+        #expect(wakeSnapshot.overrideDateKeys.contains(tomorrowKey))
+        #expect(wakeSnapshot.visibleDays.contains(where: { $0.dateKey == tomorrowKey }))
+        #expect(plansSnapshot.configuredPlansSnapshot.upcomingSpecialMornings.contains(where: {
+            DateHelpers.dayIdentifier(for: $0.date, timeZone: timeZone) == tomorrowKey
+        }))
+        #expect(progressSnapshot.fajrTodaySummary == FajrCompletionStatus.completed.title)
+        #expect(progressSnapshot.fastTodaySummary == "Qada completed")
+        #expect(progressSnapshot.qadaProgress.remaining == 1)
+        #expect(progressSnapshot.wakeProgress.summaryTitle == "Wake activity")
+    }
+
     private static func makeDate(
         year: Int,
         month: Int,
@@ -1489,4 +1700,15 @@ struct ScheduleManagerHijriTests {
         )
     }
 
+}
+
+private struct FixedWakeProgressSource: WakeProgressSource {
+    func snapshot(limit _: Int) -> WakeProgressSnapshot {
+        WakeProgressSnapshot(
+            summaryTitle: "Wake activity",
+            summaryDetail: "Recent support",
+            recentActivityLines: ["Wake fired"],
+            emptyStateText: nil
+        )
+    }
 }

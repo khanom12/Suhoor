@@ -3,6 +3,7 @@ import UIKit
 
 struct SettingsRootView: View {
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var appNavigator: AppNavigator
     @EnvironmentObject private var settingsStore: SuhoorSettingsStore
     @EnvironmentObject private var scheduleManager: ScheduleManager
     @EnvironmentObject private var locationService: LocationService
@@ -32,7 +33,7 @@ struct SettingsRootView: View {
 
             Section {
                 Button {
-                    NotificationCenter.default.post(name: .openPlanDefaultMorningPlan, object: nil)
+                    appNavigator.openDefaultMorningPlan()
                 } label: {
                     SettingsSummaryRow(
                         title: "Morning planning",

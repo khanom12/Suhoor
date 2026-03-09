@@ -1,12 +1,8 @@
 import SwiftUI
 
 struct PlanRootView: View {
+    @EnvironmentObject private var appNavigator: AppNavigator
     @EnvironmentObject private var scheduleManager: ScheduleManager
-    @EnvironmentObject private var alarmConfigStore: AlarmConfigStore
-    @EnvironmentObject private var settingsStore: SuhoorSettingsStore
-    @EnvironmentObject private var qadaBacklogStore: QadaBacklogStore
-    @EnvironmentObject private var fastLogStore: FastLogStore
-    @State private var qadaProgress = QadaProgressSnapshot(remaining: 0, completed: 0, baselineOwed: 0)
 
     private let columns = [
         GridItem(.flexible(), spacing: DesignTokens.spacingM),
@@ -14,10 +10,11 @@ struct PlanRootView: View {
     ]
 
     var body: some View {
+        let snapshot = scheduleManager.plansSurfaceSnapshot
         ScrollView {
             VStack(alignment: .leading, spacing: DesignTokens.spacingXL) {
                 NavigationLink(value: PlanDestination.defaultMorningPlan) {
-                    DefaultMorningPlanCard(summary: defaultMorningPlanSummary)
+                    DefaultMorningPlanCard(summary: snapshot.defaultMorningPlanSummary)
                 }
                 .buttonStyle(.plain)
 
@@ -25,7 +22,7 @@ struct PlanRootView: View {
                     SectionTitle("Upcoming Special Plans")
 
                     NavigationLink(value: PlanDestination.calendar) {
-                        ConfiguredPlansCard(snapshot: configuredPlansSnapshot)
+                        ConfiguredPlansCard(snapshot: snapshot.configuredPlansSnapshot)
                     }
                     .buttonStyle(.plain)
 
@@ -39,9 +36,9 @@ struct PlanRootView: View {
                     SectionTitle("Fasting & Qada")
 
                     Button {
-                        NotificationCenter.default.post(name: .openPlanQada, object: nil)
+                        appNavigator.openQadaPlanner()
                     } label: {
-                        ConfiguredQadaCard(progress: qadaProgress)
+                        ConfiguredQadaCard(progress: snapshot.qadaProgress)
                     }
                     .buttonStyle(.plain)
 
@@ -79,60 +76,6 @@ struct PlanRootView: View {
         }
         .navigationTitle("Plans")
         .navigationBarTitleDisplayMode(.large)
-        .onAppear(perform: refreshProgress)
-        .onChange(of: qadaBacklogStore.state) { _, _ in
-            refreshProgress()
-        }
-        .onChange(of: fastLogStore.currentRevision) { _, _ in
-            refreshProgress()
-        }
-    }
-
-    private var defaultMorningPlanSummary: DefaultMorningPlanSummary {
-        let defaults = alarmConfigStore.defaults
-        let wakeRelation: String
-        switch defaults.defaultSuhoorTimeMode {
-        case .relativeToFajrMinusMinutes:
-            wakeRelation = "\(defaults.defaultSuhoorOffsetMinutes) min before Fajr"
-        case .fixedTime:
-            let timeText = SettingsSummaryFormatter.timeText(minutesFromMidnight: defaults.defaultSuhoorOffsetMinutes)
-            wakeRelation = "\(timeText) fixed wake (compatibility)"
-        }
-
-        let reminderSummary = defaults.reminderEnabledDefault
-            ? defaultReminderSummary
-            : "Reminder off"
-        let followUpSummary = settingsStore.settings.snoozeEnabled
-            ? "\(settingsStore.settings.snoozeMinutes) min after wake"
-            : "Off"
-
-        return DefaultMorningPlanSummary(
-            wakeRelation: wakeRelation,
-            reminder: reminderSummary,
-            followUp: followUpSummary,
-            fajrNotice: defaults.fajrEnabledDefault ? "On" : "Off",
-            fastingDaySupport: defaults.iftarEnabledDefault ? "Iftar support on" : "Wake-only support",
-            compatibilityNote: defaults.defaultSuhoorTimeMode == .fixedTime ? "Using fixed-time compatibility." : nil
-        )
-    }
-
-    private var defaultReminderSummary: String {
-        let defaults = alarmConfigStore.defaults
-        switch defaults.defaultReminderTimeMode {
-        case .beforeFajr:
-            return "Reminder \(defaults.defaultReminderMinutesBeforeFajr) min before Fajr"
-        case .fixedTime:
-            let timeText = SettingsSummaryFormatter.timeText(minutesFromMidnight: defaults.defaultReminderFixedTimeMinutes)
-            return "Reminder \(timeText) fixed"
-        }
-    }
-
-    private var configuredPlansSnapshot: ConfiguredPlansSnapshot {
-        ProductSurfacePresentation.configuredPlansSnapshot(
-            upcomingDays: scheduleManager.activeWindowSnapshot.visibleDays,
-            overrideDateKeys: Set(alarmConfigStore.overridesByDay.keys),
-            qadaProgress: qadaProgress
-        )
     }
 
     private var opportunityTiles: [PlanTile] {
@@ -181,26 +124,10 @@ struct PlanRootView: View {
             ),
         ]
     }
-
-    private func refreshProgress() {
-        qadaProgress = QadaProgressEngine.snapshot(
-            state: qadaBacklogStore.state,
-            logEntries: fastLogStore.entriesByDateKey
-        )
-    }
-}
-
-private struct DefaultMorningPlanSummary {
-    let wakeRelation: String
-    let reminder: String
-    let followUp: String
-    let fajrNotice: String
-    let fastingDaySupport: String
-    let compatibilityNote: String?
 }
 
 private struct DefaultMorningPlanCard: View {
-    let summary: DefaultMorningPlanSummary
+    let summary: DefaultMorningPlanSurfaceSummary
 
     var body: some View {
         GlassCard(style: .header, tintColor: DawnColor.lightGold200, tintOpacity: 0.25) {

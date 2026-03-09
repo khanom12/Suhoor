@@ -172,6 +172,27 @@ final class ScheduleManager: ObservableObject {
             }
             .store(in: &cancellables)
 
+        fastLogStore.$currentRevision
+            .dropFirst()
+            .sink { [weak self] _ in
+                self?.objectWillChange.send()
+            }
+            .store(in: &cancellables)
+
+        fajrLogStore.$currentRevision
+            .dropFirst()
+            .sink { [weak self] _ in
+                self?.objectWillChange.send()
+            }
+            .store(in: &cancellables)
+
+        qadaBacklogStore.$state
+            .dropFirst()
+            .sink { [weak self] _ in
+                self?.objectWillChange.send()
+            }
+            .store(in: &cancellables)
+
         settingsStore.$settings
             .sink { [weak self] _ in
                 self?.updateBootstrapState()
@@ -224,6 +245,90 @@ final class ScheduleManager: ObservableObject {
             }
             return $0.event.fireDate < $1.event.fireDate
         }
+    }
+
+    var wakeSurfaceSnapshot: WakeSurfaceSnapshot {
+        WakeSurfaceSnapshot(
+            visibleDays: activeWindowSnapshot.visibleDays,
+            nextWakeEventSummary: nextWakeEventSummary,
+            overrideDateKeys: Set(alarmConfigStore.overridesByDay.keys)
+        )
+    }
+
+    var plansSurfaceSnapshot: PlansSurfaceSnapshot {
+        let qadaProgress = QadaProgressEngine.snapshot(
+            state: qadaBacklogStore.state,
+            logEntries: fastLogStore.entriesByDateKey
+        )
+        return PlansSurfaceSnapshot(
+            defaultMorningPlanSummary: ProductSurfaceSnapshots.defaultMorningPlanSummary(
+                defaults: alarmConfigStore.defaults,
+                settings: settingsStore.settings
+            ),
+            configuredPlansSnapshot: ProductSurfacePresentation.configuredPlansSnapshot(
+                upcomingDays: activeWindowSnapshot.visibleDays,
+                overrideDateKeys: Set(alarmConfigStore.overridesByDay.keys),
+                qadaProgress: qadaProgress
+            ),
+            qadaProgress: qadaProgress
+        )
+    }
+
+    func homeSurfaceSnapshot(
+        now: Date,
+        dismissedWarnings: Set<FastWarning>
+    ) -> HomeSurfaceSnapshot {
+        let hijriComponents = AdjustedHijriCalendar.shared.adjustedComponents(for: now, timeZone: .current)
+        let todayKey = DateHelpers.dayIdentifier(for: now, timeZone: .current)
+        let todayStart = DateHelpers.startOfDay(now, in: .current)
+        let currentDay = activeWindowSnapshot.byDateKey[todayKey]
+        let contextDay = nextWakeEventSummary?.day ?? currentDay
+        let todaySchedule = currentDay?.schedule ?? schedule(for: todayStart)
+        let supportCard = ProductSurfacePresentation.homeSupportCard(
+            now: now,
+            currentDay: currentDay,
+            todaySchedule: todaySchedule,
+            fajrStatus: fajrLogStore.status(for: todayKey),
+            fastStatus: fastLogStore.status(for: todayKey),
+            permissionSnapshot: permissionSnapshot,
+            hijriComponents: hijriComponents,
+            dismissedWarnings: dismissedWarnings
+        )
+
+        return HomeSurfaceSnapshot(
+            gregorianText: GregorianDateFormatter.shared.headerString(for: now),
+            hijriText: HijriDateFormatter.shared.string(from: now),
+            dayLabel: contextDay.map { dayLabel(for: $0.date) },
+            primaryContextTitle: contextDay.map {
+                ProductSurfacePresentation.primaryContextTitle($0.resolvedDayContext.primaryContext)
+            },
+            secondaryContextTitles: contextDay.map {
+                ProductSurfacePresentation.meaningfulSecondaryContextTitles(from: $0.resolvedDayContext)
+            } ?? [],
+            nextWakeEventSummary: nextWakeEventSummary,
+            supportCard: supportCard
+        )
+    }
+
+    func progressSurfaceSnapshot(
+        wakeProgressSource: WakeProgressSource = DebugEventLogWakeProgressSource()
+    ) -> ProgressSurfaceSnapshot {
+        let qadaProgress = QadaProgressEngine.snapshot(
+            state: qadaBacklogStore.state,
+            logEntries: fastLogStore.entriesByDateKey
+        )
+        let todayKey = DateHelpers.dayIdentifier(for: Date(), timeZone: .current)
+        let recentFajrEntries = recentDateKeys(days: 30).compactMap { fajrLogStore.entry(for: $0) }
+        let recentFastEntries = recentDateKeys(days: 30).compactMap { fastLogStore.entry(for: $0) }
+
+        return ProgressSurfaceSnapshot(
+            fajrTodaySummary: fajrLogStore.status(for: todayKey).title,
+            fajrSummary: ProductSurfaceSnapshots.summaryForLast30Fajr(entries: recentFajrEntries),
+            fastTodaySummary: ProductSurfaceSnapshots.fastTodaySummary(entry: fastLogStore.entry(for: todayKey)),
+            fastSummary: ProductSurfaceSnapshots.summaryForLast30Fasts(entries: recentFastEntries),
+            qadaProgress: qadaProgress,
+            wakeProgress: wakeProgressSource.snapshot(limit: 20)
+        )
     }
 
     var currentHijriAdjustmentYear: Int {
@@ -1067,30 +1172,20 @@ final class ScheduleManager: ObservableObject {
         locationDescription: String,
         provenancesByDateKey: [String: [ResolvedScheduledDateProvenance]]
     ) -> MorningStateSnapshot {
-        let completionSnapshot = LegacyCompletionAdapter.records(
-            fajrEntries: fajrLogStore.entriesByDateKey,
-            fastEntries: fastLogStore.entriesByDateKey,
-            qadaBacklogState: qadaBacklogStore.state
-        )
-        let dateAssignments = LegacyDateAssignmentAdapter.assignments(
-            overridesByDay: alarmConfigStore.overridesByDay,
-            provenancesByDateKey: provenancesByDateKey,
-            fastTagSelections: fastTagStore.selections,
-            qadaBatchState: qadaBatchStore.state
-        )
-
-        return MorningStateSnapshot(
+        MorningStateAssembler.assemble(
             settings: settings,
             defaultConfig: alarmConfigStore.defaults,
-            morningPlanState: LegacyMorningPlanAdapter.loadState(from: morningPlanStore),
-            dateAssignments: dateAssignments.assignments,
-            completionRecords: completionSnapshot.records,
-            qadaLedgerSnapshot: completionSnapshot.qadaLedgerSnapshot,
+            morningPlanStore: morningPlanStore,
+            fastTagSelections: fastTagStore.selections,
+            fastLogEntries: fastLogStore.entriesByDateKey,
+            fajrLogEntries: fajrLogStore.entriesByDateKey,
+            qadaBacklogState: qadaBacklogStore.state,
+            qadaBatchState: qadaBatchStore.state,
+            overridesByDateKey: alarmConfigStore.overridesByDay,
             coordinate: coordinate,
             timeZone: timeZone,
             locationDescription: locationDescription,
-            fastTagSelections: fastTagStore.selections,
-            overridesByDateKey: alarmConfigStore.overridesByDay
+            provenancesByDateKey: provenancesByDateKey
         )
     }
 
@@ -1307,7 +1402,7 @@ final class ScheduleManager: ObservableObject {
             locationDescription: "Based on your location",
             provenancesByDateKey: provenancesByDateKey
         )
-        let input = ScheduleComputationInput(
+        let input = ActiveWindowBuildInput(
             stateSnapshot: stateSnapshot,
             resolvedEntries: resolvedEntries,
             visibleHorizonDays: visibleActiveDayLimit,
@@ -1318,56 +1413,44 @@ final class ScheduleManager: ObservableObject {
             metadata: "days=\(input.resolvedEntries.count)"
         ) {
             await Task.detached(priority: .userInitiated) {
-                ScheduleComputationEngine.compute(input: input)
+                ActiveWindowBuilder.build(input: input)
             }.value
         }
-        let adjustedVisibleDays = applyShawwalTagResults(to: result.snapshot.visibleDays, timeZone: timeZone)
+        let adjustedVisibleDays = applyShawwalTagResults(to: result.visibleDays, timeZone: timeZone)
         let adjustedSnapshot: ActiveAlarmWindowSnapshot
-        if adjustedVisibleDays != result.snapshot.visibleDays {
+        if adjustedVisibleDays != result.visibleDays {
             adjustedSnapshot = ActiveAlarmWindowSnapshot(
-                generatedAt: result.snapshot.generatedAt,
+                generatedAt: result.generatedAt,
                 visibleDays: adjustedVisibleDays,
                 scheduledDays: Array(adjustedVisibleDays.prefix(scheduledActiveDayLimit)),
-                visibleHorizonDays: result.snapshot.visibleHorizonDays,
-                scheduledHorizonDays: result.snapshot.scheduledHorizonDays
+                visibleHorizonDays: result.visibleHorizonDays,
+                scheduledHorizonDays: result.scheduledHorizonDays
             )
         } else {
-            adjustedSnapshot = result.snapshot
+            adjustedSnapshot = result
         }
         debugValidateActiveWindow(adjustedSnapshot, resolvedEntries: resolvedEntries)
 
-        let scheduledEntries = adjustedSnapshot.scheduledDays.map { ($0.schedule, $0.effectiveConfig) }
         activeWindowSnapshot = adjustedSnapshot
         schedules = adjustedSnapshot.visibleDays.map(\.schedule)
         lastUpdated = Date()
-        Logging.diagnostics.debug("[perf] active-window.visible-count \(result.snapshot.visibleDays.count, privacy: .public)")
-        Logging.diagnostics.debug("[perf] active-window.scheduled-count \(result.snapshot.scheduledDays.count, privacy: .public)")
+        Logging.diagnostics.debug("[perf] active-window.visible-count \(result.visibleDays.count, privacy: .public)")
+        Logging.diagnostics.debug("[perf] active-window.scheduled-count \(result.scheduledDays.count, privacy: .public)")
 
-        let hasAnyEnabled = result.snapshot.visibleDays.contains { entry in
-            let config = entry.effectiveConfig
-            return !config.skipDay && config.hasAnyEnabled
-        }
-
-        if hasAnyEnabled {
-            if mode == .none {
-                await cancelAll()
-                schedulingMode = .none
-                statusText = await schedulingBlockedMessage()
-            } else {
-                schedulingMode = mode
-                let scheduled = await alarmScheduler.scheduleAll(
-                    entries: scheduledEntries,
-                    settings: settings,
-                    canUseAlarmKit: mode == .alarmKit,
-                    cancelWindowDays: scheduledActiveDayLimit
-                )
-                statusText = scheduled ? "Scheduled" : "Unable to schedule"
+        let reconciliation = await SchedulingReconciler.reconcile(
+            snapshot: adjustedSnapshot,
+            settings: settings,
+            requestedMode: mode,
+            alarmScheduler: alarmScheduler,
+            cancelAll: { [weak self] in
+                await self?.cancelAll()
+            },
+            blockedMessage: { [weak self] in
+                await self?.schedulingBlockedMessage() ?? "Unable to schedule"
             }
-        } else {
-            await cancelAll()
-            schedulingMode = .none
-            statusText = "Off"
-        }
+        )
+        schedulingMode = reconciliation.schedulingMode
+        statusText = reconciliation.statusText
 
         settingsStore.update { draft in
             draft.lastScheduledDate = Date()
@@ -2383,16 +2466,11 @@ final class ScheduleManager: ObservableObject {
     ) -> ActiveAlarmDay? {
         let normalizedDate = DateHelpers.startOfDay(date, in: timeZone)
         let key = DateHelpers.dayIdentifier(for: normalizedDate, timeZone: timeZone)
-        let ruleEngine = RuleEngine(
+        let effectiveConfig = ActiveWindowBuilder.effectiveConfig(
+            for: normalizedDate,
             settings: settings,
             defaultConfig: alarmConfigStore.defaults,
             overridesByDay: alarmConfigStore.overridesByDay,
-            timeZone: timeZone
-        )
-        let effectiveConfig = alarmConfigStore.effectiveConfig(
-            for: normalizedDate,
-            ruleSummary: ruleEngine.ruleSummary(for: normalizedDate),
-            settings: settings,
             timeZone: timeZone
         )
         let stateSnapshot = buildMorningStateSnapshot(
@@ -2402,16 +2480,13 @@ final class ScheduleManager: ObservableObject {
             locationDescription: "Based on your location",
             provenancesByDateKey: [key: provenances]
         )
-        let resolutionInput = MorningScheduleResolutionInput(
+        guard let resolution = ResolvedDayPipeline.resolve(
             date: normalizedDate,
             dateKey: key,
             provenances: provenances,
             effectiveConfig: effectiveConfig,
             tagResult: tagResult,
-            stateSnapshot: stateSnapshot
-        )
-        guard let resolution = MorningScheduleResolver.resolve(
-            input: resolutionInput,
+            stateSnapshot: stateSnapshot,
             calculator: calculator
         ) else {
             return nil
@@ -2424,7 +2499,7 @@ final class ScheduleManager: ObservableObject {
             isImplicitRamadan: provenances.contains(where: { $0.sourceOrigin == .defaultRamadan }),
             isExplicitOneOff: !provenances.isEmpty && provenances.allSatisfy(\.isExplicitOneOff),
             tagResult: tagResult,
-            sourceSummaryText: ScheduleComputationEngine.sourceSummary(from: provenances),
+            sourceSummaryText: ActiveWindowBuilder.sourceSummary(from: provenances),
             settings: settings,
             locationDescription: stateSnapshot.locationDescription,
             timeZone: timeZone
@@ -2745,14 +2820,14 @@ final class ScheduleManager: ObservableObject {
             locationDescription: "Based on your location",
             provenancesByDateKey: provenancesByDateKey
         )
-        let input = ScheduleComputationInput(
+        let input = ActiveWindowBuildInput(
             stateSnapshot: stateSnapshot,
             resolvedEntries: resolvedEntries,
             visibleHorizonDays: resolvedEntries.count,
             scheduledHorizonDays: resolvedEntries.count
         )
 
-        return ScheduleComputationEngine.compute(input: input).snapshot.visibleDays
+        return ActiveWindowBuilder.build(input: input).visibleDays
     }
 
     private func debugValidateActiveWindow(
@@ -2832,18 +2907,18 @@ final class ScheduleManager: ObservableObject {
     }
 
     private func updateBootstrapState() {
-        let hasVisibleDays = !activeWindowSnapshot.visibleDays.isEmpty
         if settingsStore.settings.isConfigured,
            !permissionsLoaded,
-           hasVisibleDays {
+           !activeWindowSnapshot.visibleDays.isEmpty {
             bootstrapState = .home
             return
         }
 
-        bootstrapState = Self.resolveBootstrapState(
+        bootstrapState = BootstrapEvaluator.evaluate(
             settings: settingsStore.settings,
-            permissionStates: permissionSnapshot.presentations.mapValues(\.state),
-            hasVisibleDays: hasVisibleDays
+            locationAuthorizationStatus: locationService.authorizationStatus,
+            lastLocation: locationService.lastLocation?.timestamp,
+            permissionSnapshot: permissionSnapshot
         )
     }
 
@@ -3088,6 +3163,16 @@ final class ScheduleManager: ObservableObject {
     private func dateFromMidnight(for day: Date, minutes: Int, calendar: Calendar) -> Date {
         let start = calendar.startOfDay(for: day)
         return calendar.date(byAdding: .minute, value: minutes, to: start) ?? start
+    }
+
+    private func recentDateKeys(days: Int, timeZone: TimeZone = .current) -> [String] {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let today = calendar.startOfDay(for: Date())
+        return (0..<days).compactMap { offset in
+            let date = calendar.date(byAdding: .day, value: -offset, to: today) ?? today
+            return DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
+        }
     }
 
     private func scheduledDates(
@@ -3377,325 +3462,6 @@ private struct ScheduleLocationSnapshot: Sendable {
     let longitude: Double
 }
 
-private struct ScheduleComputationInput: Sendable {
-    let stateSnapshot: MorningStateSnapshot
-    let resolvedEntries: [ResolvedScheduledDateEntry]
-    let visibleHorizonDays: Int
-    let scheduledHorizonDays: Int
-}
-
-private struct ScheduleComputationResult: Sendable {
-    let snapshot: ActiveAlarmWindowSnapshot
-}
-
-private enum ScheduleComputationEngine {
-    nonisolated static func compute(input: ScheduleComputationInput) -> ScheduleComputationResult {
-        let timeZone = input.stateSnapshot.timeZone
-        let calculator = PrayerTimeCalculator()
-        let coordinate = input.stateSnapshot.coordinate
-        let sortedEntries = input.resolvedEntries.sorted { $0.date < $1.date }
-        let tagSeeds = sortedEntries.map {
-            ActiveTagComputationSeed(
-                date: $0.date,
-                dateKey: $0.dateKey,
-                defaultPrimaryIntent: $0.provenances.defaultFastPrimaryIntent()
-            )
-        }
-        let tagResults = TagComputationEngine.results(
-            seeds: tagSeeds,
-            selections: input.stateSnapshot.fastTagSelections,
-            ruleset: .strict,
-            timeZone: timeZone
-        )
-
-        var activeDays: [ActiveAlarmDay] = []
-        activeDays.reserveCapacity(sortedEntries.count)
-
-        for resolvedEntry in sortedEntries {
-            let date = resolvedEntry.date
-            let config = effectiveConfig(
-                for: date,
-                settings: input.stateSnapshot.settings,
-                defaultConfig: input.stateSnapshot.defaultConfig,
-                overridesByDay: input.stateSnapshot.overridesByDateKey,
-                timeZone: timeZone
-            )
-
-            let tagResult = tagResults[resolvedEntry.dateKey] ?? .empty
-            let resolutionInput = MorningScheduleResolutionInput(
-                date: date,
-                dateKey: resolvedEntry.dateKey,
-                provenances: resolvedEntry.provenances,
-                effectiveConfig: config,
-                tagResult: tagResult,
-                stateSnapshot: input.stateSnapshot
-            )
-            guard let resolution = MorningScheduleResolver.resolve(
-                input: resolutionInput,
-                calculator: calculator
-            ) else {
-                continue
-            }
-
-            let summary = sourceSummary(from: resolvedEntry.provenances)
-            activeDays.append(
-                LegacyResolvedDayAdapter.makeActiveAlarmDay(
-                    snapshot: resolution,
-                    effectiveConfig: config,
-                    provenances: resolvedEntry.provenances,
-                    isImplicitRamadan: resolvedEntry.provenances.contains(where: { $0.sourceOrigin == .defaultRamadan }),
-                    isExplicitOneOff: resolvedEntry.isExplicitOneOff,
-                    tagResult: tagResult,
-                    sourceSummaryText: summary,
-                    settings: input.stateSnapshot.settings,
-                    locationDescription: input.stateSnapshot.locationDescription,
-                    timeZone: timeZone
-                )
-            )
-        }
-
-        let visibleDays = Array(activeDays.prefix(input.visibleHorizonDays))
-        let scheduledDays = Array(visibleDays.prefix(input.scheduledHorizonDays))
-
-        return ScheduleComputationResult(
-            snapshot: ActiveAlarmWindowSnapshot(
-                generatedAt: Date(),
-                visibleDays: visibleDays,
-                scheduledDays: scheduledDays,
-                visibleHorizonDays: input.visibleHorizonDays,
-                scheduledHorizonDays: input.scheduledHorizonDays
-            )
-        )
-    }
-
-    nonisolated fileprivate static func effectiveConfig(
-        for date: Date,
-        settings: AppSettings,
-        defaultConfig: DefaultAlarmConfig,
-        overridesByDay: [String: DailyAlarmOverride],
-        timeZone: TimeZone
-    ) -> EffectiveDailyConfig {
-        let key = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
-        let override = overridesByDay[key]
-        let ruleSummary = ruleSummary(
-            for: date,
-            defaultConfig: defaultConfig,
-            overridesByDay: overridesByDay,
-            timeZone: timeZone
-        )
-
-        var suhoorEnabled = override?.suhoorEnabled
-            ?? (override?.hasSuhoorCustomization == true ? true : defaultConfig.suhoorEnabledDefault)
-        var reminderEnabled = override?.reminderEnabled
-            ?? (override?.hasReminderCustomization == true ? true : defaultConfig.reminderEnabledDefault)
-        var fajrEnabled = override?.fajrEnabled
-            ?? (override?.hasFajrCustomization == true ? true : defaultConfig.fajrEnabledDefault)
-        var iftarEnabled = override?.iftarEnabled
-            ?? (override?.hasIftarCustomization == true ? true : defaultConfig.iftarEnabledDefault)
-
-        if override?.skipDay == true || ruleSummary.disabledForDay {
-            suhoorEnabled = false
-            reminderEnabled = false
-            fajrEnabled = false
-            iftarEnabled = false
-        }
-
-        let reminderTimeMode: ReminderTimeMode
-        if override?.reminderTimeOverrideMinutesFromMidnight != nil {
-            reminderTimeMode = .fixedTime
-        } else if override?.reminderOffsetOverrideMinutes != nil {
-            reminderTimeMode = .beforeFajr
-        } else {
-            reminderTimeMode = defaultConfig.defaultReminderTimeMode
-        }
-
-        return EffectiveDailyConfig(
-            date: date,
-            defaultsActive: true,
-            skipDay: override?.skipDay ?? false,
-            suhoorEnabled: suhoorEnabled,
-            reminderEnabled: reminderEnabled,
-            fajrEnabled: fajrEnabled,
-            iftarEnabled: iftarEnabled,
-            suhoorTimeMode: defaultConfig.defaultSuhoorTimeMode,
-            suhoorOffsetMinutes: ruleSummary.finalOffsetMinutes,
-            reminderTimeMode: reminderTimeMode,
-            reminderMinutesBeforeFajr: override?.reminderOffsetOverrideMinutes ?? defaultConfig.defaultReminderMinutesBeforeFajr,
-            reminderFixedTimeMinutes: defaultConfig.defaultReminderFixedTimeMinutes,
-            suhoorTimeOverrideMinutesFromMidnight: override?.suhoorTimeOverrideMinutesFromMidnight,
-            reminderTimeOverrideMinutesFromMidnight: override?.reminderTimeOverrideMinutesFromMidnight,
-            fajrSoundChoice: override?.fajrSoundOverride ?? settings.atFajrSoundSelectionGlobal,
-            iftarDelivery: (override?.iftarDeliveryOverride ?? defaultConfig.defaultIftarDelivery).normalized(),
-            iftarSoundChoice: override?.iftarSoundOverride ?? defaultConfig.defaultIftarSoundChoice,
-            hasOverrides: override?.hasOverrides ?? false
-        )
-    }
-
-    nonisolated fileprivate static func ruleSummary(
-        for date: Date,
-        defaultConfig: DefaultAlarmConfig,
-        overridesByDay: [String: DailyAlarmOverride],
-        timeZone: TimeZone
-    ) -> RuleSummary {
-        let key = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
-        let baseOffset = defaultConfig.defaultSuhoorOffsetMinutes
-        if let override = overridesByDay[key] {
-            if override.skipDay {
-                return RuleSummary(
-                    baseOffsetMinutes: baseOffset,
-                    finalOffsetMinutes: baseOffset,
-                    overrideOffsetMinutes: override.suhoorOffsetOverrideMinutes,
-                    disabledForDay: true
-                )
-            }
-            if let overrideMinutes = override.suhoorOffsetOverrideMinutes {
-                return RuleSummary(
-                    baseOffsetMinutes: baseOffset,
-                    finalOffsetMinutes: overrideMinutes,
-                    overrideOffsetMinutes: overrideMinutes,
-                    disabledForDay: false
-                )
-            }
-        }
-
-        return RuleSummary(
-            baseOffsetMinutes: baseOffset,
-            finalOffsetMinutes: baseOffset,
-            overrideOffsetMinutes: nil,
-            disabledForDay: false
-        )
-    }
-
-    nonisolated private static func buildSchedule(
-        for day: Date,
-        coordinate: CLLocationCoordinate2D,
-        timeZone: TimeZone,
-        method: CalculationMethod,
-        adjustmentMinutes: Int,
-        maghribAdjustmentMinutes: Int,
-        effectiveConfig: EffectiveDailyConfig,
-        calculator: PrayerTimeCalculator,
-        locationDescription: String
-    ) -> DaySchedule? {
-        guard let fajr = calculator.fajrDate(
-            for: day,
-            location: coordinate,
-            timeZone: timeZone,
-            method: method,
-            adjustmentMinutes: adjustmentMinutes
-        ) else {
-            return nil
-        }
-        guard let maghrib = calculator.maghribDate(
-            for: day,
-            location: coordinate,
-            timeZone: timeZone,
-            adjustmentMinutes: maghribAdjustmentMinutes
-        ) else {
-            return nil
-        }
-
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = timeZone
-
-        let wake = resolvedSuhoorDate(for: day, fajr: fajr, config: effectiveConfig, calendar: calendar)
-        let offsetMinutes = Int(round(fajr.timeIntervalSince(wake) / 60))
-        let reminder: Date?
-        if effectiveConfig.reminderEnabled {
-            reminder = resolvedReminderDate(
-                for: day,
-                suhoor: wake,
-                fajr: fajr,
-                config: effectiveConfig,
-                calendar: calendar
-            )
-        } else {
-            reminder = nil
-        }
-
-        return DaySchedule(
-            date: day,
-            fajrDate: fajr,
-            maghribDate: maghrib,
-            wakeDate: wake,
-            reminderDate: reminder,
-            boundaryDate: effectiveConfig.fajrEnabled ? fajr : nil,
-            iftarDate: effectiveConfig.iftarEnabled ? maghrib : nil,
-            fajrSoundChoice: effectiveConfig.fajrSoundChoice,
-            iftarSoundChoice: effectiveConfig.iftarSoundChoice,
-            locationDescription: locationDescription,
-            offsetMinutes: offsetMinutes,
-            calculationMethodName: method.displayName,
-            timeZone: timeZone
-        )
-    }
-
-    nonisolated private static func resolvedSuhoorDate(
-        for day: Date,
-        fajr: Date,
-        config: EffectiveDailyConfig,
-        calendar: Calendar
-    ) -> Date {
-        if let overrideMinutes = config.suhoorTimeOverrideMinutesFromMidnight {
-            return dateFromMidnight(for: day, minutes: overrideMinutes, calendar: calendar)
-        }
-        if config.suhoorTimeMode == .fixedTime {
-            return dateFromMidnight(for: day, minutes: config.suhoorOffsetMinutes, calendar: calendar)
-        }
-        return ScheduleEventCalculator.wakeDate(for: fajr, offsetMinutes: config.suhoorOffsetMinutes, calendar: calendar)
-    }
-
-    nonisolated private static func resolvedReminderDate(
-        for day: Date,
-        suhoor: Date,
-        fajr: Date,
-        config: EffectiveDailyConfig,
-        calendar: Calendar
-    ) -> Date? {
-        computedReminderTime(
-            for: day,
-            suhoor: suhoor,
-            fajr: fajr,
-            config: config,
-            calendar: calendar
-        ).reminderTime
-    }
-
-    nonisolated private static func computedReminderTime(
-        for day: Date,
-        suhoor: Date,
-        fajr: Date,
-        config: EffectiveDailyConfig,
-        calendar: Calendar
-    ) -> TimeValidationResult {
-        let reminderDate: Date
-        if let overrideMinutes = config.reminderTimeOverrideMinutesFromMidnight {
-            reminderDate = dateFromMidnight(for: day, minutes: overrideMinutes, calendar: calendar)
-        } else if config.reminderTimeMode == .fixedTime {
-            reminderDate = dateFromMidnight(for: day, minutes: config.reminderFixedTimeMinutes, calendar: calendar)
-        } else {
-            reminderDate = ScheduleEventCalculator.reminderDate(
-                for: fajr,
-                reminderMinutes: config.reminderMinutesBeforeFajr,
-                calendar: calendar
-            )
-        }
-        return TimeValidation.validateDailyTimes(suhoorTime: suhoor, reminderTime: reminderDate)
-    }
-
-    nonisolated private static func dateFromMidnight(for day: Date, minutes: Int, calendar: Calendar) -> Date {
-        let start = calendar.startOfDay(for: day)
-        return calendar.date(byAdding: .minute, value: minutes, to: start) ?? start
-    }
-
-    nonisolated fileprivate static func sourceSummary(
-        from provenances: [ResolvedScheduledDateProvenance]
-    ) -> String {
-        let labels = provenances.map(\.label)
-        return Array(NSOrderedSet(array: labels)).compactMap { $0 as? String }.joined(separator: " • ")
-    }
-}
-
 private extension ScheduleManager {
     static func makeLegacySnapshot(
         schedules: [DaySchedule],
@@ -3728,7 +3494,7 @@ private extension ScheduleManager {
             let dateKey = DateHelpers.dayIdentifier(for: schedule.date, timeZone: timeZone)
             let provenances = provenanceProvider(schedule.date, timeZone)
             guard !provenances.isEmpty else { return nil }
-            let config = ScheduleComputationEngine.effectiveConfig(
+            let config = ActiveWindowBuilder.effectiveConfig(
                 for: schedule.date,
                 settings: settings,
                 defaultConfig: defaults,

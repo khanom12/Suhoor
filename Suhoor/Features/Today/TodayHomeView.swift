@@ -1,42 +1,26 @@
 import SwiftUI
 
 struct TodayHomeView: View {
+    @EnvironmentObject private var appNavigator: AppNavigator
     @EnvironmentObject private var scheduleManager: ScheduleManager
-    @EnvironmentObject private var fajrLogStore: FajrLogStore
-    @EnvironmentObject private var fastLogStore: FastLogStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @StateObject private var dismissalStore = TodayCardDismissalStore()
 
     var body: some View {
         TimelineView(.periodic(from: Date(), by: 60)) { context in
             let now = context.date
-            let hijriComponents = AdjustedHijriCalendar.shared.adjustedComponents(for: now, timeZone: .current)
-            let todayKey = DateHelpers.dayIdentifier(for: now, timeZone: .current)
-            let todayStart = DateHelpers.startOfDay(now, in: .current)
-            let currentDay = scheduleManager.activeWindowSnapshot.byDateKey[todayKey]
-            let contextDay = scheduleManager.nextWakeEventSummary?.day ?? currentDay
-            let todaySchedule = currentDay?.schedule ?? scheduleManager.schedule(for: todayStart)
-            let supportCard = ProductSurfacePresentation.homeSupportCard(
+            let snapshot = scheduleManager.homeSurfaceSnapshot(
                 now: now,
-                currentDay: currentDay,
-                todaySchedule: todaySchedule,
-                fajrStatus: fajrLogStore.status(for: todayKey),
-                fastStatus: fastLogStore.status(for: todayKey),
-                permissionSnapshot: scheduleManager.permissionSnapshot,
-                hijriComponents: hijriComponents,
                 dismissedWarnings: dismissedWarnings(on: now)
             )
 
             ScrollView {
                 LazyVStack(spacing: DesignTokens.dashboardStackSpacing) {
-                    TodayNextWakeHeroCard()
+                    TodayNextWakeHeroCard(summary: snapshot.nextWakeEventSummary)
 
-                    TodayDateContextStrip(
-                        now: now,
-                        contextDay: contextDay
-                    )
+                    TodayDateContextStrip(snapshot: snapshot)
 
-                    if let supportCard {
+                    if let supportCard = snapshot.supportCard {
                         supportCardView(
                             for: supportCard,
                             now: now
@@ -55,7 +39,7 @@ struct TodayHomeView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
-                        NotificationCenter.default.post(name: .switchToSettingsTab, object: nil)
+                        appNavigator.openSettings()
                     } label: {
                         Image(systemName: "gearshape")
                     }
@@ -99,44 +83,36 @@ struct TodayHomeView: View {
 }
 
 private struct TodayDateContextStrip: View {
-    @EnvironmentObject private var scheduleManager: ScheduleManager
-
-    let now: Date
-    let contextDay: ActiveAlarmDay?
+    let snapshot: HomeSurfaceSnapshot
 
     var body: some View {
         VStack(alignment: .leading, spacing: DesignTokens.spacingS) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(GregorianDateFormatter.shared.headerString(for: now))
+                Text(snapshot.gregorianText)
                     .font(DesignTokens.cardSubtitleFont)
                     .foregroundStyle(.secondary)
 
-                Text(HijriDateFormatter.shared.string(from: now))
+                Text(snapshot.hijriText)
                     .font(DesignTokens.cardMetaFont)
                     .foregroundStyle(.secondary)
             }
 
-            if let contextDay {
+            if let primaryContextTitle = snapshot.primaryContextTitle {
                 HStack(alignment: .center, spacing: DesignTokens.spacingS) {
-                    Text(scheduleManager.dayLabel(for: contextDay.date))
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
+                    if let dayLabel = snapshot.dayLabel {
+                        Text(dayLabel)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                    }
 
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: DesignTokens.spacingXS) {
                             ContextChip(
-                                title: ProductSurfacePresentation.primaryContextTitle(
-                                    contextDay.resolvedDayContext.primaryContext
-                                ),
+                                title: primaryContextTitle,
                                 prominence: .primary
                             )
 
-                            ForEach(
-                                ProductSurfacePresentation.meaningfulSecondaryContextTitles(
-                                    from: contextDay.resolvedDayContext
-                                ),
-                                id: \.self
-                            ) { title in
+                            ForEach(snapshot.secondaryContextTitles, id: \.self) { title in
                                 ContextChip(title: title, prominence: .secondary)
                             }
                         }
@@ -175,6 +151,8 @@ private struct ContextChip: View {
 }
 
 private struct TodayBlockingIssueCard: View {
+    @EnvironmentObject private var appNavigator: AppNavigator
+
     let presentation: PermissionPresentation
 
     var body: some View {
@@ -188,7 +166,7 @@ private struct TodayBlockingIssueCard: View {
                     .foregroundStyle(.secondary)
 
                 Button(presentation.actionTitle ?? "Open Settings") {
-                    NotificationCenter.default.post(name: .switchToSettingsTab, object: nil)
+                    appNavigator.openSettings()
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(DawnColor.accent)
@@ -198,7 +176,10 @@ private struct TodayBlockingIssueCard: View {
 }
 
 private struct TodayNextWakeHeroCard: View {
+    @EnvironmentObject private var appNavigator: AppNavigator
     @EnvironmentObject private var scheduleManager: ScheduleManager
+
+    let summary: NextWakeEventSummary?
 
     var body: some View {
         GlassCard(style: .header, tintColor: DawnColor.lightGold200, tintOpacity: 0.18) {
@@ -207,7 +188,7 @@ private struct TodayNextWakeHeroCard: View {
                     .font(DesignTokens.cardMetaFont)
                     .foregroundStyle(.secondary)
 
-                if let summary = scheduleManager.nextWakeEventSummary {
+                if let summary {
                     VStack(alignment: .leading, spacing: DesignTokens.spacingS) {
                         Text(TimeFormatters.timeFormatter.string(from: summary.event.fireDate))
                             .font(.system(size: 42, weight: .semibold, design: .rounded))
@@ -229,7 +210,7 @@ private struct TodayNextWakeHeroCard: View {
                             .foregroundStyle(.secondary)
 
                         Button("Set Morning Plan") {
-                            NotificationCenter.default.post(name: .openPlanDefaultMorningPlan, object: nil)
+                            appNavigator.openDefaultMorningPlan()
                         }
                         .buttonStyle(.borderedProminent)
                         .tint(DawnColor.accent)

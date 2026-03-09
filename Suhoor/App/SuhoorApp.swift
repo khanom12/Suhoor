@@ -4,6 +4,7 @@ import UserNotifications
 @main
 struct SuhoorApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+    @StateObject private var appNavigator: AppNavigator
     @StateObject private var settingsStore: SuhoorSettingsStore
     @StateObject private var alarmConfigStore: AlarmConfigStore
     @StateObject private var locationService: LocationService
@@ -17,6 +18,7 @@ struct SuhoorApp: App {
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
+        let appNavigator = AppNavigator()
         let settingsStore = SuhoorSettingsStore()
         let alarmConfigStore = AlarmConfigStore(legacySettings: settingsStore.settings)
         let locationService = LocationService()
@@ -35,6 +37,7 @@ struct SuhoorApp: App {
             qadaBacklogStore: qadaBacklogStore,
             qadaBatchStore: qadaBatchStore
         )
+        _appNavigator = StateObject(wrappedValue: appNavigator)
         _settingsStore = StateObject(wrappedValue: settingsStore)
         _alarmConfigStore = StateObject(wrappedValue: alarmConfigStore)
         _locationService = StateObject(wrappedValue: locationService)
@@ -54,6 +57,7 @@ struct SuhoorApp: App {
                 // Avoid global button/control group styles here; toolbars auto-group and can add unwanted capsules.
                 .tint(DawnColor.accent)
                 .environmentObject(settingsStore)
+                .environmentObject(appNavigator)
                 .environmentObject(alarmConfigStore)
                 .environmentObject(locationService)
                 .environmentObject(scheduleManager)

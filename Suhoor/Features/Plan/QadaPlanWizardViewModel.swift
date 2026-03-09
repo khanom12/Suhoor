@@ -414,7 +414,7 @@ final class QadaPlanWizardViewModel: ObservableObject {
     }
 
     func proceedToAlarms() {
-        NotificationCenter.default.post(name: .switchToWakeTab, object: nil)
+        AppNavigationBridge.send(.switchToWake)
         shouldDismissFlow = true
     }
 

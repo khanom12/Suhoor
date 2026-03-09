@@ -286,7 +286,7 @@ final class OnboardingViewModel: ObservableObject {
     func markOnboardingCompleteAndOpenPlans() {
         markOnboardingComplete()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-            NotificationCenter.default.post(name: .openPlanHome, object: nil)
+            AppNavigationBridge.send(.switchToPlans)
         }
     }
 
