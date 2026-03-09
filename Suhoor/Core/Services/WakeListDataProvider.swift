@@ -5,10 +5,9 @@ import os
 @MainActor
 final class WakeListDataProvider {
     struct Dependencies {
-        let syncMorningPlanState: () -> Void
         let currentCoordinate: () -> CLLocationCoordinate2D?
         let resolvedEntriesForHijriMonth: (HijriYearMonth, TimeZone) -> [ResolvedScheduledDateEntry]
-        let activeDays: ([ResolvedScheduledDateEntry], CLLocationCoordinate2D, TimeZone) -> [ActiveAlarmDay]
+        let buildSnapshot: ([ResolvedScheduledDateEntry], CLLocationCoordinate2D, TimeZone) -> ActiveAlarmWindowSnapshot
     }
 
     private let alarmConfigStore: AlarmConfigStore
@@ -138,12 +137,11 @@ final class WakeListDataProvider {
             return []
         }
 
-        dependencies.syncMorningPlanState()
         let resolvedEntries = dependencies.resolvedEntriesForHijriMonth(
             HijriYearMonth(hijriYear: key.year, month: month),
             timeZone
         )
-        let entries = dependencies.activeDays(resolvedEntries, coordinate, timeZone)
+        let entries = dependencies.buildSnapshot(resolvedEntries, coordinate, timeZone).visibleDays
 
         expandedMonthSnapshots[identifier] = ExpandedMonthSnapshot(
             key: key,
