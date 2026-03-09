@@ -454,6 +454,165 @@ struct ProductSurfacePresentationTests {
     }
 
     @Test
+    func wakeSurfaceProviderPreservesCanonicalWakeInputs() {
+        let firstDay = makeActiveDay(
+            day: 14,
+            context: .standard,
+            supportingTags: [.dailyPlan],
+            provenances: [Self.defaultDailyProvenance]
+        )
+        let secondDay = makeActiveDay(
+            day: 15,
+            context: .fasting,
+            supportingTags: [.voluntary],
+            provenances: [Self.manualProvenance(label: "Selected fasting day")]
+        )
+        let activeWindow = makeActiveWindowSnapshot(days: [firstDay, secondDay])
+        let nextWakeSummary = makeNextWakeSummary(for: firstDay)
+
+        let snapshot = WakeSurfaceProvider().wakeSurfaceSnapshot(
+            activeWindowSnapshot: activeWindow,
+            nextWakeEventSummary: nextWakeSummary,
+            overrideDateKeys: [secondDay.dateKey]
+        )
+
+        #expect(snapshot.visibleDays == activeWindow.visibleDays)
+        #expect(snapshot.nextWakeEventSummary == nextWakeSummary)
+        #expect(snapshot.overrideDateKeys == [secondDay.dateKey])
+    }
+
+    @Test
+    func wakeListSnapshotBuilderKeepsNextWakePinnedAndOutOfMonthSections() {
+        let firstDay = makeActiveDay(
+            day: 16,
+            context: .standard,
+            supportingTags: [.dailyPlan],
+            provenances: [Self.defaultDailyProvenance]
+        )
+        let secondDay = makeActiveDay(
+            day: 17,
+            context: .qadaFast,
+            supportingTags: [.qada],
+            provenances: [Self.manualProvenance(label: "Qada plan")]
+        )
+        let wakeSnapshot = WakeSurfaceSnapshot(
+            visibleDays: [firstDay, secondDay],
+            nextWakeEventSummary: makeNextWakeSummary(for: firstDay),
+            overrideDateKeys: [secondDay.dateKey]
+        )
+        let monthKey = HijriMonthKey(year: 1447, month: HijriMonth.ramadan.rawValue, title: "Ramadan 1447")
+
+        let result = WakeListSnapshotBuilder.build(
+            wakeSnapshot: wakeSnapshot,
+            tagFilter: AlarmTagFilter(),
+            pinnedEntryIDs: ["missing-id"],
+            timeZone: .current,
+            totalScheduledCount: { key in key == monthKey ? 2 : 0 },
+            rollingHijriMonths: { [] },
+            monthPreview: { _ in nil },
+            cachedMonthEntries: { key in key == monthKey ? [firstDay, secondDay] : nil }
+        )
+
+        #expect(result.pinnedEntryIDs.isEmpty)
+        #expect(result.snapshot.nextWakeEntries.count == 1)
+        #expect(result.snapshot.nextWakeEntries.first?.id == firstDay.dateKey)
+        #expect(result.snapshot.sections.count == 1)
+        #expect(result.snapshot.sections[0].entries.map(\.id) == [secondDay.dateKey])
+        #expect(result.snapshot.sections[0].entries.first?.hasDayOverride == true)
+    }
+
+    @Test
+    func plansSurfaceProviderBuildsConfiguredPlansAndQadaSummaryFromInputs() {
+        var settings = AppSettings.default
+        settings.snoozeEnabled = false
+
+        var defaults = DefaultAlarmConfig.default
+        defaults.defaultSuhoorOffsetMinutes = 45
+        defaults.iftarEnabledDefault = true
+
+        let qadaDay = makeActiveDay(
+            day: 18,
+            context: .qadaFast,
+            supportingTags: [.qada],
+            provenances: [Self.manualProvenance(label: "Qada plan")]
+        )
+        let adjustedDay = makeActiveDay(
+            day: 19,
+            context: .standard,
+            supportingTags: [.dailyPlan],
+            provenances: [Self.defaultDailyProvenance]
+        )
+        let fastEntries = [
+            qadaDay.dateKey: FastLogEntry(
+                status: .completed,
+                loggedAt: makeDate(day: 18, hour: 19, minute: 0),
+                intentSnapshot: qadaFastIntent
+            )
+        ]
+
+        let snapshot = PlansSurfaceProvider().plansSurfaceSnapshot(
+            defaults: defaults,
+            settings: settings,
+            upcomingDays: [qadaDay, adjustedDay],
+            overrideDateKeys: [adjustedDay.dateKey],
+            qadaBacklogState: QadaBacklogState(trackingStartDateKey: qadaDay.dateKey, baselineOwed: 3),
+            fastLogEntries: fastEntries
+        )
+
+        #expect(snapshot.defaultMorningPlanSummary.wakeRelation == "45 min before Fajr")
+        #expect(snapshot.defaultMorningPlanSummary.followUp == "Off")
+        #expect(snapshot.defaultMorningPlanSummary.fastingDaySupport == "Iftar support on")
+        #expect(snapshot.configuredPlansSnapshot.upcomingSpecialMornings.count == 2)
+        #expect(snapshot.qadaProgress.completed == 1)
+        #expect(snapshot.qadaProgress.remaining == 2)
+    }
+
+    @Test
+    func calendarPlanningProviderUsesCanonicalDuplicateBoundary() {
+        let activeDay = makeActiveDay(
+            day: 20,
+            context: .fasting,
+            supportingTags: [.whiteDays],
+            provenances: [Self.manualProvenance(label: "White Days")]
+        )
+        let activeWindow = makeActiveWindowSnapshot(days: [activeDay])
+        let provider = CalendarPlanningProvider()
+        let dependencies = CalendarPlanningProvider.Dependencies(
+            activeWindowSnapshot: activeWindow,
+            fastTagSelections: [:],
+            provenance: { _, _ in [] },
+            activeDay: { _, _ in nil },
+            tagPreviewResult: { _, _, _, _ in .empty }
+        )
+
+        let activeStatus = provider.duplicateStatus(
+            for: activeDay.date,
+            timeZone: .current,
+            dependencies: dependencies
+        )
+        let availableStatus = provider.duplicateStatus(
+            for: makeDate(day: 21, hour: 0, minute: 0),
+            timeZone: .current,
+            dependencies: dependencies
+        )
+
+        switch activeStatus {
+        case .active(let provenances, let existingDay):
+            #expect(provenances == activeDay.provenances)
+            #expect(existingDay.dateKey == activeDay.dateKey)
+        case .available:
+            Issue.record("Expected active duplicate status for existing day.")
+        }
+
+        switch availableStatus {
+        case .available:
+            #expect(Bool(true))
+        case .active:
+            Issue.record("Expected available duplicate status for open day.")
+        }
+    }
+
+    @Test
     @MainActor
     func completionCommandGatewayWritesPrayerAndFastEditsThroughTypedIntents() {
         let suiteName = "CompletionCommandGatewayTests.\(UUID().uuidString)"
@@ -689,6 +848,33 @@ struct ProductSurfacePresentationTests {
             completionRecords: [],
             dailyCompletion: dailyCompletion,
             completionSummary: nil
+        )
+    }
+
+    private func makeActiveWindowSnapshot(days: [ActiveAlarmDay]) -> ActiveAlarmWindowSnapshot {
+        ActiveAlarmWindowSnapshot(
+            generatedAt: makeDate(day: 1, hour: 0, minute: 0),
+            visibleDays: days,
+            scheduledDays: days,
+            visibleHorizonDays: 60,
+            scheduledHorizonDays: 30
+        )
+    }
+
+    private func makeNextWakeSummary(for day: ActiveAlarmDay) -> NextWakeEventSummary {
+        NextWakeEventSummary(
+            day: day,
+            event: ScheduledEvent(
+                id: "\(day.dateKey).wakeAlarm",
+                type: .wakeAlarm,
+                dateKey: day.dateKey,
+                fireDate: day.schedule.wakeDate,
+                relativeTo: .wakeAnchor(type: .fajrStart, offsetMinutes: -30),
+                isUserVisible: true,
+                affectsCompletion: true,
+                deliveryKinds: [.wake]
+            ),
+            priority: 0
         )
     }
 }

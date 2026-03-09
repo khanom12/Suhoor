@@ -317,7 +317,7 @@ enum ProductSurfacePresentation {
         }
 
         var subtitleParts = [
-            AlarmRowPresentation.dateLabel(for: day.date),
+            WakeRowPresentation.dateLabel(for: day.date),
             wakeRelationText(delta: day.decisionLog.resolvedDelta, anchor: day.decisionLog.resolvedAnchor.type)
         ]
 

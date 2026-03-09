@@ -41,6 +41,11 @@ final class ScheduleManager: ObservableObject {
     private let qadaBatchStore: QadaBatchStore
     private let cacheStore: ScheduleCacheStore
     private let completionSurfaceProvider = CompletionSurfaceProvider()
+    private let wakeSurfaceProvider = WakeSurfaceProvider()
+    private let plansSurfaceProvider = PlansSurfaceProvider()
+    private let calendarPlanningProvider = CalendarPlanningProvider()
+    private let quickAddPreviewProvider = QuickAddPreviewProvider()
+    private let schedulingAuditProvider = SchedulingAuditProvider()
     private let completionCommandGateway: CompletionCommandGateway
     private let calculator = PrayerTimeCalculator()
     private let hijriAdjustmentStore: HijriMonthAdjustmentStore
@@ -254,29 +259,21 @@ final class ScheduleManager: ObservableObject {
     }
 
     var wakeSurfaceSnapshot: WakeSurfaceSnapshot {
-        WakeSurfaceSnapshot(
-            visibleDays: activeWindowSnapshot.visibleDays,
+        wakeSurfaceProvider.wakeSurfaceSnapshot(
+            activeWindowSnapshot: activeWindowSnapshot,
             nextWakeEventSummary: nextWakeEventSummary,
             overrideDateKeys: Set(alarmConfigStore.overridesByDay.keys)
         )
     }
 
     var plansSurfaceSnapshot: PlansSurfaceSnapshot {
-        let qadaProgress = QadaProgressEngine.snapshot(
-            state: qadaBacklogStore.state,
-            logEntries: fastLogStore.entriesByDateKey
-        )
-        return PlansSurfaceSnapshot(
-            defaultMorningPlanSummary: ProductSurfaceSnapshots.defaultMorningPlanSummary(
-                defaults: alarmConfigStore.defaults,
-                settings: settingsStore.settings
-            ),
-            configuredPlansSnapshot: ProductSurfacePresentation.configuredPlansSnapshot(
-                upcomingDays: activeWindowSnapshot.visibleDays,
-                overrideDateKeys: Set(alarmConfigStore.overridesByDay.keys),
-                qadaProgress: qadaProgress
-            ),
-            qadaProgress: qadaProgress
+        plansSurfaceProvider.plansSurfaceSnapshot(
+            defaults: alarmConfigStore.defaults,
+            settings: settingsStore.settings,
+            upcomingDays: activeWindowSnapshot.visibleDays,
+            overrideDateKeys: Set(alarmConfigStore.overridesByDay.keys),
+            qadaBacklogState: qadaBacklogStore.state,
+            fastLogEntries: fastLogStore.entriesByDateKey
         )
     }
 
@@ -317,19 +314,9 @@ final class ScheduleManager: ObservableObject {
     func progressSurfaceSnapshot(
         wakeProgressSource: WakeProgressSource = DebugEventLogWakeProgressSource()
     ) -> ProgressSurfaceSnapshot {
-        let completionState = currentCompletionStateSnapshot()
-        let todayKey = DateHelpers.dayIdentifier(for: Date(), timeZone: .current)
-        let todayCompletion = activeWindowSnapshot.byDateKey[todayKey]?.dailyCompletion
-            ?? DailyCompletionResolver.resolve(
-                dateKey: todayKey,
-                resolvedDayContext: activeWindowSnapshot.byDateKey[todayKey]?.resolvedDayContext ?? .standard,
-                completionState: completionState
-            )
-
         return completionSurfaceProvider.progressSurfaceSnapshot(
-            todayCompletion: todayCompletion,
-            recentDateKeys: recentDateKeys(days: 30),
-            completionState: completionState,
+            activeWindowSnapshot: activeWindowSnapshot,
+            completionState: currentCompletionStateSnapshot(),
             wakeProgress: wakeProgressSource.snapshot(limit: 20)
         )
     }
@@ -339,8 +326,11 @@ final class ScheduleManager: ObservableObject {
         now: Date = Date()
     ) -> FajrHistorySurfaceSnapshot {
         completionSurfaceProvider.fajrHistorySurfaceSnapshot(
-            window: completionHistoryWindow(days: days, now: now)
-        )
+            days: days,
+            now: now
+        ) { [weak self] date, timeZone in
+            self?.resolvedDaySnapshotForHistory(for: date, timeZone: timeZone)
+        }
     }
 
     func fastHistorySurfaceSnapshot(
@@ -348,8 +338,11 @@ final class ScheduleManager: ObservableObject {
         now: Date = Date()
     ) -> FastHistorySurfaceSnapshot {
         completionSurfaceProvider.fastHistorySurfaceSnapshot(
-            window: completionHistoryWindow(days: days, now: now)
-        )
+            days: days,
+            now: now
+        ) { [weak self] date, timeZone in
+            self?.resolvedDaySnapshotForHistory(for: date, timeZone: timeZone)
+        }
     }
 
     func performCompletionEdit(
@@ -596,16 +589,11 @@ final class ScheduleManager: ObservableObject {
     }
 
     func duplicateStatus(for date: Date, timeZone: TimeZone = .current) -> DuplicateDateStatus {
-        let key = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
-        if let existing = activeWindowSnapshot.byDateKey[key] {
-            return .active(provenances: existing.provenances, existingDay: existing)
-        }
-
-        let provenances = provenance(for: date, timeZone: timeZone)
-        guard !provenances.isEmpty, let existingDay = buildActiveDayIfNeeded(for: date, timeZone: timeZone) else {
-            return .available
-        }
-        return .active(provenances: provenances, existingDay: existingDay)
+        calendarPlanningProvider.duplicateStatus(
+            for: date,
+            timeZone: timeZone,
+            dependencies: calendarPlanningDependencies()
+        )
     }
 
     func tagPreviewResult(
@@ -752,7 +740,12 @@ final class ScheduleManager: ObservableObject {
         startDate: Date = Date(),
         timeZone: TimeZone = .current
     ) -> IslamicQuickAddPreview? {
-        alarmConfigStore.previewIslamicQuickAdd(kind, startDate: startDate, timeZone: timeZone)
+        quickAddPreviewProvider.previewIslamicQuickAdd(
+            alarmConfigStore: alarmConfigStore,
+            kind: kind,
+            startDate: startDate,
+            timeZone: timeZone
+        )
     }
 
     func previewAshuraQuickAdd(
@@ -760,7 +753,12 @@ final class ScheduleManager: ObservableObject {
         startDate: Date = Date(),
         timeZone: TimeZone = .current
     ) -> AshuraQuickAddPreview? {
-        alarmConfigStore.previewAshuraQuickAdd(pattern, startDate: startDate, timeZone: timeZone)
+        quickAddPreviewProvider.previewAshuraQuickAdd(
+            alarmConfigStore: alarmConfigStore,
+            pattern: pattern,
+            startDate: startDate,
+            timeZone: timeZone
+        )
     }
 
     func previewGregorianRangeAdd(
@@ -768,7 +766,12 @@ final class ScheduleManager: ObservableObject {
         endDate: Date,
         timeZone: TimeZone = .current
     ) -> AddScheduledDatesResult {
-        alarmConfigStore.previewGregorianRangeAdd(startDate: startDate, endDate: endDate, timeZone: timeZone)
+        quickAddPreviewProvider.previewGregorianRangeAdd(
+            alarmConfigStore: alarmConfigStore,
+            startDate: startDate,
+            endDate: endDate,
+            timeZone: timeZone
+        )
     }
 
     func islamicQuickAddAvailability(
@@ -776,14 +779,23 @@ final class ScheduleManager: ObservableObject {
         startDate: Date = Date(),
         timeZone: TimeZone = .current
     ) -> IslamicQuickAddAvailability {
-        alarmConfigStore.islamicQuickAddAvailability(kind, startDate: startDate, timeZone: timeZone)
+        quickAddPreviewProvider.islamicQuickAddAvailability(
+            alarmConfigStore: alarmConfigStore,
+            kind: kind,
+            startDate: startDate,
+            timeZone: timeZone
+        )
     }
 
     func recommendedAshuraQuickAddPattern(
         startDate: Date = Date(),
         timeZone: TimeZone = .current
     ) -> AshuraQuickAddPattern {
-        alarmConfigStore.recommendedAshuraQuickAddPattern(startDate: startDate, timeZone: timeZone)
+        quickAddPreviewProvider.recommendedAshuraQuickAddPattern(
+            alarmConfigStore: alarmConfigStore,
+            startDate: startDate,
+            timeZone: timeZone
+        )
     }
 
     func ashuraQuickAddAvailability(
@@ -791,7 +803,12 @@ final class ScheduleManager: ObservableObject {
         startDate: Date = Date(),
         timeZone: TimeZone = .current
     ) -> AshuraQuickAddAvailability {
-        alarmConfigStore.ashuraQuickAddAvailability(pattern, startDate: startDate, timeZone: timeZone)
+        quickAddPreviewProvider.ashuraQuickAddAvailability(
+            alarmConfigStore: alarmConfigStore,
+            pattern: pattern,
+            startDate: startDate,
+            timeZone: timeZone
+        )
     }
 
     func recurringRuleStatus(_ rule: RecurringIslamicRule) -> RecurringRuleStatus {
@@ -805,102 +822,12 @@ final class ScheduleManager: ObservableObject {
         allowedDateRange: ClosedRange<Date>,
         timeZone: TimeZone = .current
     ) -> CalendarMonthContext {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = timeZone
-
-        let monthStart = calendar.date(
-            from: calendar.dateComponents([.year, .month], from: displayedMonth)
-        ) ?? DateHelpers.startOfToday(in: timeZone)
-        let weekdaySymbols = reorderedWeekdaySymbols(calendar: calendar)
-        let firstDisplayedDate = firstVisibleDate(in: monthStart, calendar: calendar)
-        let gridDates = DateHelpers.dates(startingFrom: firstDisplayedDate, count: 42, calendar: calendar)
-        let inMonthDates = gridDates.filter {
-            calendar.isDate($0, equalTo: monthStart, toGranularity: .month)
-        }
-        let cachedByKey = activeWindowSnapshot.byDateKey
-        let missingDates = inMonthDates.filter {
-            cachedByKey[DateHelpers.dayIdentifier(for: $0, timeZone: timeZone)] == nil
-        }
-        let missingProvenance = alarmConfigStore.provenanceByDate(for: missingDates, timeZone: timeZone)
-        let seeds: [ActiveTagComputationSeed] = inMonthDates.map { date in
-            let key = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
-            let cached = cachedByKey[key]
-            let provenances = cached?.provenances ?? missingProvenance[key] ?? []
-            return ActiveTagComputationSeed(
-                date: DateHelpers.startOfDay(date, in: timeZone),
-                dateKey: key,
-                defaultPrimaryIntent: provenances.defaultFastPrimaryIntent()
-            )
-        }
-        let tagResults = TagComputationEngine.results(
-            seeds: seeds,
-            selections: fastTagStore.selections,
-            ruleset: .strict,
-            timeZone: timeZone
-        )
-
-        let dayStates = gridDates.map { date in
-            let isInDisplayedMonth = calendar.isDate(date, equalTo: monthStart, toGranularity: .month)
-            guard isInDisplayedMonth else {
-                return CalendarDayState(
-                    date: date,
-                    dayNumberText: "",
-                    isInDisplayedMonth: false,
-                    isToday: false,
-                    isSelected: false,
-                    isDisabled: true,
-                    isAlreadyActive: false,
-                    activeSourceSummary: nil,
-                    hijriText: "",
-                    computedPrimaryIntent: .other,
-                    computedSecondaryTags: [],
-                    previewSecondaryTags: [],
-                    warnings: [],
-                    isForbidden: false,
-                    isRamadan: false,
-                    isLocked: true
-                )
-            }
-
-            let key = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
-            let cached = cachedByKey[key]
-            let provenances = cached?.provenances ?? missingProvenance[key] ?? []
-            let summary = summaryText(for: provenances)
-            let tagResult = tagResults[key] ?? .empty
-            let previewTags = FastIntentEngine.displaySecondaryTags(
-                FastIntentEngine.dateDerivedObservanceTags(
-                    for: date,
-                    timeZone: timeZone,
-                    includeShawwalPotential: true
-                )
-            )
-            let warnings = FastIntentEngine.warnings(for: date, timeZone: timeZone)
-            let isRamadan = FastIntentEngine.isRamadan(date, timeZone: timeZone)
-            return CalendarDayState(
-                date: date,
-                dayNumberText: String(calendar.component(.day, from: date)),
-                isInDisplayedMonth: true,
-                isToday: calendar.isDateInToday(date),
-                isSelected: calendar.isDate(date, inSameDayAs: selectedDate),
-                isDisabled: !allowedDateRange.contains(date),
-                isAlreadyActive: !provenances.isEmpty,
-                activeSourceSummary: summary.isEmpty ? nil : summary,
-                hijriText: HijriDateFormatter.shared.string(from: date),
-                computedPrimaryIntent: tagResult.computedPrimaryIntent,
-                computedSecondaryTags: FastIntentEngine.displaySecondaryTags(tagResult.computedSecondaryTags),
-                previewSecondaryTags: previewTags,
-                warnings: warnings,
-                isForbidden: !warnings.isEmpty,
-                isRamadan: isRamadan,
-                isLocked: !warnings.isEmpty || isRamadan
-            )
-        }
-
-        return CalendarMonthContext(
-            monthStart: monthStart,
-            monthTitle: GregorianDateFormatter.shared.monthYearString(for: monthStart),
-            weekdaySymbols: weekdaySymbols,
-            dayStates: dayStates
+        calendarPlanningProvider.calendarMonthContext(
+            displayedMonth: displayedMonth,
+            selectedDate: selectedDate,
+            allowedDateRange: allowedDateRange,
+            timeZone: timeZone,
+            dependencies: calendarPlanningDependencies()
         )
     }
 
@@ -910,68 +837,13 @@ final class ScheduleManager: ObservableObject {
         allowedDateRange: ClosedRange<Date>,
         timeZone: TimeZone = .current
     ) -> [CalendarDayState] {
-        guard !dates.isEmpty else { return [] }
-
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = timeZone
-
-        let normalizedDates = dates.map { DateHelpers.startOfDay($0, in: timeZone) }
-        let cachedByKey = activeWindowSnapshot.byDateKey
-        let missingDates = normalizedDates.filter {
-            cachedByKey[DateHelpers.dayIdentifier(for: $0, timeZone: timeZone)] == nil
-        }
-        let missingProvenance = alarmConfigStore.provenanceByDate(for: missingDates, timeZone: timeZone)
-        let seeds: [ActiveTagComputationSeed] = normalizedDates.map { date in
-            let key = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
-            let cached = cachedByKey[key]
-            let provenances = cached?.provenances ?? missingProvenance[key] ?? []
-            return ActiveTagComputationSeed(
-                date: date,
-                dateKey: key,
-                defaultPrimaryIntent: provenances.defaultFastPrimaryIntent()
-            )
-        }
-        let tagResults = TagComputationEngine.results(
-            seeds: seeds,
-            selections: fastTagStore.selections,
-            ruleset: .strict,
-            timeZone: timeZone
+        calendarPlanningProvider.calendarDayStates(
+            dates: dates,
+            selectedDate: selectedDate,
+            allowedDateRange: allowedDateRange,
+            timeZone: timeZone,
+            dependencies: calendarPlanningDependencies()
         )
-
-        return normalizedDates.map { date in
-            let key = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
-            let cached = cachedByKey[key]
-            let provenances = cached?.provenances ?? missingProvenance[key] ?? []
-            let summary = summaryText(for: provenances)
-            let tagResult = tagResults[key] ?? .empty
-            let previewTags = FastIntentEngine.displaySecondaryTags(
-                FastIntentEngine.dateDerivedObservanceTags(
-                    for: date,
-                    timeZone: timeZone,
-                    includeShawwalPotential: true
-                )
-            )
-            let warnings = FastIntentEngine.warnings(for: date, timeZone: timeZone)
-            let isRamadan = FastIntentEngine.isRamadan(date, timeZone: timeZone)
-            return CalendarDayState(
-                date: date,
-                dayNumberText: String(calendar.component(.day, from: date)),
-                isInDisplayedMonth: true,
-                isToday: calendar.isDateInToday(date),
-                isSelected: calendar.isDate(date, inSameDayAs: selectedDate),
-                isDisabled: !allowedDateRange.contains(date),
-                isAlreadyActive: !provenances.isEmpty,
-                activeSourceSummary: summary.isEmpty ? nil : summary,
-                hijriText: HijriDateFormatter.shared.string(from: date),
-                computedPrimaryIntent: tagResult.computedPrimaryIntent,
-                computedSecondaryTags: FastIntentEngine.displaySecondaryTags(tagResult.computedSecondaryTags),
-                previewSecondaryTags: previewTags,
-                warnings: warnings,
-                isForbidden: !warnings.isEmpty,
-                isRamadan: isRamadan,
-                isLocked: !warnings.isEmpty || isRamadan
-            )
-        }
     }
 
     func calendarDayDetail(
@@ -979,35 +851,11 @@ final class ScheduleManager: ObservableObject {
         overrideSelection: FastIntentSelection? = nil,
         timeZone: TimeZone = .current
     ) -> CalendarDayDetail {
-        let provenances = provenance(for: date, timeZone: timeZone)
-        let tagResult = tagPreviewResult(
+        calendarPlanningProvider.calendarDayDetail(
             for: date,
             overrideSelection: overrideSelection,
-            defaultPrimaryIntent: provenances.defaultFastPrimaryIntent(),
-            timeZone: timeZone
-        )
-        let sourceSummary = summaryText(for: provenances)
-        let warnings = FastIntentEngine.warnings(for: date, timeZone: timeZone)
-        return CalendarDayDetail(
-            date: date,
-            gregorianText: GregorianDateFormatter.shared.headerString(for: date),
-            hijriText: HijriDateFormatter.shared.string(from: date),
-            isAlreadyActive: !provenances.isEmpty,
-            activeSourceSummary: sourceSummary.isEmpty ? nil : sourceSummary,
-            tagSummary: tagSummaryText(
-                primaryIntent: tagResult.computedPrimaryIntent,
-                secondaryTags: tagResult.computedSecondaryTags
-            ),
-            computedPrimaryIntent: tagResult.computedPrimaryIntent,
-            computedSecondaryTags: FastIntentEngine.displaySecondaryTags(tagResult.computedSecondaryTags),
-            previewSecondaryTags: FastIntentEngine.displaySecondaryTags(
-                FastIntentEngine.dateDerivedObservanceTags(
-                    for: date,
-                    timeZone: timeZone,
-                    includeShawwalPotential: true
-                )
-            ),
-            warnings: warnings
+            timeZone: timeZone,
+            dependencies: calendarPlanningDependencies()
         )
     }
 
@@ -1230,17 +1078,25 @@ final class ScheduleManager: ObservableObject {
         )
     }
 
-    private func completionHistoryWindow(
-        days: Int,
-        now: Date
-    ) -> CompletionHistoryWindow {
-        CompletionHistoryWindowBuilder.build(
-            days: days,
-            now: now,
-            timeZone: .current
-        ) { date in
-            resolvedDaySnapshotForHistory(for: date)
-        }
+    private func calendarPlanningDependencies() -> CalendarPlanningProvider.Dependencies {
+        CalendarPlanningProvider.Dependencies(
+            activeWindowSnapshot: activeWindowSnapshot,
+            fastTagSelections: fastTagStore.selections,
+            provenance: { [weak self] date, timeZone in
+                self?.provenance(for: date, timeZone: timeZone) ?? []
+            },
+            activeDay: { [weak self] date, timeZone in
+                self?.activeDay(for: date, timeZone: timeZone)
+            },
+            tagPreviewResult: { [weak self] date, overrideSelection, defaultPrimaryIntent, timeZone in
+                self?.tagPreviewResult(
+                    for: date,
+                    overrideSelection: overrideSelection,
+                    defaultPrimaryIntent: defaultPrimaryIntent,
+                    timeZone: timeZone
+                ) ?? .empty
+            }
+        )
     }
 
     private func resolvedDaySnapshotForHistory(
@@ -2090,186 +1946,73 @@ final class ScheduleManager: ObservableObject {
     }
 
     func makeSchedulingAudit() async -> SchedulingAuditSnapshot {
+        syncMorningPlanState()
         let settings = settingsStore.settings
         let timeZone = TimeZone.current
         let now = Date()
         let canUseAlarmKit = await alarmKitAvailableAndAuthorized()
-        let ruleEngine = RuleEngine(
-            settings: settings,
-            defaultConfig: alarmConfigStore.defaults,
-            overridesByDay: alarmConfigStore.overridesByDay,
-            timeZone: timeZone
-        )
 
-        guard let coordinate = currentCoordinate() else {
-            let mismatch = AuditMismatch(severity: .error, message: "Location unavailable; unable to compute expected events.")
-            return SchedulingAuditSnapshot(
-                generatedAt: Date(),
-                expectedEvents: [],
-                notificationItems: [],
-                alarmKitItems: [],
-                mismatches: [mismatch]
-            )
-        }
-
-        let today = DateHelpers.startOfToday(in: timeZone)
-        let tomorrow = DateHelpers.startOfTomorrow(in: timeZone)
-        let dates = [today, tomorrow]
-        var expectedEvents: [ExpectedScheduledEvent] = []
-        syncMorningPlanState()
-
-        for date in dates {
-            guard dateParticipatesInWakePlan(date, timeZone: timeZone) else { continue }
-            let effectiveConfig = alarmConfigStore.effectiveConfig(
-                for: date,
-                ruleSummary: ruleEngine.ruleSummary(for: date),
+        let snapshot = await schedulingAuditProvider.makeSchedulingAudit(
+            dependencies: .init(
                 settings: settings,
-                timeZone: timeZone
-            )
-            guard let schedule = buildSchedule(
-                for: date,
-                coordinate: coordinate,
+                coordinate: currentCoordinate(),
+                canUseAlarmKit: canUseAlarmKit,
+                now: now,
                 timeZone: timeZone,
-                method: settings.calculationMethod,
-                adjustmentMinutes: settings.fajrAdjustmentMinutes,
-                maghribAdjustmentMinutes: settings.maghribAdjustmentMinutes,
-                effectiveConfig: effectiveConfig,
-                locationDescription: "Audit"
-            ) else { continue }
-
-            let dayLabelText = dayLabel(for: date)
-            if effectiveConfig.suhoorEnabled && !effectiveConfig.skipDay {
-                let channel: ExpectedScheduledEvent.Channel = canUseAlarmKit ? .alarmKit : .notification
-                let identifier = channel == .alarmKit
-                    ? SchedulingIdentifiers.alarmID(for: schedule, kind: .wake).uuidString
-                    : SchedulingIdentifiers.dailyIdentifier(for: schedule, kind: .wake)
-                expectedEvents.append(
-                    ExpectedScheduledEvent(
-                        kind: .wake,
-                        date: schedule.wakeDate,
-                        dayLabel: dayLabelText,
-                        scheduleId: schedule.id,
-                        channel: channel,
-                        identifier: identifier,
-                        isPast: schedule.wakeDate <= now
+                dayLabel: { date in
+                    self.dayLabel(for: date)
+                },
+                dateParticipatesInWakePlan: { date, timeZone in
+                    self.dateParticipatesInWakePlan(date, timeZone: timeZone)
+                },
+                effectiveConfig: { date, timeZone in
+                    let ruleEngine = RuleEngine(
+                        settings: settings,
+                        defaultConfig: self.alarmConfigStore.defaults,
+                        overridesByDay: self.alarmConfigStore.overridesByDay,
+                        timeZone: timeZone
                     )
-                )
-            }
-
-            if effectiveConfig.reminderEnabled, !effectiveConfig.skipDay, let reminderDate = schedule.reminderDate {
-                let channel: ExpectedScheduledEvent.Channel = canUseAlarmKit ? .alarmKit : .notification
-                let identifier = channel == .alarmKit
-                    ? SchedulingIdentifiers.alarmID(for: schedule, kind: .reminder).uuidString
-                    : SchedulingIdentifiers.dailyIdentifier(for: schedule, kind: .reminder)
-                expectedEvents.append(
-                    ExpectedScheduledEvent(
-                        kind: .reminder,
-                        date: reminderDate,
-                        dayLabel: dayLabelText,
-                        scheduleId: schedule.id,
-                        channel: channel,
-                        identifier: identifier,
-                        isPast: reminderDate <= now
+                    return self.alarmConfigStore.effectiveConfig(
+                        for: date,
+                        ruleSummary: ruleEngine.ruleSummary(for: date),
+                        settings: settings,
+                        timeZone: timeZone
                     )
-                )
-            }
-
-            if effectiveConfig.fajrEnabled, !effectiveConfig.skipDay, let boundaryDate = schedule.boundaryDate {
-                let channel: ExpectedScheduledEvent.Channel = canUseAlarmKit ? .alarmKit : .notification
-                let identifier = channel == .alarmKit
-                    ? SchedulingIdentifiers.alarmID(for: schedule, kind: .boundary).uuidString
-                    : SchedulingIdentifiers.dailyIdentifier(for: schedule, kind: .boundary)
-                expectedEvents.append(
-                    ExpectedScheduledEvent(
-                        kind: .boundary,
-                        date: boundaryDate,
-                        dayLabel: dayLabelText,
-                        scheduleId: schedule.id,
-                        channel: channel,
-                        identifier: identifier,
-                        isPast: boundaryDate <= now
+                },
+                buildSchedule: { date, coordinate, timeZone, method, adjustmentMinutes, maghribAdjustmentMinutes, effectiveConfig, locationDescription in
+                    self.buildSchedule(
+                        for: date,
+                        coordinate: coordinate,
+                        timeZone: timeZone,
+                        method: method,
+                        adjustmentMinutes: adjustmentMinutes,
+                        maghribAdjustmentMinutes: maghribAdjustmentMinutes,
+                        effectiveConfig: effectiveConfig,
+                        locationDescription: locationDescription
                     )
-                )
-            }
-
-            if effectiveConfig.iftarEnabled, !effectiveConfig.skipDay, let iftarDate = schedule.iftarDate {
-                if effectiveConfig.iftarDelivery.includesNotification {
-                    expectedEvents.append(
-                        ExpectedScheduledEvent(
-                            kind: .iftarNotification,
-                            date: iftarDate,
-                            dayLabel: dayLabelText,
-                            scheduleId: schedule.id,
-                            channel: .notification,
-                            identifier: SchedulingIdentifiers.dailyIdentifier(for: schedule, kind: .iftarNotification),
-                            isPast: iftarDate <= now
-                        )
+                },
+                pendingRequests: { [notificationScheduler] in
+                    await notificationScheduler.pendingRequests()
+                },
+                alarmKitItems: { [alarmKitScheduler] in
+                    if #available(iOS 26.0, *), let alarmKitScheduler {
+                        return alarmKitScheduler.fetchScheduledAlarms()
+                    }
+                    return []
+                },
+                buildAuditMismatches: { expectedEvents, notificationItems, alarmKitItems in
+                    self.buildAuditMismatches(
+                        expectedEvents: expectedEvents,
+                        notificationItems: notificationItems,
+                        alarmKitItems: alarmKitItems
                     )
                 }
-
-                switch effectiveConfig.iftarDelivery.audibleMode {
-                case .none:
-                    break
-                case .alarm:
-                    let channel: ExpectedScheduledEvent.Channel = canUseAlarmKit ? .alarmKit : .notification
-                    expectedEvents.append(
-                        ExpectedScheduledEvent(
-                            kind: .iftarAlarm,
-                            date: iftarDate,
-                            dayLabel: dayLabelText,
-                            scheduleId: schedule.id,
-                            channel: channel,
-                            identifier: channel == .alarmKit
-                                ? SchedulingIdentifiers.alarmID(for: schedule, kind: .iftarAlarm).uuidString
-                                : SchedulingIdentifiers.dailyIdentifier(for: schedule, kind: .iftarAlarm),
-                            isPast: iftarDate <= now
-                        )
-                    )
-                case .adhan:
-                    let channel: ExpectedScheduledEvent.Channel = canUseAlarmKit ? .alarmKit : .notification
-                    expectedEvents.append(
-                        ExpectedScheduledEvent(
-                            kind: .iftarAdhan,
-                            date: iftarDate,
-                            dayLabel: dayLabelText,
-                            scheduleId: schedule.id,
-                            channel: channel,
-                            identifier: channel == .alarmKit
-                                ? SchedulingIdentifiers.alarmID(for: schedule, kind: .iftarAdhan).uuidString
-                                : SchedulingIdentifiers.dailyIdentifier(for: schedule, kind: .iftarAdhan),
-                            isPast: iftarDate <= now
-                        )
-                    )
-                }
-            }
-        }
-
-        let pendingRequests = await notificationScheduler.pendingRequests()
-        let notificationItems = pendingRequests.map { NotificationAuditItem(request: $0) }
-
-        let alarmKitItems: [AlarmKitAuditItem]
-        if #available(iOS 26.0, *), let alarmKitScheduler {
-            alarmKitItems = alarmKitScheduler.fetchScheduledAlarms()
-        } else {
-            alarmKitItems = []
-        }
-
-        let mismatches = buildAuditMismatches(
-            expectedEvents: expectedEvents,
-            notificationItems: notificationItems,
-            alarmKitItems: alarmKitItems
+            )
         )
 
-        Logging.scheduler.info("Scheduling audit: expected=\(expectedEvents.count) notifications=\(notificationItems.count) alarms=\(alarmKitItems.count) mismatches=\(mismatches.count)")
-        EventTimelineLog.shared.record(category: "audit", message: "Audit expected=\(expectedEvents.count) notifications=\(notificationItems.count) alarms=\(alarmKitItems.count) mismatches=\(mismatches.count)")
-
-        return SchedulingAuditSnapshot(
-            generatedAt: Date(),
-            expectedEvents: expectedEvents,
-            notificationItems: notificationItems,
-            alarmKitItems: alarmKitItems,
-            mismatches: mismatches
-        )
+        Logging.scheduler.info("Scheduling audit: expected=\(snapshot.expectedEvents.count) notifications=\(snapshot.notificationItems.count) alarms=\(snapshot.alarmKitItems.count) mismatches=\(snapshot.mismatches.count)")
+        EventTimelineLog.shared.record(category: "audit", message: "Audit expected=\(snapshot.expectedEvents.count) notifications=\(snapshot.notificationItems.count) alarms=\(snapshot.alarmKitItems.count) mismatches=\(snapshot.mismatches.count)")
+        return snapshot
     }
 
     private var isLocationAuthorized: Bool {
