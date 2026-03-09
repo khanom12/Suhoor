@@ -60,7 +60,7 @@ struct FajrHistoryView: View {
 
                 HStack(spacing: DesignTokens.spacingXS) {
                     statusButton(
-                        title: "Prayed",
+                        title: "Fajr completed",
                         isSelected: row.status == .completed,
                         tint: .green
                     ) {
@@ -68,7 +68,7 @@ struct FajrHistoryView: View {
                     }
 
                     statusButton(
-                        title: "Missed",
+                        title: "Not prayed",
                         isSelected: row.status == .missed,
                         tint: .red
                     ) {

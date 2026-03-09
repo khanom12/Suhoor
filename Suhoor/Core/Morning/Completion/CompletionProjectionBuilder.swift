@@ -194,6 +194,7 @@ enum CompletionProjectionBuilder {
 
     static func buildProgress(
         todayCompletion: DailyCompletionSnapshot,
+        todayResolvedDayContext: ResolvedDayContext?,
         recentDateKeys: [String],
         completionState: CompletionStateSnapshot,
         settings: AppSettings,
@@ -217,26 +218,31 @@ enum CompletionProjectionBuilder {
             recentFastMissedCount: recentFastMissedCount,
             qadaProgress: qadaProgress
         )
+        let isRamadanSeason = todayResolvedDayContext?.supportingTags.contains(.ramadan) == true
 
         return ProgressSurfaceSnapshot(
             headlineText: progressHeadline(
                 history: history,
                 settings: settings,
+                isRamadanSeason: isRamadanSeason,
                 wakeProgress: wakeProgress
             ),
+            fastSectionTitle: isRamadanSeason ? "Ramadan & Fasts" : "Fasts",
             fajrTodaySummary: prayerTodaySummary(history.todayCompletion.prayer.status),
             fajrSummary: historySummary(
                 completed: history.recentFajrCompletedCount,
                 missed: history.recentFajrMissedCount,
                 empty: "No logged mornings yet",
-                completedLabel: "made it"
+                completedLabel: "Fajr completed",
+                missedLabel: "not prayed"
             ),
             fastTodaySummary: fastTodaySummary(from: history.todayCompletion),
             fastSummary: historySummary(
                 completed: history.recentFastCompletedCount,
                 missed: history.recentFastMissedCount,
                 empty: "No logged fasts yet",
-                completedLabel: "completed"
+                completedLabel: "completed",
+                missedLabel: "not completed"
             ),
             qadaProgress: history.qadaProgress,
             wakeProgress: wakeProgress
@@ -246,18 +252,27 @@ enum CompletionProjectionBuilder {
     private static func progressHeadline(
         history: CompletionHistoryProjection,
         settings: AppSettings,
+        isRamadanSeason: Bool,
         wakeProgress: WakeProgressSnapshot
     ) -> String? {
         if settings.quietPeriodEnabled {
-            return "Quiet period is on. You can keep going gently."
+            return "Quiet period is on. Prayer and fasting prompts are softer right now."
+        }
+        if isRamadanSeason {
+            return history.recentFajrCompletedCount > 0
+                ? "Ramadan mornings are being held around Fajr."
+                : "Ramadan is here. Keep tomorrow calm and clear."
         }
         if history.qadaProgress.baselineOwed > 0 && history.qadaProgress.completed > 0 {
-            return "You're making progress on Qada."
+            return "Qada progress is moving gently."
+        }
+        if history.qadaProgress.baselineOwed > 0 {
+            return "Plan Qada when you're ready."
         }
         if history.recentFastCompletedCount > 0 {
             return history.recentFastCompletedCount == 1
-                ? "One completed fast recently."
-                : "\(history.recentFastCompletedCount) completed fasts recently."
+                ? "One recent fast was completed."
+                : "\(history.recentFastCompletedCount) recent fasts were completed."
         }
         if history.recentFajrCompletedCount > history.recentFajrMissedCount && history.recentFajrCompletedCount > 0 {
             return "You've been steadier with Fajr lately."
@@ -309,12 +324,13 @@ enum CompletionProjectionBuilder {
         completed: Int,
         missed: Int,
         empty: String,
-        completedLabel: String
+        completedLabel: String,
+        missedLabel: String
     ) -> String {
         if completed == 0 && missed == 0 {
             return empty
         }
-        return "\(completed) \(completedLabel) · \(missed) missed"
+        return "\(completed) \(completedLabel) · \(missed) \(missedLabel)"
     }
 
     private static func activeForbiddenWarning(

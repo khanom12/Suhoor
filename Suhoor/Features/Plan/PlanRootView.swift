@@ -13,21 +13,20 @@ struct PlanRootView: View {
         let snapshot = scheduleManager.plansSurfaceSnapshot
         ScrollView {
             VStack(alignment: .leading, spacing: DesignTokens.spacingXL) {
-                NavigationLink(value: PlanDestination.defaultMorningPlan) {
-                    DefaultMorningPlanCard(summary: snapshot.defaultMorningPlanSummary)
+                VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
+                    SectionTitle("Default Morning Plan")
+
+                    NavigationLink(value: PlanDestination.defaultMorningPlan) {
+                        DefaultMorningPlanCard(summary: snapshot.defaultMorningPlanSummary)
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
 
                 VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
                     SectionTitle("Upcoming Special Plans")
 
-                    NavigationLink(value: PlanDestination.calendar) {
+                    NavigationLink(value: PlanDestination.upcomingSpecialPlans) {
                         ConfiguredPlansCard(snapshot: snapshot.configuredPlansSnapshot)
-                    }
-                    .buttonStyle(.plain)
-
-                    NavigationLink(value: PlanDestination.calendar) {
-                        DatePlanningCard()
                     }
                     .buttonStyle(.plain)
                 }
@@ -49,17 +48,16 @@ struct PlanRootView: View {
                 }
 
                 VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
-                    SectionTitle("Observance Opportunities")
+                    SectionTitle("Plan by Date")
 
-                    NavigationLink(value: PlanDestination.sunnahPlanner) {
-                        PlansFeatureRow(
-                            title: "Sunnah opportunities",
-                            subtitle: Strings.PlansSurface.opportunitiesSubtitle,
-                            systemImage: "sparkles",
-                            color: DawnColor.lightGold200
-                        )
+                    NavigationLink(value: PlanDestination.calendar) {
+                        DatePlanningCard()
                     }
                     .buttonStyle(.plain)
+                }
+
+                VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
+                    SectionTitle("Observance Opportunities")
 
                     LazyVGrid(columns: columns, spacing: DesignTokens.spacingM) {
                         ForEach(opportunityTiles) { tile in
@@ -82,43 +80,43 @@ struct PlanRootView: View {
         [
             PlanTile(
                 title: "Shawwal",
-                subtitle: "Plan Shawwal 6",
+                subtitle: "Plan Shawwal mornings",
                 color: FastSecondaryVirtueTag.shawwalSix.style.color,
                 destination: .shawwalPlanner
             ),
             PlanTile(
                 title: "Dhul Hijjah",
-                subtitle: "First 9 days",
+                subtitle: "Plan the first nine days",
                 color: FastSecondaryVirtueTag.dhulHijjahFirstNine.style.color,
                 destination: .dhulHijjah
             ),
             PlanTile(
                 title: "Arafah",
-                subtitle: "9 Dhul Hijjah",
+                subtitle: "Plan Arafah",
                 color: FastSecondaryVirtueTag.arafah.style.color,
                 destination: .arafah
             ),
             PlanTile(
                 title: "Ashura",
-                subtitle: "9–11 Muharram",
+                subtitle: "Plan Ashura days",
                 color: FastSecondaryVirtueTag.ashura.style.color,
                 destination: .ashura
             ),
             PlanTile(
                 title: "White Days",
-                subtitle: "13–15 each month",
+                subtitle: "Plan White Days",
                 color: FastSecondaryVirtueTag.whiteDays.style.color,
                 destination: .whiteDays
             ),
             PlanTile(
                 title: "Mon/Thurs",
-                subtitle: "Weekly Sunnah",
+                subtitle: "Plan weekly mornings",
                 color: FastSecondaryVirtueTag.mondayThursday.style.color,
                 destination: .mondayThursday
             ),
             PlanTile(
-                title: "Others",
-                subtitle: "Custom fasting days",
+                title: "Custom",
+                subtitle: "Choose your own date",
                 color: .secondary,
                 destination: .others
             ),
@@ -149,17 +147,13 @@ private struct DefaultMorningPlanCard: View {
                 }
 
                 VStack(alignment: .leading, spacing: DesignTokens.spacingS) {
-                    SummaryRow(label: "Wake relation to Fajr", value: summary.wakeRelation)
-                    SummaryRow(label: "Reminder", value: summary.reminder)
-                    SummaryRow(label: "Follow-up", value: summary.followUp)
-                    SummaryRow(label: "Fajr notice", value: summary.fajrNotice)
-                    SummaryRow(label: "Fasting-day support", value: summary.fastingDaySupport)
-                }
-
-                if let compatibilityNote = summary.compatibilityNote {
-                    Text(compatibilityNote)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
+                    SummaryRow(label: "Wake lead", value: summary.wakeLead)
+                    SummaryRow(label: "Extra wake buffer", value: summary.extraWakeBuffer)
+                    SummaryRow(label: "Reminders", value: summary.reminders)
+                    SummaryRow(label: "Prayer times", value: summary.prayerTimes)
+                    if let tahajjudBehavior = summary.tahajjudBehavior {
+                        SummaryRow(label: "Tahajjud", value: tahajjudBehavior)
+                    }
                 }
             }
         }
@@ -192,16 +186,16 @@ private struct ConfiguredPlansCard: View {
                     VStack(alignment: .leading, spacing: DesignTokens.spacingS) {
                         ForEach(snapshot.upcomingSpecialMornings) { item in
                             VStack(alignment: .leading, spacing: 4) {
-                                Text(item.title)
-                                    .font(.subheadline.weight(.semibold))
                                 Text(item.subtitle)
+                                    .font(.subheadline.weight(.semibold))
+                                Text(item.title)
                                     .font(.footnote)
                                     .foregroundStyle(.secondary)
                             }
                         }
 
                         if snapshot.additionalSpecialMorningCount > 0 {
-                            Text("+\(snapshot.additionalSpecialMorningCount) more")
+                            Text(additionalSummary)
                                 .font(.footnote.weight(.semibold))
                                 .foregroundStyle(DawnColor.accent)
                         }
@@ -218,6 +212,15 @@ private struct ConfiguredPlansCard: View {
             }
         }
     }
+
+    private var additionalSummary: String {
+        let titles = Set(snapshot.upcomingSpecialMornings.map(\.title))
+        if titles == ["Ramadan fast"] {
+            let total = snapshot.upcomingSpecialMornings.count + snapshot.additionalSpecialMorningCount
+            return "Ramadan continues on \(total) upcoming mornings"
+        }
+        return "\(snapshot.additionalSpecialMorningCount) more mornings"
+    }
 }
 
 private struct DatePlanningCard: View {
@@ -227,7 +230,7 @@ private struct DatePlanningCard: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Plan by date")
                         .font(.headline.weight(.semibold))
-                    Text(Strings.PlansSurface.planByDateSubtitle)
+                    Text("Choose a future date and shape one morning.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -250,7 +253,7 @@ private struct ConfiguredQadaCard: View {
             VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
                 HStack(alignment: .top, spacing: DesignTokens.spacingM) {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("Qada remaining")
+                        Text(progress.baselineOwed > 0 ? "Qada remaining" : "Qada tracking")
                             .font(.headline.weight(.semibold))
                         Text(qadaDescription)
                             .font(.footnote)
@@ -264,23 +267,23 @@ private struct ConfiguredQadaCard: View {
                         .foregroundStyle(FastPrimaryIntent.qadaMakeup.style.color)
                 }
 
-                SummaryRow(label: "Progress", value: qadaValue)
+                SummaryRow(label: progress.baselineOwed > 0 ? "Progress" : "Next step", value: qadaValue)
             }
         }
     }
 
     private var qadaDescription: String {
         if progress.baselineOwed > 0 {
-            return Strings.PlansSurface.qadaReady
+            return "Completed Qada fasts reduce what remains."
         }
-        return Strings.PlansSurface.qadaSetup
+        return "Plan your first Qada day when you're ready."
     }
 
     private var qadaValue: String {
         if progress.baselineOwed > 0 {
             return "\(progress.completed) completed · \(progress.remaining) remaining"
         }
-        return "Not configured"
+        return "Enable Qada tracking"
     }
 }
 
@@ -291,7 +294,7 @@ private struct CustomFastingCard: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Custom fasting days")
                         .font(.headline.weight(.semibold))
-                    Text(Strings.PlansSurface.customFastingSubtitle)
+                    Text("Choose a date for a voluntary or one-off fasting morning.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -301,33 +304,6 @@ private struct CustomFastingCard: View {
                 Image(systemName: "moon.stars")
                     .font(.title3.weight(.semibold))
                     .foregroundStyle(DawnColor.accent)
-            }
-        }
-    }
-}
-
-private struct PlansFeatureRow: View {
-    let title: String
-    let subtitle: String
-    let systemImage: String
-    let color: Color
-
-    var body: some View {
-        GlassCard(tintColor: color, tintOpacity: 0.12) {
-            HStack(alignment: .top, spacing: DesignTokens.spacingM) {
-                VStack(alignment: .leading, spacing: 6) {
-                        Text(title)
-                            .font(.headline.weight(.semibold))
-                        Text(subtitle)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-
-                Spacer()
-
-                Image(systemName: systemImage)
-                    .font(.title3.weight(.semibold))
-                    .foregroundStyle(color)
             }
         }
     }
@@ -407,5 +383,50 @@ private extension DefaultAlarmConfig {
 
     var wakeAlarmEnabledDefault: Bool {
         suhoorEnabledDefault
+    }
+}
+
+struct UpcomingSpecialPlansView: View {
+    @EnvironmentObject private var scheduleManager: ScheduleManager
+
+    var body: some View {
+        let snapshot = scheduleManager.plansSurfaceSnapshot.configuredPlansSnapshot
+
+        List {
+            Section {
+                if snapshot.upcomingSpecialMornings.isEmpty {
+                    Text("Nothing special is planned yet.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(snapshot.upcomingSpecialMornings) { item in
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(item.subtitle)
+                                .font(.headline.weight(.semibold))
+                            Text(item.title)
+                                .font(.subheadline)
+                            Text(WakeRowPresentation.accessibilityDateLabel(for: item.date))
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(.vertical, 4)
+                    }
+
+                    if snapshot.additionalSpecialMorningCount > 0 {
+                        Text("\(snapshot.additionalSpecialMorningCount) more mornings are already shaped.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            } footer: {
+                NavigationLink(value: PlanDestination.calendar) {
+                    Text("View by date")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(DawnColor.accent)
+                }
+            }
+        }
+        .navigationTitle("Upcoming Special Plans")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }

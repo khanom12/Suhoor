@@ -15,8 +15,10 @@ struct CompletionSurfaceProvider {
                 resolvedDayContext: activeWindowSnapshot.byDateKey[todayKey]?.resolvedDayContext ?? .standard,
                 completionState: completionState
             )
+        let todayResolvedDayContext = activeWindowSnapshot.byDateKey[todayKey]?.resolvedDayContext
         return CompletionProjectionBuilder.buildProgress(
             todayCompletion: todayCompletion,
+            todayResolvedDayContext: todayResolvedDayContext,
             recentDateKeys: recentDateKeys(days: 30, now: now),
             completionState: completionState,
             settings: settings,

@@ -12,19 +12,16 @@ struct HomeSurfaceProvider {
         supportDecision: HomeSupportDecision?,
         dayLabel: (Date) -> String
     ) -> HomeSurfaceSnapshot {
+        _ = dayLabel
         let contextDay = nextWakeEventSummary?.day ?? currentDay
         let contextDate = contextDay?.date ?? now
-        let contextDayLabel = contextDay.map { dayLabel($0.date) }
+        let heroDay = nextWakeEventSummary?.day
 
         return HomeSurfaceSnapshot(
             gregorianText: GregorianDateFormatter.shared.headerString(for: contextDate),
             hijriText: HijriDateFormatter.shared.string(from: contextDate),
-            contextSummaryText: contextDay.map {
-                ProductSurfacePresentation.homeContextSummaryText(for: $0, dayLabel: contextDayLabel)
-            },
-            secondaryContextTitles: contextDay.map {
-                ProductSurfacePresentation.scheduleChipTitles(for: $0, hasDayOverride: false)
-            } ?? [],
+            heroLabel: heroDay.map(ProductSurfacePresentation.homeHeroLabel(for:)),
+            heroSubline: heroDay.map(ProductSurfacePresentation.homeHeroSubline(for:)),
             nextWakeEventSummary: nextWakeEventSummary,
             supportDecision: supportDecision ?? fallbackSupportDecision(
                 currentDay: currentDay,

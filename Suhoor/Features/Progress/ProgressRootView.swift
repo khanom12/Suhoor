@@ -40,7 +40,7 @@ struct ProgressRootView: View {
                     }
                 }
             } header: {
-                Text("Fasts")
+                Text(snapshot.fastSectionTitle)
             } footer: {
                 Text(Strings.ProgressSurface.fastFooter)
             }
@@ -63,7 +63,8 @@ struct ProgressRootView: View {
                 if let summaryTitle = snapshot.wakeProgress.summaryTitle {
                     VStack(alignment: .leading, spacing: DesignTokens.spacingXS) {
                         Text(summaryTitle)
-                            .font(.headline.weight(.semibold))
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.secondary)
                         if let summaryDetail = snapshot.wakeProgress.summaryDetail {
                             Text(summaryDetail)
                                 .font(.footnote)

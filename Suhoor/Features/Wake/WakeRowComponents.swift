@@ -1,18 +1,10 @@
 import SwiftUI
 
 struct WakeRowView: View {
-    @Environment(\.editMode) private var editMode
-
-    private let editAccessoryWidth: CGFloat = 40
-
     let entry: WakeRowEntry
-    let deleteCapability: WakeRowDeleteCapability
-    let onToggleChanged: (Bool) -> Void
     let onSelect: () -> Void
-    let onRequestRamadanDisable: () -> Void
 
     @ScaledMetric(relativeTo: .largeTitle) private var timeFontSize: CGFloat = 46
-    @State private var localIsOn: Bool
 
     private static let timeMainFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -32,76 +24,51 @@ struct WakeRowView: View {
 
     init(
         entry: WakeRowEntry,
-        deleteCapability: WakeRowDeleteCapability,
-        onToggleChanged: @escaping (Bool) -> Void = { _ in },
-        onSelect: @escaping () -> Void,
-        onRequestRamadanDisable: @escaping () -> Void
+        onSelect: @escaping () -> Void
     ) {
         self.entry = entry
-        self.deleteCapability = deleteCapability
-        self.onToggleChanged = onToggleChanged
         self.onSelect = onSelect
-        self.onRequestRamadanDisable = onRequestRamadanDisable
-        _localIsOn = State(initialValue: !entry.config.skipDay && entry.config.hasAnyEnabled)
     }
 
     var body: some View {
-        HStack(alignment: .center, spacing: DesignTokens.spacingM) {
-            if showsRamadanEditAccessory {
-                Button(action: onRequestRamadanDisable) {
-                    Image(systemName: "minus.circle.fill")
-                        .font(.system(size: 22, weight: .regular))
-                        .foregroundStyle(.gray)
-                        .frame(width: 44, height: 44)
-                }
-                .buttonStyle(.plain)
-                .frame(width: editAccessoryWidth)
-                .accessibilityLabel("Ramadan alarms can't be deleted")
-                .accessibilityHint("Turn this day off instead")
-            }
-
+        Button(action: onSelect) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(dateLabel)
                     .font(.footnote)
                     .foregroundStyle(isDisabled ? .tertiary : .secondary)
 
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Text(primaryTimeMain)
-                        .font(.system(size: timeFontSize, weight: .regular, design: .default))
-                        .monospacedDigit()
-                        .foregroundStyle(isDisabled ? .tertiary : .primary)
-                        .minimumScaleFactor(0.8)
-
-                    if let primaryTimeSuffix {
-                        Text(primaryTimeSuffix)
-                            .font(.system(size: timeFontSize * 0.55, weight: .regular, design: .default))
+                HStack(alignment: .center, spacing: DesignTokens.spacingM) {
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text(primaryTimeMain)
+                            .font(.system(size: timeFontSize, weight: .regular, design: .default))
                             .monospacedDigit()
-                            .foregroundStyle(isDisabled ? .tertiary : .secondary)
-                            .baselineOffset(1)
+                            .foregroundStyle(isDisabled ? .tertiary : .primary)
+                            .minimumScaleFactor(0.8)
+
+                        if let primaryTimeSuffix {
+                            Text(primaryTimeSuffix)
+                                .font(.system(size: timeFontSize * 0.55, weight: .regular, design: .default))
+                                .monospacedDigit()
+                                .foregroundStyle(isDisabled ? .tertiary : .secondary)
+                                .baselineOffset(1)
+                        }
                     }
+
+                    Spacer(minLength: DesignTokens.spacingM)
+
+                    Image(systemName: "chevron.right")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.tertiary)
                 }
 
-                HStack(spacing: 8) {
-                    Text(entry.rowPresentation.meaningText)
-                }
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(isDisabled ? .tertiary : .primary)
+                Text(entry.rowPresentation.meaningText)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(isDisabled ? .tertiary : .primary)
 
                 Text(entry.rowPresentation.detailText)
                     .font(.callout)
                     .foregroundStyle(isDisabled ? .tertiary : .secondary)
                     .monospacedDigit()
-
-                if !entry.rowPresentation.chipTitles.isEmpty {
-                    HStack(spacing: DesignTokens.spacingXS) {
-                        ForEach(entry.rowPresentation.chipTitles, id: \.self) { title in
-                            WakeContextChip(
-                                title: title,
-                                isDisabled: isDisabled
-                            )
-                        }
-                    }
-                }
 
                 if let provenanceText = entry.rowPresentation.provenanceText {
                     Text(provenanceText)
@@ -114,47 +81,9 @@ struct WakeRowView: View {
             .contentShape(Rectangle())
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(accessibilitySummary)
-            .onTapGesture {
-                guard editMode?.wrappedValue.isEditing != true else { return }
-                onSelect()
-            }
-
-            VStack(alignment: .trailing, spacing: 10) {
-                if editMode?.wrappedValue.isEditing != true {
-                    Button("Adjust this date") {
-                        onSelect()
-                    }
-                    .buttonStyle(.plain)
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(DawnColor.accent)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(Capsule().fill(DawnColor.accent.opacity(0.12)))
-                    .accessibilityLabel("Adjust this date")
-                }
-
-                Toggle("", isOn: Binding(
-                    get: { localIsOn },
-                    set: { isOn in
-                        localIsOn = isOn
-                        onToggleChanged(isOn)
-                    }
-                ))
-                .labelsHidden()
-                .tint(DawnColor.accent)
-                .accessibilityLabel("Keep this morning active")
-                .frame(minWidth: 51, alignment: .trailing)
-            }
-            .frame(minWidth: 74, alignment: .trailing)
         }
+        .buttonStyle(.plain)
         .padding(.vertical, 6)
-        .onChange(of: entry.config) { _, newValue in
-            localIsOn = !newValue.skipDay && newValue.hasAnyEnabled
-        }
-    }
-
-    private var showsRamadanEditAccessory: Bool {
-        editMode?.wrappedValue.isEditing == true && deleteCapability == .ramadan
     }
 
     private var primaryTimeMain: String {
@@ -171,16 +100,13 @@ struct WakeRowView: View {
 
     private var accessibilitySummary: String {
         var summary = "\(WakeRowPresentation.accessibilityDateLabel(for: entry.schedule.date)). Wake at \(primaryTimeText). \(entry.rowPresentation.meaningText). \(entry.rowPresentation.detailText)."
-        if !entry.rowPresentation.chipTitles.isEmpty {
-            summary += " \(entry.rowPresentation.chipTitles.joined(separator: ", "))."
-        }
         if let provenanceText = entry.rowPresentation.provenanceText {
             summary += " \(provenanceText)."
         }
         return summary
     }
 
-    private var isDisabled: Bool { !localIsOn }
+    private var isDisabled: Bool { !entry.isEnabled }
 
     private var primaryTimeText: String {
         TimeFormatters.timeFormatter.string(from: entry.schedule.wakeDate)

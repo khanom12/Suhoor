@@ -52,10 +52,10 @@ struct QadaCompanionView: View {
         if case .needsRecovery(let snapshot) = state {
             GlassCard(tintColor: FastPrimaryIntent.qadaMakeup.style.color, tintOpacity: 0.08) {
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("You missed a planned Qada fast.")
+                    Text("One planned Qada day still needs to be rescheduled.")
                         .font(.headline.weight(.semibold))
                     if let missedDate = snapshot.missedDate {
-                        Text("Missed date: \(mediumDate(missedDate)). Move it to the next available date when you're ready.")
+                        Text("Last planned date: \(mediumDate(missedDate)). Move it to the next available date when you're ready.")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     } else {
@@ -63,7 +63,7 @@ struct QadaCompanionView: View {
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
-                    Button("Recover missed day") {
+                    Button("Reschedule day") {
                         onRecoverMissedDay()
                     }
                     .buttonStyle(.borderedProminent)
@@ -169,7 +169,7 @@ struct QadaCompanionView: View {
         case .batchCompleteNeedsNext(let snapshot):
             return snapshot.remainingBacklog == 0 ? "View last batch" : "Plan next batch"
         case .needsRecovery:
-            return "Recover missed day"
+            return "Reschedule day"
         }
     }
 

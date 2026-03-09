@@ -152,7 +152,7 @@ struct QadaPlanWizardView: View {
             if let suggestion = viewModel.backlogSuggestion, draftCountIsEmpty {
                 GlassCard(style: .header, tintColor: DawnColor.lightGold200, tintOpacity: 0.1) {
                     VStack(alignment: .leading, spacing: 10) {
-                        Text("We found \(suggestion.suggestedOwed) missed fast\(suggestion.suggestedOwed == 1 ? "" : "s") from your Ramadan check-ins.")
+                        Text("Ramadan check-ins suggest \(suggestion.suggestedOwed) fast\(suggestion.suggestedOwed == 1 ? "" : "s") to make up.")
                             .font(.subheadline.weight(.semibold))
                         Text("Use this as your starting count, or enter your own total below.")
                             .font(.footnote)

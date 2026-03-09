@@ -66,6 +66,17 @@ enum HomeSupportCardPresentation: Equatable, Sendable {
             return presentation.phase
         }
     }
+
+    var dismissalKey: String? {
+        switch self {
+        case .blockingIssue, .forbiddenFastNotice:
+            return nil
+        case .fajrCompletionPrompt(let presentation):
+            return "fajr-\(presentation.dateKey)"
+        case .fasting(let presentation):
+            return "fast-\(presentation.dateKey)-\(presentation.phase)"
+        }
+    }
 }
 
 struct ConfiguredPlanItem: Identifiable, Equatable, Sendable {
@@ -192,6 +203,18 @@ enum ProductSurfacePresentation {
         return dayMeaningText(for: day, style: .homeContext)
     }
 
+    static func homeHeroLabel(for day: ActiveAlarmDay) -> String {
+        homeHeroMeaningText(for: day) == nil ? "Next wake" : "Tomorrow's wake"
+    }
+
+    static func homeHeroSubline(for day: ActiveAlarmDay) -> String {
+        let fajrText = "Fajr at \(TimeFormatters.timeFormatter.string(from: day.schedule.fajrDate))"
+        if let meaning = homeHeroMeaningText(for: day) {
+            return "\(meaning) • \(fajrText)"
+        }
+        return "For \(fajrText)"
+    }
+
     static func scheduleChipTitles(
         for day: ActiveAlarmDay,
         hasDayOverride: Bool,
@@ -294,7 +317,6 @@ enum ProductSurfacePresentation {
         for day: ActiveAlarmDay,
         hasDayOverride: Bool
     ) -> ScheduleRowPresentation {
-        let chipTitles = scheduleChipTitles(for: day, hasDayOverride: hasDayOverride)
         let nonDefaultProvenances = day.provenances.filter { $0.sourceOrigin != .defaultDailyPlan }
         let provenanceText: String?
         if nonDefaultProvenances.isEmpty || day.resolvedDayContext.primaryContext != .standard {
@@ -304,11 +326,15 @@ enum ProductSurfacePresentation {
             provenanceText = labels.joined(separator: " • ")
         }
 
+        let relationText = wakeRelationText(delta: day.decisionLog.resolvedDelta, anchor: day.decisionLog.resolvedAnchor.type)
+        let detailPrefix = hasDayOverride ? "Adjusted" : relationText
+        let detailText = "\(detailPrefix) • Fajr at \(TimeFormatters.timeFormatter.string(from: day.schedule.fajrDate))"
+
         return ScheduleRowPresentation(
             wakeTime: day.schedule.wakeDate,
             meaningText: dayMeaningText(for: day, style: .wakeRow),
-            detailText: "\(wakeRelationText(delta: day.decisionLog.resolvedDelta, anchor: day.decisionLog.resolvedAnchor.type)) · Fajr \(TimeFormatters.timeFormatter.string(from: day.schedule.fajrDate))",
-            chipTitles: chipTitles,
+            detailText: detailText,
+            chipTitles: [],
             provenanceText: provenanceText
         )
     }

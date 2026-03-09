@@ -541,9 +541,9 @@ enum Strings {
 
     enum ProgressSurface {
         static let fajrFooter = "Your recent prayer record."
-        static let fastFooter = "Completed and missed fasts."
+        static let fastFooter = "Completed and not-completed fasting days."
         static let qadaFooter = "Completed Qada fasts reduce what remains."
-        static let wakeFooter = "Supportive wake follow-through."
+        static let wakeFooter = "Recent wake follow-through, kept secondary."
         static let qadaEnablePrompt = "Add Qada from Plans when you need it."
     }
 
@@ -558,9 +558,9 @@ enum Strings {
         static let masterToggle = "Quiet period"
         static let prayerToggle = "Reduce prayer check-ins"
         static let fastingToggle = "Reduce fasting prompts"
-        static let footer = "Wake delivery stays the same. Quiet period only softens in-app prompts in this phase."
+        static let footer = "Quiet period softens prayer and fasting prompts. It does not change wake delivery unless you adjust that separately."
         static let summaryOff = "Off"
         static let summaryOn = "Prayer and fasting prompts are softer."
-        static let summaryPartial = "Some in-app prompts are softer."
+        static let summaryPartial = "Some prompts are softer."
     }
 }

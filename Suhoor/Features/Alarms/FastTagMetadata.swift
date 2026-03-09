@@ -58,8 +58,8 @@ extension FastPrimaryIntent {
             return FastTagAbout(
                 id: "qada",
                 title: "Make-up (Qadāʾ)",
-                subtitle: "Making up a missed Ramadan fast.",
-                aboutText: "Use this for a fast that replaces a missed day of Ramadan. Some people avoid combining make-up fasts with voluntary fast intentions; this app can enforce that based on your ruleset."
+                subtitle: "Making up a Ramadan fast.",
+                aboutText: "Use this for a fast that makes up a day of Ramadan. Some people avoid combining make-up fasts with voluntary fast intentions; this app can enforce that based on your ruleset."
             )
         case .kaffarahExpiation:
             return FastTagAbout(

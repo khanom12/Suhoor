@@ -7,6 +7,8 @@ struct TodayHomeView: View {
     @StateObject private var dismissalStore = TodayCardDismissalStore()
 
     var body: some View {
+        let _ = dismissalStore.revision
+
         TimelineView(.periodic(from: Date(), by: 60)) { context in
             let now = context.date
             let snapshot = scheduleManager.homeSurfaceSnapshot(
@@ -16,11 +18,16 @@ struct TodayHomeView: View {
 
             ScrollView {
                 LazyVStack(spacing: DesignTokens.dashboardStackSpacing) {
-                    TodayNextWakeHeroCard(summary: snapshot.nextWakeEventSummary)
+                    TodayDateBlock(snapshot: snapshot)
 
-                    TodayDateContextStrip(snapshot: snapshot)
+                    TodayNextWakeHeroCard(
+                        summary: snapshot.nextWakeEventSummary,
+                        label: snapshot.heroLabel,
+                        subline: snapshot.heroSubline
+                    )
 
-                    if let supportDecision = snapshot.supportDecision {
+                    if let supportDecision = snapshot.supportDecision,
+                       supportCardShouldBeVisible(supportDecision.presentation, now: now) {
                         supportCardView(
                             for: supportDecision.presentation,
                             now: now
@@ -50,6 +57,14 @@ struct TodayHomeView: View {
         }
     }
 
+    private func supportCardShouldBeVisible(
+        _ presentation: HomeSupportCardPresentation,
+        now: Date
+    ) -> Bool {
+        guard let dismissalKey = presentation.dismissalKey else { return true }
+        return !dismissalStore.isSupportCardDismissed(dismissalKey, on: now)
+    }
+
     private func dismissedWarnings(on now: Date) -> Set<FastWarning> {
         Set(FastWarning.allCases.filter { dismissalStore.isDismissed($0, on: now) })
     }
@@ -65,7 +80,16 @@ struct TodayHomeView: View {
                 TodayBlockingIssueCard(presentation: presentation)
             }
         case .fajrCompletionPrompt(let presentation):
-            TodayFajrCheckInCard(presentation: presentation)
+            TodayFajrCheckInCard(
+                presentation: presentation,
+                onLater: {
+                    if let dismissalKey = HomeSupportCardPresentation.fajrCompletionPrompt(presentation).dismissalKey {
+                        withAnimation(Motion.fade(reduceMotion: reduceMotion)) {
+                            dismissalStore.dismissSupportCard(dismissalKey, on: now)
+                        }
+                    }
+                }
+            )
         case .forbiddenFastNotice(let warning):
             TodayForbiddenFastDayCard(
                 kind: warning,
@@ -77,59 +101,33 @@ struct TodayHomeView: View {
                 }
             )
         case .fasting(let presentation):
-            TodayFastCheckInCard(presentation: presentation)
-        }
-    }
-}
-
-private struct TodayDateContextStrip: View {
-    let snapshot: HomeSurfaceSnapshot
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: DesignTokens.spacingS) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(snapshot.gregorianText)
-                    .font(DesignTokens.cardSubtitleFont)
-                    .foregroundStyle(.secondary)
-
-                Text(snapshot.hijriText)
-                    .font(DesignTokens.cardMetaFont)
-                    .foregroundStyle(.secondary)
-            }
-
-            if let contextSummaryText = snapshot.contextSummaryText {
-                VStack(alignment: .leading, spacing: DesignTokens.spacingXS) {
-                    Text(contextSummaryText)
-                        .font(.subheadline.weight(.semibold))
-                    if !snapshot.secondaryContextTitles.isEmpty {
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: DesignTokens.spacingXS) {
-                                ForEach(snapshot.secondaryContextTitles, id: \.self) { title in
-                                    ContextChip(title: title)
-                                }
-                            }
+            TodayFastCheckInCard(
+                presentation: presentation,
+                onLater: {
+                    if let dismissalKey = HomeSupportCardPresentation.fasting(presentation).dismissalKey {
+                        withAnimation(Motion.fade(reduceMotion: reduceMotion)) {
+                            dismissalStore.dismissSupportCard(dismissalKey, on: now)
                         }
                     }
                 }
-            }
+            )
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
-private struct ContextChip: View {
-    let title: String
+private struct TodayDateBlock: View {
+    let snapshot: HomeSurfaceSnapshot
 
     var body: some View {
-        Text(title)
-            .font(.caption.weight(.semibold))
-            .foregroundStyle(Color.secondary)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(
-                Capsule()
-                    .fill(Color(.secondarySystemGroupedBackground))
-            )
+        VStack(alignment: .leading, spacing: 2) {
+            Text(snapshot.gregorianText)
+                .font(DesignTokens.cardSubtitleFont)
+                .foregroundStyle(.secondary)
+            Text(snapshot.hijriText)
+                .font(DesignTokens.cardMetaFont)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
@@ -162,11 +160,13 @@ private struct TodayNextWakeHeroCard: View {
     @EnvironmentObject private var appNavigator: AppNavigator
 
     let summary: NextWakeEventSummary?
+    let label: String?
+    let subline: String?
 
     var body: some View {
         GlassCard(style: .header, tintColor: DawnColor.lightGold200, tintOpacity: 0.18) {
             VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
-                Text(Strings.HomeSurface.heroTitle)
+                Text(label ?? Strings.HomeSurface.heroTitle)
                     .font(DesignTokens.cardMetaFont)
                     .foregroundStyle(.secondary)
 
@@ -176,7 +176,7 @@ private struct TodayNextWakeHeroCard: View {
                             .font(.system(size: 42, weight: .semibold, design: .rounded))
                             .monospacedDigit()
 
-                        Text(heroLine(for: summary))
+                        Text(subline ?? heroLine(for: summary))
                             .font(DesignTokens.cardTitleFont)
 
                         Button(Strings.HomeSurface.heroAction) {
@@ -205,10 +205,6 @@ private struct TodayNextWakeHeroCard: View {
     }
 
     private func heroLine(for summary: NextWakeEventSummary) -> String {
-        let fajrText = "Fajr at \(TimeFormatters.timeFormatter.string(from: summary.day.schedule.fajrDate))"
-        if let meaning = ProductSurfacePresentation.homeHeroMeaningText(for: summary.day) {
-            return "\(meaning) • \(fajrText)"
-        }
-        return "For \(fajrText)"
+        ProductSurfacePresentation.homeHeroSubline(for: summary.day)
     }
 }

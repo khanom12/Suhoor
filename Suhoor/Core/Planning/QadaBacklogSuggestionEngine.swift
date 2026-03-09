@@ -31,8 +31,8 @@ enum QadaBacklogSuggestionEngine {
 
         guard count > 0 else { return nil }
         let sourceSummary = count == 1
-            ? "We found 1 missed fast from your Ramadan check-ins."
-            : "We found \(count) missed fasts from your Ramadan check-ins."
+            ? "Ramadan check-ins suggest 1 fast to make up."
+            : "Ramadan check-ins suggest \(count) fasts to make up."
         return QadaBacklogSuggestion(suggestedOwed: count, sourceSummary: sourceSummary)
     }
 

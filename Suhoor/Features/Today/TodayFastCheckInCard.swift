@@ -5,6 +5,7 @@ struct TodayFastCheckInCard: View {
     @State private var isPulsing = false
 
     let presentation: FastingHomeSupportPresentation
+    var onLater: (() -> Void)? = nil
 
     var body: some View {
         GlassCard(style: .header, tintColor: tint.color, tintOpacity: tint.opacity) {
@@ -82,6 +83,13 @@ struct TodayFastCheckInCard: View {
                     .buttonStyle(.bordered)
                     .tint(presentation.phase == .fastCompletionPrompt ? .red : .secondary)
                 }
+            }
+
+            if let onLater {
+                Button(Strings.HomeSurface.fajrPromptLater, action: onLater)
+                    .buttonStyle(.plain)
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(DawnColor.accent)
             }
         }
     }

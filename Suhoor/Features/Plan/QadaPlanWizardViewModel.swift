@@ -130,7 +130,7 @@ final class QadaPlanWizardViewModel: ObservableObject {
     var intakeSuggestionHelperText: String? {
         guard let backlogSuggestion else { return nil }
         guard draft.baselineOwed > 0 else { return nil }
-        return "Ramadan check-ins suggest about \(backlogSuggestion.suggestedOwed) missed fasts. Keep or adjust this total as needed."
+        return "Ramadan check-ins suggest about \(backlogSuggestion.suggestedOwed) fasts to make up. Keep or adjust this total as needed."
     }
 
     var batchRecommendationText: String {
@@ -406,7 +406,7 @@ final class QadaPlanWizardViewModel: ObservableObject {
         persistBaseline()
 
         // TODO: when missed Qada logs are detected, use the maintenance service to suggest a replacement date.
-        // TODO: Surface recovery support here: "You missed a planned Qada fast. Move it to the next available date?"
+        // TODO: Surface recovery support here: "One planned Qada day still needs to be rescheduled. Move it to the next available date?"
         _ = maintenanceService
 
         refreshProgressSnapshot()

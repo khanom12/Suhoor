@@ -19,7 +19,8 @@ enum CompletionHistoryProjectionBuilder {
                 completed: rows.filter { $0.status == .completed }.count,
                 missed: rows.filter { $0.status == .missed }.count,
                 empty: "No prayer check-ins yet",
-                completedLabel: "prayed"
+                completedLabel: "Fajr completed",
+                missedLabel: "not prayed"
             ),
             rows: rows,
             emptyText: "No mornings available yet.",
@@ -53,7 +54,8 @@ enum CompletionHistoryProjectionBuilder {
                 completed: rows.filter { $0.status == .completed }.count,
                 missed: rows.filter { $0.status == .notCompleted }.count,
                 empty: "No fast outcomes logged yet",
-                completedLabel: "completed"
+                completedLabel: "completed",
+                missedLabel: "not completed"
             )
         }
 
@@ -70,7 +72,7 @@ enum CompletionHistoryProjectionBuilder {
         case .unknown:
             return "Not logged"
         case .completed:
-            return "Prayed"
+            return "Fajr completed"
         case .missed:
             return "Not prayed"
         }
@@ -123,7 +125,8 @@ enum CompletionHistoryProjectionBuilder {
         completed: Int,
         missed: Int,
         empty: String,
-        completedLabel: String
+        completedLabel: String,
+        missedLabel: String
     ) -> String {
         guard completed > 0 || missed > 0 else { return empty }
         var parts: [String] = []
@@ -131,7 +134,7 @@ enum CompletionHistoryProjectionBuilder {
             parts.append("\(completed) \(completedLabel)")
         }
         if missed > 0 {
-            parts.append("\(missed) missed")
+            parts.append("\(missed) \(missedLabel)")
         }
         return parts.joined(separator: " · ")
     }

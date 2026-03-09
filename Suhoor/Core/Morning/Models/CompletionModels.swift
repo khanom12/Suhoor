@@ -45,9 +45,9 @@ enum PrayerCompletionStatus: String, Codable, CaseIterable, Identifiable, Sendab
         case .unknown:
             return "Not logged"
         case .completed:
-            return "Made Fajr"
+            return "Fajr completed"
         case .missed:
-            return "Missed Fajr"
+            return "Not prayed"
         }
     }
 }

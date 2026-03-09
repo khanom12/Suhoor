@@ -3,7 +3,6 @@ import UIKit
 
 struct SettingsRootView: View {
     @Environment(\.dismiss) private var dismiss
-    @EnvironmentObject private var appNavigator: AppNavigator
     @EnvironmentObject private var settingsStore: SuhoorSettingsStore
     @EnvironmentObject private var scheduleManager: ScheduleManager
     @EnvironmentObject private var locationService: LocationService
@@ -29,25 +28,6 @@ struct SettingsRootView: View {
                 } header: {
                     SettingsSectionHeader(title: Strings.Settings.needsAttentionSection)
                 }
-            }
-
-            Section {
-                Button {
-                    appNavigator.openDefaultMorningPlan()
-                } label: {
-                    SettingsSummaryRow(
-                        title: "Morning planning",
-                        subtitle: "Open Plans to edit your default morning plan.",
-                        systemImage: "sun.horizon",
-                        badgeText: nil,
-                        badgeTone: .neutral
-                    )
-                }
-                .buttonStyle(.plain)
-            } header: {
-                SettingsSectionHeader(title: "Shortcut")
-            } footer: {
-                Text("Planning lives in Plans. Settings only handles system setup and support.")
             }
 
             ForEach(SettingsDestinationGroup.allCases) { group in
@@ -76,7 +56,7 @@ struct SettingsRootView: View {
                 } label: {
                     SettingsSummaryRow(
                         title: "Send Feedback",
-                        subtitle: "Share product feedback with diagnostics-ready context.",
+                        subtitle: "Share feedback or report a problem.",
                         systemImage: "envelope",
                         badgeText: nil,
                         badgeTone: .neutral
@@ -90,7 +70,7 @@ struct SettingsRootView: View {
                 } label: {
                     SettingsSummaryRow(
                         title: "Copy Diagnostics",
-                        subtitle: "Includes app version, device, locale, and permission summary.",
+                        subtitle: "Version, device, locale, and permission summary.",
                         systemImage: "doc.on.doc",
                         badgeText: nil,
                         badgeTone: .neutral
@@ -100,7 +80,7 @@ struct SettingsRootView: View {
             } header: {
                 SettingsSectionHeader(title: "Support")
             } footer: {
-                Text("Diagnostics do not include precise location or personal data unless you paste it yourself.")
+                Text("Diagnostics leave out precise location unless you add it yourself.")
             }
         }
         .formStyle(.grouped)

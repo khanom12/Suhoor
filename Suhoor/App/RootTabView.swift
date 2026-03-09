@@ -46,6 +46,8 @@ struct RootTabView: View {
                             DefaultAlarmsSettingsView()
                         case .qadaPlanner:
                             QadaPlannerView()
+                        case .upcomingSpecialPlans:
+                            UpcomingSpecialPlansView()
                         case .shawwalPlanner:
                             ShawwalPlannerView()
                         case .sunnahPlanner:

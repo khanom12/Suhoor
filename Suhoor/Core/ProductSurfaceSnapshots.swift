@@ -3,8 +3,8 @@ import Foundation
 struct HomeSurfaceSnapshot: Equatable, Sendable {
     let gregorianText: String
     let hijriText: String
-    let contextSummaryText: String?
-    let secondaryContextTitles: [String]
+    let heroLabel: String?
+    let heroSubline: String?
     let nextWakeEventSummary: NextWakeEventSummary?
     let supportDecision: HomeSupportDecision?
 
@@ -20,12 +20,11 @@ struct WakeSurfaceSnapshot: Equatable, Sendable {
 }
 
 struct DefaultMorningPlanSurfaceSummary: Equatable, Sendable {
-    let wakeRelation: String
-    let reminder: String
-    let followUp: String
-    let fajrNotice: String
-    let fastingDaySupport: String
-    let compatibilityNote: String?
+    let wakeLead: String
+    let extraWakeBuffer: String
+    let reminders: String
+    let prayerTimes: String
+    let tahajjudBehavior: String?
 }
 
 struct PlansSurfaceSnapshot: Equatable, Sendable {
@@ -36,6 +35,7 @@ struct PlansSurfaceSnapshot: Equatable, Sendable {
 
 struct ProgressSurfaceSnapshot: Equatable, Sendable {
     let headlineText: String?
+    let fastSectionTitle: String
     let fajrTodaySummary: String
     let fajrSummary: String
     let fastTodaySummary: String
@@ -49,13 +49,13 @@ enum ProductSurfaceSnapshots {
         defaults: DefaultAlarmConfig,
         settings: AppSettings
     ) -> DefaultMorningPlanSurfaceSummary {
-        let wakeRelation: String
+        let wakeLead: String
         switch defaults.defaultSuhoorTimeMode {
         case .relativeToFajrMinusMinutes:
-            wakeRelation = "\(defaults.defaultSuhoorOffsetMinutes) min before Fajr"
+            wakeLead = "\(defaults.defaultSuhoorOffsetMinutes) min before Fajr"
         case .fixedTime:
             let timeText = SettingsSummaryFormatter.timeText(minutesFromMidnight: defaults.defaultSuhoorOffsetMinutes)
-            wakeRelation = "\(timeText) fixed wake (compatibility)"
+            wakeLead = "Fixed at \(timeText)"
         }
 
         let reminderSummary: String
@@ -67,21 +67,20 @@ enum ProductSurfaceSnapshots {
         case .fixedTime:
             let timeText = SettingsSummaryFormatter.timeText(minutesFromMidnight: defaults.defaultReminderFixedTimeMinutes)
             reminderSummary = defaults.reminderEnabledDefault
-                ? "Reminder \(timeText) fixed"
+                ? "Reminder at \(timeText)"
                 : "Reminder off"
         }
 
-        let followUpSummary = settings.snoozeEnabled
-            ? "\(settings.snoozeMinutes) min after wake"
-            : "Off"
+        let prayerTimes = defaults.fajrEnabledDefault
+            ? "Fajr adhan on"
+            : "Fajr adhan off"
 
         return DefaultMorningPlanSurfaceSummary(
-            wakeRelation: wakeRelation,
-            reminder: reminderSummary,
-            followUp: followUpSummary,
-            fajrNotice: defaults.fajrEnabledDefault ? "On" : "Off",
-            fastingDaySupport: defaults.iftarEnabledDefault ? "Iftar support on" : "Wake-only support",
-            compatibilityNote: defaults.defaultSuhoorTimeMode == .fixedTime ? "Using fixed-time compatibility." : nil
+            wakeLead: wakeLead,
+            extraWakeBuffer: settings.snoozeEnabled ? "\(settings.snoozeMinutes) min follow-up" : "Off",
+            reminders: reminderSummary,
+            prayerTimes: prayerTimes,
+            tahajjudBehavior: nil
         )
     }
 

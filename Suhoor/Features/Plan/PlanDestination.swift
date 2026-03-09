@@ -3,6 +3,7 @@ import Foundation
 enum PlanDestination: Hashable {
     case defaultMorningPlan
     case qadaPlanner
+    case upcomingSpecialPlans
     case shawwalPlanner
     case sunnahPlanner
     case calendar

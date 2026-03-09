@@ -3,6 +3,7 @@ import SwiftUI
 struct TodayFajrCheckInCard: View {
     @EnvironmentObject private var fajrLogStore: FajrLogStore
     let presentation: FajrHomeSupportPresentation
+    var onLater: (() -> Void)? = nil
 
     var body: some View {
         GlassCard(style: .header, tintColor: DawnColor.lightGold200, tintOpacity: 0.18) {
@@ -40,9 +41,12 @@ struct TodayFajrCheckInCard: View {
                     .tint(.secondary)
                 }
 
-                Text(Strings.HomeSurface.fajrPromptLater)
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(DawnColor.accent)
+                if let onLater {
+                    Button(Strings.HomeSurface.fajrPromptLater, action: onLater)
+                        .buttonStyle(.plain)
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(DawnColor.accent)
+                }
             }
         }
     }

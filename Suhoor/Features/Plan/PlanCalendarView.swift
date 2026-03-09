@@ -2,32 +2,63 @@ import SwiftUI
 
 struct PlanCalendarView: View {
     @EnvironmentObject private var scheduleManager: ScheduleManager
-    @EnvironmentObject private var fastTagStore: FastTagStore
 
-    @State private var displayedMonth = DateHelpers.startOfToday()
     @State private var selectedDate = DateHelpers.startOfToday()
     @State private var showsAddSheet = false
     @State private var selectedSchedule: DaySchedule?
 
     var body: some View {
         ScrollView {
-            VStack(spacing: DesignTokens.spacingM) {
-                SuhoorCalendarView(
-                    displayedMonth: $displayedMonth,
-                    focusedDate: $selectedDate,
-                    selectedDate: selectedDate,
-                    allowedDateRange: allowedRange,
-                    onSelectDate: { selectedDate = $0 }
-                )
-                .padding(.horizontal, DesignTokens.spacingL)
+            VStack(alignment: .leading, spacing: DesignTokens.spacingXL) {
+                VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
+                    Text("Choose a date")
+                        .font(.headline.weight(.semibold))
 
-                SuhoorCalendarDetailCard(
-                    detail: detail,
-                    notScheduledText: "No special plan yet"
-                )
-                .padding(.horizontal, DesignTokens.spacingL)
+                    DatePicker(
+                        "Date",
+                        selection: $selectedDate,
+                        in: allowedRange,
+                        displayedComponents: .date
+                    )
+                    .datePickerStyle(.graphical)
+                    .labelsHidden()
+                    .background(
+                        RoundedRectangle(cornerRadius: DesignTokens.innerCardRadius, style: .continuous)
+                            .fill(Color(.secondarySystemGroupedBackground))
+                    )
+                }
 
-                VStack(spacing: DesignTokens.spacingS) {
+                GlassCard(tintColor: DawnColor.lightGold200, tintOpacity: 0.14) {
+                    VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(detail.gregorianText)
+                                .font(.headline.weight(.semibold))
+                            Text(detail.hijriText)
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(existingSchedule == nil ? "No special plan yet" : "Morning already shaped")
+                                .font(.subheadline.weight(.semibold))
+                            Text(detail.tagSummary)
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                            if let activeSourceSummary = detail.activeSourceSummary {
+                                Text(activeSourceSummary)
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                            }
+                            if let warning = detail.warnings.first {
+                                Text(warning.title)
+                                    .font(.footnote.weight(.semibold))
+                                    .foregroundStyle(.red)
+                            }
+                        }
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: DesignTokens.spacingS) {
                     Button(primaryActionTitle) {
                         if let existingSchedule {
                             selectedSchedule = existingSchedule
@@ -37,22 +68,16 @@ struct PlanCalendarView: View {
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(DawnColor.accent)
+                    .disabled(primaryActionDisabled)
 
                     Text(primaryActionSubtitle)
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
-
-                    if let secondaryActionTitle {
-                        Button(secondaryActionTitle) {
-                            triggerSecondaryAction()
-                        }
-                        .buttonStyle(.bordered)
-                    }
                 }
-                .padding(.horizontal, DesignTokens.spacingL)
-                .padding(.bottom, DesignTokens.spacingL)
             }
+            .padding(.horizontal, DesignTokens.spacingL)
+            .padding(.vertical, DesignTokens.spacingL)
         }
         .navigationTitle("Plan by Date")
         .navigationBarTitleDisplayMode(.large)
@@ -88,46 +113,21 @@ struct PlanCalendarView: View {
     }
 
     private var primaryActionTitle: String {
-        existingSchedule == nil ? "Plan This Date" : "Edit This Morning"
+        existingSchedule == nil ? "Plan this date" : "Open this morning"
     }
 
     private var primaryActionSubtitle: String {
         if existingSchedule == nil {
-            return "Use this for one-day changes, fasting days, and Qada dates."
-        }
-        return "Open this morning to adjust its wake, meaning, or source."
-    }
-
-    private var secondaryActionTitle: String? {
-        guard detail.warnings.isEmpty else { return nil }
-        if detail.computedPrimaryIntent == .other {
-            return "Mark as Fasting Day"
-        }
-        return "Edit Day Meaning"
-    }
-
-    private func triggerSecondaryAction() {
-        if detail.computedPrimaryIntent == .other {
-            Task {
-                let selection = FastIntentSelection(primaryIntent: .voluntary, secondaryTags: [])
-                if existingSchedule != nil {
-                    fastTagStore.setSelection(selection, for: normalizedSelectedDate, timeZone: .current)
-                    selectedSchedule = scheduleManager.schedule(for: normalizedSelectedDate) ?? existingSchedule
-                } else {
-                    let result = await scheduleManager.addSingleScheduledDate(
-                        normalizedSelectedDate,
-                        selection: selection
-                    )
-                    if let date = result.addedDates.first {
-                        selectedSchedule = scheduleManager.schedule(for: date)
-                    }
-                }
+            if let warning = detail.warnings.first {
+                return warning.about.subtitle ?? warning.about.title
             }
-        } else if let existingSchedule {
-            selectedSchedule = existingSchedule
-        } else {
-            showsAddSheet = true
+            return "Create a one-day plan for this morning."
         }
+        return "Inspect or adjust the wake, meaning, and one-day settings."
+    }
+
+    private var primaryActionDisabled: Bool {
+        existingSchedule == nil && !detail.warnings.isEmpty
     }
 
     private var allowedRange: ClosedRange<Date> {

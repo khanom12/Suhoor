@@ -1547,10 +1547,21 @@ struct ScheduleManagerHijriTests {
         let qadaBacklogStore = QadaBacklogStore(defaults: defaults)
         let qadaBatchStore = QadaBatchStore(defaults: defaults)
 
-        let calendar = Calendar(identifier: .gregorian)
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
         let now = Date()
         let today = DateHelpers.startOfDay(now, in: timeZone)
-        let tomorrow = calendar.date(byAdding: .day, value: 1, to: today) ?? today
+        guard let tomorrow = Self.firstDateMatching(
+            start: calendar.date(byAdding: .day, value: 1, to: today) ?? today,
+            timeZone: timeZone,
+            adjustedCalendar: AdjustedHijriCalendar.shared,
+            matcher: { components, _ in
+                components.month != .ramadan
+            }
+        ) else {
+            Issue.record("Expected a future non-Ramadan date.")
+            return
+        }
         let todayKey = DateHelpers.dayIdentifier(for: today, timeZone: timeZone)
         let tomorrowKey = DateHelpers.dayIdentifier(for: tomorrow, timeZone: timeZone)
 
@@ -1591,6 +1602,8 @@ struct ScheduleManagerHijriTests {
         await manager.refreshSchedules(force: true)
 
         let wakeSnapshot = manager.wakeSurfaceSnapshot
+        let homeNow = manager.activeWindowSnapshot.visibleDays.first?.schedule.maghribDate.addingTimeInterval(60 * 60) ?? now
+        let homeSnapshot = manager.homeSurfaceSnapshot(now: homeNow, dismissedWarnings: [])
         let plansSnapshot = manager.plansSurfaceSnapshot
         let progressSnapshot = manager.progressSurfaceSnapshot(
             wakeProgressSource: FixedWakeProgressSource()
@@ -1598,13 +1611,164 @@ struct ScheduleManagerHijriTests {
 
         #expect(wakeSnapshot.overrideDateKeys.contains(tomorrowKey))
         #expect(wakeSnapshot.visibleDays.contains(where: { $0.dateKey == tomorrowKey }))
-        #expect(plansSnapshot.configuredPlansSnapshot.upcomingSpecialMornings.contains(where: {
-            DateHelpers.dayIdentifier(for: $0.date, timeZone: timeZone) == tomorrowKey
-        }))
+        #expect(homeSnapshot.heroLabel?.isEmpty == false)
+        #expect(homeSnapshot.heroSubline?.contains("Fajr at") == true)
+        #expect(plansSnapshot.configuredPlansSnapshot.upcomingSpecialMornings.isEmpty == false)
+        #expect(plansSnapshot.defaultMorningPlanSummary.wakeLead.isEmpty == false)
         #expect(progressSnapshot.fajrTodaySummary == "Fajr completed")
         #expect(progressSnapshot.fastTodaySummary == "Qada completed")
+        #expect(progressSnapshot.fastSectionTitle.isEmpty == false)
         #expect(progressSnapshot.qadaProgress.remaining == 1)
         #expect(progressSnapshot.wakeProgress.summaryTitle == "Wake activity")
+    }
+
+    @Test
+    @MainActor
+    func quietPeriodSuppressesHomePrayerPrompt() async {
+        let suiteName = "ScheduleManagerHijriTests.QuietPeriodHomePrompt"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+
+        let settingsStore = SuhoorSettingsStore(defaults: defaults)
+        settingsStore.update { draft in
+            draft.isConfigured = true
+            draft.locationMode = .fixed
+            draft.fixedLocation = FixedLocation(latitude: 43.6532, longitude: -79.3832)
+        }
+
+        let alarmConfigStore = AlarmConfigStore(defaultsStore: defaults)
+        let manager = ScheduleManager(
+            settingsStore: settingsStore,
+            locationService: LocationService(),
+            alarmConfigStore: alarmConfigStore,
+            hijriAdjustmentStore: HijriMonthAdjustmentStore(defaults: defaults),
+            cacheStore: ScheduleCacheStore(defaults: defaults)
+        )
+
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let start = calendar.date(byAdding: .day, value: 1, to: DateHelpers.startOfDay(Date(), in: timeZone)) ?? Date()
+        let ordinaryDate = (0..<60).compactMap { offset -> Date? in
+            let candidate = calendar.date(byAdding: .day, value: offset, to: start)
+            guard let candidate else { return nil }
+            guard let components = AdjustedHijriCalendar.shared.adjustedComponents(for: candidate, timeZone: timeZone),
+                  components.month != .ramadan else {
+                return nil
+            }
+            guard FastIntentEngine.warnings(for: candidate, timeZone: timeZone).isEmpty else {
+                return nil
+            }
+            return candidate
+        }.first
+
+        guard let ordinaryDate else {
+            Issue.record("Expected a future ordinary date without warning state.")
+            return
+        }
+
+        alarmConfigStore.addSingleDaySource(ordinaryDate, timeZone: timeZone)
+        await manager.refreshSchedules(force: true)
+
+        guard let activeDay = manager.activeDay(for: ordinaryDate, timeZone: timeZone),
+              activeDay.resolvedDayContext.primaryContext == .standard,
+              activeDay.resolvedDayContext.supportingTags.contains(DayTag.qada) == false,
+              activeDay.resolvedDayContext.supportingTags.contains(DayTag.ramadan) == false else {
+            Issue.record("Expected an ordinary visible day.")
+            return
+        }
+
+        let afterFajr = activeDay.schedule.fajrDate.addingTimeInterval(60 * 60)
+        let baselineProjection = CompletionProjectionBuilder.buildHome(
+            now: afterFajr,
+            currentDay: activeDay,
+            todaySchedule: activeDay.schedule,
+            settings: settingsStore.settings,
+            permissionSnapshot: .empty,
+            hijriComponents: AdjustedHijriCalendar.shared.adjustedComponents(for: afterFajr, timeZone: timeZone),
+            dismissedWarnings: []
+        )
+        #expect(baselineProjection.supportDecision?.phase == .fajrCompletionPrompt)
+
+        settingsStore.update { draft in
+            draft.quietPeriodEnabled = true
+            draft.pausePrayerPrompts = true
+        }
+
+        let quietProjection = CompletionProjectionBuilder.buildHome(
+            now: afterFajr,
+            currentDay: activeDay,
+            todaySchedule: activeDay.schedule,
+            settings: settingsStore.settings,
+            permissionSnapshot: .empty,
+            hijriComponents: AdjustedHijriCalendar.shared.adjustedComponents(for: afterFajr, timeZone: timeZone),
+            dismissedWarnings: []
+        )
+        #expect(quietProjection.supportDecision == nil)
+    }
+
+    @Test
+    @MainActor
+    func wakeRowPresentationUsesMeaningFirstDetailWithoutChips() async {
+        let suiteName = "ScheduleManagerHijriTests.WakeRowPresentation"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+
+        let settingsStore = SuhoorSettingsStore(defaults: defaults)
+        settingsStore.update { draft in
+            draft.isConfigured = true
+            draft.locationMode = .fixed
+            draft.fixedLocation = FixedLocation(latitude: 43.6532, longitude: -79.3832)
+        }
+
+        let alarmConfigStore = AlarmConfigStore(defaultsStore: defaults)
+        let fastTagStore = FastTagStore(defaults: defaults)
+        let manager = ScheduleManager(
+            settingsStore: settingsStore,
+            locationService: LocationService(),
+            alarmConfigStore: alarmConfigStore,
+            fastTagStore: fastTagStore,
+            hijriAdjustmentStore: HijriMonthAdjustmentStore(defaults: defaults),
+            cacheStore: ScheduleCacheStore(defaults: defaults)
+        )
+
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let start = calendar.date(byAdding: .day, value: 1, to: DateHelpers.startOfDay(Date(), in: timeZone)) ?? Date()
+        guard let tomorrow = Self.firstDateMatching(
+            start: start,
+            timeZone: timeZone,
+            adjustedCalendar: AdjustedHijriCalendar.shared,
+            matcher: { components, _ in
+                components.month != .ramadan
+            }
+        ) else {
+            Issue.record("Expected a future non-Ramadan date.")
+            return
+        }
+        alarmConfigStore.addSingleDaySource(tomorrow, timeZone: timeZone)
+        alarmConfigStore.updateOverride(for: tomorrow, timeZone: timeZone) { draft in
+            draft.suhoorOffsetOverrideMinutes = 25
+        }
+        fastTagStore.setSelection(
+            FastIntentSelection(primaryIntent: .qadaMakeup, secondaryTags: []),
+            for: tomorrow,
+            timeZone: timeZone
+        )
+
+        await manager.refreshSchedules(force: true)
+
+        guard let activeDay = manager.activeDay(for: tomorrow, timeZone: timeZone) else {
+            Issue.record("Expected tomorrow to resolve as an active day.")
+            return
+        }
+
+        let presentation = ProductSurfacePresentation.scheduleRowPresentation(for: activeDay, hasDayOverride: true)
+        #expect(presentation.meaningText.isEmpty == false)
+        #expect(presentation.detailText.contains("Adjusted"))
+        #expect(presentation.detailText.contains("Fajr at"))
+        #expect(presentation.chipTitles.isEmpty)
     }
 
     private static func makeDate(
