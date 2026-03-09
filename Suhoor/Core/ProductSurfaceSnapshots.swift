@@ -7,7 +7,11 @@ struct HomeSurfaceSnapshot: Equatable, Sendable {
     let primaryContextTitle: String?
     let secondaryContextTitles: [String]
     let nextWakeEventSummary: NextWakeEventSummary?
-    let supportCard: HomeSupportCardPresentation?
+    let supportDecision: HomeSupportDecision?
+
+    var supportCard: HomeSupportCardPresentation? {
+        supportDecision?.presentation
+    }
 }
 
 struct WakeSurfaceSnapshot: Equatable, Sendable {
@@ -81,36 +85,4 @@ enum ProductSurfaceSnapshots {
         )
     }
 
-    static func fastTodaySummary(entry: FastLogEntry?) -> String {
-        guard let entry else { return FastLogStatus.unknown.title }
-        let isQada = entry.intentSnapshot?.primaryIntent == .qadaMakeup
-        switch entry.status {
-        case .unknown:
-            return "Not logged"
-        case .inProgress:
-            return isQada ? "Qada in progress" : "In progress"
-        case .completed:
-            return isQada ? "Qada completed" : "Completed"
-        case .missed:
-            return isQada ? "Qada not completed" : "Missed"
-        }
-    }
-
-    static func summaryForLast30Fajr(entries: [FajrLogEntry]) -> String {
-        let completed = entries.filter { $0.status == .completed }.count
-        let missed = entries.filter { $0.status == .missed }.count
-        if completed == 0 && missed == 0 {
-            return "No logged mornings yet"
-        }
-        return "\(completed) made it · \(missed) missed"
-    }
-
-    static func summaryForLast30Fasts(entries: [FastLogEntry]) -> String {
-        let completed = entries.filter { $0.status == .completed }.count
-        let missed = entries.filter { $0.status == .missed }.count
-        if completed == 0 && missed == 0 {
-            return "No logged fasts yet"
-        }
-        return "\(completed) completed · \(missed) missed"
-    }
 }

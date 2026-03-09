@@ -20,9 +20,9 @@ struct TodayHomeView: View {
 
                     TodayDateContextStrip(snapshot: snapshot)
 
-                    if let supportCard = snapshot.supportCard {
+                    if let supportDecision = snapshot.supportDecision {
                         supportCardView(
-                            for: supportCard,
+                            for: supportDecision.presentation,
                             now: now
                         )
                     }

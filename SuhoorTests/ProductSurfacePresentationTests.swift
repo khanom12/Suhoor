@@ -59,12 +59,21 @@ struct ProductSurfacePresentationTests {
     }
 
     @Test
-    func homeSupportCardPrefersBlockingIssuesOverFajrAndFasting() {
+    func homeSupportDecisionPrefersBlockingIssuesOverFajrAndFasting() {
         let currentDay = makeActiveDay(
             day: 5,
             context: .fasting,
             supportingTags: [.ramadan],
-            provenances: [defaultDailyProvenance]
+            provenances: [defaultDailyProvenance],
+            dailyCompletion: .init(
+                dateKey: dayKey(day: 5),
+                prayer: .empty,
+                fast: FastCompletionState(status: .unknown, intentSnapshot: voluntaryFastIntent, updatedAt: nil, source: nil),
+                qadaEffect: .none,
+                wakeSupport: .none,
+                outstandingAction: .prayerCheckIn,
+                isMeaningfullyResolved: false
+            )
         )
         let permissionSnapshot = PermissionSnapshot(
             summaryText: "Needs attention",
@@ -93,35 +102,40 @@ struct ProductSurfacePresentationTests {
             isDerivedFromBaseline: true
         )
 
-        let result = ProductSurfacePresentation.homeSupportCard(
+        let result = CompletionProjectionBuilder.buildHome(
             now: makeDate(day: 5, hour: 6, minute: 0),
             currentDay: currentDay,
             todaySchedule: currentDay.schedule,
-            fajrStatus: .unknown,
-            fastStatus: .unknown,
             permissionSnapshot: permissionSnapshot,
             hijriComponents: components,
             dismissedWarnings: []
-        )
+        ).supportDecision?.presentation
 
         #expect(result == .blockingIssue(.location))
     }
 
     @Test
-    func homeSupportCardShowsFajrCheckInBeforeFastingCheckInDuringMorningWindow() {
+    func homeSupportDecisionShowsFajrCheckInBeforeFastingCheckInDuringMorningWindow() {
         let currentDay = makeActiveDay(
             day: 5,
             context: .fasting,
             supportingTags: [.ramadan],
-            provenances: [defaultDailyProvenance]
+            provenances: [defaultDailyProvenance],
+            dailyCompletion: .init(
+                dateKey: dayKey(day: 5),
+                prayer: .empty,
+                fast: FastCompletionState(status: .unknown, intentSnapshot: voluntaryFastIntent, updatedAt: nil, source: nil),
+                qadaEffect: .none,
+                wakeSupport: .none,
+                outstandingAction: .prayerCheckIn,
+                isMeaningfullyResolved: false
+            )
         )
 
-        let result = ProductSurfacePresentation.homeSupportCard(
+        let result = CompletionProjectionBuilder.buildHome(
             now: makeDate(day: 5, hour: 6, minute: 30),
             currentDay: currentDay,
             todaySchedule: currentDay.schedule,
-            fajrStatus: .unknown,
-            fastStatus: .unknown,
             permissionSnapshot: PermissionSnapshot(
                 summaryText: "",
                 alarmAuthorizationText: "",
@@ -130,7 +144,7 @@ struct ProductSurfacePresentationTests {
             ),
             hijriComponents: nil,
             dismissedWarnings: []
-        )
+        ).supportDecision?.presentation
 
         switch result {
         case .fajrCompletionPrompt:
@@ -141,20 +155,27 @@ struct ProductSurfacePresentationTests {
     }
 
     @Test
-    func homeSupportCardShowsFastingStatusLaterInDayBeforeLingeringFajrPrompt() {
+    func homeSupportDecisionShowsFastingStatusLaterInDayBeforeLingeringFajrPrompt() {
         let currentDay = makeActiveDay(
             day: 5,
             context: .fasting,
             supportingTags: [.voluntary],
-            provenances: [defaultDailyProvenance]
+            provenances: [defaultDailyProvenance],
+            dailyCompletion: .init(
+                dateKey: dayKey(day: 5),
+                prayer: .empty,
+                fast: FastCompletionState(status: .unknown, intentSnapshot: voluntaryFastIntent, updatedAt: nil, source: nil),
+                qadaEffect: .none,
+                wakeSupport: .none,
+                outstandingAction: .fastingStatus,
+                isMeaningfullyResolved: false
+            )
         )
 
-        let result = ProductSurfacePresentation.homeSupportCard(
+        let result = CompletionProjectionBuilder.buildHome(
             now: makeDate(day: 5, hour: 14, minute: 0),
             currentDay: currentDay,
             todaySchedule: currentDay.schedule,
-            fajrStatus: .unknown,
-            fastStatus: .unknown,
             permissionSnapshot: PermissionSnapshot(
                 summaryText: "",
                 alarmAuthorizationText: "",
@@ -163,7 +184,7 @@ struct ProductSurfacePresentationTests {
             ),
             hijriComponents: nil,
             dismissedWarnings: []
-        )
+        ).supportDecision?.presentation
 
         switch result {
         case .fasting(let presentation):
@@ -174,20 +195,68 @@ struct ProductSurfacePresentationTests {
     }
 
     @Test
-    func homeSupportCardShowsFastCompletionPromptAfterMaghribWhenStillUnknown() {
+    func homeSupportDecisionShowsFastCompletionPromptAfterMaghribWhenStillUnknown() {
         let currentDay = makeActiveDay(
             day: 5,
             context: .qadaFast,
             supportingTags: [.qada],
-            provenances: [defaultDailyProvenance]
+            provenances: [defaultDailyProvenance],
+            dailyCompletion: .init(
+                dateKey: dayKey(day: 5),
+                prayer: .empty,
+                fast: FastCompletionState(status: .unknown, intentSnapshot: qadaFastIntent, updatedAt: nil, source: nil),
+                qadaEffect: .none,
+                wakeSupport: .none,
+                outstandingAction: .fastCompletion,
+                isMeaningfullyResolved: false
+            )
         )
 
-        let result = ProductSurfacePresentation.homeSupportCard(
+        let result = CompletionProjectionBuilder.buildHome(
             now: makeDate(day: 5, hour: 19, minute: 15),
             currentDay: currentDay,
             todaySchedule: currentDay.schedule,
-            fajrStatus: .unknown,
-            fastStatus: .unknown,
+            permissionSnapshot: PermissionSnapshot(
+                summaryText: "",
+                alarmAuthorizationText: "",
+                notificationAuthorizationText: "",
+                presentations: [:]
+            ),
+            hijriComponents: nil,
+            dismissedWarnings: []
+        ).supportDecision?.presentation
+
+        switch result {
+        case .fasting(let presentation):
+            #expect(presentation.phase == .fastCompletionPrompt)
+            #expect(presentation.title == "Did you complete the Qada fast?")
+        default:
+            Issue.record("Expected fast completion prompt after Maghrib.")
+        }
+    }
+
+    @Test
+    func homeSupportDecisionCanStayQuietWhenDayIsMeaningfullyResolved() {
+        let currentDay = makeActiveDay(
+            day: 6,
+            context: .standard,
+            supportingTags: [.dailyPlan],
+            provenances: [defaultDailyProvenance],
+            dailyCompletion: .init(
+                dateKey: dayKey(day: 6),
+                prayer: PrayerCompletionState(status: .completed, updatedAt: makeDate(day: 6, hour: 6, minute: 0), source: "test"),
+                fast: .notRequired,
+                qadaEffect: .none,
+                wakeSupport: .none,
+                outstandingAction: nil,
+                isMeaningfullyResolved: true
+            )
+        )
+
+        let result = CompletionProjectionBuilder.buildHome(
+            now: makeDate(day: 6, hour: 13, minute: 0),
+            currentDay: currentDay,
+            todaySchedule: currentDay.schedule,
             permissionSnapshot: PermissionSnapshot(
                 summaryText: "",
                 alarmAuthorizationText: "",
@@ -198,13 +267,7 @@ struct ProductSurfacePresentationTests {
             dismissedWarnings: []
         )
 
-        switch result {
-        case .fasting(let presentation):
-            #expect(presentation.phase == .fastCompletionPrompt)
-            #expect(presentation.title == "Did you complete the Qada fast?")
-        default:
-            Issue.record("Expected fast completion prompt after Maghrib.")
-        }
+        #expect(result.supportDecision == nil)
     }
 
     @Test
@@ -218,10 +281,108 @@ struct ProductSurfacePresentationTests {
 
         let snapshot = ProductSurfacePresentation.wakeProgressSnapshot(from: events)
 
-        #expect(snapshot.summaryTitle == "1 recent wake event fired")
+        #expect(snapshot.summaryTitle == "1 recent wake event")
         #expect(snapshot.recentActivityLines.count == 3)
         #expect(snapshot.recentActivityLines.allSatisfy { !$0.contains("fajr") })
         #expect(snapshot.emptyStateText == nil)
+    }
+
+    @Test
+    func dailyCompletionResolverMapsQadaCompletionToQadaEffectOnlyWhenCompleted() {
+        let dateKey = dayKey(day: 9)
+        let resolvedContext = ResolvedDayContext(
+            primaryContext: .qadaFast,
+            secondaryContexts: [],
+            supportingTags: [.qada],
+            explanation: .empty
+        )
+        let completedRecord = CompletionRecord(
+            id: "fast-\(dateKey)",
+            dateKey: dateKey,
+            kind: .fast,
+            status: .completed,
+            updatedAt: makeDate(day: 9, hour: 20, minute: 0),
+            source: "test",
+            metadata: [
+                "legacyStatus": FastLogStatus.completed.rawValue,
+                "primaryIntent": FastPrimaryIntent.qadaMakeup.rawValue,
+            ]
+        )
+        let state = CompletionStateAssembler.assemble(
+            completionRecords: [completedRecord],
+            qadaLedgerSnapshot: QadaLedgerSnapshot(
+                trackingStartDateKey: dateKey,
+                baselineOwed: 5,
+                completed: 2,
+                remaining: 3
+            )
+        )
+
+        let snapshot = DailyCompletionResolver.resolve(
+            dateKey: dateKey,
+            resolvedDayContext: resolvedContext,
+            completionState: state
+        )
+
+        #expect(snapshot.fast.status == .completed)
+        #expect(snapshot.qadaEffect.countsTowardQada)
+        #expect(snapshot.qadaEffect.completedDelta == 1)
+        #expect(snapshot.qadaEffect.remainingAfterEffect == 3)
+    }
+
+    @Test
+    func progressProjectionReadsCanonicalCompletionState() {
+        let todayKey = dayKey(day: 10)
+        let records = [
+            CompletionRecord(
+                id: "fajr-\(todayKey)",
+                dateKey: todayKey,
+                kind: .fajr,
+                status: .completed,
+                updatedAt: makeDate(day: 10, hour: 6, minute: 0),
+                source: "test",
+                metadata: [:]
+            ),
+            CompletionRecord(
+                id: "fast-\(todayKey)",
+                dateKey: todayKey,
+                kind: .fast,
+                status: .completed,
+                updatedAt: makeDate(day: 10, hour: 19, minute: 0),
+                source: "test",
+                metadata: ["legacyStatus": FastLogStatus.completed.rawValue]
+            ),
+        ]
+        let completionState = CompletionStateAssembler.assemble(
+            completionRecords: records,
+            qadaLedgerSnapshot: QadaLedgerSnapshot(
+                trackingStartDateKey: todayKey,
+                baselineOwed: 2,
+                completed: 1,
+                remaining: 1
+            )
+        )
+        let todayCompletion = DailyCompletionSnapshot(
+            dateKey: todayKey,
+            prayer: PrayerCompletionState(status: .completed, updatedAt: makeDate(day: 10, hour: 6, minute: 0), source: "test"),
+            fast: FastCompletionState(status: .completed, intentSnapshot: voluntaryFastIntent, updatedAt: makeDate(day: 10, hour: 19, minute: 0), source: "test"),
+            qadaEffect: .none,
+            wakeSupport: .none,
+            outstandingAction: nil,
+            isMeaningfullyResolved: true
+        )
+
+        let snapshot = CompletionProjectionBuilder.buildProgress(
+            todayCompletion: todayCompletion,
+            recentDateKeys: [todayKey],
+            completionState: completionState,
+            wakeProgress: .empty
+        )
+
+        #expect(snapshot.fajrTodaySummary == "Made Fajr")
+        #expect(snapshot.fastTodaySummary == "Completed")
+        #expect(snapshot.qadaProgress.remaining == 1)
+        #expect(snapshot.wakeProgress == .empty)
     }
 
     private static var defaultDailyProvenance: ResolvedScheduledDateProvenance {
@@ -250,7 +411,8 @@ struct ProductSurfacePresentationTests {
         day: Int,
         context: MorningContextType,
         supportingTags: [DayTag],
-        provenances: [ResolvedScheduledDateProvenance]
+        provenances: [ResolvedScheduledDateProvenance],
+        dailyCompletion: DailyCompletionSnapshot? = nil
     ) -> ActiveAlarmDay {
         let date = makeDate(day: day, hour: 0, minute: 0)
         let fajr = makeDate(day: day, hour: 5, minute: 30)
@@ -299,7 +461,7 @@ struct ProductSurfacePresentationTests {
 
         return ActiveAlarmDay(
             date: date,
-            dateKey: DateHelpers.dayIdentifier(for: date, timeZone: .current),
+            dateKey: dayKey(day: day),
             schedule: schedule,
             effectiveConfig: effectiveConfig,
             provenances: provenances,
@@ -308,8 +470,21 @@ struct ProductSurfacePresentationTests {
             tagResult: .empty,
             primaryDisplay: PrimaryDisplay(time: wake, kind: .suhoor),
             sourceSummaryText: provenances.map(\.label).joined(separator: " • "),
-            resolvedDayContext: resolvedContext
+            resolvedDayContext: resolvedContext,
+            dailyCompletion: dailyCompletion
         )
+    }
+
+    private func dayKey(day: Int) -> String {
+        DateHelpers.dayIdentifier(for: makeDate(day: day, hour: 0, minute: 0), timeZone: .current)
+    }
+
+    private var voluntaryFastIntent: FastIntentSnapshot {
+        FastIntentSnapshot(primaryIntent: .voluntary, secondaryTags: [])
+    }
+
+    private var qadaFastIntent: FastIntentSnapshot {
+        FastIntentSnapshot(primaryIntent: .qadaMakeup, secondaryTags: [])
     }
 
     private func makeDate(day: Int, hour: Int, minute: Int) -> Date {

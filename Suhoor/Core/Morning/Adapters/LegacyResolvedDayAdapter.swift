@@ -58,7 +58,8 @@ enum LegacyResolvedDayAdapter {
             sourceSummaryText: sourceSummaryText,
             resolvedDayContext: snapshot.resolvedDayContext,
             scheduledEvents: snapshot.materializedEvents,
-            decisionLog: snapshot.decisionLog
+            decisionLog: snapshot.decisionLog,
+            dailyCompletion: snapshot.dailyCompletion
         )
     }
 

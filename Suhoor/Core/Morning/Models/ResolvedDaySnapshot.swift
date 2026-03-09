@@ -10,4 +10,6 @@ struct ResolvedDaySnapshot: Sendable {
     let materializedEvents: [ScheduledEvent]
     let decisionLog: RuleDecisionLog
     let completionRecords: [CompletionRecord]
+    let dailyCompletion: DailyCompletionSnapshot
+    let completionSummary: String?
 }

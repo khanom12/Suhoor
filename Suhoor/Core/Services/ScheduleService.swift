@@ -284,12 +284,10 @@ final class ScheduleManager: ObservableObject {
         let currentDay = activeWindowSnapshot.byDateKey[todayKey]
         let contextDay = nextWakeEventSummary?.day ?? currentDay
         let todaySchedule = currentDay?.schedule ?? schedule(for: todayStart)
-        let supportCard = ProductSurfacePresentation.homeSupportCard(
+        let completionProjection = CompletionProjectionBuilder.buildHome(
             now: now,
             currentDay: currentDay,
             todaySchedule: todaySchedule,
-            fajrStatus: fajrLogStore.status(for: todayKey),
-            fastStatus: fastLogStore.status(for: todayKey),
             permissionSnapshot: permissionSnapshot,
             hijriComponents: hijriComponents,
             dismissedWarnings: dismissedWarnings
@@ -306,27 +304,26 @@ final class ScheduleManager: ObservableObject {
                 ProductSurfacePresentation.meaningfulSecondaryContextTitles(from: $0.resolvedDayContext)
             } ?? [],
             nextWakeEventSummary: nextWakeEventSummary,
-            supportCard: supportCard
+            supportDecision: completionProjection.supportDecision
         )
     }
 
     func progressSurfaceSnapshot(
         wakeProgressSource: WakeProgressSource = DebugEventLogWakeProgressSource()
     ) -> ProgressSurfaceSnapshot {
-        let qadaProgress = QadaProgressEngine.snapshot(
-            state: qadaBacklogStore.state,
-            logEntries: fastLogStore.entriesByDateKey
-        )
+        let completionState = currentCompletionStateSnapshot()
         let todayKey = DateHelpers.dayIdentifier(for: Date(), timeZone: .current)
-        let recentFajrEntries = recentDateKeys(days: 30).compactMap { fajrLogStore.entry(for: $0) }
-        let recentFastEntries = recentDateKeys(days: 30).compactMap { fastLogStore.entry(for: $0) }
+        let todayCompletion = activeWindowSnapshot.byDateKey[todayKey]?.dailyCompletion
+            ?? DailyCompletionResolver.resolve(
+                dateKey: todayKey,
+                resolvedDayContext: activeWindowSnapshot.byDateKey[todayKey]?.resolvedDayContext ?? .standard,
+                completionState: completionState
+            )
 
-        return ProgressSurfaceSnapshot(
-            fajrTodaySummary: fajrLogStore.status(for: todayKey).title,
-            fajrSummary: ProductSurfaceSnapshots.summaryForLast30Fajr(entries: recentFajrEntries),
-            fastTodaySummary: ProductSurfaceSnapshots.fastTodaySummary(entry: fastLogStore.entry(for: todayKey)),
-            fastSummary: ProductSurfaceSnapshots.summaryForLast30Fasts(entries: recentFastEntries),
-            qadaProgress: qadaProgress,
+        return CompletionProjectionBuilder.buildProgress(
+            todayCompletion: todayCompletion,
+            recentDateKeys: recentDateKeys(days: 30),
+            completionState: completionState,
             wakeProgress: wakeProgressSource.snapshot(limit: 20)
         )
     }
@@ -696,7 +693,8 @@ final class ScheduleManager: ObservableObject {
                 sourceSummaryText: day.sourceSummaryText,
                 resolvedDayContext: day.resolvedDayContext,
                 scheduledEvents: day.scheduledEvents,
-                decisionLog: day.decisionLog
+                decisionLog: day.decisionLog,
+                dailyCompletion: day.dailyCompletion
             )
         }
 
@@ -1186,6 +1184,18 @@ final class ScheduleManager: ObservableObject {
             timeZone: timeZone,
             locationDescription: locationDescription,
             provenancesByDateKey: provenancesByDateKey
+        )
+    }
+
+    private func currentCompletionStateSnapshot() -> CompletionStateSnapshot {
+        let legacySnapshot = LegacyCompletionAdapter.records(
+            fajrEntries: fajrLogStore.entriesByDateKey,
+            fastEntries: fastLogStore.entriesByDateKey,
+            qadaBacklogState: qadaBacklogStore.state
+        )
+        return CompletionStateAssembler.assemble(
+            completionRecords: legacySnapshot.records,
+            qadaLedgerSnapshot: legacySnapshot.qadaLedgerSnapshot
         )
     }
 
@@ -3299,6 +3309,7 @@ struct ActiveAlarmDay: Codable, Equatable, Identifiable, Sendable {
     let resolvedDayContext: ResolvedDayContext
     let scheduledEvents: [ScheduledEvent]
     let decisionLog: RuleDecisionLog
+    let dailyCompletion: DailyCompletionSnapshot
 
     var id: String { dateKey }
 
@@ -3315,7 +3326,8 @@ struct ActiveAlarmDay: Codable, Equatable, Identifiable, Sendable {
         sourceSummaryText: String,
         resolvedDayContext: ResolvedDayContext = .standard,
         scheduledEvents: [ScheduledEvent] = [],
-        decisionLog: RuleDecisionLog? = nil
+        decisionLog: RuleDecisionLog? = nil,
+        dailyCompletion: DailyCompletionSnapshot? = nil
     ) {
         self.date = date
         self.dateKey = dateKey
@@ -3335,6 +3347,7 @@ struct ActiveAlarmDay: Codable, Equatable, Identifiable, Sendable {
             resolvedDayContext: resolvedDayContext,
             primaryDisplay: primaryDisplay
         )
+        self.dailyCompletion = dailyCompletion ?? .empty(dateKey: dateKey)
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -3351,6 +3364,7 @@ struct ActiveAlarmDay: Codable, Equatable, Identifiable, Sendable {
         case resolvedDayContext
         case scheduledEvents
         case decisionLog
+        case dailyCompletion
     }
 
     init(from decoder: Decoder) throws {
@@ -3368,6 +3382,8 @@ struct ActiveAlarmDay: Codable, Equatable, Identifiable, Sendable {
         let resolvedDayContext = try container.decodeIfPresent(ResolvedDayContext.self, forKey: .resolvedDayContext) ?? .standard
         let scheduledEvents = try container.decodeIfPresent([ScheduledEvent].self, forKey: .scheduledEvents) ?? []
         let decisionLog = try container.decodeIfPresent(RuleDecisionLog.self, forKey: .decisionLog)
+        let dailyCompletion = try container.decodeIfPresent(DailyCompletionSnapshot.self, forKey: .dailyCompletion)
+            ?? .empty(dateKey: dateKey)
 
         self.init(
             date: date,
@@ -3382,7 +3398,8 @@ struct ActiveAlarmDay: Codable, Equatable, Identifiable, Sendable {
             sourceSummaryText: sourceSummaryText,
             resolvedDayContext: resolvedDayContext,
             scheduledEvents: scheduledEvents,
-            decisionLog: decisionLog
+            decisionLog: decisionLog,
+            dailyCompletion: dailyCompletion
         )
     }
 
@@ -3513,7 +3530,8 @@ private extension ScheduleManager {
                 isExplicitOneOff: !provenances.isEmpty && provenances.allSatisfy(\.isExplicitOneOff),
                 tagResult: tagResults[dateKey] ?? .empty,
                 primaryDisplay: config.primaryDisplay(schedule: schedule),
-                sourceSummaryText: summary
+                sourceSummaryText: summary,
+                dailyCompletion: .empty(dateKey: dateKey)
             )
         }
 

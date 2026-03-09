@@ -113,6 +113,19 @@ enum MorningScheduleResolver {
                 selectedPlan: planSelection.selectedPlan
             )
         )
+        let completionState = CompletionStateAssembler.assemble(
+            completionRecords: input.stateSnapshot.completionRecords,
+            qadaLedgerSnapshot: input.stateSnapshot.qadaLedgerSnapshot
+        )
+        let completionRecords = CompletionSnapshotResolver.resolve(
+            for: input.dateKey,
+            completionRecords: input.stateSnapshot.completionRecords
+        )
+        let dailyCompletion = DailyCompletionResolver.resolve(
+            dateKey: input.dateKey,
+            resolvedDayContext: resolvedContext,
+            completionState: completionState
+        )
 
         return ResolvedDaySnapshot(
             date: input.date,
@@ -123,10 +136,9 @@ enum MorningScheduleResolver {
             resolvedBehaviorProfile: behaviorProfile,
             materializedEvents: materializedEvents,
             decisionLog: decisionLog,
-            completionRecords: CompletionSnapshotResolver.resolve(
-                for: input.dateKey,
-                completionRecords: input.stateSnapshot.completionRecords
-            )
+            completionRecords: completionRecords,
+            dailyCompletion: dailyCompletion,
+            completionSummary: completionSummary(from: dailyCompletion)
         )
     }
 
@@ -409,6 +421,24 @@ enum MorningScheduleResolver {
             notes.append("abstract_fajr_end_anchor")
         }
         return notes
+    }
+
+    private static func completionSummary(
+        from snapshot: DailyCompletionSnapshot
+    ) -> String? {
+        switch snapshot.outstandingAction {
+        case .prayerCheckIn:
+            return "Fajr not logged yet."
+        case .fastingStatus:
+            return "Fasting status not logged yet."
+        case .fastCompletion:
+            return "Fast completion is still unresolved."
+        case nil:
+            if snapshot.qadaEffect.countsTowardQada {
+                return snapshot.qadaEffect.explanation
+            }
+            return nil
+        }
     }
 
     private static func decisionHash(
