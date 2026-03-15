@@ -83,7 +83,7 @@ struct ProgressRootView: View {
                         .foregroundStyle(.secondary)
                 }
             } header: {
-                Text("Wake Activity")
+                Text("Morning Follow-Through")
             } footer: {
                 Text(Strings.ProgressSurface.wakeFooter)
             }

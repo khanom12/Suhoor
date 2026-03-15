@@ -724,12 +724,45 @@ struct ProductSurfacePresentationTests {
             fastLogEntries: fastEntries
         )
 
-        #expect(snapshot.defaultMorningPlanSummary.wakeRelation == "45 min before Fajr")
-        #expect(snapshot.defaultMorningPlanSummary.followUp == "Off")
-        #expect(snapshot.defaultMorningPlanSummary.fastingDaySupport == "Iftar support on")
+        #expect(snapshot.defaultMorningPlanSummary.wakeLead == "45 min before Fajr")
+        #expect(snapshot.defaultMorningPlanSummary.extraWakeBuffer == "Off")
+        #expect(snapshot.defaultMorningPlanSummary.reminders == "Reminder 10 min before Fajr")
+        #expect(snapshot.defaultMorningPlanSummary.prayerTimes == "Fajr adhan on")
         #expect(snapshot.configuredPlansSnapshot.upcomingSpecialMornings.count == 2)
         #expect(snapshot.qadaProgress.completed == 1)
         #expect(snapshot.qadaProgress.remaining == 2)
+    }
+
+    @Test
+    func homeHeroSublineUsesFajrBeginsCopy() {
+        let day = makeActiveDay(
+            day: 12,
+            context: .standard,
+            supportingTags: [.dailyPlan],
+            provenances: [defaultDailyProvenance]
+        )
+
+        let subline = ProductSurfacePresentation.homeHeroSubline(for: day)
+
+        #expect(subline.contains("Fajr begins at"))
+        #expect(subline.contains("Fajr at") == false)
+    }
+
+    @Test
+    func scheduleRowPresentationUsesMorningTimelineCopy() {
+        let day = makeActiveDay(
+            day: 13,
+            context: .standard,
+            supportingTags: [.dailyPlan],
+            provenances: [defaultDailyProvenance]
+        )
+
+        let defaultPresentation = ProductSurfacePresentation.scheduleRowPresentation(for: day, hasDayOverride: false)
+        let adjustedPresentation = ProductSurfacePresentation.scheduleRowPresentation(for: day, hasDayOverride: true)
+
+        #expect(defaultPresentation.detailText.contains("Fajr begins at"))
+        #expect(defaultPresentation.detailText.contains("Adjusted") == false)
+        #expect(adjustedPresentation.detailText.contains("Adjusted for this morning"))
     }
 
     @Test

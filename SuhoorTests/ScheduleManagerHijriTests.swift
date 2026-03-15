@@ -1608,11 +1608,17 @@ struct ScheduleManagerHijriTests {
         let progressSnapshot = manager.progressSurfaceSnapshot(
             wakeProgressSource: FixedWakeProgressSource()
         )
+        let fajrWindowSnapshot = manager.fajrWindowSurfaceSnapshot(
+            period: .sevenDays,
+            overlay: .compareSafe,
+            selectedDateKey: tomorrowKey,
+            timeZone: timeZone
+        )
 
         #expect(wakeSnapshot.overrideDateKeys.contains(tomorrowKey))
         #expect(wakeSnapshot.visibleDays.contains(where: { $0.dateKey == tomorrowKey }))
         #expect(homeSnapshot.heroLabel?.isEmpty == false)
-        #expect(homeSnapshot.heroSubline?.contains("Fajr at") == true)
+        #expect(homeSnapshot.heroSubline?.contains("Fajr begins at") == true)
         #expect(plansSnapshot.configuredPlansSnapshot.upcomingSpecialMornings.isEmpty == false)
         #expect(plansSnapshot.defaultMorningPlanSummary.wakeLead.isEmpty == false)
         #expect(progressSnapshot.fajrTodaySummary == "Fajr completed")
@@ -1620,6 +1626,10 @@ struct ScheduleManagerHijriTests {
         #expect(progressSnapshot.fastSectionTitle.isEmpty == false)
         #expect(progressSnapshot.qadaProgress.remaining == 1)
         #expect(progressSnapshot.wakeProgress.summaryTitle == "Wake activity")
+        #expect(fajrWindowSnapshot.activeOverlay == .compareSafe)
+        #expect(fajrWindowSnapshot.selectedDateKey == tomorrowKey)
+        #expect(fajrWindowSnapshot.points.contains(where: { $0.dateKey == tomorrowKey && $0.isOverride }))
+        #expect(fajrWindowSnapshot.selectedDay?.comparisonItem?.label == "Safer comparison")
     }
 
     @Test
@@ -1825,8 +1835,8 @@ struct ScheduleManagerHijriTests {
 
         let presentation = ProductSurfacePresentation.scheduleRowPresentation(for: activeDay, hasDayOverride: true)
         #expect(presentation.meaningText.isEmpty == false)
-        #expect(presentation.detailText.contains("Adjusted"))
-        #expect(presentation.detailText.contains("Fajr at"))
+        #expect(presentation.detailText.contains("Adjusted for this morning"))
+        #expect(presentation.detailText.contains("Fajr begins at"))
         #expect(presentation.chipTitles.isEmpty)
     }
 

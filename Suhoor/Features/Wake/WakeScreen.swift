@@ -1,27 +1,68 @@
 import SwiftUI
 import UIKit
 
+private enum WakeDestination: Identifiable, Hashable {
+    case fajrWindow
+    case day(DaySchedule)
+
+    var id: String {
+        switch self {
+        case .fajrWindow:
+            return "fajr-window"
+        case .day(let schedule):
+            return "day-\(schedule.id)"
+        }
+    }
+
+    static func == (lhs: WakeDestination, rhs: WakeDestination) -> Bool {
+        lhs.id == rhs.id
+    }
+
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+    }
+}
+
 struct WakeScreen: View {
     @EnvironmentObject private var scheduleManager: ScheduleManager
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var viewState = WakeListState()
+    @State private var destination: WakeDestination?
 
     var body: some View {
+        let wakeSnapshot = scheduleManager.wakeSurfaceSnapshot
+        let compactFajrWindowSnapshot = scheduleManager.fajrWindowSurfaceSnapshot(period: .sevenDays)
+
         ScrollView {
             VStack(alignment: .leading, spacing: DesignTokens.spacingXL) {
-                if let summary = scheduleManager.wakeSurfaceSnapshot.nextWakeEventSummary {
+                FajrWindowCompactCard(snapshot: compactFajrWindowSnapshot) {
+                    destination = .fajrWindow
+                }
+
+                if let summary = wakeSnapshot.nextWakeEventSummary {
                     Button {
-                        viewState.selectedSchedule = summary.day.schedule
+                        destination = .day(summary.day.schedule)
                     } label: {
                         FeaturedTomorrowCard(
                             summary: summary,
-                            hasOverride: scheduleManager.wakeSurfaceSnapshot.overrideDateKeys.contains(summary.day.dateKey)
+                            hasOverride: wakeSnapshot.overrideDateKeys.contains(summary.day.dateKey)
                         )
                     }
                     .buttonStyle(.plain)
                 } else {
                     emptyStateView
+                }
+
+                if !visibleSections.isEmpty {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Upcoming mornings")
+                            .font(.headline.weight(.semibold))
+                        Text("Every row keeps the next stretch of mornings visible while preserving day-detail edits and overrides.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
 
                 ForEach(visibleSections) { section in
@@ -31,7 +72,7 @@ struct WakeScreen: View {
                         if section.entries.isEmpty {
                             HStack(spacing: DesignTokens.spacingS) {
                                 ProgressView()
-                                Text("Loading upcoming mornings")
+                                Text("Loading more mornings")
                                     .font(.footnote)
                                     .foregroundStyle(.secondary)
                             }
@@ -41,7 +82,7 @@ struct WakeScreen: View {
                         } else {
                             ForEach(section.entries) { entry in
                                 WakeRowView(entry: entry) {
-                                    viewState.selectedSchedule = entry.schedule
+                                    destination = .day(entry.schedule)
                                 }
                             }
                         }
@@ -55,8 +96,11 @@ struct WakeScreen: View {
         .background(Color(.systemGroupedBackground).ignoresSafeArea())
         .navigationTitle("Wake")
         .navigationBarTitleDisplayMode(.large)
-        .navigationDestination(isPresented: navigationIsActiveBinding) {
-            if let schedule = viewState.selectedSchedule {
+        .navigationDestination(item: $destination) { destination in
+            switch destination {
+            case .fajrWindow:
+                FajrWindowDetailView(initialPeriod: .sevenDays)
+            case .day(let schedule):
                 AlarmDayDetailView(schedule: schedule)
             }
         }
@@ -70,7 +114,7 @@ struct WakeScreen: View {
 
     private var emptyStateView: some View {
         VStack(alignment: .leading, spacing: DesignTokens.spacingS) {
-            Text(Strings.AlarmsTab.emptyTitle)
+            Text("No mornings are ready yet")
                 .font(.headline.weight(.semibold))
             Text(emptyStateDetail)
                 .font(.subheadline)
@@ -91,7 +135,7 @@ struct WakeScreen: View {
         if !scheduleManager.statusText.isEmpty {
             return scheduleManager.statusText
         }
-        return Strings.AlarmsTab.emptySubtitle
+        return "Shape your daily morning plan in Plans and Suhoor will bring the next wake here."
     }
 
     private func openAppSettings() {
@@ -200,12 +244,6 @@ struct WakeScreen: View {
         DateFormatter.localizedString(from: date, dateStyle: .medium, timeStyle: .none)
     }
 
-    private var navigationIsActiveBinding: Binding<Bool> {
-        Binding(
-            get: { viewState.selectedSchedule != nil },
-            set: { if !$0 { viewState.selectedSchedule = nil } }
-        )
-    }
 }
 
 private struct FeaturedTomorrowCard: View {
@@ -215,7 +253,7 @@ private struct FeaturedTomorrowCard: View {
     var body: some View {
         GlassCard(style: .header, tintColor: DawnColor.lightGold200, tintOpacity: 0.18) {
             VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
-                Text("Tomorrow")
+                Text("Next morning")
                     .font(DesignTokens.cardMetaFont)
                     .foregroundStyle(.secondary)
 
@@ -234,7 +272,7 @@ private struct FeaturedTomorrowCard: View {
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.secondary)
 
-                    Text("Fajr at \(TimeFormatters.timeFormatter.string(from: summary.day.schedule.fajrDate))")
+                    Text("Fajr begins at \(TimeFormatters.timeFormatter.string(from: summary.day.schedule.fajrDate))")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                         .monospacedDigit()

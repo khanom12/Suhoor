@@ -23,7 +23,7 @@ struct PlanRootView: View {
                 }
 
                 VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
-                    SectionTitle("Upcoming Special Plans")
+                    SectionTitle("Upcoming Special Mornings")
 
                     NavigationLink(value: PlanDestination.upcomingSpecialPlans) {
                         ConfiguredPlansCard(snapshot: snapshot.configuredPlansSnapshot)

@@ -350,7 +350,7 @@ enum Strings {
         static let reminderOffsetTitle = "Reminder time"
         static let minutesBeforeFajr = "Minutes before Fajr"
         static func offsetValue(_ minutes: Int) -> String { "\(minutes) min" }
-        static let previewSection = "Next wake preview"
+        static let previewSection = "Preview"
         static let previewUnavailable = "Preview will appear once your next wake is ready."
         static let previewHelper = "Preview uses your current morning plan and location."
         static let routineDefaultsSection = "Wake timing"
@@ -513,11 +513,11 @@ enum Strings {
     }
 
     enum HomeSurface {
-        static let heroTitle = "Next wake"
+        static let heroTitle = "Next morning"
         static let heroEmptyTitle = "Set up your mornings"
-        static let heroEmptyBody = "Start with your daily plan."
-        static let heroEmptyAction = "Start with Plans"
-        static let heroAction = "View tomorrow"
+        static let heroEmptyBody = "Start with your default morning plan."
+        static let heroEmptyAction = "Open Plans"
+        static let heroAction = "Open Wake"
         static let fajrPromptTitle = "Did you pray Fajr?"
         static let fajrPromptBody = "Record today before you move on."
         static let fajrPromptPrimary = "Yes, I did"
@@ -528,8 +528,8 @@ enum Strings {
     }
 
     enum PlansSurface {
-        static let defaultSubtitle = "Your usual Fajr-centered wake rhythm"
-        static let upcomingSubtitle = "Dates that differ from your usual plan"
+        static let defaultSubtitle = "Your usual Fajr-centered morning plan"
+        static let upcomingSubtitle = "Mornings that differ from your usual plan"
         static let upcomingEmptyTitle = "Nothing special is planned yet"
         static let upcomingEmptyBody = "Your regular Fajr mornings are still set."
         static let planByDateSubtitle = "Choose a date and shape it directly"
@@ -543,7 +543,7 @@ enum Strings {
         static let fajrFooter = "Your recent prayer record."
         static let fastFooter = "Completed and not-completed fasting days."
         static let qadaFooter = "Completed Qada fasts reduce what remains."
-        static let wakeFooter = "Recent wake follow-through, kept secondary."
+        static let wakeFooter = "A light review of recent wake follow-through."
         static let qadaEnablePrompt = "Add Qada from Plans when you need it."
     }
 

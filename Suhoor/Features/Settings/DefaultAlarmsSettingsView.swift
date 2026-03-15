@@ -12,11 +12,11 @@ struct DefaultAlarmsSettingsView: View {
     var body: some View {
         Form {
             Section {
-                LabeledContent("Wake relation to Fajr", value: wakeSummaryText)
+                LabeledContent("Wake timing", value: wakeSummaryText)
                 LabeledContent("Reminder", value: reminderSummaryText)
-                LabeledContent("Follow-up", value: followUpSummaryText)
-                LabeledContent("Fajr notice", value: fajrDefaultBinding.wrappedValue ? "On" : "Off")
-                LabeledContent("Fasting-day support", value: iftarDefaultBinding.wrappedValue ? "Iftar support on" : "Wake-only support")
+                LabeledContent("Wake follow-up", value: followUpSummaryText)
+                LabeledContent("Prayer times", value: fajrDefaultBinding.wrappedValue ? "Fajr adhan on" : "Fajr adhan off")
+                LabeledContent("Iftar support", value: iftarDefaultBinding.wrappedValue ? "On" : "Off")
 
                 if usesFixedTimeCompatibility {
                     Text("Fixed-time wake settings are preserved for compatibility. Fajr-relative planning is the long-term default.")

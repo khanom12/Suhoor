@@ -408,7 +408,7 @@ struct AlarmDayDetailView: View {
                 } label: {
                     HStack {
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("Edit day meaning")
+                            Text("Shape this morning's meaning")
                                 .foregroundStyle(.primary)
                             Text(intentSummaryText)
                                 .font(.footnote)
@@ -433,19 +433,19 @@ struct AlarmDayDetailView: View {
                     }
                 }
             } header: {
-                Text("Day Meaning")
+                Text("Morning meaning")
                     .textCase(nil)
             } footer: {
-                Text("Use this to make the date a fasting day, Qada day, or another special morning.")
+                Text("Use this to make the date a fasting morning, Qada morning, or another meaningful morning.")
             }
 
             Section {
                 Toggle("Keep this morning active", isOn: dayToggleBinding)
             } header: {
-                Text("One-Day Override")
+                Text("This morning only")
                     .textCase(nil)
             } footer: {
-                Text(hasOneDayChanges ? "This date is using one-day changes." : "This date is using your default morning plan.")
+                Text(hasOneDayChanges ? "This morning is using date-specific changes." : "This morning is using your default morning plan.")
             }
             .animation(Motion.standard(reduceMotion: reduceMotion), value: dayToggleBinding.wrappedValue)
 
@@ -610,7 +610,7 @@ struct AlarmDayDetailView: View {
                         }
                     }
                 } header: {
-                    Text("Change Planned Source")
+                    Text("Adjust Planned Source")
                         .textCase(nil)
                 }
             }

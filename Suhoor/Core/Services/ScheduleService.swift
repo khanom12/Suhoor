@@ -42,6 +42,7 @@ final class ScheduleManager: ObservableObject {
     private let cacheStore: ScheduleCacheStore
     private let completionSurfaceProvider = CompletionSurfaceProvider()
     private let wakeSurfaceProvider = WakeSurfaceProvider()
+    private let fajrWindowSurfaceProvider = FajrWindowSurfaceProvider()
     private let plansSurfaceProvider = PlansSurfaceProvider()
     private let homeSurfaceProvider = HomeSurfaceProvider()
     private let nextWakeEventResolver = NextWakeEventResolver()
@@ -333,6 +334,27 @@ final class ScheduleManager: ObservableObject {
             activeWindowSnapshot: activeWindowSnapshot,
             nextWakeEventSummary: nextWakeEventSummary,
             overrideDateKeys: Set(alarmConfigStore.overridesByDay.keys)
+        )
+    }
+
+    func fajrWindowSurfaceSnapshot(
+        period: FajrWindowPeriod,
+        overlay: FajrWindowOverlay = .myWake,
+        selectedDateKey: String? = nil,
+        timeZone: TimeZone = .current
+    ) -> FajrWindowSurfaceSnapshot {
+        let days = activeDaysForFajrWindow(period: period, timeZone: timeZone)
+        return fajrWindowSurfaceProvider.snapshot(
+            period: period,
+            requestedOverlay: overlay,
+            selectedDateKey: selectedDateKey,
+            activeDays: days,
+            overrideDateKeys: Set(alarmConfigStore.overridesByDay.keys),
+            comparisonDay: { [unowned self] day, requestedOverlay in
+                comparisonPreviewDay(for: day, overlay: requestedOverlay, timeZone: timeZone)
+            },
+            now: Date(),
+            timeZone: timeZone
         )
     }
 
@@ -691,6 +713,77 @@ final class ScheduleManager: ObservableObject {
             alarmConfigStore: alarmConfigStore,
             kind: kind,
             startDate: startDate,
+            timeZone: timeZone
+        )
+    }
+
+    private func activeDaysForFajrWindow(
+        period: FajrWindowPeriod,
+        timeZone: TimeZone
+    ) -> [ActiveAlarmDay] {
+        let count = period.dayCount
+        if activeWindowSnapshot.visibleDays.count >= count {
+            return Array(activeWindowSnapshot.visibleDays.prefix(count))
+        }
+
+        guard let coordinate = currentCoordinate() else {
+            return Array(activeWindowSnapshot.visibleDays.prefix(count))
+        }
+
+        let resolvedEntries = activeDayResolver.resolvedEntriesForActiveWindow(
+            from: DateHelpers.startOfToday(in: timeZone),
+            limit: count,
+            timeZone: timeZone
+        )
+
+        return buildActiveWindowSnapshot(
+            resolvedEntries: resolvedEntries,
+            coordinate: coordinate,
+            timeZone: timeZone,
+            visibleHorizonDays: count,
+            scheduledHorizonDays: count
+        ).visibleDays
+    }
+
+    private func comparisonPreviewDay(
+        for day: ActiveAlarmDay,
+        overlay: FajrWindowOverlay,
+        timeZone: TimeZone
+    ) -> ActiveAlarmDay? {
+        switch overlay {
+        case .myWake, .compareSafe:
+            return nil
+        case .compareFasting:
+            return previewComparisonDay(
+                for: day,
+                overrideSelection: FastIntentSelection(primaryIntent: .voluntary, secondaryTags: []),
+                timeZone: timeZone
+            )
+        case .compareTahajjud:
+            return nil
+        }
+    }
+
+    private func previewComparisonDay(
+        for day: ActiveAlarmDay,
+        overrideSelection: FastIntentSelection,
+        timeZone: TimeZone
+    ) -> ActiveAlarmDay? {
+        guard let coordinate = currentCoordinate() else { return nil }
+
+        let tagResult = tagPreviewResult(
+            for: day.date,
+            overrideSelection: overrideSelection,
+            defaultPrimaryIntent: day.provenances.defaultFastPrimaryIntent(),
+            timeZone: timeZone
+        )
+
+        return activeDayResolver.resolveActiveDay(
+            for: day.date,
+            provenances: day.provenances,
+            tagResult: tagResult,
+            coordinate: coordinate,
+            settings: settingsStore.settings,
             timeZone: timeZone
         )
     }

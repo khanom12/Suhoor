@@ -204,15 +204,15 @@ enum ProductSurfacePresentation {
     }
 
     static func homeHeroLabel(for day: ActiveAlarmDay) -> String {
-        homeHeroMeaningText(for: day) == nil ? "Next wake" : "Tomorrow's wake"
+        homeHeroMeaningText(for: day) == nil ? "Next morning" : "Tomorrow's morning"
     }
 
     static func homeHeroSubline(for day: ActiveAlarmDay) -> String {
-        let fajrText = "Fajr at \(TimeFormatters.timeFormatter.string(from: day.schedule.fajrDate))"
+        let fajrText = "Fajr begins at \(TimeFormatters.timeFormatter.string(from: day.schedule.fajrDate))"
         if let meaning = homeHeroMeaningText(for: day) {
             return "\(meaning) • \(fajrText)"
         }
-        return "For \(fajrText)"
+        return fajrText
     }
 
     static func scheduleChipTitles(
@@ -327,8 +327,8 @@ enum ProductSurfacePresentation {
         }
 
         let relationText = wakeRelationText(delta: day.decisionLog.resolvedDelta, anchor: day.decisionLog.resolvedAnchor.type)
-        let detailPrefix = hasDayOverride ? "Adjusted" : relationText
-        let detailText = "\(detailPrefix) • Fajr at \(TimeFormatters.timeFormatter.string(from: day.schedule.fajrDate))"
+        let detailPrefix = hasDayOverride ? "Adjusted for this morning" : relationText
+        let detailText = "\(detailPrefix) • Fajr begins at \(TimeFormatters.timeFormatter.string(from: day.schedule.fajrDate))"
 
         return ScheduleRowPresentation(
             wakeTime: day.schedule.wakeDate,
