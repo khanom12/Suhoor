@@ -6,44 +6,69 @@ struct FajrWindowDetailView: View {
 
     let initialPeriod: FajrWindowPeriod
 
-    @State private var period: FajrWindowPeriod
-    @State private var requestedOverlay: FajrWindowOverlay = .myWake
-    @State private var selectedDateKey: String?
+    @StateObject private var store: FajrWindowDetailStore
     @State private var selectedMorningDate: Date?
 
     init(initialPeriod: FajrWindowPeriod = .sevenDays) {
         self.initialPeriod = initialPeriod
-        _period = State(initialValue: initialPeriod)
+        _store = StateObject(wrappedValue: FajrWindowDetailStore(initialPeriod: initialPeriod))
     }
 
     var body: some View {
-        let snapshot = scheduleManager.fajrWindowSurfaceSnapshot(
-            period: period,
-            overlay: requestedOverlay,
-            selectedDateKey: selectedDateKey
-        )
+        Group {
+            if let snapshot = store.snapshot {
+                content(snapshot: snapshot)
+            } else {
+                ProgressView("Loading mornings")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+                    .padding()
+            }
+        }
+        .background(Color(.systemGroupedBackground).ignoresSafeArea())
+        .navigationTitle("Fajr Window")
+        .navigationBarTitleDisplayMode(.inline)
+        .navigationDestination(item: $selectedMorningDate) { date in
+            if let schedule = scheduleManager.activeDay(for: date)?.schedule {
+                AlarmDayDetailView(schedule: schedule)
+            } else {
+                ContentUnavailableView(
+                    "Morning unavailable",
+                    systemImage: "sun.haze",
+                    description: Text("This morning could not be reopened right now.")
+                )
+            }
+        }
+        .task(id: detailRefreshKey) {
+            store.load(using: scheduleManager, timeZone: .current)
+        }
+    }
 
+    private var detailRefreshKey: String {
+        "\(scheduleManager.currentRevision)-\(TimeZone.current.identifier)"
+    }
+
+    private func content(snapshot: FajrWindowSurfaceSnapshot) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: DesignTokens.spacingXL) {
                 header(snapshot: snapshot)
 
-                FajrWindowPeriodPicker(selectedPeriod: period) { newPeriod in
-                    period = newPeriod
+                FajrWindowPeriodPicker(selectedPeriod: store.period) { newPeriod in
+                    store.setPeriod(newPeriod, using: scheduleManager, timeZone: .current)
                 }
 
                 GlassCard(style: .header, tintColor: DawnColor.lightGold200, tintOpacity: 0.10) {
                     VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
                         FajrWindowChartView(
-                            snapshot: snapshot,
+                            chart: snapshot.chart,
                             layoutStyle: .detail,
-                            onSelectDateKey: { selectedDateKey = $0 }
+                            onSelectDateKey: { store.selectDateKey($0, using: scheduleManager, timeZone: .current) }
                         )
 
                         FajrWindowOverlayPicker(
                             overlays: snapshot.availableOverlays,
                             selectedOverlay: snapshot.activeOverlay
                         ) { overlay in
-                            requestedOverlay = overlay
+                            store.setOverlay(overlay, using: scheduleManager, timeZone: .current)
                         }
                     }
                 }
@@ -72,25 +97,6 @@ struct FajrWindowDetailView: View {
             }
             .padding(.horizontal, DesignTokens.spacingL)
             .padding(.vertical, DesignTokens.spacingL)
-        }
-        .background(Color(.systemGroupedBackground).ignoresSafeArea())
-        .navigationTitle("Fajr Window")
-        .navigationBarTitleDisplayMode(.inline)
-        .navigationDestination(item: $selectedMorningDate) { date in
-            if let schedule = scheduleManager.activeDay(for: date)?.schedule {
-                AlarmDayDetailView(schedule: schedule)
-            } else {
-                ContentUnavailableView(
-                    "Morning unavailable",
-                    systemImage: "sun.haze",
-                    description: Text("This morning could not be reopened right now.")
-                )
-            }
-        }
-        .onChange(of: snapshot.selectedDateKey) { _, newValue in
-            if selectedDateKey == nil {
-                selectedDateKey = newValue
-            }
         }
     }
 

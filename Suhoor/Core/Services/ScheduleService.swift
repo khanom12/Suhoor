@@ -25,6 +25,7 @@ final class ScheduleManager: ObservableObject {
     @Published private(set) var activeWindowSnapshot: ActiveAlarmWindowSnapshot = .empty {
         didSet {
             currentRevision += 1
+            clearFajrWindowCaches()
         }
     }
     @Published private(set) var bootstrapState: AppBootstrapState = .welcome
@@ -75,7 +76,11 @@ final class ScheduleManager: ObservableObject {
     private let monthTagResultLookup = MonthTagResultLookup()
     private var activeTagSelectionRevision: Int = -1
     private var pendingDayRescheduleTasks: [String: Task<Void, Never>] = [:]
+    private var fajrWindowDatasetCache: [FajrWindowDatasetKey: FajrWindowDataset] = [:]
+    private var fajrWindowOverlaySeriesCache: [FajrWindowOverlayCacheKey: FajrWindowOverlaySeries] = [:]
     private var cancellables: Set<AnyCancellable> = []
+    private(set) var fajrWindowDatasetBuildCount: Int = 0
+    private(set) var fajrWindowOverlayBuildCounts: [FajrWindowOverlay: Int] = [:]
     private lazy var activeDayResolver = ActiveDayResolver(
         alarmConfigStore: alarmConfigStore,
         morningPlanStore: morningPlanStore,
@@ -343,17 +348,106 @@ final class ScheduleManager: ObservableObject {
         selectedDateKey: String? = nil,
         timeZone: TimeZone = .current
     ) -> FajrWindowSurfaceSnapshot {
-        let days = activeDaysForFajrWindow(period: period, timeZone: timeZone)
-        return fajrWindowSurfaceProvider.snapshot(
-            period: period,
+        let dataset = fajrWindowDataset(period: period, timeZone: timeZone)
+        let overlaySeries = loadedFajrWindowOverlaySeries(
+            for: period,
             requestedOverlay: overlay,
+            timeZone: timeZone
+        )
+        return projectedFajrWindowSurfaceSnapshot(
+            dataset: dataset,
+            overlay: overlay,
             selectedDateKey: selectedDateKey,
+            overlaySeries: overlaySeries,
+            timeZone: timeZone
+        )
+    }
+
+    func fajrWindowCompactSnapshot(timeZone: TimeZone = .current) -> FajrWindowCompactSnapshot {
+        let dataset = fajrWindowDataset(period: .sevenDays, timeZone: timeZone)
+        return fajrWindowSurfaceProvider.compactSnapshot(
+            dataset: dataset,
+            now: Date(),
+            timeZone: timeZone
+        )
+    }
+
+    func fajrWindowDataset(
+        period: FajrWindowPeriod,
+        timeZone: TimeZone = .current
+    ) -> FajrWindowDataset {
+        let key = fajrWindowDatasetKey(period: period, timeZone: timeZone)
+        if let cached = fajrWindowDatasetCache[key] {
+            return cached
+        }
+
+        let days = activeDaysForFajrWindow(period: period, timeZone: timeZone)
+        let dataset = fajrWindowSurfaceProvider.buildDataset(
+            period: period,
             activeDays: days,
             overrideDateKeys: Set(alarmConfigStore.overridesByDay.keys),
+            timeZone: timeZone
+        )
+        fajrWindowDatasetCache[key] = dataset
+        fajrWindowDatasetBuildCount += 1
+        return dataset
+    }
+
+    func fajrWindowOverlaySeries(
+        period: FajrWindowPeriod,
+        overlay: FajrWindowOverlay,
+        timeZone: TimeZone = .current
+    ) -> FajrWindowOverlaySeries? {
+        guard overlay == .compareFasting || overlay == .compareTahajjud else {
+            return nil
+        }
+
+        let cacheKey = FajrWindowOverlayCacheKey(
+            datasetKey: fajrWindowDatasetKey(period: period, timeZone: timeZone),
+            overlay: overlay
+        )
+        if let cached = fajrWindowOverlaySeriesCache[cacheKey] {
+            return cached.isAvailable ? cached : nil
+        }
+
+        let days = activeDaysForFajrWindow(period: period, timeZone: timeZone)
+        let series = fajrWindowSurfaceProvider.buildOverlaySeries(
+            period: period,
+            overlay: overlay,
+            activeDays: days,
             comparisonDay: { [unowned self] day, requestedOverlay in
                 comparisonPreviewDay(for: day, overlay: requestedOverlay, timeZone: timeZone)
             },
-            now: Date(),
+            timeZone: timeZone
+        ) ?? FajrWindowOverlaySeries(overlay: overlay, valuesByDateKey: [:])
+
+        fajrWindowOverlaySeriesCache[cacheKey] = series
+        fajrWindowOverlayBuildCounts[overlay, default: 0] += 1
+        return series.isAvailable ? series : nil
+    }
+
+    func projectedFajrWindowSurfaceSnapshot(
+        dataset: FajrWindowDataset,
+        overlay: FajrWindowOverlay = .myWake,
+        selectedDateKey: String? = nil,
+        overlaySeries: [FajrWindowOverlaySeries] = [],
+        timeZone: TimeZone = .current,
+        now: Date = Date()
+    ) -> FajrWindowSurfaceSnapshot {
+        let resolvedOverlaySeries = overlaySeries.isEmpty
+            ? loadedFajrWindowOverlaySeries(
+                for: dataset.period,
+                requestedOverlay: overlay,
+                timeZone: timeZone
+            )
+            : overlaySeries
+
+        return fajrWindowSurfaceProvider.surfaceSnapshot(
+            dataset: dataset,
+            requestedOverlay: overlay,
+            selectedDateKey: selectedDateKey,
+            overlaySeries: resolvedOverlaySeries,
+            now: now,
             timeZone: timeZone
         )
     }
@@ -717,6 +811,51 @@ final class ScheduleManager: ObservableObject {
         )
     }
 
+    private func fajrWindowDatasetKey(
+        period: FajrWindowPeriod,
+        timeZone: TimeZone
+    ) -> FajrWindowDatasetKey {
+        FajrWindowDatasetKey(
+            revision: currentRevision,
+            period: period,
+            timeZoneIdentifier: timeZone.identifier
+        )
+    }
+
+    private func loadedFajrWindowOverlaySeries(
+        for period: FajrWindowPeriod,
+        requestedOverlay: FajrWindowOverlay,
+        timeZone: TimeZone
+    ) -> [FajrWindowOverlaySeries] {
+        var overlays: [FajrWindowOverlaySeries] = []
+
+        if let cachedFasting = fajrWindowOverlaySeriesCache[
+            FajrWindowOverlayCacheKey(
+                datasetKey: fajrWindowDatasetKey(period: period, timeZone: timeZone),
+                overlay: .compareFasting
+            )
+        ], cachedFasting.isAvailable {
+            overlays.append(cachedFasting)
+        } else if requestedOverlay == .compareFasting,
+                  let fasting = fajrWindowOverlaySeries(period: period, overlay: .compareFasting, timeZone: timeZone) {
+            overlays.append(fasting)
+        }
+
+        if let cachedTahajjud = fajrWindowOverlaySeriesCache[
+            FajrWindowOverlayCacheKey(
+                datasetKey: fajrWindowDatasetKey(period: period, timeZone: timeZone),
+                overlay: .compareTahajjud
+            )
+        ], cachedTahajjud.isAvailable {
+            overlays.append(cachedTahajjud)
+        } else if requestedOverlay == .compareTahajjud,
+                  let tahajjud = fajrWindowOverlaySeries(period: period, overlay: .compareTahajjud, timeZone: timeZone) {
+            overlays.append(tahajjud)
+        }
+
+        return overlays
+    }
+
     private func activeDaysForFajrWindow(
         period: FajrWindowPeriod,
         timeZone: TimeZone
@@ -786,6 +925,11 @@ final class ScheduleManager: ObservableObject {
             settings: settingsStore.settings,
             timeZone: timeZone
         )
+    }
+
+    private func clearFajrWindowCaches() {
+        fajrWindowDatasetCache.removeAll(keepingCapacity: true)
+        fajrWindowOverlaySeriesCache.removeAll(keepingCapacity: true)
     }
 
     func recommendedAshuraQuickAddPattern(

@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct FajrWindowCompactCard: View {
-    let snapshot: FajrWindowSurfaceSnapshot
+    let snapshot: FajrWindowCompactSnapshot
     let onOpen: () -> Void
 
     var body: some View {
@@ -25,7 +25,7 @@ struct FajrWindowCompactCard: View {
                             .foregroundStyle(DawnColor.lightGold200)
                     }
 
-                    FajrWindowChartView(snapshot: snapshot, layoutStyle: .compact)
+                    FajrWindowChartView(chart: snapshot.chart, layoutStyle: .compact)
 
                     Text(snapshot.compactInsight)
                         .font(.footnote)

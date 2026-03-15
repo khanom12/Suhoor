@@ -1,6 +1,6 @@
 import Foundation
 
-enum FajrWindowPeriod: String, CaseIterable, Identifiable, Sendable {
+enum FajrWindowPeriod: String, CaseIterable, Identifiable, Hashable, Sendable {
     case sevenDays
     case thirtyDays
     case oneYear
@@ -52,7 +52,7 @@ enum FajrWindowPeriod: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
-enum FajrWindowOverlay: String, CaseIterable, Identifiable, Sendable {
+enum FajrWindowOverlay: String, CaseIterable, Identifiable, Hashable, Sendable {
     case myWake
     case compareSafe
     case compareFasting
@@ -74,7 +74,7 @@ enum FajrWindowOverlay: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
-enum FajrWindowBoundaryTruth: Equatable, Sendable {
+enum FajrWindowBoundaryTruth: Equatable, Hashable, Sendable {
     case canonicalEnd
     case sunriseProxy
     case supportedFallback
@@ -100,6 +100,17 @@ enum FajrWindowBoundaryTruth: Equatable, Sendable {
             return "This lower boundary falls back to the closest supported morning boundary in the current model."
         }
     }
+}
+
+struct FajrWindowDatasetKey: Hashable, Sendable {
+    let revision: Int
+    let period: FajrWindowPeriod
+    let timeZoneIdentifier: String
+}
+
+struct FajrWindowOverlayCacheKey: Hashable, Sendable {
+    let datasetKey: FajrWindowDatasetKey
+    let overlay: FajrWindowOverlay
 }
 
 struct FajrWindowValueItem: Identifiable, Equatable, Sendable {
@@ -158,7 +169,50 @@ struct FajrWindowSelectedDaySnapshot: Equatable, Sendable {
     let explanationText: String
 }
 
+struct FajrWindowOverlayValue: Equatable, Sendable {
+    let wake: Date
+    let wakeMinutes: Int
+}
+
+struct FajrWindowOverlaySeries: Equatable, Sendable {
+    let overlay: FajrWindowOverlay
+    let valuesByDateKey: [String: FajrWindowOverlayValue]
+
+    var isAvailable: Bool {
+        !valuesByDateKey.isEmpty
+    }
+}
+
+struct FajrWindowDatasetRow: Identifiable, Equatable, Sendable {
+    let dayOrdinal: Int
+    let date: Date
+    let dateKey: String
+    let shortLabel: String
+    let mediumLabel: String
+    let longLabel: String
+    let monthLabel: String
+    let fajrStart: Date
+    let fajrEndOrBoundary: Date
+    let boundaryTruth: FajrWindowBoundaryTruth
+    let primaryWake: Date
+    let saferWake: Date
+    let fajrStartMinutes: Int
+    let fajrEndOrBoundaryMinutes: Int
+    let primaryWakeMinutes: Int
+    let saferWakeMinutes: Int
+    let bufferBeforeBoundaryMinutes: Int
+    let isOverride: Bool
+    let isSpecialDay: Bool
+    let isFastingContext: Bool
+    let isTahajjudContext: Bool
+    let contextTags: [String]
+    let relationText: String
+
+    var id: String { dateKey }
+}
+
 struct FajrWindowPoint: Identifiable, Equatable, Sendable {
+    let dayOrdinal: Int
     let date: Date
     let dateKey: String
     let shortLabel: String
@@ -201,17 +255,72 @@ struct FajrWindowPoint: Identifiable, Equatable, Sendable {
     }
 }
 
+struct FajrWindowAxisLabel: Identifiable, Equatable, Sendable {
+    let dateKey: String
+    let title: String
+    let dayOrdinal: Int
+
+    var id: String { dateKey }
+}
+
+struct FajrWindowChartTick: Identifiable, Equatable, Sendable {
+    let minutes: Int
+    let label: String
+
+    var id: Int { minutes }
+}
+
+struct FajrWindowChartSnapshot: Equatable, Sendable {
+    let period: FajrWindowPeriod
+    let activeOverlay: FajrWindowOverlay
+    let points: [FajrWindowPoint]
+    let renderPoints: [FajrWindowPoint]
+    let selectedDateKey: String?
+    let chartDomain: ClosedRange<Int>
+    let xAxisLabels: [FajrWindowAxisLabel]
+    let yTicks: [FajrWindowChartTick]
+}
+
+struct FajrWindowDataset: Equatable, Sendable {
+    let period: FajrWindowPeriod
+    let rows: [FajrWindowDatasetRow]
+    let renderDateKeys: [String]
+    let compactInsight: String
+    let primarySummary: FajrWindowSummarySnapshot?
+    let supportSummaries: [FajrWindowSummarySnapshot]
+    let insightItems: [FajrWindowInsightItem]
+    let xAxisLabels: [FajrWindowAxisLabel]
+}
+
+struct FajrWindowCompactSnapshot: Equatable, Sendable {
+    let period: FajrWindowPeriod
+    let chart: FajrWindowChartSnapshot
+    let compactInsight: String
+
+    var points: [FajrWindowPoint] { chart.points }
+    var renderPoints: [FajrWindowPoint] { chart.renderPoints }
+    var selectedDateKey: String? { chart.selectedDateKey }
+    var chartDomain: ClosedRange<Int> { chart.chartDomain }
+    var xAxisLabels: [FajrWindowAxisLabel] { chart.xAxisLabels }
+    var yTicks: [FajrWindowChartTick] { chart.yTicks }
+}
+
 struct FajrWindowSurfaceSnapshot: Equatable, Sendable {
     let period: FajrWindowPeriod
     let activeOverlay: FajrWindowOverlay
     let availableOverlays: [FajrWindowOverlay]
-    let points: [FajrWindowPoint]
-    let selectedDateKey: String?
+    let chart: FajrWindowChartSnapshot
     let selectedDay: FajrWindowSelectedDaySnapshot?
     let compactInsight: String
     let primarySummary: FajrWindowSummarySnapshot?
     let supportSummaries: [FajrWindowSummarySnapshot]
     let insightItems: [FajrWindowInsightItem]
     let actionItems: [FajrWindowActionItem]
-    let chartDomain: ClosedRange<Int>
+
+    var points: [FajrWindowPoint] { chart.points }
+    var renderPoints: [FajrWindowPoint] { chart.renderPoints }
+    var selectedDateKey: String? { chart.selectedDateKey }
+    var chartDomain: ClosedRange<Int> { chart.chartDomain }
+    var xAxisLabels: [FajrWindowAxisLabel] { chart.xAxisLabels }
+    var yTicks: [FajrWindowChartTick] { chart.yTicks }
 }

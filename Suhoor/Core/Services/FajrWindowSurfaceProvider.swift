@@ -11,17 +11,105 @@ struct FajrWindowSurfaceProvider {
         now: Date = Date(),
         timeZone: TimeZone = .current
     ) -> FajrWindowSurfaceSnapshot {
-        let points = Array(activeDays.prefix(period.dayCount)).map { day in
-            buildPoint(
-                for: day,
-                overrideDateKeys: overrideDateKeys,
+        let dataset = buildDataset(
+            period: period,
+            activeDays: activeDays,
+            overrideDateKeys: overrideDateKeys,
+            timeZone: timeZone
+        )
+        let overlays = [FajrWindowOverlay.compareFasting, .compareTahajjud].compactMap { overlay in
+            buildOverlaySeries(
+                period: period,
+                overlay: overlay,
+                activeDays: activeDays,
                 comparisonDay: comparisonDay,
                 timeZone: timeZone
             )
         }
 
-        let availableOverlays = availableOverlays(for: points)
+        return surfaceSnapshot(
+            dataset: dataset,
+            requestedOverlay: requestedOverlay,
+            selectedDateKey: selectedDateKey,
+            overlaySeries: overlays,
+            now: now,
+            timeZone: timeZone
+        )
+    }
+
+    func buildDataset(
+        period: FajrWindowPeriod,
+        activeDays: [ActiveAlarmDay],
+        overrideDateKeys: Set<String>,
+        timeZone: TimeZone = .current
+    ) -> FajrWindowDataset {
+        let days = Array(activeDays.prefix(period.dayCount))
+        let formatters = LabelFormatterBundle(timeZone: timeZone)
+        let rows = days.enumerated().map { index, day in
+            buildDatasetRow(
+                for: day,
+                ordinal: index,
+                overrideDateKeys: overrideDateKeys,
+                formatters: formatters,
+                timeZone: timeZone
+            )
+        }
+
+        return FajrWindowDataset(
+            period: period,
+            rows: rows,
+            renderDateKeys: renderDateKeys(for: rows, period: period, timeZone: timeZone),
+            compactInsight: compactInsight(for: rows, period: period),
+            primarySummary: buildPrimarySummary(rows: rows, period: period),
+            supportSummaries: buildSupportSummaries(rows: rows, period: period),
+            insightItems: buildInsightItems(rows: rows, period: period),
+            xAxisLabels: xAxisLabels(for: rows, period: period)
+        )
+    }
+
+    func buildOverlaySeries(
+        period: FajrWindowPeriod,
+        overlay: FajrWindowOverlay,
+        activeDays: [ActiveAlarmDay],
+        comparisonDay: (ActiveAlarmDay, FajrWindowOverlay) -> ActiveAlarmDay?,
+        timeZone: TimeZone = .current
+    ) -> FajrWindowOverlaySeries? {
+        guard overlay == .compareFasting || overlay == .compareTahajjud else {
+            return nil
+        }
+
+        var valuesByDateKey: [String: FajrWindowOverlayValue] = [:]
+        for day in Array(activeDays.prefix(period.dayCount)) {
+            guard let comparison = comparisonDay(day, overlay),
+                  let distinctWake = distinctComparisonDate(
+                    primary: day.schedule.wakeDate,
+                    comparison: comparison.schedule.wakeDate
+                  ) else {
+                continue
+            }
+
+            valuesByDateKey[day.dateKey] = FajrWindowOverlayValue(
+                wake: distinctWake,
+                wakeMinutes: minutesFromMidnight(for: distinctWake, timeZone: timeZone)
+            )
+        }
+
+        guard valuesByDateKey.isEmpty == false else { return nil }
+        return FajrWindowOverlaySeries(overlay: overlay, valuesByDateKey: valuesByDateKey)
+    }
+
+    func surfaceSnapshot(
+        dataset: FajrWindowDataset,
+        requestedOverlay: FajrWindowOverlay,
+        selectedDateKey: String?,
+        overlaySeries: [FajrWindowOverlaySeries],
+        now: Date = Date(),
+        timeZone: TimeZone = .current
+    ) -> FajrWindowSurfaceSnapshot {
+        let overlayLookup = Dictionary(uniqueKeysWithValues: overlaySeries.map { ($0.overlay, $0) })
+        let availableOverlays = availableOverlays(with: overlayLookup)
         let activeOverlay = availableOverlays.contains(requestedOverlay) ? requestedOverlay : .myWake
+        let points = projectedPoints(rows: dataset.rows, overlayLookup: overlayLookup)
         let selectedPoint = selectedPoint(
             from: points,
             selectedDateKey: selectedDateKey,
@@ -30,27 +118,66 @@ struct FajrWindowSurfaceProvider {
         )
 
         return FajrWindowSurfaceSnapshot(
-            period: period,
+            period: dataset.period,
             activeOverlay: activeOverlay,
             availableOverlays: availableOverlays,
-            points: points,
-            selectedDateKey: selectedPoint?.dateKey,
+            chart: chartSnapshot(
+                period: dataset.period,
+                activeOverlay: activeOverlay,
+                points: points,
+                renderDateKeys: dataset.renderDateKeys,
+                selectedDateKey: selectedPoint?.dateKey,
+                xAxisLabels: dataset.xAxisLabels
+            ),
             selectedDay: selectedPoint.map { buildSelectedDaySnapshot(point: $0, overlay: activeOverlay) },
-            compactInsight: compactInsight(for: points, period: period),
-            primarySummary: buildPrimarySummary(points: points, period: period),
-            supportSummaries: buildSupportSummaries(points: points, period: period),
-            insightItems: buildInsightItems(points: points, period: period),
-            actionItems: buildActionItems(selectedPoint: selectedPoint, period: period, now: now, timeZone: timeZone),
-            chartDomain: chartDomain(for: points)
+            compactInsight: dataset.compactInsight,
+            primarySummary: dataset.primarySummary,
+            supportSummaries: dataset.supportSummaries,
+            insightItems: dataset.insightItems,
+            actionItems: buildActionItems(
+                selectedPoint: selectedPoint,
+                period: dataset.period,
+                now: now,
+                timeZone: timeZone
+            )
         )
     }
 
-    private func buildPoint(
+    func compactSnapshot(
+        dataset: FajrWindowDataset,
+        selectedDateKey: String? = nil,
+        now: Date = Date(),
+        timeZone: TimeZone = .current
+    ) -> FajrWindowCompactSnapshot {
+        let points = projectedPoints(rows: dataset.rows, overlayLookup: [:])
+        let selectedPoint = selectedPoint(
+            from: points,
+            selectedDateKey: selectedDateKey,
+            now: now,
+            timeZone: timeZone
+        )
+
+        return FajrWindowCompactSnapshot(
+            period: dataset.period,
+            chart: chartSnapshot(
+                period: dataset.period,
+                activeOverlay: .myWake,
+                points: points,
+                renderDateKeys: dataset.renderDateKeys,
+                selectedDateKey: selectedPoint?.dateKey,
+                xAxisLabels: dataset.xAxisLabels
+            ),
+            compactInsight: dataset.compactInsight
+        )
+    }
+
+    private func buildDatasetRow(
         for day: ActiveAlarmDay,
+        ordinal: Int,
         overrideDateKeys: Set<String>,
-        comparisonDay: (ActiveAlarmDay, FajrWindowOverlay) -> ActiveAlarmDay?,
+        formatters: LabelFormatterBundle,
         timeZone: TimeZone
-    ) -> FajrWindowPoint {
+    ) -> FajrWindowDatasetRow {
         let lowerBoundaryDate: Date
         let boundaryTruth: FajrWindowBoundaryTruth
 
@@ -67,8 +194,6 @@ struct FajrWindowSurfaceProvider {
         }
 
         let saferWake = safeWake(for: day, lowerBoundaryDate: lowerBoundaryDate)
-        let fastingWake = comparisonDay(day, .compareFasting)?.schedule.wakeDate
-        let tahajjudWake = comparisonDay(day, .compareTahajjud)?.schedule.wakeDate
         let secondaryTitles = ProductSurfacePresentation.meaningfulSecondaryContextTitles(from: day.resolvedDayContext)
         let primaryMeaning = ProductSurfacePresentation.dayMeaningText(for: day, style: .wakeRow)
         let tags = Array(
@@ -88,27 +213,23 @@ struct FajrWindowSurfaceProvider {
         let isTahajjudContext = day.resolvedDayContext.primaryContext == .tahajjud
             || day.resolvedDayContext.secondaryContexts.contains(.tahajjud)
 
-        return FajrWindowPoint(
+        return FajrWindowDatasetRow(
+            dayOrdinal: ordinal,
             date: day.date,
             dateKey: day.dateKey,
-            shortLabel: shortLabel(for: day.date, timeZone: timeZone),
-            mediumLabel: mediumLabel(for: day.date, timeZone: timeZone),
-            longLabel: longLabel(for: day.date, timeZone: timeZone),
+            shortLabel: formatters.short.string(from: day.date),
+            mediumLabel: formatters.medium.string(from: day.date),
+            longLabel: formatters.long.string(from: day.date),
+            monthLabel: formatters.month.string(from: day.date),
             fajrStart: day.decisionLog.prayerWindow.fajrStart,
             fajrEndOrBoundary: lowerBoundaryDate,
             boundaryTruth: boundaryTruth,
             primaryWake: day.schedule.wakeDate,
             saferWake: saferWake,
-            fastingWake: distinctComparisonDate(primary: day.schedule.wakeDate, comparison: fastingWake),
-            tahajjudWake: distinctComparisonDate(primary: day.schedule.wakeDate, comparison: tahajjudWake),
             fajrStartMinutes: minutesFromMidnight(for: day.decisionLog.prayerWindow.fajrStart, timeZone: timeZone),
             fajrEndOrBoundaryMinutes: minutesFromMidnight(for: lowerBoundaryDate, timeZone: timeZone),
             primaryWakeMinutes: minutesFromMidnight(for: day.schedule.wakeDate, timeZone: timeZone),
             saferWakeMinutes: minutesFromMidnight(for: saferWake, timeZone: timeZone),
-            fastingWakeMinutes: distinctComparisonDate(primary: day.schedule.wakeDate, comparison: fastingWake)
-                .map { minutesFromMidnight(for: $0, timeZone: timeZone) },
-            tahajjudWakeMinutes: distinctComparisonDate(primary: day.schedule.wakeDate, comparison: tahajjudWake)
-                .map { minutesFromMidnight(for: $0, timeZone: timeZone) },
             bufferBeforeBoundaryMinutes: Int(round(lowerBoundaryDate.timeIntervalSince(day.schedule.wakeDate) / 60)),
             isOverride: overrideDateKeys.contains(day.dateKey),
             isSpecialDay: day.resolvedDayContext.primaryContext != .standard || !secondaryTitles.isEmpty,
@@ -119,6 +240,69 @@ struct FajrWindowSurfaceProvider {
                 delta: day.decisionLog.resolvedDelta,
                 anchor: day.decisionLog.resolvedAnchor.type
             )
+        )
+    }
+
+    private func projectedPoints(
+        rows: [FajrWindowDatasetRow],
+        overlayLookup: [FajrWindowOverlay: FajrWindowOverlaySeries]
+    ) -> [FajrWindowPoint] {
+        rows.map { row in
+            let fastingValue = overlayLookup[.compareFasting]?.valuesByDateKey[row.dateKey]
+            let tahajjudValue = overlayLookup[.compareTahajjud]?.valuesByDateKey[row.dateKey]
+
+            return FajrWindowPoint(
+                dayOrdinal: row.dayOrdinal,
+                date: row.date,
+                dateKey: row.dateKey,
+                shortLabel: row.shortLabel,
+                mediumLabel: row.mediumLabel,
+                longLabel: row.longLabel,
+                fajrStart: row.fajrStart,
+                fajrEndOrBoundary: row.fajrEndOrBoundary,
+                boundaryTruth: row.boundaryTruth,
+                primaryWake: row.primaryWake,
+                saferWake: row.saferWake,
+                fastingWake: fastingValue?.wake,
+                tahajjudWake: tahajjudValue?.wake,
+                fajrStartMinutes: row.fajrStartMinutes,
+                fajrEndOrBoundaryMinutes: row.fajrEndOrBoundaryMinutes,
+                primaryWakeMinutes: row.primaryWakeMinutes,
+                saferWakeMinutes: row.saferWakeMinutes,
+                fastingWakeMinutes: fastingValue?.wakeMinutes,
+                tahajjudWakeMinutes: tahajjudValue?.wakeMinutes,
+                bufferBeforeBoundaryMinutes: row.bufferBeforeBoundaryMinutes,
+                isOverride: row.isOverride,
+                isSpecialDay: row.isSpecialDay,
+                isFastingContext: row.isFastingContext,
+                isTahajjudContext: row.isTahajjudContext,
+                contextTags: row.contextTags,
+                relationText: row.relationText
+            )
+        }
+    }
+
+    private func chartSnapshot(
+        period: FajrWindowPeriod,
+        activeOverlay: FajrWindowOverlay,
+        points: [FajrWindowPoint],
+        renderDateKeys: [String],
+        selectedDateKey: String?,
+        xAxisLabels: [FajrWindowAxisLabel]
+    ) -> FajrWindowChartSnapshot {
+        let renderDateKeySet = Set(renderDateKeys)
+        let renderPoints = points.filter { renderDateKeySet.contains($0.dateKey) }
+        let domain = chartDomain(for: points)
+
+        return FajrWindowChartSnapshot(
+            period: period,
+            activeOverlay: activeOverlay,
+            points: points,
+            renderPoints: renderPoints.isEmpty ? points : renderPoints,
+            selectedDateKey: selectedDateKey,
+            chartDomain: domain,
+            xAxisLabels: xAxisLabels,
+            yTicks: chartTicks(for: domain)
         )
     }
 
@@ -134,12 +318,14 @@ struct FajrWindowSurfaceProvider {
         return abs(comparison.timeIntervalSince(primary)) >= 60 ? comparison : nil
     }
 
-    private func availableOverlays(for points: [FajrWindowPoint]) -> [FajrWindowOverlay] {
+    private func availableOverlays(
+        with overlayLookup: [FajrWindowOverlay: FajrWindowOverlaySeries]
+    ) -> [FajrWindowOverlay] {
         var overlays: [FajrWindowOverlay] = [.myWake, .compareSafe]
-        if points.contains(where: { $0.fastingWake != nil }) {
+        if overlayLookup[.compareFasting]?.isAvailable == true {
             overlays.append(.compareFasting)
         }
-        if points.contains(where: { $0.tahajjudWake != nil }) {
+        if overlayLookup[.compareTahajjud]?.isAvailable == true {
             overlays.append(.compareTahajjud)
         }
         return overlays
@@ -274,18 +460,18 @@ struct FajrWindowSurfaceProvider {
         )
     }
 
-    private func compactInsight(for points: [FajrWindowPoint], period: FajrWindowPeriod) -> String {
-        guard !points.isEmpty else {
+    private func compactInsight(for rows: [FajrWindowDatasetRow], period: FajrWindowPeriod) -> String {
+        guard !rows.isEmpty else {
             return "Your morning window will appear once Suhoor has upcoming resolved mornings."
         }
 
-        let averageBuffer = Int(round(Double(points.map(\.bufferBeforeBoundaryMinutes).reduce(0, +)) / Double(points.count)))
-        let overrideCount = points.filter(\.isOverride).count
-        let fastingCount = points.filter(\.isFastingContext).count
+        let averageBuffer = Int(round(Double(rows.map(\.bufferBeforeBoundaryMinutes).reduce(0, +)) / Double(rows.count)))
+        let overrideCount = rows.filter(\.isOverride).count
+        let fastingCount = rows.filter(\.isFastingContext).count
 
         switch period {
         case .sevenDays:
-            if let tightest = points.min(by: { $0.bufferBeforeBoundaryMinutes < $1.bufferBeforeBoundaryMinutes }),
+            if let tightest = rows.min(by: { $0.bufferBeforeBoundaryMinutes < $1.bufferBeforeBoundaryMinutes }),
                tightest.bufferBeforeBoundaryMinutes <= 20 {
                 return "\(tightest.mediumLabel) is your tightest morning, with \(bufferText(minutes: tightest.bufferBeforeBoundaryMinutes)) before the boundary."
             }
@@ -304,16 +490,16 @@ struct FajrWindowSurfaceProvider {
     }
 
     private func buildPrimarySummary(
-        points: [FajrWindowPoint],
+        rows: [FajrWindowDatasetRow],
         period: FajrWindowPeriod
     ) -> FajrWindowSummarySnapshot? {
-        guard !points.isEmpty else { return nil }
+        guard !rows.isEmpty else { return nil }
 
-        let buffers = points.map(\.bufferBeforeBoundaryMinutes)
+        let buffers = rows.map(\.bufferBeforeBoundaryMinutes)
         let averageBuffer = Int(round(Double(buffers.reduce(0, +)) / Double(buffers.count)))
         let smallestBuffer = buffers.min() ?? 0
-        let earliestWake = points.min(by: { $0.primaryWake < $1.primaryWake })?.primaryWake
-        let latestWake = points.max(by: { $0.primaryWake < $1.primaryWake })?.primaryWake
+        let earliestWake = rows.min(by: { $0.primaryWake < $1.primaryWake })?.primaryWake
+        let latestWake = rows.max(by: { $0.primaryWake < $1.primaryWake })?.primaryWake
 
         let body: String
         switch period {
@@ -359,15 +545,15 @@ struct FajrWindowSurfaceProvider {
     }
 
     private func buildSupportSummaries(
-        points: [FajrWindowPoint],
+        rows: [FajrWindowDatasetRow],
         period: FajrWindowPeriod
     ) -> [FajrWindowSummarySnapshot] {
-        guard !points.isEmpty else { return [] }
+        guard !rows.isEmpty else { return [] }
 
-        let adjustedCount = points.filter(\.isOverride).count
-        let specialCount = points.filter(\.isSpecialDay).count
-        let earliestBoundary = points.min(by: { $0.fajrEndOrBoundary < $1.fajrEndOrBoundary })?.fajrEndOrBoundary
-        let latestBoundary = points.max(by: { $0.fajrEndOrBoundary < $1.fajrEndOrBoundary })?.fajrEndOrBoundary
+        let adjustedCount = rows.filter(\.isOverride).count
+        let specialCount = rows.filter(\.isSpecialDay).count
+        let earliestBoundary = rows.min(by: { $0.fajrEndOrBoundary < $1.fajrEndOrBoundary })?.fajrEndOrBoundary
+        let latestBoundary = rows.max(by: { $0.fajrEndOrBoundary < $1.fajrEndOrBoundary })?.fajrEndOrBoundary
 
         var summaries: [FajrWindowSummarySnapshot] = []
 
@@ -395,7 +581,7 @@ struct FajrWindowSurfaceProvider {
             )
         )
 
-        if period == .oneYear, let earliestWake = points.min(by: { $0.primaryWake < $1.primaryWake })?.primaryWake {
+        if period == .oneYear, let earliestWake = rows.min(by: { $0.primaryWake < $1.primaryWake })?.primaryWake {
             summaries.append(
                 FajrWindowSummarySnapshot(
                     id: "year-strategy",
@@ -416,12 +602,12 @@ struct FajrWindowSurfaceProvider {
     }
 
     private func buildInsightItems(
-        points: [FajrWindowPoint],
+        rows: [FajrWindowDatasetRow],
         period: FajrWindowPeriod
     ) -> [FajrWindowInsightItem] {
         var insights: [FajrWindowInsightItem] = []
 
-        if let tightest = points.min(by: { $0.bufferBeforeBoundaryMinutes < $1.bufferBeforeBoundaryMinutes }) {
+        if let tightest = rows.min(by: { $0.bufferBeforeBoundaryMinutes < $1.bufferBeforeBoundaryMinutes }) {
             insights.append(
                 FajrWindowInsightItem(
                     id: "tightest-day",
@@ -431,7 +617,7 @@ struct FajrWindowSurfaceProvider {
             )
         }
 
-        if let adjusted = points.first(where: \.isOverride) {
+        if let adjusted = rows.first(where: \.isOverride) {
             insights.append(
                 FajrWindowInsightItem(
                     id: "adjusted-day",
@@ -441,7 +627,7 @@ struct FajrWindowSurfaceProvider {
             )
         }
 
-        if let fasting = points.first(where: { $0.fastingWake != nil || $0.isFastingContext }) {
+        if let fasting = rows.first(where: \.isFastingContext) {
             insights.append(
                 FajrWindowInsightItem(
                     id: "fasting-context",
@@ -519,6 +705,73 @@ struct FajrWindowSurfaceProvider {
         return lower...max(lower + 15, upper)
     }
 
+    private func chartTicks(for domain: ClosedRange<Int>) -> [FajrWindowChartTick] {
+        let start = (domain.lowerBound / 60) * 60
+        let end = ((domain.upperBound + 59) / 60) * 60
+        var ticks: [FajrWindowChartTick] = []
+        var current = start
+        while current <= end {
+            ticks.append(FajrWindowChartTick(minutes: current, label: timeLabel(for: current)))
+            current += 60
+        }
+
+        if ticks.isEmpty {
+            return [
+                FajrWindowChartTick(minutes: domain.lowerBound, label: timeLabel(for: domain.lowerBound)),
+                FajrWindowChartTick(minutes: domain.upperBound, label: timeLabel(for: domain.upperBound))
+            ]
+        }
+        return ticks
+    }
+
+    private func xAxisLabels(
+        for rows: [FajrWindowDatasetRow],
+        period: FajrWindowPeriod
+    ) -> [FajrWindowAxisLabel] {
+        switch period {
+        case .sevenDays:
+            return rows.map { row in
+                FajrWindowAxisLabel(dateKey: row.dateKey, title: row.shortLabel, dayOrdinal: row.dayOrdinal)
+            }
+        case .thirtyDays:
+            let stride = max(1, rows.count / 5)
+            return rows.enumerated().compactMap { index, row in
+                guard index == 0 || index == rows.count - 1 || index % stride == 0 else { return nil }
+                return FajrWindowAxisLabel(dateKey: row.dateKey, title: row.mediumLabel, dayOrdinal: row.dayOrdinal)
+            }
+        case .oneYear:
+            var labels: [FajrWindowAxisLabel] = []
+            var previousLabel: String?
+            for row in rows {
+                guard row.monthLabel != previousLabel else { continue }
+                labels.append(FajrWindowAxisLabel(dateKey: row.dateKey, title: row.monthLabel, dayOrdinal: row.dayOrdinal))
+                previousLabel = row.monthLabel
+            }
+            return labels
+        }
+    }
+
+    private func renderDateKeys(
+        for rows: [FajrWindowDatasetRow],
+        period: FajrWindowPeriod,
+        timeZone: TimeZone
+    ) -> [String] {
+        guard period == .oneYear, rows.count > 40 else {
+            return rows.map(\.dateKey)
+        }
+
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+
+        return rows.compactMap { row in
+            let monthDay = calendar.component(.day, from: row.date)
+            let isMonthStart = monthDay == 1
+            let isWeeklySample = row.dayOrdinal % 7 == 0
+            let isEdge = row.dayOrdinal == 0 || row.dayOrdinal == rows.count - 1
+            return (isMonthStart || isWeeklySample || isEdge) ? row.dateKey : nil
+        }
+    }
+
     private func bufferText(minutes: Int) -> String {
         if minutes <= 0 {
             return "No buffer"
@@ -533,27 +786,39 @@ struct FajrWindowSurfaceProvider {
         return max(0, Int(round(date.timeIntervalSince(start) / 60)))
     }
 
-    private func shortLabel(for date: Date, timeZone: TimeZone) -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "EEE"
-        formatter.timeZone = timeZone
-        formatter.locale = .current
-        return formatter.string(from: date)
+    private func timeLabel(for minutes: Int) -> String {
+        let hour = minutes / 60
+        let suffix = hour >= 12 ? "PM" : "AM"
+        let normalizedHour = hour == 0 ? 12 : (hour > 12 ? hour - 12 : hour)
+        return "\(normalizedHour) \(suffix)"
     }
+}
 
-    private func mediumLabel(for date: Date, timeZone: TimeZone) -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "MMM d"
-        formatter.timeZone = timeZone
-        formatter.locale = .current
-        return formatter.string(from: date)
-    }
+private struct LabelFormatterBundle {
+    let short: DateFormatter
+    let medium: DateFormatter
+    let long: DateFormatter
+    let month: DateFormatter
 
-    private func longLabel(for date: Date, timeZone: TimeZone) -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "EEEE, MMM d"
-        formatter.timeZone = timeZone
-        formatter.locale = .current
-        return formatter.string(from: date)
+    init(timeZone: TimeZone) {
+        short = DateFormatter()
+        short.dateFormat = "EEE"
+        short.timeZone = timeZone
+        short.locale = .current
+
+        medium = DateFormatter()
+        medium.dateFormat = "MMM d"
+        medium.timeZone = timeZone
+        medium.locale = .current
+
+        long = DateFormatter()
+        long.dateFormat = "EEEE, MMM d"
+        long.timeZone = timeZone
+        long.locale = .current
+
+        month = DateFormatter()
+        month.dateFormat = "MMM"
+        month.timeZone = timeZone
+        month.locale = .current
     }
 }

@@ -202,6 +202,86 @@ struct FajrWindowSurfaceProviderTests {
         #expect(selectedDay.primaryItems.contains(where: { $0.label == "Supported boundary" }))
     }
 
+    @Test
+    func datasetProjectionSupportsCheapSelectionUpdates() {
+        let days = makeDays(count: 30)
+        let dataset = provider.buildDataset(
+            period: .thirtyDays,
+            activeDays: days,
+            overrideDateKeys: [],
+            timeZone: .current
+        )
+
+        let firstSnapshot = provider.surfaceSnapshot(
+            dataset: dataset,
+            requestedOverlay: .myWake,
+            selectedDateKey: days[2].dateKey,
+            overlaySeries: [],
+            now: days[0].date,
+            timeZone: .current
+        )
+        let secondSnapshot = provider.surfaceSnapshot(
+            dataset: dataset,
+            requestedOverlay: .myWake,
+            selectedDateKey: days[8].dateKey,
+            overlaySeries: [],
+            now: days[0].date,
+            timeZone: .current
+        )
+
+        #expect(firstSnapshot.points.count == secondSnapshot.points.count)
+        #expect(firstSnapshot.points.map(\.dateKey) == secondSnapshot.points.map(\.dateKey))
+        #expect(firstSnapshot.selectedDateKey == days[2].dateKey)
+        #expect(secondSnapshot.selectedDateKey == days[8].dateKey)
+    }
+
+    @Test
+    func yearlyChartKeepsDailyPointsButUsesReducedRenderSeries() {
+        let days = makeDays(count: 365)
+        let dataset = provider.buildDataset(
+            period: .oneYear,
+            activeDays: days,
+            overrideDateKeys: [],
+            timeZone: .current
+        )
+
+        let snapshot = provider.surfaceSnapshot(
+            dataset: dataset,
+            requestedOverlay: .myWake,
+            selectedDateKey: days[150].dateKey,
+            overlaySeries: [],
+            now: days[0].date,
+            timeZone: .current
+        )
+
+        #expect(snapshot.points.count == 365)
+        #expect(snapshot.renderPoints.count < snapshot.points.count)
+        #expect(snapshot.renderPoints.contains(where: { $0.dateKey == days[0].dateKey }))
+        #expect(snapshot.renderPoints.contains(where: { $0.dateKey == days[364].dateKey }))
+    }
+
+    @Test
+    func compactSnapshotStaysOnNarrowSevenDayPath() {
+        let days = makeDays(count: 30)
+        let dataset = provider.buildDataset(
+            period: .sevenDays,
+            activeDays: days,
+            overrideDateKeys: [],
+            timeZone: .current
+        )
+
+        let compact = provider.compactSnapshot(
+            dataset: dataset,
+            now: days[0].date,
+            timeZone: .current
+        )
+
+        #expect(compact.period == .sevenDays)
+        #expect(compact.points.count == 7)
+        #expect(compact.chart.activeOverlay == .myWake)
+        #expect(compact.compactInsight.isEmpty == false)
+    }
+
     private func makeDays(count: Int) -> [ActiveAlarmDay] {
         (0..<count).map { offset in
             makeDay(dayOffset: offset)

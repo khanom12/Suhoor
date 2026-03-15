@@ -1634,6 +1634,75 @@ struct ScheduleManagerHijriTests {
 
     @Test
     @MainActor
+    func fajrWindowCachingReusesDatasetAndOverlayWorkUntilRevisionChanges() async throws {
+        let suiteName = "ScheduleManagerHijriTests.FajrWindowCaching"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+
+        let settingsStore = SuhoorSettingsStore(defaults: defaults)
+        settingsStore.update { draft in
+            draft.isConfigured = true
+            draft.locationMode = .fixed
+            draft.fixedLocation = FixedLocation(latitude: 43.6532, longitude: -79.3832)
+        }
+
+        let manager = ScheduleManager(
+            settingsStore: settingsStore,
+            locationService: LocationService(),
+            alarmConfigStore: AlarmConfigStore(defaultsStore: defaults),
+            hijriAdjustmentStore: HijriMonthAdjustmentStore(defaults: defaults),
+            cacheStore: ScheduleCacheStore(defaults: defaults)
+        )
+
+        await manager.refreshSchedules(force: true)
+        let firstSelectedKey = try #require(manager.activeWindowSnapshot.visibleDays.first?.dateKey)
+        let secondSelectedKey = try #require(manager.activeWindowSnapshot.visibleDays.dropFirst().first?.dateKey)
+
+        _ = manager.fajrWindowSurfaceSnapshot(
+            period: .oneYear,
+            overlay: .myWake,
+            selectedDateKey: firstSelectedKey,
+            timeZone: timeZone
+        )
+        let datasetBuildCount = manager.fajrWindowDatasetBuildCount
+
+        _ = manager.fajrWindowSurfaceSnapshot(
+            period: .oneYear,
+            overlay: .myWake,
+            selectedDateKey: secondSelectedKey,
+            timeZone: timeZone
+        )
+        #expect(manager.fajrWindowDatasetBuildCount == datasetBuildCount)
+
+        _ = manager.fajrWindowSurfaceSnapshot(
+            period: .oneYear,
+            overlay: .compareFasting,
+            selectedDateKey: firstSelectedKey,
+            timeZone: timeZone
+        )
+        let fastingOverlayBuildCount = manager.fajrWindowOverlayBuildCounts[.compareFasting] ?? 0
+
+        _ = manager.fajrWindowSurfaceSnapshot(
+            period: .oneYear,
+            overlay: .compareFasting,
+            selectedDateKey: secondSelectedKey,
+            timeZone: timeZone
+        )
+        #expect((manager.fajrWindowOverlayBuildCounts[.compareFasting] ?? 0) == fastingOverlayBuildCount)
+
+        await manager.refreshSchedules(force: true)
+        _ = manager.fajrWindowSurfaceSnapshot(
+            period: .oneYear,
+            overlay: .myWake,
+            selectedDateKey: firstSelectedKey,
+            timeZone: timeZone
+        )
+        #expect(manager.fajrWindowDatasetBuildCount == datasetBuildCount + 1)
+    }
+
+    @Test
+    @MainActor
     func quietPeriodSuppressesHomePrayerPrompt() async {
         let suiteName = "ScheduleManagerHijriTests.QuietPeriodHomePrompt"
         let defaults = UserDefaults(suiteName: suiteName)!

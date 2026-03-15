@@ -28,12 +28,12 @@ struct FajrWindowChartView: View {
         }
     }
 
-    let snapshot: FajrWindowSurfaceSnapshot
+    let chart: FajrWindowChartSnapshot
     let layoutStyle: LayoutStyle
     var onSelectDateKey: ((String) -> Void)? = nil
 
     var body: some View {
-        if snapshot.points.isEmpty {
+        if chart.points.isEmpty {
             placeholder
         } else {
             VStack(alignment: .leading, spacing: layoutStyle == .compact ? 8 : 12) {
@@ -48,6 +48,7 @@ struct FajrWindowChartView: View {
                 }
 
                 xAxis
+                    .frame(height: 18)
             }
         }
     }
@@ -100,8 +101,8 @@ struct FajrWindowChartView: View {
                 boundaryLine(for: \.fajrEndOrBoundaryMinutes, color: DawnColor.lightGold200.opacity(0.88), lineWidth: 2, dash: [], in: frame)
                 primaryWakeLine(in: frame)
 
-                if snapshot.activeOverlay != .myWake {
-                    overlayLine(for: snapshot.activeOverlay, in: frame)
+                if chart.activeOverlay != .myWake {
+                    overlayLine(for: chart.activeOverlay, in: frame)
                 }
 
                 selectedMarker(in: frame)
@@ -113,9 +114,9 @@ struct FajrWindowChartView: View {
 
     @ViewBuilder
     private func grid(in frame: CGRect) -> some View {
-        Canvas { context, size in
-            for tick in yTicks {
-                let y = yPosition(for: tick, in: frame)
+        Canvas { context, _ in
+            for tick in chart.yTicks {
+                let y = yPosition(for: tick.minutes, in: frame)
                 var path = Path()
                 path.move(to: CGPoint(x: frame.minX, y: y))
                 path.addLine(to: CGPoint(x: frame.maxX, y: y))
@@ -167,13 +168,16 @@ struct FajrWindowChartView: View {
             path.stroke(Color.white, style: StrokeStyle(lineWidth: layoutStyle == .compact ? 2.3 : 2.8, lineCap: .round, lineJoin: .round))
         }
 
-        ForEach(snapshot.points) { point in
-            let isSelected = point.dateKey == snapshot.selectedDateKey
+        ForEach(markerPoints) { point in
+            let isSelected = point.dateKey == chart.selectedDateKey
             let x = xPosition(for: point, in: frame)
             let y = yPosition(for: point.primaryWakeMinutes, in: frame)
             Circle()
                 .fill(Color.white)
-                .frame(width: isSelected ? 10 : (layoutStyle == .compact ? 5 : 7), height: isSelected ? 10 : (layoutStyle == .compact ? 5 : 7))
+                .frame(
+                    width: isSelected ? 10 : (layoutStyle == .compact ? 5 : 7),
+                    height: isSelected ? 10 : (layoutStyle == .compact ? 5 : 7)
+                )
                 .overlay(
                     Circle()
                         .stroke(isSelected ? DawnColor.accent.opacity(0.9) : Color.clear, lineWidth: 2)
@@ -216,7 +220,7 @@ struct FajrWindowChartView: View {
     @ViewBuilder
     private func selectedMarker(in frame: CGRect) -> some View {
         if layoutStyle == .detail,
-           let selectedPoint = snapshot.points.first(where: { $0.dateKey == snapshot.selectedDateKey }) {
+           let selectedPoint = chart.points.first(where: { $0.dateKey == chart.selectedDateKey }) {
             let x = xPosition(for: selectedPoint, in: frame)
             Path { path in
                 path.move(to: CGPoint(x: x, y: frame.minY))
@@ -242,25 +246,37 @@ struct FajrWindowChartView: View {
     }
 
     private var xAxis: some View {
-        HStack(spacing: 0) {
-            ForEach(xAxisPoints) { point in
-                Text(xAxisLabel(for: point))
-                    .font(.caption2.weight(point.dateKey == snapshot.selectedDateKey ? .semibold : .regular))
-                    .foregroundStyle(point.dateKey == snapshot.selectedDateKey ? .primary : .secondary)
-                    .frame(maxWidth: .infinity, alignment: .center)
+        GeometryReader { geometry in
+            ZStack(alignment: .leading) {
+                ForEach(chart.xAxisLabels) { label in
+                    Text(label.title)
+                        .font(.caption2.weight(label.dateKey == chart.selectedDateKey ? .semibold : .regular))
+                        .foregroundStyle(label.dateKey == chart.selectedDateKey ? .primary : .secondary)
+                        .position(
+                            x: xPosition(forOrdinal: label.dayOrdinal, width: geometry.size.width),
+                            y: geometry.size.height / 2
+                        )
+                }
             }
         }
     }
 
     private var yAxis: some View {
         VStack(alignment: .trailing, spacing: 0) {
-            ForEach(yTicks, id: \.self) { tick in
-                Text(timeLabel(for: tick))
+            ForEach(chart.yTicks) { tick in
+                Text(tick.label)
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .frame(maxHeight: .infinity, alignment: .topTrailing)
             }
         }
+    }
+
+    private var markerPoints: [FajrWindowPoint] {
+        if chart.period == .oneYear, let selected = chart.points.first(where: { $0.dateKey == chart.selectedDateKey }) {
+            return [selected]
+        }
+        return chart.points
     }
 
     private func plotFrame(in size: CGSize) -> CGRect {
@@ -274,24 +290,25 @@ struct FajrWindowChartView: View {
     }
 
     private func xPosition(for point: FajrWindowPoint, in frame: CGRect) -> CGFloat {
-        guard let index = snapshot.points.firstIndex(where: { $0.id == point.id }) else { return frame.midX }
-        if snapshot.points.count == 1 {
-            return frame.midX
-        }
-        let step = frame.width / CGFloat(snapshot.points.count - 1)
-        return frame.minX + (CGFloat(index) * step)
+        xPosition(forOrdinal: point.dayOrdinal, width: frame.width) + frame.minX
+    }
+
+    private func xPosition(forOrdinal ordinal: Int, width: CGFloat) -> CGFloat {
+        guard chart.points.count > 1 else { return width / 2 }
+        let step = width / CGFloat(chart.points.count - 1)
+        return CGFloat(ordinal) * step
     }
 
     private func yPosition(for minute: Int, in frame: CGRect) -> CGFloat {
-        let domain = snapshot.chartDomain
+        let domain = chart.chartDomain
         let clamped = min(max(minute, domain.lowerBound), domain.upperBound)
         let ratio = CGFloat(clamped - domain.lowerBound) / CGFloat(max(1, domain.upperBound - domain.lowerBound))
         return frame.minY + (ratio * frame.height)
     }
 
     private func bandPath(in frame: CGRect) -> Path? {
-        guard !snapshot.points.isEmpty else { return nil }
-        if snapshot.points.count == 1, let point = snapshot.points.first {
+        guard !chart.renderPoints.isEmpty else { return nil }
+        if chart.renderPoints.count == 1, let point = chart.renderPoints.first {
             let x = xPosition(for: point, in: frame)
             let top = yPosition(for: point.fajrStartMinutes, in: frame)
             let bottom = yPosition(for: point.fajrEndOrBoundaryMinutes, in: frame)
@@ -304,14 +321,14 @@ struct FajrWindowChartView: View {
         }
 
         var path = Path()
-        guard let first = snapshot.points.first else { return nil }
+        guard let first = chart.renderPoints.first else { return nil }
         path.move(to: CGPoint(x: xPosition(for: first, in: frame), y: yPosition(for: first.fajrStartMinutes, in: frame)))
 
-        for point in snapshot.points.dropFirst() {
+        for point in chart.renderPoints.dropFirst() {
             path.addLine(to: CGPoint(x: xPosition(for: point, in: frame), y: yPosition(for: point.fajrStartMinutes, in: frame)))
         }
 
-        for point in snapshot.points.reversed() {
+        for point in chart.renderPoints.reversed() {
             path.addLine(to: CGPoint(x: xPosition(for: point, in: frame), y: yPosition(for: point.fajrEndOrBoundaryMinutes, in: frame)))
         }
         path.closeSubpath()
@@ -322,8 +339,8 @@ struct FajrWindowChartView: View {
         for keyPath: KeyPath<FajrWindowPoint, Int>,
         in frame: CGRect
     ) -> Path? {
-        guard let first = snapshot.points.first else { return nil }
-        if snapshot.points.count == 1 {
+        guard let first = chart.renderPoints.first else { return nil }
+        if chart.renderPoints.count == 1 {
             let y = yPosition(for: first[keyPath: keyPath], in: frame)
             return Path { path in
                 path.move(to: CGPoint(x: frame.midX - 12, y: y))
@@ -333,7 +350,7 @@ struct FajrWindowChartView: View {
 
         var path = Path()
         path.move(to: CGPoint(x: xPosition(for: first, in: frame), y: yPosition(for: first[keyPath: keyPath], in: frame)))
-        for point in snapshot.points.dropFirst() {
+        for point in chart.renderPoints.dropFirst() {
             path.addLine(to: CGPoint(x: xPosition(for: point, in: frame), y: yPosition(for: point[keyPath: keyPath], in: frame)))
         }
         return path
@@ -343,7 +360,7 @@ struct FajrWindowChartView: View {
         for keyPath: KeyPath<FajrWindowPoint, Int?>,
         in frame: CGRect
     ) -> Path? {
-        let plotted = snapshot.points.compactMap { point -> (FajrWindowPoint, Int)? in
+        let plotted = chart.renderPoints.compactMap { point -> (FajrWindowPoint, Int)? in
             guard let value = point[keyPath: keyPath] else { return nil }
             return (point, value)
         }
@@ -358,67 +375,11 @@ struct FajrWindowChartView: View {
     }
 
     private func nearestPoint(to x: CGFloat, in frame: CGRect) -> FajrWindowPoint? {
-        snapshot.points.min { lhs, rhs in
-            abs(xPosition(for: lhs, in: frame) - x) < abs(xPosition(for: rhs, in: frame) - x)
-        }
-    }
+        guard !chart.points.isEmpty else { return nil }
+        guard chart.points.count > 1 else { return chart.points.first }
 
-    private var xAxisPoints: [FajrWindowPoint] {
-        switch snapshot.period {
-        case .sevenDays:
-            return snapshot.points
-        case .thirtyDays:
-            let stride = max(1, snapshot.points.count / 5)
-            return snapshot.points.enumerated().compactMap { index, point in
-                index == 0 || index == snapshot.points.count - 1 || index % stride == 0 ? point : nil
-            }
-        case .oneYear:
-            var result: [FajrWindowPoint] = []
-            var previousMonth: Int?
-            let calendar = Calendar(identifier: .gregorian)
-            for point in snapshot.points {
-                let month = calendar.component(.month, from: point.date)
-                if month != previousMonth {
-                    result.append(point)
-                    previousMonth = month
-                }
-            }
-            return result
-        }
-    }
-
-    private func xAxisLabel(for point: FajrWindowPoint) -> String {
-        switch snapshot.period {
-        case .sevenDays:
-            return point.shortLabel
-        case .thirtyDays:
-            return point.mediumLabel
-        case .oneYear:
-            let formatter = DateFormatter()
-            formatter.dateFormat = "MMM"
-            formatter.locale = .current
-            formatter.timeZone = .current
-            return formatter.string(from: point.date)
-        }
-    }
-
-    private var yTicks: [Int] {
-        let domain = snapshot.chartDomain
-        let start = (domain.lowerBound / 60) * 60
-        let end = ((domain.upperBound + 59) / 60) * 60
-        var ticks: [Int] = []
-        var current = start
-        while current <= end {
-            ticks.append(current)
-            current += 60
-        }
-        return ticks.isEmpty ? [domain.lowerBound, domain.upperBound] : ticks
-    }
-
-    private func timeLabel(for minutes: Int) -> String {
-        let hour = minutes / 60
-        let suffix = hour >= 12 ? "PM" : "AM"
-        let normalizedHour = hour == 0 ? 12 : (hour > 12 ? hour - 12 : hour)
-        return "\(normalizedHour) \(suffix)"
+        let ratio = min(max((x - frame.minX) / max(frame.width, 1), 0), 1)
+        let index = Int(round(ratio * CGFloat(chart.points.count - 1)))
+        return chart.points[min(max(index, 0), chart.points.count - 1)]
     }
 }

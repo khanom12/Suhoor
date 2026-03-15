@@ -29,15 +29,17 @@ struct WakeScreen: View {
 
     @State private var viewState = WakeListState()
     @State private var destination: WakeDestination?
+    @State private var compactFajrWindowSnapshot: FajrWindowCompactSnapshot?
 
     var body: some View {
         let wakeSnapshot = scheduleManager.wakeSurfaceSnapshot
-        let compactFajrWindowSnapshot = scheduleManager.fajrWindowSurfaceSnapshot(period: .sevenDays)
 
         ScrollView {
             VStack(alignment: .leading, spacing: DesignTokens.spacingXL) {
-                FajrWindowCompactCard(snapshot: compactFajrWindowSnapshot) {
-                    destination = .fajrWindow
+                if let compactFajrWindowSnapshot {
+                    FajrWindowCompactCard(snapshot: compactFajrWindowSnapshot) {
+                        destination = .fajrWindow
+                    }
                 }
 
                 if let summary = wakeSnapshot.nextWakeEventSummary {
@@ -106,9 +108,11 @@ struct WakeScreen: View {
         }
         .task {
             refreshListSnapshot(animated: false)
+            refreshCompactFajrWindowSnapshot()
         }
         .onChange(of: scheduleManager.currentRevision) { _, _ in
             refreshListSnapshot(animated: false)
+            refreshCompactFajrWindowSnapshot()
         }
     }
 
@@ -169,6 +173,15 @@ struct WakeScreen: View {
             withTransaction(transaction) {
                 update()
             }
+        }
+    }
+
+    private func refreshCompactFajrWindowSnapshot() {
+        let snapshot = scheduleManager.fajrWindowCompactSnapshot(timeZone: .current)
+        var transaction = Transaction()
+        transaction.animation = nil
+        withTransaction(transaction) {
+            compactFajrWindowSnapshot = snapshot
         }
     }
 
