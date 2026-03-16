@@ -10,7 +10,7 @@ struct FajrWindowCompactCard: View {
                 VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
                     HStack(alignment: .top, spacing: DesignTokens.spacingM) {
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("Your Fajr Window")
+                            Text("Fajr Window")
                                 .font(.headline.weight(.semibold))
                                 .foregroundStyle(.primary)
                             Text(snapshot.period.subtitle)
@@ -35,6 +35,8 @@ struct FajrWindowCompactCard: View {
             }
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Open Fajr Window detail")
+        .accessibilityLabel("Fajr Window")
+        .accessibilityValue("\(snapshot.period.subtitle). \(snapshot.compactInsight)")
+        .accessibilityHint("Double-tap for details.")
     }
 }

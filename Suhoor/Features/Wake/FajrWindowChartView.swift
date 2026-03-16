@@ -31,26 +31,13 @@ struct FajrWindowChartView: View {
     let chart: FajrWindowChartSnapshot
     let layoutStyle: LayoutStyle
     var onSelectDateKey: ((String) -> Void)? = nil
+    var onMoveSelection: ((Int) -> Void)? = nil
+    var accessibilityLabel: String? = nil
+    var accessibilityValue: String? = nil
+    var accessibilityHint: String? = nil
 
     var body: some View {
-        if chart.points.isEmpty {
-            placeholder
-        } else {
-            VStack(alignment: .leading, spacing: layoutStyle == .compact ? 8 : 12) {
-                HStack(alignment: .top, spacing: layoutStyle.showsYAxis ? 12 : 0) {
-                    if layoutStyle.showsYAxis {
-                        yAxis
-                            .frame(width: 52, height: layoutStyle.height)
-                    }
-
-                    plotArea
-                        .frame(maxWidth: .infinity)
-                }
-
-                xAxis
-                    .frame(height: 18)
-            }
-        }
+        accessibleChart(baseChart)
     }
 
     private var placeholder: some View {
@@ -62,6 +49,55 @@ struct FajrWindowChartView: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             )
+    }
+
+    private var baseChart: some View {
+        Group {
+            if chart.points.isEmpty {
+                placeholder
+            } else {
+                VStack(alignment: .leading, spacing: layoutStyle == .compact ? 8 : 12) {
+                    HStack(alignment: .top, spacing: layoutStyle.showsYAxis ? 12 : 0) {
+                        if layoutStyle.showsYAxis {
+                            yAxis
+                                .frame(width: 52, height: layoutStyle.height)
+                        }
+
+                        plotArea
+                            .frame(maxWidth: .infinity)
+                    }
+
+                    xAxis
+                        .frame(height: 18)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func accessibleChart<Content: View>(_ content: Content) -> some View {
+        if let accessibilityLabel, let accessibilityValue {
+            content
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(accessibilityLabel)
+                .accessibilityValue(accessibilityValue)
+                .accessibilityHint(
+                    accessibilityHint
+                    ?? "The shaded band shows the supported Fajr window and the solid line shows your wake."
+                )
+                .accessibilityAdjustableAction { direction in
+                    switch direction {
+                    case .increment:
+                        onMoveSelection?(1)
+                    case .decrement:
+                        onMoveSelection?(-1)
+                    @unknown default:
+                        break
+                    }
+                }
+        } else {
+            content
+        }
     }
 
     private var plotArea: some View {

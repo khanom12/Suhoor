@@ -65,11 +65,24 @@ enum FajrWindowOverlay: String, CaseIterable, Identifiable, Hashable, Sendable {
         case .myWake:
             return "My wake"
         case .compareSafe:
-            return "Compare safer"
+            return "Safer option"
         case .compareFasting:
-            return "Compare fasting"
+            return "Fasting wake"
         case .compareTahajjud:
             return "Compare Tahajjud"
+        }
+    }
+
+    var accessibilityHint: String {
+        switch self {
+        case .myWake:
+            return "Shows your planned wake across the selected mornings."
+        case .compareSafe:
+            return "Compares your wake with a safer option that keeps the same lead before the current supported end."
+        case .compareFasting:
+            return "Compares your wake with the fasting wake when that plan differs."
+        case .compareTahajjud:
+            return "Compares your wake with the Tahajjud wake when that plan differs."
         }
     }
 }
@@ -84,20 +97,20 @@ enum FajrWindowBoundaryTruth: Equatable, Hashable, Sendable {
         case .canonicalEnd:
             return "Fajr ends"
         case .sunriseProxy:
-            return "Fajr end (sunrise proxy)"
+            return "Supported end (sunrise proxy)"
         case .supportedFallback:
-            return "Supported boundary"
+            return "Current supported end"
         }
     }
 
     var explanationText: String {
         switch self {
         case .canonicalEnd:
-            return "This view is using the resolved Fajr boundary."
+            return "Suhoor is using the resolved Fajr end for this day."
         case .sunriseProxy:
-            return "This lower boundary uses the current sunrise-based proxy supported by Suhoor."
+            return "Suhoor is using its current sunrise-based end marker for this day."
         case .supportedFallback:
-            return "This lower boundary falls back to the closest supported morning boundary in the current model."
+            return "Suhoor is using the closest supported end marker available in the current model."
         }
     }
 }
@@ -323,4 +336,27 @@ struct FajrWindowSurfaceSnapshot: Equatable, Sendable {
     var chartDomain: ClosedRange<Int> { chart.chartDomain }
     var xAxisLabels: [FajrWindowAxisLabel] { chart.xAxisLabels }
     var yTicks: [FajrWindowChartTick] { chart.yTicks }
+}
+
+extension FajrWindowSelectedDaySnapshot {
+    var accessibilitySummary: String {
+        var parts = [title]
+
+        if let statusText, !statusText.isEmpty {
+            parts.append(statusText)
+        }
+
+        parts.append(contentsOf: primaryItems.map { "\($0.label): \($0.value)" })
+        parts.append(contentsOf: secondaryItems.map { "\($0.label): \($0.value)" })
+
+        if let comparisonItem {
+            parts.append("\(comparisonItem.label): \(comparisonItem.value)")
+        }
+
+        if !contextTags.isEmpty {
+            parts.append("Contexts: \(contextTags.joined(separator: ", "))")
+        }
+
+        return parts.joined(separator: ". ")
+    }
 }

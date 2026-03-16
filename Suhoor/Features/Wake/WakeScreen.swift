@@ -26,41 +26,45 @@ private enum WakeDestination: Identifiable, Hashable {
 struct WakeScreen: View {
     @EnvironmentObject private var scheduleManager: ScheduleManager
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
 
     @State private var viewState = WakeListState()
     @State private var destination: WakeDestination?
     @State private var compactFajrWindowSnapshot: FajrWindowCompactSnapshot?
+    @State private var lastRefreshContext: FajrWindowRefreshContext?
 
     var body: some View {
         let wakeSnapshot = scheduleManager.wakeSurfaceSnapshot
 
         ScrollView {
             VStack(alignment: .leading, spacing: DesignTokens.spacingXL) {
-                if let compactFajrWindowSnapshot {
-                    FajrWindowCompactCard(snapshot: compactFajrWindowSnapshot) {
-                        destination = .fajrWindow
+                VStack(alignment: .leading, spacing: DesignTokens.spacingL) {
+                    if let compactFajrWindowSnapshot {
+                        FajrWindowCompactCard(snapshot: compactFajrWindowSnapshot) {
+                            destination = .fajrWindow
+                        }
                     }
-                }
 
-                if let summary = wakeSnapshot.nextWakeEventSummary {
-                    Button {
-                        destination = .day(summary.day.schedule)
-                    } label: {
-                        FeaturedTomorrowCard(
-                            summary: summary,
-                            hasOverride: wakeSnapshot.overrideDateKeys.contains(summary.day.dateKey)
-                        )
+                    if let summary = wakeSnapshot.nextWakeEventSummary {
+                        Button {
+                            destination = .day(summary.day.schedule)
+                        } label: {
+                            FeaturedTomorrowCard(
+                                summary: summary,
+                                hasOverride: wakeSnapshot.overrideDateKeys.contains(summary.day.dateKey)
+                            )
+                        }
+                        .buttonStyle(.plain)
+                    } else {
+                        emptyStateView
                     }
-                    .buttonStyle(.plain)
-                } else {
-                    emptyStateView
                 }
 
                 if !visibleSections.isEmpty {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Upcoming mornings")
                             .font(.headline.weight(.semibold))
-                        Text("Every row keeps the next stretch of mornings visible while preserving day-detail edits and overrides.")
+                        Text("Your next stretch of mornings, with each day ready for edits.")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -107,12 +111,23 @@ struct WakeScreen: View {
             }
         }
         .task {
-            refreshListSnapshot(animated: false)
-            refreshCompactFajrWindowSnapshot()
+            refreshWakeSurfaceIfNeeded(force: true)
         }
         .onChange(of: scheduleManager.currentRevision) { _, _ in
-            refreshListSnapshot(animated: false)
-            refreshCompactFajrWindowSnapshot()
+            refreshWakeSurfaceIfNeeded()
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            guard newPhase == .active else { return }
+            refreshWakeSurfaceIfNeeded()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.significantTimeChangeNotification)) { _ in
+            refreshWakeSurfaceIfNeeded()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in
+            refreshWakeSurfaceIfNeeded()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .NSSystemTimeZoneDidChange)) { _ in
+            refreshWakeSurfaceIfNeeded()
         }
     }
 
@@ -154,9 +169,32 @@ struct WakeScreen: View {
         }
     }
 
+    private var currentTimeZone: TimeZone {
+        .autoupdatingCurrent
+    }
+
+    private var refreshContext: FajrWindowRefreshContext {
+        FajrWindowRefreshContext.current(
+            revision: scheduleManager.currentRevision,
+            timeZone: currentTimeZone
+        )
+    }
+
+    private func refreshWakeSurfaceIfNeeded(force: Bool = false) {
+        let nextContext = refreshContext
+        guard force || lastRefreshContext != nextContext else { return }
+        lastRefreshContext = nextContext
+        refreshListSnapshot(animated: false)
+        refreshCompactFajrWindowSnapshot()
+    }
+
     private func refreshListSnapshot(animated: Bool) {
         let update = {
-            let result = scheduleManager.wakeListSnapshot(tagFilter: WakeTagFilter(), pinnedEntryIDs: [], timeZone: .current)
+            let result = scheduleManager.wakeListSnapshot(
+                tagFilter: WakeTagFilter(),
+                pinnedEntryIDs: [],
+                timeZone: currentTimeZone
+            )
             let sectionIdentifiers = Set(result.snapshot.sections.map(\.id))
             viewState.loadingSectionIDs = viewState.loadingSectionIDs.filter { sectionIdentifiers.contains($0) }
             viewState.listSnapshot = result.snapshot
@@ -177,7 +215,7 @@ struct WakeScreen: View {
     }
 
     private func refreshCompactFajrWindowSnapshot() {
-        let snapshot = scheduleManager.fajrWindowCompactSnapshot(timeZone: .current)
+        let snapshot = scheduleManager.fajrWindowCompactSnapshot(timeZone: currentTimeZone)
         var transaction = Transaction()
         transaction.animation = nil
         withTransaction(transaction) {
@@ -223,7 +261,7 @@ struct WakeScreen: View {
 
         viewState.loadingSectionIDs.insert(section.id)
         Task {
-            _ = await scheduleManager.monthEntries(for: section.key, timeZone: .current)
+            _ = await scheduleManager.monthEntries(for: section.key, timeZone: currentTimeZone)
             await MainActor.run {
                 viewState.loadingSectionIDs.remove(section.id)
                 refreshListSnapshot(animated: false)
@@ -242,7 +280,11 @@ struct WakeScreen: View {
         }
     }
 
-    private func monthStartLabel(for date: Date, currentDate: Date = Date(), timeZone: TimeZone = .current) -> String {
+    private func monthStartLabel(
+        for date: Date,
+        currentDate: Date = Date(),
+        timeZone: TimeZone = .autoupdatingCurrent
+    ) -> String {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = timeZone
         let startOfToday = calendar.startOfDay(for: currentDate)

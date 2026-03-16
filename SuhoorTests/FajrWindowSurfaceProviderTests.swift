@@ -151,8 +151,8 @@ struct FajrWindowSurfaceProviderTests {
 
         let selectedDay = try #require(snapshot.selectedDay)
         #expect(selectedDay.boundaryTruth == .sunriseProxy)
-        #expect(selectedDay.primaryItems.contains(where: { $0.label == "Fajr end (sunrise proxy)" }))
-        #expect(selectedDay.comparisonItem?.label == "Fasting comparison")
+        #expect(selectedDay.primaryItems.contains(where: { $0.label == "Supported end (sunrise proxy)" }))
+        #expect(selectedDay.comparisonItem?.label == "Fasting wake")
         #expect(selectedDay.statusText == "Adjusted for this date")
     }
 
@@ -170,7 +170,7 @@ struct FajrWindowSurfaceProviderTests {
         )
 
         #expect(snapshot.supportSummaries.contains(where: { $0.id == "year-strategy" }))
-        #expect(snapshot.supportSummaries.contains(where: { $0.title == "Steadier strategy" }))
+        #expect(snapshot.supportSummaries.contains(where: { $0.title == "Steadier rhythm" }))
     }
 
     @Test
@@ -199,7 +199,7 @@ struct FajrWindowSurfaceProviderTests {
         let selectedDay = try #require(snapshot.selectedDay)
         #expect(point.boundaryTruth == .supportedFallback)
         #expect(selectedDay.boundaryTruth == .supportedFallback)
-        #expect(selectedDay.primaryItems.contains(where: { $0.label == "Supported boundary" }))
+        #expect(selectedDay.primaryItems.contains(where: { $0.label == "Current supported end" }))
     }
 
     @Test

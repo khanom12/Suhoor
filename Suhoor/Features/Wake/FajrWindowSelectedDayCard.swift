@@ -74,6 +74,10 @@ struct FajrWindowSelectedDayCard: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Selected morning")
+        .accessibilityValue(snapshot.accessibilitySummary)
+        .accessibilityHint("Shows how this morning sits inside the supported Fajr window.")
     }
 
     private func itemRow(_ item: FajrWindowValueItem) -> some View {

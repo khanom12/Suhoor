@@ -1,8 +1,10 @@
 import SwiftUI
+import UIKit
 
 struct FajrWindowDetailView: View {
     @EnvironmentObject private var scheduleManager: ScheduleManager
     @EnvironmentObject private var appNavigator: AppNavigator
+    @Environment(\.scenePhase) private var scenePhase
 
     let initialPeriod: FajrWindowPeriod
 
@@ -38,13 +40,44 @@ struct FajrWindowDetailView: View {
                 )
             }
         }
-        .task(id: detailRefreshKey) {
-            store.load(using: scheduleManager, timeZone: .current)
+        .task {
+            refreshFajrWindowData()
+        }
+        .onChange(of: scheduleManager.currentRevision) { _, _ in
+            refreshFajrWindowData()
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            guard newPhase == .active else { return }
+            refreshFajrWindowData()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.significantTimeChangeNotification)) { _ in
+            refreshFajrWindowData()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in
+            refreshFajrWindowData()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .NSSystemTimeZoneDidChange)) { _ in
+            refreshFajrWindowData()
         }
     }
 
-    private var detailRefreshKey: String {
-        "\(scheduleManager.currentRevision)-\(TimeZone.current.identifier)"
+    private var currentTimeZone: TimeZone {
+        .autoupdatingCurrent
+    }
+
+    private var refreshContext: FajrWindowRefreshContext {
+        FajrWindowRefreshContext.current(
+            revision: scheduleManager.currentRevision,
+            timeZone: currentTimeZone
+        )
+    }
+
+    private func refreshFajrWindowData() {
+        store.refreshIfNeeded(
+            using: scheduleManager,
+            refreshContext: refreshContext,
+            timeZone: currentTimeZone
+        )
     }
 
     private func content(snapshot: FajrWindowSurfaceSnapshot) -> some View {
@@ -53,7 +86,7 @@ struct FajrWindowDetailView: View {
                 header(snapshot: snapshot)
 
                 FajrWindowPeriodPicker(selectedPeriod: store.period) { newPeriod in
-                    store.setPeriod(newPeriod, using: scheduleManager, timeZone: .current)
+                    store.setPeriod(newPeriod, using: scheduleManager, timeZone: currentTimeZone)
                 }
 
                 GlassCard(style: .header, tintColor: DawnColor.lightGold200, tintOpacity: 0.10) {
@@ -61,14 +94,40 @@ struct FajrWindowDetailView: View {
                         FajrWindowChartView(
                             chart: snapshot.chart,
                             layoutStyle: .detail,
-                            onSelectDateKey: { store.selectDateKey($0, using: scheduleManager, timeZone: .current) }
+                            onSelectDateKey: { store.selectDateKey($0, using: scheduleManager, timeZone: currentTimeZone) },
+                            onMoveSelection: { store.moveSelection(by: $0, using: scheduleManager, timeZone: currentTimeZone) },
+                            accessibilityLabel: "Fajr Window chart",
+                            accessibilityValue: snapshot.selectedDay?.accessibilitySummary,
+                            accessibilityHint: "The shaded band shows the supported Fajr window and the solid line shows your wake. Swipe up or down to move days, or use Previous day and Next day."
                         )
 
+                        if let selectedDay = snapshot.selectedDay {
+                            FajrWindowDayStepper(
+                                selectedTitle: selectedDay.title,
+                                canMoveBackward: canMoveBackward(in: snapshot),
+                                canMoveForward: canMoveForward(in: snapshot),
+                                onMoveBackward: {
+                                    store.moveSelection(by: -1, using: scheduleManager, timeZone: currentTimeZone)
+                                },
+                                onMoveForward: {
+                                    store.moveSelection(by: 1, using: scheduleManager, timeZone: currentTimeZone)
+                                }
+                            )
+                        }
+
                         FajrWindowOverlayPicker(
-                            overlays: snapshot.availableOverlays,
-                            selectedOverlay: snapshot.activeOverlay
+                            overlays: overlayOptions(for: snapshot),
+                            selectedOverlay: store.requestedOverlay,
+                            loadingOverlay: store.loadingOverlay
                         ) { overlay in
-                            store.setOverlay(overlay, using: scheduleManager, timeZone: .current)
+                            store.setOverlay(overlay, using: scheduleManager, timeZone: currentTimeZone)
+                        }
+
+                        if let loadingOverlay = store.loadingOverlay {
+                            Text("Loading \(loadingOverlay.title.lowercased())...")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                                .accessibilityLabel("Loading \(loadingOverlay.title.lowercased())")
                         }
                     }
                 }
@@ -107,11 +166,45 @@ struct FajrWindowDetailView: View {
             Text(snapshot.period.subtitle)
                 .font(.footnote.weight(.semibold))
                 .foregroundStyle(.secondary)
-            Text("A calm view of where your wake sits inside the morning window Suhoor can truthfully support today.")
+            Text("See how your wake sits inside each morning's supported Fajr window.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
+    }
+
+    private func overlayOptions(for snapshot: FajrWindowSurfaceSnapshot) -> [FajrWindowOverlay] {
+        let shouldOfferFastingWake = snapshot.availableOverlays.contains(.compareFasting)
+            || snapshot.points.contains(where: \.isFastingContext)
+            || store.loadingOverlay == .compareFasting
+            || store.requestedOverlay == .compareFasting
+
+        return FajrWindowOverlay.allCases.filter { overlay in
+            switch overlay {
+            case .myWake, .compareSafe:
+                return snapshot.availableOverlays.contains(overlay)
+            case .compareFasting:
+                return shouldOfferFastingWake
+            case .compareTahajjud:
+                return snapshot.availableOverlays.contains(overlay)
+            }
+        }
+    }
+
+    private func canMoveBackward(in snapshot: FajrWindowSurfaceSnapshot) -> Bool {
+        guard let selectedDateKey = snapshot.selectedDateKey,
+              let currentIndex = snapshot.points.firstIndex(where: { $0.dateKey == selectedDateKey }) else {
+            return false
+        }
+        return currentIndex > 0
+    }
+
+    private func canMoveForward(in snapshot: FajrWindowSurfaceSnapshot) -> Bool {
+        guard let selectedDateKey = snapshot.selectedDateKey,
+              let currentIndex = snapshot.points.firstIndex(where: { $0.dateKey == selectedDateKey }) else {
+            return false
+        }
+        return currentIndex < (snapshot.points.count - 1)
     }
 
     private func handle(

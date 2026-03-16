@@ -377,7 +377,7 @@ struct FajrWindowSurfaceProvider {
         var secondaryItems = [
             FajrWindowValueItem(
                 id: "buffer",
-                label: "Buffer before boundary",
+                label: "Space before end",
                 value: bufferText(minutes: point.bufferBeforeBoundaryMinutes),
                 emphasis: .secondary
             )
@@ -412,7 +412,7 @@ struct FajrWindowSurfaceProvider {
         } else if point.isSpecialDay {
             statusText = point.contextTags.first
         } else {
-            statusText = "Morning window"
+            statusText = nil
         }
 
         return FajrWindowSelectedDaySnapshot(
@@ -441,10 +441,10 @@ struct FajrWindowSurfaceProvider {
         case .myWake:
             return nil
         case .compareSafe:
-            label = "Safer comparison"
+            label = "Safer option"
             value = point.saferWake
         case .compareFasting:
-            label = "Fasting comparison"
+            label = "Fasting wake"
             value = point.fastingWake
         case .compareTahajjud:
             label = "Tahajjud comparison"
@@ -473,14 +473,14 @@ struct FajrWindowSurfaceProvider {
         case .sevenDays:
             if let tightest = rows.min(by: { $0.bufferBeforeBoundaryMinutes < $1.bufferBeforeBoundaryMinutes }),
                tightest.bufferBeforeBoundaryMinutes <= 20 {
-                return "\(tightest.mediumLabel) is your tightest morning, with \(bufferText(minutes: tightest.bufferBeforeBoundaryMinutes)) before the boundary."
+                return "\(tightest.mediumLabel) is your tightest morning, with \(bufferText(minutes: tightest.bufferBeforeBoundaryMinutes)) before the current supported end."
             }
-            return "Your next week keeps about \(bufferText(minutes: averageBuffer)) between wake and the supported lower boundary."
+            return "Your next week keeps about \(bufferText(minutes: averageBuffer)) between your wake and the current supported end."
         case .thirtyDays:
             if overrideCount > 0 {
                 return "\(overrideCount) morning\(overrideCount == 1 ? "" : "s") in this view are adjusted away from your usual plan."
             }
-            return "Across this month, your wake keeps roughly \(bufferText(minutes: averageBuffer)) before the supported lower boundary."
+            return "Across this month, your wake keeps roughly \(bufferText(minutes: averageBuffer)) before the current supported end."
         case .oneYear:
             if fastingCount > 0 {
                 return "\(fastingCount) mornings across the year carry a fasting context, while your main wake pattern stays centered on Fajr."
@@ -512,8 +512,8 @@ struct FajrWindowSurfaceProvider {
         }
 
         var metrics = [
-            FajrWindowMetric(id: "average-buffer", label: "Average buffer", value: bufferText(minutes: averageBuffer)),
-            FajrWindowMetric(id: "tightest-buffer", label: "Tightest day", value: bufferText(minutes: smallestBuffer))
+            FajrWindowMetric(id: "average-buffer", label: "Average space", value: bufferText(minutes: averageBuffer)),
+            FajrWindowMetric(id: "tightest-buffer", label: "Tightest morning", value: bufferText(minutes: smallestBuffer))
         ]
 
         if let earliestWake {
@@ -560,10 +560,10 @@ struct FajrWindowSurfaceProvider {
         summaries.append(
             FajrWindowSummarySnapshot(
                 id: "stability-summary",
-                title: period == .oneYear ? "Seasonality" : "Wake stability",
+                title: period == .oneYear ? "Across the year" : "Wake steadiness",
                 body: period == .oneYear
-                    ? "The lower boundary moves through the year, which is why a wake that feels roomy in one season can feel much tighter in another."
-                    : "A calm timeline still needs a grounded explanation, so this block keeps the month anchored in actual timing instead of vague trend language.",
+                    ? "The supported end moves through the year, which is why a wake that feels roomy in one season can feel much tighter in another."
+                    : "This keeps the month grounded in real timing, so the pattern stays readable without turning your mornings into a dashboard.",
                 metrics: [
                     FajrWindowMetric(id: "adjusted-count", label: "Adjusted mornings", value: "\(adjustedCount)"),
                     FajrWindowMetric(id: "special-count", label: "Special contexts", value: "\(specialCount)"),
@@ -585,7 +585,7 @@ struct FajrWindowSurfaceProvider {
             summaries.append(
                 FajrWindowSummarySnapshot(
                     id: "year-strategy",
-                    title: "Steadier strategy",
+                    title: "Steadier rhythm",
                     body: "If you want one wake that holds together more smoothly across the year, start near the earliest wake your current plan already reaches and treat later seasons as extra room rather than the baseline.",
                     metrics: [
                         FajrWindowMetric(
@@ -612,7 +612,7 @@ struct FajrWindowSurfaceProvider {
                 FajrWindowInsightItem(
                     id: "tightest-day",
                     title: "Tightest morning",
-                    detail: "\(tightest.mediumLabel) leaves \(bufferText(minutes: tightest.bufferBeforeBoundaryMinutes)) before the supported lower boundary."
+                    detail: "\(tightest.mediumLabel) leaves \(bufferText(minutes: tightest.bufferBeforeBoundaryMinutes)) before the current supported end."
                 )
             )
         }
@@ -666,7 +666,7 @@ struct FajrWindowSurfaceProvider {
                 FajrWindowActionItem(
                     id: "selected-day",
                     title: title,
-                    subtitle: "Keep your day-detail flow intact.",
+                    subtitle: "Review or adjust this morning's plan.",
                     intent: .openSelectedMorning(dateKey: selectedPoint.dateKey)
                 )
             )
@@ -676,7 +676,7 @@ struct FajrWindowSurfaceProvider {
             FajrWindowActionItem(
                 id: "default-plan",
                 title: period == .oneYear ? "Adjust default wake strategy" : "Adjust default morning plan",
-                subtitle: "Update the daily wake relation that shapes most mornings.",
+                subtitle: "Update the plan that shapes most mornings.",
                 intent: .openDefaultMorningPlan
             )
         )
