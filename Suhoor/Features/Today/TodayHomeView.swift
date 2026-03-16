@@ -121,7 +121,6 @@ private struct TodayDateBlock: View {
     var body: some View {
         AppGlassSurface(
             variant: .quiet,
-            tint: DawnColor.lightGold200,
             contentPadding: 0,
             maxWidth: 320,
             alignment: .leading
@@ -133,7 +132,10 @@ private struct TodayDateBlock: View {
                     .frame(width: 28, height: 28)
                     .background(
                         Circle()
-                            .fill(DawnColor.glassWarmOverlay.opacity(0.12))
+                            .fill(Color.secondary.opacity(0.10))
+                            .overlay {
+                                Circle().stroke(Color.white.opacity(0.08), lineWidth: 1)
+                            }
                     )
 
                 VStack(alignment: .leading, spacing: 2) {
@@ -157,7 +159,7 @@ private struct TodayBlockingIssueCard: View {
     let presentation: PermissionPresentation
 
     var body: some View {
-        AppGlassSurface(variant: .tinted, tint: DawnColor.lightGold200) {
+        AppGlassSurface(variant: .tinted, tint: .orange) {
             VStack(alignment: .leading, spacing: DesignTokens.dashboardCardInternalSpacing) {
                 Text(presentation.title)
                     .font(DesignTokens.cardTitleFont)
@@ -169,7 +171,7 @@ private struct TodayBlockingIssueCard: View {
                 Button(presentation.actionTitle ?? "Open Settings") {
                     appNavigator.openSettings()
                 }
-                .appControlStyle(.primary)
+                .appControlStyle(.primary, tint: .orange)
             }
         }
     }
@@ -185,8 +187,7 @@ private struct TodayNextWakeHeroCard: View {
     var body: some View {
         AppGlassSurface(
             variant: .hero,
-            prominence: .high,
-            tint: DawnColor.lightGold200
+            prominence: .high
         ) {
             VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
                 Text(label ?? Strings.HomeSurface.heroTitle)

@@ -6,7 +6,7 @@ struct FajrWindowCompactCard: View {
 
     var body: some View {
         Button(action: onOpen) {
-            GlassCard(style: .header, tintColor: DawnColor.lightGold200, tintOpacity: 0.16) {
+            GlassCard(style: .header) {
                 VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
                     HStack(alignment: .top, spacing: DesignTokens.spacingM) {
                         VStack(alignment: .leading, spacing: 4) {
@@ -22,7 +22,7 @@ struct FajrWindowCompactCard: View {
 
                         Image(systemName: "sun.horizon")
                             .font(.title3.weight(.semibold))
-                            .foregroundStyle(DawnColor.lightGold200)
+                            .foregroundStyle(.secondary)
                     }
 
                     FajrWindowChartView(chart: snapshot.chart, layoutStyle: .compact)

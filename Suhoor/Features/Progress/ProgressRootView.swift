@@ -45,7 +45,7 @@ struct ProgressRootView: View {
 
                     AppGlassSurface(
                         variant: snapshot.qadaProgress.baselineOwed > 0 ? .standard : .quiet,
-                        tint: FastPrimaryIntent.qadaMakeup.style.color
+                        tint: nil
                     ) {
                         VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
                             HStack(alignment: .top, spacing: DesignTokens.spacingM) {
@@ -66,10 +66,18 @@ struct ProgressRootView: View {
                                     .foregroundStyle(FastPrimaryIntent.qadaMakeup.style.color)
                             }
 
-                            AppInsetGroup(tint: FastPrimaryIntent.qadaMakeup.style.color.opacity(0.35)) {
-                                ProgressMetricRow(label: "Completed", value: "\(snapshot.qadaProgress.completed)")
+                            AppInsetGroup {
+                                ProgressMetricRow(
+                                    label: "Completed",
+                                    value: "\(snapshot.qadaProgress.completed)",
+                                    valueColor: FastPrimaryIntent.qadaMakeup.style.color
+                                )
                                 AppGroupDivider(inset: 0)
-                                ProgressMetricRow(label: "Remaining", value: "\(snapshot.qadaProgress.remaining)")
+                                ProgressMetricRow(
+                                    label: "Remaining",
+                                    value: "\(snapshot.qadaProgress.remaining)",
+                                    valueColor: FastPrimaryIntent.qadaMakeup.style.color
+                                )
                             }
                         }
                     }
@@ -78,7 +86,7 @@ struct ProgressRootView: View {
                 VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
                     AppSectionHeader("Morning Follow-Through", subtitle: Strings.ProgressSurface.wakeFooter)
 
-                    AppGlassSurface(variant: .quiet, tint: DawnColor.lightGold200) {
+                    AppGlassSurface(variant: .quiet) {
                         VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
                             if let summaryTitle = snapshot.wakeProgress.summaryTitle {
                                 Text(summaryTitle)
@@ -130,8 +138,7 @@ private struct ProgressSummaryCard: View {
     var body: some View {
         AppGlassSurface(
             variant: snapshot.headlineText == nil ? .standard : .hero,
-            prominence: snapshot.headlineText == nil ? .regular : .high,
-            tint: DawnColor.lightGold200
+            prominence: snapshot.headlineText == nil ? .regular : .high
         ) {
             VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
                 Text("Progress summary")
@@ -181,7 +188,7 @@ private struct ProgressHistoryCard: View {
     let summary: String
 
     var body: some View {
-        AppGlassSurface(variant: .standard, tint: DawnColor.lightGold200) {
+        AppGlassSurface(variant: .standard) {
             VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
                 Text(eyebrow)
                     .font(.footnote.weight(.semibold))
@@ -205,6 +212,7 @@ private struct ProgressHistoryCard: View {
 private struct ProgressMetricRow: View {
     let label: String
     let value: String
+    var valueColor: Color? = nil
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: DesignTokens.spacingM) {
@@ -217,7 +225,7 @@ private struct ProgressMetricRow: View {
             Text(value)
                 .font(.footnote)
                 .multilineTextAlignment(.trailing)
-                .foregroundStyle(.primary)
+                .foregroundStyle(valueColor ?? Color.primary)
         }
         .padding(.horizontal, DesignTokens.spacingM)
         .padding(.vertical, 12)

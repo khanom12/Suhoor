@@ -30,7 +30,7 @@ struct TodayForbiddenFastDayCard: View {
                                 HijriMonthAdjustmentMenu(
                                     month: .shawwal,
                                     iconSystemName: "moon.stars.fill",
-                                    accent: DawnColor.accent
+                                    accent: accentColor
                                 )
                             }
 

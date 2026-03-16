@@ -47,10 +47,10 @@ struct SettingsSummaryRow: View {
 
     private var iconBackground: some View {
         Circle()
-            .fill(DawnColor.glassWarmOverlay.opacity(0.12))
+            .fill(Color.secondary.opacity(0.10))
             .overlay {
                 Circle()
-                    .stroke(Color.white.opacity(0.12), lineWidth: 1)
+                    .stroke(Color.white.opacity(0.08), lineWidth: 1)
             }
     }
 }

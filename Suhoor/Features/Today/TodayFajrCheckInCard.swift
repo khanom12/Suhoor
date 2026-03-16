@@ -6,7 +6,7 @@ struct TodayFajrCheckInCard: View {
     var onLater: (() -> Void)? = nil
 
     var body: some View {
-        AppGlassSurface(variant: .quiet, tint: DawnColor.lightGold200) {
+        AppGlassSurface(variant: .quiet) {
             VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(presentation.title)

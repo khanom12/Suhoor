@@ -37,13 +37,21 @@ struct QadaCompanionView: View {
 
     @ViewBuilder
     private var headerCard: some View {
-        AppGlassSurface(variant: .hero, tint: FastPrimaryIntent.qadaMakeup.style.color) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text(headerTitle)
+        AppGlassSurface(variant: .hero) {
+            HStack(alignment: .top, spacing: DesignTokens.spacingM) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(headerTitle)
+                        .font(.title3.weight(.semibold))
+                    Text(headerSubtitle)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer(minLength: DesignTokens.spacingM)
+
+                Image(systemName: "checklist")
                     .font(.title3.weight(.semibold))
-                Text(headerSubtitle)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(FastPrimaryIntent.qadaMakeup.style.color)
             }
         }
     }
@@ -51,7 +59,7 @@ struct QadaCompanionView: View {
     @ViewBuilder
     private var recoveryCard: some View {
         if case .needsRecovery(let snapshot) = state {
-            AppGlassSurface(variant: .quiet, tint: FastPrimaryIntent.qadaMakeup.style.color) {
+            AppGlassSurface(variant: .tinted, tint: .orange) {
                 VStack(alignment: .leading, spacing: 10) {
                     Text("One planned Qada day still needs to be rescheduled.")
                         .font(.headline.weight(.semibold))
@@ -67,7 +75,7 @@ struct QadaCompanionView: View {
                     Button("Reschedule day") {
                         onRecoverMissedDay()
                     }
-                    .appControlStyle(.primary)
+                    .appControlStyle(.primary, tint: .orange)
                 }
             }
         }
@@ -76,7 +84,7 @@ struct QadaCompanionView: View {
     private var batchCard: some View {
         let snapshot = currentSnapshot
 
-        return AppGlassSurface(variant: .quiet, tint: FastPrimaryIntent.qadaMakeup.style.color) {
+        return AppGlassSurface(variant: .quiet) {
             VStack(alignment: .leading, spacing: 12) {
                 if let nextDate = snapshot?.nextPlannedDate {
                     summaryRow(title: "Next Qada", value: mediumDate(nextDate))
@@ -97,7 +105,7 @@ struct QadaCompanionView: View {
     }
 
     private var actionCard: some View {
-        AppGlassSurface(variant: .standard, tint: DawnColor.lightGold200) {
+        AppGlassSurface(variant: .standard) {
             VStack(alignment: .leading, spacing: 12) {
                 Button(primaryActionTitle) {
                     primaryAction()

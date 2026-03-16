@@ -153,7 +153,7 @@ struct QadaPlanWizardView: View {
     private var intakePage: some View {
         VStack(alignment: .leading, spacing: DesignTokens.spacingL) {
             if let suggestion = viewModel.backlogSuggestion, draftCountIsEmpty {
-                GlassCard(style: .header, tintColor: DawnColor.lightGold200, tintOpacity: 0.1) {
+                GlassCard(style: .header) {
                     VStack(alignment: .leading, spacing: 10) {
                         Text("Ramadan check-ins suggest \(suggestion.suggestedOwed) fast\(suggestion.suggestedOwed == 1 ? "" : "s") to make up.")
                             .font(.subheadline.weight(.semibold))
@@ -345,7 +345,7 @@ struct QadaPlanWizardView: View {
     }
 
     private var summaryCard: some View {
-        GlassCard(style: .header, tintColor: FastPrimaryIntent.qadaMakeup.style.color, tintOpacity: 0.08) {
+        GlassCard(style: .header) {
             VStack(alignment: .leading, spacing: 10) {
                 Text("\(viewModel.planSummary.plannedCount) fast\(viewModel.planSummary.plannedCount == 1 ? "" : "s") planned")
                     .font(.title3.weight(.semibold))
@@ -534,7 +534,7 @@ struct QadaPlanWizardView: View {
             .font(.caption.weight(.semibold))
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
-            .background(DawnColor.lightGold200.opacity(0.16))
+            .background(Color.secondary.opacity(0.10))
             .foregroundStyle(.secondary)
             .clipShape(Capsule(style: .continuous))
     }

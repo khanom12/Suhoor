@@ -128,7 +128,7 @@ private struct DefaultMorningPlanCard: View {
     let summary: DefaultMorningPlanSurfaceSummary
 
     var body: some View {
-        AppGlassSurface(variant: .hero, prominence: .high, tint: DawnColor.lightGold200) {
+        AppGlassSurface(variant: .hero, prominence: .high) {
             VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
                 HStack(alignment: .top, spacing: DesignTokens.spacingM) {
                     VStack(alignment: .leading, spacing: 6) {
@@ -146,7 +146,7 @@ private struct DefaultMorningPlanCard: View {
                         .foregroundStyle(.primary)
                 }
 
-                AppInsetGroup(tint: DawnColor.lightGold200.opacity(0.35)) {
+                AppInsetGroup {
                     SummaryRow(label: "Wake lead", value: summary.wakeLead)
                     AppGroupDivider(inset: 0)
                     SummaryRow(label: "Extra wake buffer", value: summary.extraWakeBuffer)
@@ -168,7 +168,7 @@ private struct ConfiguredPlansCard: View {
     let snapshot: ConfiguredPlansSnapshot
 
     var body: some View {
-        AppGlassSurface(variant: .standard, tint: DawnColor.accent) {
+        AppGlassSurface(variant: .standard) {
             VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
                 HStack(alignment: .top, spacing: DesignTokens.spacingM) {
                     VStack(alignment: .leading, spacing: 6) {
@@ -183,7 +183,7 @@ private struct ConfiguredPlansCard: View {
 
                     Image(systemName: "calendar.badge.clock")
                         .font(.title3.weight(.semibold))
-                        .foregroundStyle(DawnColor.accent)
+                        .foregroundStyle(.secondary)
                 }
 
                 if snapshot.hasUpcomingSpecialMornings {
@@ -201,7 +201,7 @@ private struct ConfiguredPlansCard: View {
                         if snapshot.additionalSpecialMorningCount > 0 {
                             Text(additionalSummary)
                                 .font(.footnote.weight(.semibold))
-                                .foregroundStyle(DawnColor.accent)
+                                .foregroundStyle(.secondary)
                         }
                     }
                 } else {
@@ -229,7 +229,7 @@ private struct ConfiguredPlansCard: View {
 
 private struct DatePlanningCard: View {
     var body: some View {
-        AppGlassSurface(variant: .quiet, tint: DawnColor.lightGold200) {
+        AppGlassSurface(variant: .quiet) {
             HStack(alignment: .top, spacing: DesignTokens.spacingM) {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Plan by date")
@@ -243,7 +243,7 @@ private struct DatePlanningCard: View {
 
                 Image(systemName: "calendar.badge.plus")
                     .font(.title3.weight(.semibold))
-                    .foregroundStyle(DawnColor.lightGold200)
+                    .foregroundStyle(.secondary)
             }
         }
     }
@@ -261,7 +261,8 @@ private struct PlanningSupportCluster: View {
                     subtitle: qadaDescription,
                     value: qadaValue,
                     symbol: "checklist",
-                    accent: FastPrimaryIntent.qadaMakeup.style.color
+                    accent: FastPrimaryIntent.qadaMakeup.style.color,
+                    valueColor: FastPrimaryIntent.qadaMakeup.style.color
                 )
             }
             .buttonStyle(.plain)
@@ -274,7 +275,8 @@ private struct PlanningSupportCluster: View {
                     subtitle: "Choose a date for a voluntary or one-off fasting morning.",
                     value: "Shape a day",
                     symbol: "moon.stars",
-                    accent: DawnColor.accent
+                    accent: nil,
+                    valueColor: nil
                 )
             }
             .buttonStyle(.plain)
@@ -301,7 +303,8 @@ private struct PlanningSupportRow: View {
     let subtitle: String
     let value: String
     let symbol: String
-    let accent: Color
+    let accent: Color?
+    let valueColor: Color?
 
     var body: some View {
         HStack(alignment: .top, spacing: DesignTokens.spacingM) {
@@ -314,14 +317,14 @@ private struct PlanningSupportRow: View {
                     .foregroundStyle(.secondary)
                 Text(value)
                     .font(.footnote.weight(.semibold))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(valueColor ?? Color.secondary)
             }
 
             Spacer(minLength: DesignTokens.spacingM)
 
             Image(systemName: symbol)
                 .font(.title3.weight(.semibold))
-                .foregroundStyle(accent)
+                .foregroundStyle(accent ?? Color.secondary)
         }
         .padding(.horizontal, DesignTokens.spacingL)
         .padding(.vertical, DesignTokens.spacingM)
@@ -362,7 +365,7 @@ private struct PlanTileView: View {
     let tile: PlanTile
 
     var body: some View {
-        AppGlassSurface(variant: .quiet, tint: tile.color) {
+        AppGlassSurface(variant: .quiet) {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(alignment: .top) {
                     VStack(alignment: .leading, spacing: 6) {
@@ -375,11 +378,14 @@ private struct PlanTileView: View {
                     Spacer()
                     Image(systemName: "plus")
                         .font(.subheadline.weight(.bold))
-                        .foregroundStyle(tile.color)
+                        .foregroundStyle(.secondary)
                         .padding(8)
                         .background(
                             Circle()
-                                .fill(tile.color.opacity(0.10))
+                                .fill(Color.secondary.opacity(0.10))
+                                .overlay {
+                                    Circle().stroke(Color.white.opacity(0.08), lineWidth: 1)
+                                }
                         )
                 }
             }
@@ -433,7 +439,7 @@ struct UpcomingSpecialPlansView: View {
                 NavigationLink(value: PlanDestination.calendar) {
                     Text("View by date")
                         .font(.footnote.weight(.semibold))
-                        .foregroundStyle(DawnColor.accent)
+                        .foregroundStyle(.secondary)
                 }
             }
         }

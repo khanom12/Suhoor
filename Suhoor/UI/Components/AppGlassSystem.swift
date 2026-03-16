@@ -47,9 +47,9 @@ struct AppGlassStyle {
                 cornerRadius: 32,
                 padding: 22,
                 fallbackMaterial: .regularMaterial,
-                baseOverlayOpacity: 0.18,
-                warmOverlayOpacity: 0.08,
-                tintOpacity: 0.12,
+                baseOverlayOpacity: 0.16,
+                warmOverlayOpacity: 0.0,
+                tintOpacity: 0.06,
                 strokeOpacityLight: 0.18,
                 strokeOpacityDark: 0.11,
                 ambientShadow: ShadowStyle(y: 14, blur: 34, opacity: 0.10),
@@ -61,9 +61,9 @@ struct AppGlassStyle {
                 cornerRadius: 28,
                 padding: 18,
                 fallbackMaterial: .thinMaterial,
-                baseOverlayOpacity: 0.14,
-                warmOverlayOpacity: 0.06,
-                tintOpacity: 0.08,
+                baseOverlayOpacity: 0.13,
+                warmOverlayOpacity: 0.0,
+                tintOpacity: 0.04,
                 strokeOpacityLight: 0.14,
                 strokeOpacityDark: 0.09,
                 ambientShadow: ShadowStyle(y: 10, blur: 26, opacity: 0.07),
@@ -75,9 +75,9 @@ struct AppGlassStyle {
                 cornerRadius: 24,
                 padding: 16,
                 fallbackMaterial: .thinMaterial,
-                baseOverlayOpacity: 0.10,
-                warmOverlayOpacity: 0.03,
-                tintOpacity: 0.04,
+                baseOverlayOpacity: 0.09,
+                warmOverlayOpacity: 0.0,
+                tintOpacity: 0.02,
                 strokeOpacityLight: 0.10,
                 strokeOpacityDark: 0.06,
                 ambientShadow: ShadowStyle(y: 6, blur: 18, opacity: 0.04),
@@ -90,8 +90,8 @@ struct AppGlassStyle {
                 padding: 18,
                 fallbackMaterial: .regularMaterial,
                 baseOverlayOpacity: 0.12,
-                warmOverlayOpacity: 0.05,
-                tintOpacity: 0.10,
+                warmOverlayOpacity: 0.0,
+                tintOpacity: 0.07,
                 strokeOpacityLight: 0.12,
                 strokeOpacityDark: 0.08,
                 ambientShadow: ShadowStyle(y: 8, blur: 20, opacity: 0.05),
@@ -104,8 +104,8 @@ struct AppGlassStyle {
                 padding: 0,
                 fallbackMaterial: .thinMaterial,
                 baseOverlayOpacity: 0.13,
-                warmOverlayOpacity: 0.04,
-                tintOpacity: 0.05,
+                warmOverlayOpacity: 0.0,
+                tintOpacity: 0.03,
                 strokeOpacityLight: 0.12,
                 strokeOpacityDark: 0.08,
                 ambientShadow: ShadowStyle(y: 8, blur: 18, opacity: 0.04),
@@ -268,40 +268,47 @@ struct AppPageBackground: View {
             )
 
             Circle()
-                .fill(DawnColor.lightGold100.opacity(colorScheme == .dark ? 0.06 : 0.16))
-                .frame(width: 320, height: 320)
-                .blur(radius: 56)
-                .offset(x: -110, y: -220)
+                .fill(Color.white.opacity(colorScheme == .dark ? 0.07 : 0.44))
+                .frame(width: 360, height: 360)
+                .blur(radius: 74)
+                .offset(x: -150, y: -230)
 
             Circle()
-                .fill(DawnColor.lightApricot100.opacity(colorScheme == .dark ? 0.05 : 0.12))
-                .frame(width: 360, height: 360)
-                .blur(radius: 64)
-                .offset(x: 150, y: 280)
+                .fill(
+                    colorScheme == .dark
+                    ? Color.white.opacity(0.03)
+                    : Color.black.opacity(0.04)
+                )
+                .frame(width: 400, height: 400)
+                .blur(radius: 84)
+                .offset(x: 170, y: 300)
 
             Rectangle()
-                .fill(Color.white.opacity(colorScheme == .dark ? 0.01 : 0.06))
+                .fill(Color.white.opacity(colorScheme == .dark ? 0.02 : 0.08))
                 .blendMode(.softLight)
         }
     }
 
     private var baseColor: Color {
-        colorScheme == .dark ? Color(red: 0.08, green: 0.09, blue: 0.11) : Color(.systemBackground)
+        if colorScheme == .dark {
+            return Color(red: 0.07, green: 0.08, blue: 0.10)
+        }
+        return Color(red: 0.97, green: 0.973, blue: 0.98)
     }
 
     private var gradientColors: [Color] {
         if colorScheme == .dark {
             return [
                 Color(red: 0.11, green: 0.12, blue: 0.14),
-                Color(red: 0.07, green: 0.08, blue: 0.10),
-                DawnColor.lightGold900.opacity(0.12)
+                Color(red: 0.08, green: 0.09, blue: 0.11),
+                Color(red: 0.05, green: 0.06, blue: 0.08)
             ]
         }
 
         return [
-            DawnColor.bgWarmTop.opacity(0.36),
-            Color(.systemBackground),
-            DawnColor.bgWarmBottom.opacity(0.22)
+            Color.white,
+            Color(red: 0.965, green: 0.969, blue: 0.976),
+            Color(red: 0.948, green: 0.953, blue: 0.962)
         ]
     }
 }
@@ -439,38 +446,52 @@ extension View {
     @ViewBuilder
     func appControlStyle(
         _ prominence: AppControlProminence,
-        tint: Color = DawnColor.accent
+        tint: Color? = nil
     ) -> some View {
+        let resolvedTint = tint ?? Color.secondary
+
         switch prominence {
         case .primary:
             if #available(iOS 26.0, *) {
                 self
                     .buttonStyle(.glassProminent)
-                    .tint(tint)
+                    .tint(resolvedTint)
             } else {
                 self
                     .buttonStyle(.borderedProminent)
-                    .tint(tint)
+                    .tint(resolvedTint)
             }
         case .secondary:
             if #available(iOS 26.0, *) {
-                self
-                    .buttonStyle(.glass(.regular.tint(tint.opacity(0.16))))
-                    .tint(tint)
+                if let tint {
+                    self
+                        .buttonStyle(.glass(.regular.tint(tint.opacity(0.12))))
+                        .tint(tint)
+                } else {
+                    self
+                        .buttonStyle(.glass(.regular))
+                        .tint(resolvedTint)
+                }
             } else {
                 self
                     .buttonStyle(.bordered)
-                    .tint(tint)
+                    .tint(resolvedTint)
             }
         case .quiet:
             if #available(iOS 26.0, *) {
                 self
                     .buttonStyle(.glass(.clear))
-                    .tint(tint)
+                    .tint(resolvedTint)
             } else {
-                self
-                    .buttonStyle(.plain)
-                    .foregroundStyle(tint)
+                if let tint {
+                    self
+                        .buttonStyle(.plain)
+                        .foregroundStyle(tint)
+                } else {
+                    self
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.secondary)
+                }
             }
         }
     }
@@ -480,7 +501,11 @@ extension View {
         if #available(iOS 26.0, *) {
             self
                 .padding(10)
-                .glassEffect(.regular.tint(Color.white.opacity(0.08)), in: Circle())
+                .glassEffect(.regular, in: Circle())
+                .overlay {
+                    Circle()
+                        .stroke(Color.white.opacity(0.10), lineWidth: 1)
+                }
         } else {
             self
                 .padding(10)
@@ -488,7 +513,7 @@ extension View {
                     Circle()
                         .fill(.thinMaterial)
                         .overlay {
-                            Circle().stroke(Color.white.opacity(0.12), lineWidth: 1)
+                            Circle().stroke(Color.white.opacity(0.08), lineWidth: 1)
                         }
                 )
         }

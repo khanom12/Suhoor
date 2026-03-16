@@ -38,7 +38,7 @@ struct QadaPaceCard: View {
 
     private var cardBackground: some View {
         RoundedRectangle(cornerRadius: DesignTokens.dashboardCardRadius, style: .continuous)
-            .fill(isSelected ? DawnColor.lightGold200.opacity(0.12) : Color(.secondarySystemGroupedBackground))
+            .fill(isSelected ? Color.secondary.opacity(0.10) : Color(.secondarySystemGroupedBackground))
     }
 
     private var cardBorder: some View {

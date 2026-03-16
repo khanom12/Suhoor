@@ -125,7 +125,10 @@ struct WakeContextChip: View {
             .padding(.vertical, 4)
             .background(
                 Capsule()
-                    .fill(Color(.secondarySystemGroupedBackground))
+                    .fill(Color.secondary.opacity(0.10))
+                    .overlay {
+                        Capsule().stroke(Color.white.opacity(0.08), lineWidth: 1)
+                    }
             )
             .opacity(isDisabled ? 0.55 : 1.0)
     }
@@ -137,15 +140,15 @@ struct MonthWakeCountBadge: View {
     var body: some View {
         Text("\(count)")
             .font(.caption.weight(.semibold))
-            .foregroundStyle(count == 0 ? .secondary : DawnColor.accent)
+            .foregroundStyle(.secondary)
             .padding(.vertical, 4)
             .padding(.horizontal, 10)
             .background(
                 Capsule()
-                    .fill(count == 0 ? Color.secondary.opacity(0.10) : DawnColor.accent.opacity(0.10))
+                    .fill(Color.secondary.opacity(0.10))
                     .overlay {
                         Capsule()
-                            .stroke(Color.white.opacity(0.10), lineWidth: 1)
+                            .stroke(Color.white.opacity(0.08), lineWidth: 1)
                     }
             )
             .accessibilityLabel(Strings.AlarmsTab.alarmCountAccessibility(count))

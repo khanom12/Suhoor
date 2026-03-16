@@ -51,11 +51,11 @@ struct SettingsInfoBanner<Action: View>: View {
     }
 
     var body: some View {
-        AppGlassSurface(variant: .quiet, tint: DawnColor.lightGold200) {
+        AppGlassSurface(variant: .quiet) {
             HStack(alignment: .top, spacing: DesignTokens.spacingM) {
                 Image(systemName: systemImage)
                     .font(.headline)
-                    .foregroundStyle(DawnColor.accent)
+                    .foregroundStyle(.secondary)
                     .padding(.top, 2)
 
                 VStack(alignment: .leading, spacing: 6) {

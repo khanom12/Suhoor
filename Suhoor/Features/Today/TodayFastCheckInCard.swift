@@ -8,10 +8,7 @@ struct TodayFastCheckInCard: View {
     var onLater: (() -> Void)? = nil
 
     var body: some View {
-        AppGlassSurface(
-            variant: effectiveStatus == .inProgress ? .tinted : .quiet,
-            tint: tint.color
-        ) {
+        AppGlassSurface(variant: .quiet) {
             VStack(alignment: .leading, spacing: DesignTokens.dashboardCardInternalSpacing) {
                 switch presentation.phase {
                 case .fastingStatusPrompt, .fastCompletionPrompt:
@@ -204,17 +201,6 @@ struct TodayFastCheckInCard: View {
             return .green
         case .missed:
             return .secondary
-        }
-    }
-
-    private var tint: (color: Color?, opacity: Double) {
-        switch effectiveStatus {
-        case .completed:
-            return (Color.green, 0.12)
-        case .inProgress:
-            return (DawnColor.lightApricot100, 0.22)
-        case .missed, .unknown:
-            return (nil, 0.0)
         }
     }
 

@@ -304,7 +304,7 @@ private struct FeaturedTomorrowCard: View {
     let hasOverride: Bool
 
     var body: some View {
-        AppGlassSurface(variant: .standard, prominence: .high, tint: DawnColor.lightGold200) {
+        AppGlassSurface(variant: .standard, prominence: .high) {
             VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
                 Text("Next morning")
                     .font(.footnote.weight(.semibold))
