@@ -57,7 +57,7 @@ struct QadaPlanWizardView: View {
                 .padding(.top, DesignTokens.spacingL)
                 .padding(.bottom, viewModel.step == .review ? 120 : 112)
             }
-            .background(Color.clear)
+            .appScrollableChrome()
             .navigationTitle(viewModel.navigationTitle)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -78,10 +78,12 @@ struct QadaPlanWizardView: View {
             }
             .sheet(isPresented: $viewModel.isShowingSuccess) {
                 successSheet
+                    .appPresentedChrome()
                     .presentationDetents([.medium])
             }
             .sheet(item: $activeInfoSheet) { sheet in
                 infoSheet(sheet)
+                    .appPresentedChrome()
                     .presentationDetents([.medium])
             }
             .sheet(isPresented: $viewModel.isShowingDateDetail, onDismiss: {
@@ -89,6 +91,7 @@ struct QadaPlanWizardView: View {
             }) {
                 if let detail = viewModel.detailCardData() {
                     dateDetailSheet(detail)
+                        .appPresentedChrome()
                         .presentationDetents([.height(280), .medium])
                 }
             }
@@ -160,8 +163,7 @@ struct QadaPlanWizardView: View {
                         Button("Use \(suggestion.suggestedOwed)") {
                             viewModel.useSuggestedBacklog()
                         }
-                        .buttonStyle(.borderedProminent)
-                        .tint(DawnColor.accent)
+                        .appControlStyle(.primary)
                     }
                 }
             }
@@ -230,6 +232,7 @@ struct QadaPlanWizardView: View {
                             Image(systemName: "info.circle")
                                 .font(.subheadline.weight(.semibold))
                                 .foregroundStyle(.secondary)
+                                .appToolbarButtonChrome()
                         }
                         .buttonStyle(.plain)
                     }
@@ -302,13 +305,13 @@ struct QadaPlanWizardView: View {
                 Button("Regenerate") {
                     viewModel.regeneratePlan()
                 }
-                .buttonStyle(.bordered)
+                .appControlStyle(.secondary)
 
                 Button("Edit setup") {
                     viewModel.editSetup()
                 }
-                .buttonStyle(.plain)
                 .font(.footnote.weight(.semibold))
+                .appControlStyle(.quiet)
             }
 
             GlassCard {
@@ -392,13 +395,12 @@ struct QadaPlanWizardView: View {
                 Button(viewModel.setupPrimaryActionTitle) {
                     viewModel.advanceSetup()
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(DawnColor.accent)
+                .appControlStyle(.primary)
             }
             .padding(.horizontal, DesignTokens.spacingL)
             .padding(.top, DesignTokens.spacingM)
             .padding(.bottom, max(DesignTokens.spacingM, 12))
-            .background(.ultraThinMaterial)
+            .background(.thinMaterial)
         }
     }
 
@@ -415,14 +417,13 @@ struct QadaPlanWizardView: View {
                 Button(viewModel.isApplying ? "Confirming..." : "Confirm Qada plan") {
                     Task { await viewModel.applyPlan() }
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(DawnColor.accent)
+                .appControlStyle(.primary)
                 .disabled(!viewModel.canConfirmSchedule || viewModel.isApplying)
             }
             .padding(.horizontal, DesignTokens.spacingL)
             .padding(.top, DesignTokens.spacingM)
             .padding(.bottom, max(DesignTokens.spacingM, 12))
-            .background(.ultraThinMaterial)
+            .background(.thinMaterial)
         }
     }
 
@@ -444,16 +445,13 @@ struct QadaPlanWizardView: View {
             Button("Go to Wake") {
                 viewModel.proceedToAlarms()
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-            .tint(DawnColor.accent)
+            .appControlStyle(.primary)
 
             Button("Done") {
                 viewModel.finishFlow()
             }
-            .buttonStyle(.plain)
             .font(.footnote.weight(.semibold))
-            .foregroundStyle(.secondary)
+            .appControlStyle(.quiet)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .padding(DesignTokens.spacingL)
@@ -470,9 +468,8 @@ struct QadaPlanWizardView: View {
             Button("Done") {
                 viewModel.dismissDateDetail()
             }
-            .buttonStyle(.plain)
             .font(.footnote.weight(.semibold))
-            .foregroundStyle(.secondary)
+            .appControlStyle(.quiet)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .padding(DesignTokens.spacingL)
@@ -494,9 +491,8 @@ struct QadaPlanWizardView: View {
                 Button("Done") {
                     activeInfoSheet = nil
                 }
-                .buttonStyle(.plain)
                 .font(.footnote.weight(.semibold))
-                .foregroundStyle(.secondary)
+                .appControlStyle(.quiet)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .padding(DesignTokens.spacingL)

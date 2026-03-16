@@ -3,18 +3,14 @@ import SwiftUI
 struct PlanRootView: View {
     @EnvironmentObject private var appNavigator: AppNavigator
     @EnvironmentObject private var scheduleManager: ScheduleManager
-
-    private let columns = [
-        GridItem(.flexible(), spacing: DesignTokens.spacingM),
-        GridItem(.flexible(), spacing: DesignTokens.spacingM),
-    ]
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         let snapshot = scheduleManager.plansSurfaceSnapshot
         ScrollView {
-            VStack(alignment: .leading, spacing: DesignTokens.spacingXL) {
+            LazyVStack(alignment: .leading, spacing: DesignTokens.spacingXL) {
                 VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
-                    SectionTitle("Default Morning Plan")
+                    AppSectionHeader("Default Morning Plan")
 
                     NavigationLink(value: PlanDestination.defaultMorningPlan) {
                         DefaultMorningPlanCard(summary: snapshot.defaultMorningPlanSummary)
@@ -23,7 +19,7 @@ struct PlanRootView: View {
                 }
 
                 VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
-                    SectionTitle("Upcoming Special Mornings")
+                    AppSectionHeader("Upcoming Special Mornings")
 
                     NavigationLink(value: PlanDestination.upcomingSpecialPlans) {
                         ConfiguredPlansCard(snapshot: snapshot.configuredPlansSnapshot)
@@ -32,23 +28,16 @@ struct PlanRootView: View {
                 }
 
                 VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
-                    SectionTitle("Fasting & Qada")
+                    AppSectionHeader("Fasting & Qada")
 
-                    Button {
-                        appNavigator.openQadaPlanner()
-                    } label: {
-                        ConfiguredQadaCard(progress: snapshot.qadaProgress)
-                    }
-                    .buttonStyle(.plain)
-
-                    NavigationLink(value: PlanDestination.others) {
-                        CustomFastingCard()
-                    }
-                    .buttonStyle(.plain)
+                    PlanningSupportCluster(
+                        progress: snapshot.qadaProgress,
+                        onOpenQada: { appNavigator.openQadaPlanner() }
+                    )
                 }
 
                 VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
-                    SectionTitle("Plan by Date")
+                    AppSectionHeader("Plan by Date")
 
                     NavigationLink(value: PlanDestination.calendar) {
                         DatePlanningCard()
@@ -57,7 +46,10 @@ struct PlanRootView: View {
                 }
 
                 VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
-                    SectionTitle("Observance Opportunities")
+                    AppSectionHeader(
+                        "Observance Opportunities",
+                        subtitle: "Quick ways to shape a specific season or rhythm."
+                    )
 
                     LazyVGrid(columns: columns, spacing: DesignTokens.spacingM) {
                         ForEach(opportunityTiles) { tile in
@@ -72,8 +64,16 @@ struct PlanRootView: View {
             .padding(.horizontal, DesignTokens.spacingL)
             .padding(.vertical, DesignTokens.spacingL)
         }
+        .appScrollableChrome()
         .navigationTitle("Plans")
         .navigationBarTitleDisplayMode(.large)
+    }
+
+    private var columns: [GridItem] {
+        Array(
+            repeating: GridItem(.flexible(), spacing: DesignTokens.spacingM),
+            count: dynamicTypeSize.isAccessibilitySize ? 1 : 2
+        )
     }
 
     private var opportunityTiles: [PlanTile] {
@@ -128,7 +128,7 @@ private struct DefaultMorningPlanCard: View {
     let summary: DefaultMorningPlanSurfaceSummary
 
     var body: some View {
-        GlassCard(style: .header, tintColor: DawnColor.lightGold200, tintOpacity: 0.25) {
+        AppGlassSurface(variant: .hero, prominence: .high, tint: DawnColor.lightGold200) {
             VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
                 HStack(alignment: .top, spacing: DesignTokens.spacingM) {
                     VStack(alignment: .leading, spacing: 6) {
@@ -146,12 +146,16 @@ private struct DefaultMorningPlanCard: View {
                         .foregroundStyle(.primary)
                 }
 
-                VStack(alignment: .leading, spacing: DesignTokens.spacingS) {
+                AppInsetGroup(tint: DawnColor.lightGold200.opacity(0.35)) {
                     SummaryRow(label: "Wake lead", value: summary.wakeLead)
+                    AppGroupDivider(inset: 0)
                     SummaryRow(label: "Extra wake buffer", value: summary.extraWakeBuffer)
+                    AppGroupDivider(inset: 0)
                     SummaryRow(label: "Reminders", value: summary.reminders)
+                    AppGroupDivider(inset: 0)
                     SummaryRow(label: "Prayer times", value: summary.prayerTimes)
                     if let tahajjudBehavior = summary.tahajjudBehavior {
+                        AppGroupDivider(inset: 0)
                         SummaryRow(label: "Tahajjud", value: tahajjudBehavior)
                     }
                 }
@@ -164,7 +168,7 @@ private struct ConfiguredPlansCard: View {
     let snapshot: ConfiguredPlansSnapshot
 
     var body: some View {
-        GlassCard(tintColor: DawnColor.accent, tintOpacity: 0.12) {
+        AppGlassSurface(variant: .standard, tint: DawnColor.accent) {
             VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
                 HStack(alignment: .top, spacing: DesignTokens.spacingM) {
                     VStack(alignment: .leading, spacing: 6) {
@@ -225,7 +229,7 @@ private struct ConfiguredPlansCard: View {
 
 private struct DatePlanningCard: View {
     var body: some View {
-        GlassCard(tintColor: DawnColor.lightGold200, tintOpacity: 0.14) {
+        AppGlassSurface(variant: .quiet, tint: DawnColor.lightGold200) {
             HStack(alignment: .top, spacing: DesignTokens.spacingM) {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Plan by date")
@@ -245,30 +249,35 @@ private struct DatePlanningCard: View {
     }
 }
 
-private struct ConfiguredQadaCard: View {
+private struct PlanningSupportCluster: View {
     let progress: QadaProgressSnapshot
+    let onOpenQada: () -> Void
 
     var body: some View {
-        GlassCard(tintColor: FastPrimaryIntent.qadaMakeup.style.color, tintOpacity: 0.14) {
-            VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
-                HStack(alignment: .top, spacing: DesignTokens.spacingM) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(progress.baselineOwed > 0 ? "Qada remaining" : "Qada tracking")
-                            .font(.headline.weight(.semibold))
-                        Text(qadaDescription)
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    Spacer()
-
-                    Image(systemName: "checklist")
-                        .font(.title3.weight(.semibold))
-                        .foregroundStyle(FastPrimaryIntent.qadaMakeup.style.color)
-                }
-
-                SummaryRow(label: progress.baselineOwed > 0 ? "Progress" : "Next step", value: qadaValue)
+        AppInsetGroup {
+            Button(action: onOpenQada) {
+                PlanningSupportRow(
+                    title: progress.baselineOwed > 0 ? "Qada remaining" : "Qada tracking",
+                    subtitle: qadaDescription,
+                    value: qadaValue,
+                    symbol: "checklist",
+                    accent: FastPrimaryIntent.qadaMakeup.style.color
+                )
             }
+            .buttonStyle(.plain)
+
+            AppGroupDivider()
+
+            NavigationLink(value: PlanDestination.others) {
+                PlanningSupportRow(
+                    title: "Custom fasting days",
+                    subtitle: "Choose a date for a voluntary or one-off fasting morning.",
+                    value: "Shape a day",
+                    symbol: "moon.stars",
+                    accent: DawnColor.accent
+                )
+            }
+            .buttonStyle(.plain)
         }
     }
 
@@ -287,39 +296,35 @@ private struct ConfiguredQadaCard: View {
     }
 }
 
-private struct CustomFastingCard: View {
-    var body: some View {
-        GlassCard(tintColor: DawnColor.accent, tintOpacity: 0.1) {
-            HStack(alignment: .top, spacing: DesignTokens.spacingM) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Custom fasting days")
-                        .font(.headline.weight(.semibold))
-                    Text("Choose a date for a voluntary or one-off fasting morning.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-
-                Spacer()
-
-                Image(systemName: "moon.stars")
-                    .font(.title3.weight(.semibold))
-                    .foregroundStyle(DawnColor.accent)
-            }
-        }
-    }
-}
-
-private struct SectionTitle: View {
+private struct PlanningSupportRow: View {
     let title: String
-
-    init(_ title: String) {
-        self.title = title
-    }
+    let subtitle: String
+    let value: String
+    let symbol: String
+    let accent: Color
 
     var body: some View {
-        Text(title)
-            .font(.caption.weight(.semibold))
-            .foregroundStyle(.secondary)
+        HStack(alignment: .top, spacing: DesignTokens.spacingM) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(title)
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(.primary)
+                Text(subtitle)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                Text(value)
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer(minLength: DesignTokens.spacingM)
+
+            Image(systemName: symbol)
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(accent)
+        }
+        .padding(.horizontal, DesignTokens.spacingL)
+        .padding(.vertical, DesignTokens.spacingM)
     }
 }
 
@@ -332,14 +337,15 @@ private struct SummaryRow: View {
             Text(label)
                 .font(.footnote.weight(.semibold))
                 .foregroundStyle(.secondary)
-
-            Spacer()
+                .frame(maxWidth: .infinity, alignment: .leading)
 
             Text(value)
                 .font(.footnote)
                 .foregroundStyle(.primary)
                 .multilineTextAlignment(.trailing)
         }
+        .padding(.horizontal, DesignTokens.spacingM)
+        .padding(.vertical, 12)
     }
 }
 
@@ -356,7 +362,7 @@ private struct PlanTileView: View {
     let tile: PlanTile
 
     var body: some View {
-        GlassCard(tintColor: tile.color, tintOpacity: 0.18) {
+        AppGlassSurface(variant: .quiet, tint: tile.color) {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(alignment: .top) {
                     VStack(alignment: .leading, spacing: 6) {
@@ -367,9 +373,14 @@ private struct PlanTileView: View {
                             .foregroundStyle(.secondary)
                     }
                     Spacer()
-                    Text("+")
-                        .font(.title3.weight(.semibold))
+                    Image(systemName: "plus")
+                        .font(.subheadline.weight(.bold))
                         .foregroundStyle(tile.color)
+                        .padding(8)
+                        .background(
+                            Circle()
+                                .fill(tile.color.opacity(0.10))
+                        )
                 }
             }
         }

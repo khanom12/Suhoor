@@ -8,7 +8,10 @@ struct TodayFastCheckInCard: View {
     var onLater: (() -> Void)? = nil
 
     var body: some View {
-        GlassCard(style: .header, tintColor: tint.color, tintOpacity: tint.opacity) {
+        AppGlassSurface(
+            variant: effectiveStatus == .inProgress ? .tinted : .quiet,
+            tint: tint.color
+        ) {
             VStack(alignment: .leading, spacing: DesignTokens.dashboardCardInternalSpacing) {
                 switch presentation.phase {
                 case .fastingStatusPrompt, .fastCompletionPrompt:
@@ -67,8 +70,7 @@ struct TodayFastCheckInCard: View {
                         Text(primaryActionTitle)
                             .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .tint(.green)
+                    .appControlStyle(.primary, tint: .green)
                 }
 
                 if let secondaryActionTitle = presentation.secondaryActionTitle {
@@ -80,16 +82,17 @@ struct TodayFastCheckInCard: View {
                         Text(secondaryActionTitle)
                             .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.bordered)
-                    .tint(presentation.phase == .fastCompletionPrompt ? .red : .secondary)
+                    .appControlStyle(
+                        .secondary,
+                        tint: presentation.phase == .fastCompletionPrompt ? .red : .secondary
+                    )
                 }
             }
 
             if let onLater {
                 Button(Strings.HomeSurface.fajrPromptLater, action: onLater)
-                    .buttonStyle(.plain)
                     .font(.footnote.weight(.semibold))
-                    .foregroundStyle(DawnColor.accent)
+                    .appControlStyle(.quiet)
             }
         }
     }
@@ -144,9 +147,8 @@ struct TodayFastCheckInCard: View {
         } label: {
             Text("View history")
                 .font(.footnote.weight(.semibold))
-                .foregroundStyle(DawnColor.accent)
         }
-        .buttonStyle(.plain)
+        .appControlStyle(.quiet)
         .accessibilityLabel("Open fast completion history")
     }
 
@@ -159,9 +161,8 @@ struct TodayFastCheckInCard: View {
         } label: {
             Text("Clear")
                 .font(.footnote.weight(.semibold))
-                .foregroundStyle(DawnColor.accent)
         }
-        .buttonStyle(.plain)
+        .appControlStyle(.quiet)
         .accessibilityLabel("Clear fasting status")
     }
 

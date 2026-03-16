@@ -17,7 +17,7 @@ struct TodayHomeView: View {
             )
 
             ScrollView {
-                LazyVStack(spacing: DesignTokens.dashboardStackSpacing) {
+                LazyVStack(alignment: .leading, spacing: DesignTokens.spacingXL) {
                     TodayDateBlock(snapshot: snapshot)
 
                     TodayNextWakeHeroCard(
@@ -35,13 +35,10 @@ struct TodayHomeView: View {
                     }
                 }
                 .padding(.horizontal, DesignTokens.spacingL)
-                .padding(.top, DesignTokens.spacingXS)
+                .padding(.top, DesignTokens.spacingL)
                 .padding(.bottom, DesignTokens.spacingXL)
             }
-            .background(
-                Color(.systemGroupedBackground)
-                    .ignoresSafeArea()
-            )
+            .appScrollableChrome()
             .navigationTitle("Home")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -49,7 +46,10 @@ struct TodayHomeView: View {
                         appNavigator.openSettings()
                     } label: {
                         Image(systemName: "gearshape")
+                            .font(.system(size: 16, weight: .semibold))
+                            .appToolbarButtonChrome()
                     }
+                    .buttonStyle(.plain)
                     .accessibilityLabel("Open Settings")
                 }
             }
@@ -119,15 +119,35 @@ private struct TodayDateBlock: View {
     let snapshot: HomeSurfaceSnapshot
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(snapshot.gregorianText)
-                .font(DesignTokens.cardSubtitleFont)
-                .foregroundStyle(.secondary)
-            Text(snapshot.hijriText)
-                .font(DesignTokens.cardMetaFont)
-                .foregroundStyle(.secondary)
+        AppGlassSurface(
+            variant: .quiet,
+            tint: DawnColor.lightGold200,
+            contentPadding: 0,
+            maxWidth: 320,
+            alignment: .leading
+        ) {
+            HStack(spacing: DesignTokens.spacingS) {
+                Image(systemName: "calendar")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 28, height: 28)
+                    .background(
+                        Circle()
+                            .fill(DawnColor.glassWarmOverlay.opacity(0.12))
+                    )
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(snapshot.gregorianText)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.primary)
+                    Text(snapshot.hijriText)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(.horizontal, DesignTokens.spacingM)
+            .padding(.vertical, 12)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
@@ -137,7 +157,7 @@ private struct TodayBlockingIssueCard: View {
     let presentation: PermissionPresentation
 
     var body: some View {
-        GlassCard(style: .header, tintColor: DawnColor.lightGold200, tintOpacity: 0.2) {
+        AppGlassSurface(variant: .tinted, tint: DawnColor.lightGold200) {
             VStack(alignment: .leading, spacing: DesignTokens.dashboardCardInternalSpacing) {
                 Text(presentation.title)
                     .font(DesignTokens.cardTitleFont)
@@ -149,8 +169,7 @@ private struct TodayBlockingIssueCard: View {
                 Button(presentation.actionTitle ?? "Open Settings") {
                     appNavigator.openSettings()
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(DawnColor.accent)
+                .appControlStyle(.primary)
             }
         }
     }
@@ -164,40 +183,42 @@ private struct TodayNextWakeHeroCard: View {
     let subline: String?
 
     var body: some View {
-        GlassCard(style: .header, tintColor: DawnColor.lightGold200, tintOpacity: 0.18) {
+        AppGlassSurface(
+            variant: .hero,
+            prominence: .high,
+            tint: DawnColor.lightGold200
+        ) {
             VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
                 Text(label ?? Strings.HomeSurface.heroTitle)
-                    .font(DesignTokens.cardMetaFont)
+                    .font(.footnote.weight(.semibold))
                     .foregroundStyle(.secondary)
+                    .textCase(.uppercase)
+                    .tracking(0.4)
 
                 if let summary {
                     VStack(alignment: .leading, spacing: DesignTokens.spacingS) {
-                        Text(TimeFormatters.timeFormatter.string(from: summary.day.schedule.wakeDate))
-                            .font(.system(size: 42, weight: .semibold, design: .rounded))
-                            .monospacedDigit()
-
-                        Text(subline ?? heroLine(for: summary))
-                            .font(DesignTokens.cardTitleFont)
+                        AppHeroMetric(
+                            value: TimeFormatters.timeFormatter.string(from: summary.day.schedule.wakeDate),
+                            title: subline ?? heroLine(for: summary)
+                        )
 
                         Button(Strings.HomeSurface.heroAction) {
                             appNavigator.switchToWake()
                         }
-                        .buttonStyle(.borderedProminent)
-                        .tint(DawnColor.accent)
+                        .appControlStyle(.primary)
                     }
                 } else {
                     VStack(alignment: .leading, spacing: DesignTokens.spacingS) {
                         Text(Strings.HomeSurface.heroEmptyTitle)
-                            .font(DesignTokens.cardTitleFont)
+                            .font(.headline.weight(.semibold))
                         Text(Strings.HomeSurface.heroEmptyBody)
-                            .font(DesignTokens.cardMetaFont)
+                            .font(.footnote)
                             .foregroundStyle(.secondary)
 
                         Button(Strings.HomeSurface.heroEmptyAction) {
                             appNavigator.openDefaultMorningPlan()
                         }
-                        .buttonStyle(.borderedProminent)
-                        .tint(DawnColor.accent)
+                        .appControlStyle(.primary)
                     }
                 }
             }

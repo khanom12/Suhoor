@@ -139,10 +139,14 @@ struct MonthWakeCountBadge: View {
             .font(.caption.weight(.semibold))
             .foregroundStyle(count == 0 ? .secondary : DawnColor.accent)
             .padding(.vertical, 4)
-            .padding(.horizontal, 8)
+            .padding(.horizontal, 10)
             .background(
                 Capsule()
-                    .fill(count == 0 ? Color.secondary.opacity(0.12) : DawnColor.accent.opacity(0.14))
+                    .fill(count == 0 ? Color.secondary.opacity(0.10) : DawnColor.accent.opacity(0.10))
+                    .overlay {
+                        Capsule()
+                            .stroke(Color.white.opacity(0.10), lineWidth: 1)
+                    }
             )
             .accessibilityLabel(Strings.AlarmsTab.alarmCountAccessibility(count))
     }

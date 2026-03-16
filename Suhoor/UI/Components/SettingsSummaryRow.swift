@@ -6,17 +6,15 @@ struct SettingsSummaryRow: View {
     let systemImage: String
     var badgeText: String? = nil
     var badgeTone: SettingsBadgeTone = .neutral
+    var showsDisclosureIndicator: Bool = false
 
     var body: some View {
         HStack(spacing: DesignTokens.spacingM) {
             Image(systemName: systemImage)
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(DawnColor.accent)
-                .frame(width: 30, height: 30)
-                .background(
-                    Circle()
-                        .fill(DawnColor.glassWarmOverlay.opacity(0.14))
-                )
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(.primary)
+                .frame(width: 34, height: 34)
+                .background(iconBackground)
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
@@ -35,10 +33,25 @@ struct SettingsSummaryRow: View {
             if let badgeText {
                 SettingsStatusBadge(text: badgeText, tone: badgeTone)
             }
+
+            if showsDisclosureIndicator {
+                Image(systemName: "chevron.right")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+            }
         }
         .frame(minHeight: 56)
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
+    }
+
+    private var iconBackground: some View {
+        Circle()
+            .fill(DawnColor.glassWarmOverlay.opacity(0.12))
+            .overlay {
+                Circle()
+                    .stroke(Color.white.opacity(0.12), lineWidth: 1)
+            }
     }
 }
 

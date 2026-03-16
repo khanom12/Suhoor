@@ -22,26 +22,13 @@ struct SettingsSectionHeader: View {
     var meta: String? = nil
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(title)
-                    .font(DesignTokens.sectionHeaderFont)
-                Spacer()
-                if let meta {
-                    Text(meta)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            if let supportingText {
-                Text(supportingText)
-                    .font(.footnote)
+        AppSectionHeader(title, subtitle: supportingText) {
+            if let meta {
+                Text(meta)
+                    .font(.footnote.weight(.semibold))
                     .foregroundStyle(.secondary)
             }
         }
-        .padding(.top, DesignTokens.spacingXS)
-        .padding(.bottom, DesignTokens.spacingS)
-        .padding(.horizontal, 2)
     }
 }
 
@@ -64,27 +51,26 @@ struct SettingsInfoBanner<Action: View>: View {
     }
 
     var body: some View {
-        HStack(alignment: .top, spacing: DesignTokens.spacingM) {
-            Image(systemName: systemImage)
-                .font(.headline)
-                .foregroundStyle(DawnColor.accent)
-                .padding(.top, 2)
-            VStack(alignment: .leading, spacing: 6) {
-                Text(title)
-                    .font(.body.weight(.semibold))
-                Text(message)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                action()
+        AppGlassSurface(variant: .quiet, tint: DawnColor.lightGold200) {
+            HStack(alignment: .top, spacing: DesignTokens.spacingM) {
+                Image(systemName: systemImage)
+                    .font(.headline)
+                    .foregroundStyle(DawnColor.accent)
+                    .padding(.top, 2)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(title)
+                        .font(.body.weight(.semibold))
+                    Text(message)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    action()
+                }
+
+                Spacer(minLength: 0)
             }
-            Spacer(minLength: 0)
         }
-        .padding(DesignTokens.spacingM)
-        .background(
-            RoundedRectangle(cornerRadius: DesignTokens.innerCardRadius, style: .continuous)
-                .fill(Color(.secondarySystemGroupedBackground))
-        )
     }
 }
 
@@ -114,40 +100,44 @@ struct SettingsEditorCard<Content: View>: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
-            if title != nil || subtitle != nil || trailing != nil {
-                HStack(alignment: .top, spacing: DesignTokens.spacingM) {
-                    if let onToggleExpanded {
-                        Button(action: onToggleExpanded) {
-                            HStack(alignment: .top, spacing: 12) {
-                                headerText
-                                Spacer(minLength: 0)
-                                Image(systemName: "chevron.right")
-                                    .font(.footnote.weight(.semibold))
-                                    .foregroundStyle(.secondary)
-                                    .rotationEffect(.degrees(isExpanded ? 90 : 0))
-                                    .animation(Motion.standard(reduceMotion: reduceMotion), value: isExpanded)
+        AppGlassSurface(variant: .grouped, contentPadding: 0) {
+            VStack(alignment: .leading, spacing: 0) {
+                if title != nil || subtitle != nil || trailing != nil {
+                    HStack(alignment: .top, spacing: DesignTokens.spacingM) {
+                        if let onToggleExpanded {
+                            Button(action: onToggleExpanded) {
+                                HStack(alignment: .top, spacing: 12) {
+                                    headerText
+                                    Spacer(minLength: 0)
+                                    Image(systemName: "chevron.right")
+                                        .font(.footnote.weight(.semibold))
+                                        .foregroundStyle(.secondary)
+                                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                                        .animation(Motion.standard(reduceMotion: reduceMotion), value: isExpanded)
+                                }
                             }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .buttonStyle(.plain)
+                        } else {
+                            headerText
+                            Spacer(minLength: 0)
                         }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .buttonStyle(.plain)
-                    } else {
-                        headerText
-                        Spacer(minLength: 0)
+                        trailing
                     }
-                    trailing
+                    .padding(DesignTokens.spacingM)
+                }
+
+                if onToggleExpanded == nil || isExpanded {
+                    if title != nil || subtitle != nil || trailing != nil {
+                        AppGroupDivider(inset: DesignTokens.spacingM)
+                    }
+
+                    content()
+                        .padding(DesignTokens.spacingM)
+                        .transition(.opacity.combined(with: .move(edge: .top)))
                 }
             }
-            if onToggleExpanded == nil || isExpanded {
-                content()
-                    .transition(.opacity.combined(with: .move(edge: .top)))
-            }
         }
-        .padding(DesignTokens.spacingM)
-        .background(
-            RoundedRectangle(cornerRadius: DesignTokens.innerCardRadius, style: .continuous)
-                .fill(Color(.secondarySystemGroupedBackground))
-        )
     }
 
     @ViewBuilder
@@ -193,9 +183,7 @@ struct RelativeOffsetControl: View {
                         .font(.system(size: 14, weight: .semibold))
                         .frame(width: 28, height: 28)
                 }
-                .buttonStyle(.bordered)
-                .buttonBorderShape(.circle)
-                .controlSize(.mini)
+                .appControlStyle(.secondary)
                 .disabled(isDisabled || value <= range.lowerBound)
 
                 Text("\(value)")
@@ -211,9 +199,7 @@ struct RelativeOffsetControl: View {
                         .font(.system(size: 14, weight: .semibold))
                         .frame(width: 28, height: 28)
                 }
-                .buttonStyle(.bordered)
-                .buttonBorderShape(.circle)
-                .controlSize(.mini)
+                .appControlStyle(.secondary)
                 .disabled(isDisabled || value >= range.upperBound)
             }
         }

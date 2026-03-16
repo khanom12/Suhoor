@@ -10,48 +10,84 @@ struct DefaultAlarmsSettingsView: View {
     @State private var expandedAlarm: DefaultAlarmSection? = .suhoor
 
     var body: some View {
-        Form {
-            Section {
-                LabeledContent("Wake timing", value: wakeSummaryText)
-                LabeledContent("Reminder", value: reminderSummaryText)
-                LabeledContent("Wake follow-up", value: followUpSummaryText)
-                LabeledContent("Prayer times", value: fajrDefaultBinding.wrappedValue ? "Fajr adhan on" : "Fajr adhan off")
-                LabeledContent("Iftar support", value: iftarDefaultBinding.wrappedValue ? "On" : "Off")
+        SettingsScrollPage {
+            SettingsGroup(
+                title: "Default Morning Plan",
+                supportingText: "Choose your everyday wake relation to Fajr and the support around it."
+            ) {
+                SettingsRow {
+                    SettingsValueRow(title: "Wake timing", value: wakeSummaryText)
+                }
+                AppGroupDivider()
+                SettingsRow {
+                    SettingsValueRow(title: "Reminder", value: reminderSummaryText)
+                }
+                AppGroupDivider()
+                SettingsRow {
+                    SettingsValueRow(title: "Wake follow-up", value: followUpSummaryText)
+                }
+                AppGroupDivider()
+                SettingsRow {
+                    SettingsValueRow(
+                        title: "Prayer times",
+                        value: fajrDefaultBinding.wrappedValue ? "Fajr adhan on" : "Fajr adhan off"
+                    )
+                }
+                AppGroupDivider()
+                SettingsRow {
+                    SettingsValueRow(title: "Iftar support", value: iftarDefaultBinding.wrappedValue ? "On" : "Off")
+                }
 
                 if usesFixedTimeCompatibility {
-                    Text("Fixed-time wake settings are preserved for compatibility. Fajr-relative planning is the long-term default.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
+                    AppGroupDivider()
+                    SettingsRow {
+                        Text("Fixed-time wake settings are preserved for compatibility. Fajr-relative planning is the long-term default.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
-            } header: {
-                SettingsSectionHeader(
-                    title: "Default Morning Plan",
-                    supportingText: "Choose your everyday wake relation to Fajr and the support around it."
-                )
             }
 
-            Section {
-                Toggle(Strings.Settings.wakeAlarmLabel, isOn: suhoorDefaultBinding)
-                Toggle(Strings.Settings.reminderLabel, isOn: reminderDefaultBinding)
-                Toggle(Strings.Settings.fajrAdhanLabel, isOn: fajrDefaultBinding)
-                Toggle("Iftar / Maghrib", isOn: iftarDefaultBinding)
-                Toggle("Wake follow-up", isOn: wakeFollowUpEnabledBinding)
+            SettingsGroup(
+                title: "Wake sequence",
+                supportingText: "Turn the supporting wake events on or off."
+            ) {
+                SettingsRow {
+                    Toggle(Strings.Settings.wakeAlarmLabel, isOn: suhoorDefaultBinding)
+                }
+                AppGroupDivider()
+                SettingsRow {
+                    Toggle(Strings.Settings.reminderLabel, isOn: reminderDefaultBinding)
+                }
+                AppGroupDivider()
+                SettingsRow {
+                    Toggle(Strings.Settings.fajrAdhanLabel, isOn: fajrDefaultBinding)
+                }
+                AppGroupDivider()
+                SettingsRow {
+                    Toggle("Iftar / Maghrib", isOn: iftarDefaultBinding)
+                }
+                AppGroupDivider()
+                SettingsRow {
+                    Toggle("Wake follow-up", isOn: wakeFollowUpEnabledBinding)
+                }
 
                 if settingsStore.settings.snoozeEnabled {
-                    Picker("Follow-up delay", selection: wakeFollowUpMinutesBinding) {
-                        ForEach([5, 9, 10, 15], id: \.self) { value in
-                            Text("\(value) minutes").tag(value)
+                    AppGroupDivider()
+                    SettingsRow {
+                        Picker("Follow-up delay", selection: wakeFollowUpMinutesBinding) {
+                            ForEach([5, 9, 10, 15], id: \.self) { value in
+                                Text("\(value) minutes").tag(value)
+                            }
                         }
                     }
                 }
-            } header: {
-                SettingsSectionHeader(
-                    title: "Wake sequence",
-                    supportingText: "Turn the supporting wake events on or off."
-                )
             }
 
-            Section {
+            VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
+                AppSectionHeader("Timing")
+
                 VStack(spacing: DesignTokens.spacingM) {
                     AlarmTimingEditor(
                         title: Strings.Settings.wakeAlarmLabel,
@@ -123,53 +159,57 @@ struct DefaultAlarmsSettingsView: View {
                         }
                     }
                 }
-                .padding(.vertical, 4)
-            } header: {
-                SettingsSectionHeader(title: "Timing")
             }
 
-            Section {
+            SettingsGroup(
+                title: Strings.Settings.previewSection,
+                supportingText: Strings.Settings.previewHelper
+            ) {
                 if let preview = scheduleManager.schedules.first {
-                    previewRow(
-                        title: Strings.Settings.wakeAlarmLabel,
-                        value: alarmConfigStore.defaults.suhoorEnabledDefault
-                            ? TimeFormatters.timeFormatter.string(from: preview.wakeDate)
-                            : Strings.AlarmList.offLabel
-                    )
-
-                    previewRow(
-                        title: Strings.Settings.reminderLabel,
-                        value: alarmConfigStore.defaults.reminderEnabledDefault
-                            ? preview.reminderDate.map { TimeFormatters.timeFormatter.string(from: $0) } ?? "--"
-                            : Strings.AlarmList.offLabel
-                    )
-
-                    previewRow(
-                        title: Strings.Settings.fajrAdhanLabel,
-                        value: alarmConfigStore.defaults.fajrEnabledDefault
-                            ? TimeFormatters.timeFormatter.string(from: preview.fajrDate)
-                            : Strings.AlarmList.offLabel
-                    )
-
-                    previewRow(
-                        title: "Iftar / Maghrib",
-                        value: alarmConfigStore.defaults.iftarEnabledDefault
-                            ? TimeFormatters.timeFormatter.string(from: preview.iftarDate ?? preview.maghribDate)
-                            : Strings.AlarmList.offLabel
-                    )
+                    SettingsRow {
+                        previewRow(
+                            title: Strings.Settings.wakeAlarmLabel,
+                            value: alarmConfigStore.defaults.suhoorEnabledDefault
+                                ? TimeFormatters.timeFormatter.string(from: preview.wakeDate)
+                                : Strings.AlarmList.offLabel
+                        )
+                    }
+                    AppGroupDivider()
+                    SettingsRow {
+                        previewRow(
+                            title: Strings.Settings.reminderLabel,
+                            value: alarmConfigStore.defaults.reminderEnabledDefault
+                                ? preview.reminderDate.map { TimeFormatters.timeFormatter.string(from: $0) } ?? "--"
+                                : Strings.AlarmList.offLabel
+                        )
+                    }
+                    AppGroupDivider()
+                    SettingsRow {
+                        previewRow(
+                            title: Strings.Settings.fajrAdhanLabel,
+                            value: alarmConfigStore.defaults.fajrEnabledDefault
+                                ? TimeFormatters.timeFormatter.string(from: preview.fajrDate)
+                                : Strings.AlarmList.offLabel
+                        )
+                    }
+                    AppGroupDivider()
+                    SettingsRow {
+                        previewRow(
+                            title: "Iftar / Maghrib",
+                            value: alarmConfigStore.defaults.iftarEnabledDefault
+                                ? TimeFormatters.timeFormatter.string(from: preview.iftarDate ?? preview.maghribDate)
+                                : Strings.AlarmList.offLabel
+                        )
+                    }
                 } else {
-                    Text(Strings.Settings.previewUnavailable)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
+                    SettingsRow {
+                        Text(Strings.Settings.previewUnavailable)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
                 }
-            } header: {
-                SettingsSectionHeader(
-                    title: Strings.Settings.previewSection,
-                    supportingText: Strings.Settings.previewHelper
-                )
             }
         }
-        .formStyle(.grouped)
         .navigationTitle(Strings.Settings.defaultAlarmsScreenTitle)
         .navigationBarTitleDisplayMode(.inline)
     }

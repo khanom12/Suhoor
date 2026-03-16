@@ -6,7 +6,7 @@ struct TodayFajrCheckInCard: View {
     var onLater: (() -> Void)? = nil
 
     var body: some View {
-        GlassCard(style: .header, tintColor: DawnColor.lightGold200, tintOpacity: 0.18) {
+        AppGlassSurface(variant: .quiet, tint: DawnColor.lightGold200) {
             VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(presentation.title)
@@ -26,8 +26,7 @@ struct TodayFajrCheckInCard: View {
                         Text(Strings.HomeSurface.fajrPromptPrimary)
                             .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .tint(.green)
+                    .appControlStyle(.primary, tint: .green)
 
                     Button {
                         withAnimation(.easeInOut(duration: 0.22)) {
@@ -37,15 +36,13 @@ struct TodayFajrCheckInCard: View {
                         Text(Strings.HomeSurface.fajrPromptSecondary)
                             .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.bordered)
-                    .tint(.secondary)
+                    .appControlStyle(.secondary, tint: .secondary)
                 }
 
                 if let onLater {
                     Button(Strings.HomeSurface.fajrPromptLater, action: onLater)
-                        .buttonStyle(.plain)
                         .font(.footnote.weight(.semibold))
-                        .foregroundStyle(DawnColor.accent)
+                        .appControlStyle(.quiet)
                 }
             }
         }

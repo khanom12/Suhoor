@@ -82,10 +82,13 @@ struct RootTabView: View {
             }
             .tag(RootTab.progress)
         }
+        .background(AppPageBackground().ignoresSafeArea())
+        .tabBarMinimizeBehavior(.onScrollDown)
         .fullScreenCover(isPresented: $isShowingQadaWizard) {
             NavigationStack {
                 QadaPlannerView()
             }
+            .appPresentedChrome()
         }
         .sheet(isPresented: $isShowingSettings) {
             NavigationStack(path: $settingsPath) {
@@ -97,6 +100,7 @@ struct RootTabView: View {
                         }
                     }
             }
+            .appPresentedChrome()
         }
         .onReceive(appNavigator.$latestRequest.compactMap { $0 }) { request in
             handle(request.intent)

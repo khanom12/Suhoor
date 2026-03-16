@@ -37,7 +37,7 @@ struct WakeScreen: View {
         let wakeSnapshot = scheduleManager.wakeSurfaceSnapshot
 
         ScrollView {
-            VStack(alignment: .leading, spacing: DesignTokens.spacingXL) {
+            LazyVStack(alignment: .leading, spacing: DesignTokens.spacingXL) {
                 VStack(alignment: .leading, spacing: DesignTokens.spacingL) {
                     if let compactFajrWindowSnapshot {
                         FajrWindowCompactCard(snapshot: compactFajrWindowSnapshot) {
@@ -61,34 +61,41 @@ struct WakeScreen: View {
                 }
 
                 if !visibleSections.isEmpty {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Upcoming mornings")
-                            .font(.headline.weight(.semibold))
-                        Text("Your next stretch of mornings, with each day ready for edits.")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
+                    AppSectionHeader(
+                        "Upcoming mornings",
+                        subtitle: "Your next stretch of mornings, with each day ready for edits."
+                    )
                 }
 
                 ForEach(visibleSections) { section in
                     VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
                         headerLabel(for: section)
 
-                        if section.entries.isEmpty {
-                            HStack(spacing: DesignTokens.spacingS) {
-                                ProgressView()
-                                Text("Loading more mornings")
-                                    .font(.footnote)
-                                    .foregroundStyle(.secondary)
-                            }
-                            .task {
-                                ensureMonthEntriesLoaded(for: section)
-                            }
-                        } else {
-                            ForEach(section.entries) { entry in
-                                WakeRowView(entry: entry) {
-                                    destination = .day(entry.schedule)
+                        AppInsetGroup {
+                            if section.entries.isEmpty {
+                                HStack(spacing: DesignTokens.spacingS) {
+                                    ProgressView()
+                                    Text("Loading more mornings")
+                                        .font(.footnote)
+                                        .foregroundStyle(.secondary)
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, DesignTokens.spacingL)
+                                .padding(.vertical, DesignTokens.spacingL)
+                                .task {
+                                    ensureMonthEntriesLoaded(for: section)
+                                }
+                            } else {
+                                ForEach(Array(section.entries.enumerated()), id: \.element.id) { index, entry in
+                                    WakeRowView(entry: entry) {
+                                        destination = .day(entry.schedule)
+                                    }
+                                    .padding(.horizontal, DesignTokens.spacingL)
+                                    .padding(.vertical, 10)
+
+                                    if index < section.entries.count - 1 {
+                                        AppGroupDivider()
+                                    }
                                 }
                             }
                         }
@@ -96,10 +103,10 @@ struct WakeScreen: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
+            .padding(.horizontal, DesignTokens.spacingL)
+            .padding(.vertical, DesignTokens.spacingL)
         }
-        .padding(.horizontal, DesignTokens.spacingL)
-        .padding(.vertical, DesignTokens.spacingL)
-        .background(Color(.systemGroupedBackground).ignoresSafeArea())
+        .appScrollableChrome()
         .navigationTitle("Wake")
         .navigationBarTitleDisplayMode(.large)
         .navigationDestination(item: $destination) { destination in
@@ -225,28 +232,19 @@ struct WakeScreen: View {
 
     @ViewBuilder
     private func headerLabel(for section: WakeMonthSection) -> some View {
-        HStack(alignment: .center, spacing: DesignTokens.spacingS) {
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(alignment: .center, spacing: DesignTokens.spacingS) {
-                    Text(section.key.title)
-                        .font(.headline.weight(.semibold))
-                        .foregroundStyle(.primary)
-                    Spacer(minLength: DesignTokens.spacingS)
-                    MonthWakeCountBadge(count: section.visibleAlarmCount)
-                }
-                if let preview = section.preview {
-                    HStack(alignment: .firstTextBaseline, spacing: 4) {
-                        Text(monthStartLabel(for: preview.startDate))
-                        if let adjustment = adjustmentTag(for: preview.offsetDays) {
-                            Text("(\(adjustment))")
-                        }
-                    }
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                }
-            }
+        AppSectionHeader(section.key.title, subtitle: previewText(for: section)) {
+            MonthWakeCountBadge(count: section.visibleAlarmCount)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func previewText(for section: WakeMonthSection) -> String? {
+        guard let preview = section.preview else { return nil }
+
+        if let adjustment = adjustmentTag(for: preview.offsetDays) {
+            return "\(monthStartLabel(for: preview.startDate)) · \(adjustment)"
+        }
+
+        return monthStartLabel(for: preview.startDate)
     }
 
     private func ensureVisibleSectionsLoaded() {
@@ -306,18 +304,18 @@ private struct FeaturedTomorrowCard: View {
     let hasOverride: Bool
 
     var body: some View {
-        GlassCard(style: .header, tintColor: DawnColor.lightGold200, tintOpacity: 0.18) {
+        AppGlassSurface(variant: .standard, prominence: .high, tint: DawnColor.lightGold200) {
             VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
                 Text("Next morning")
-                    .font(DesignTokens.cardMetaFont)
+                    .font(.footnote.weight(.semibold))
                     .foregroundStyle(.secondary)
+                    .textCase(.uppercase)
+                    .tracking(0.4)
 
-                Text(TimeFormatters.timeFormatter.string(from: summary.day.schedule.wakeDate))
-                    .font(.system(size: 42, weight: .semibold, design: .rounded))
-                    .monospacedDigit()
-
-                Text(ProductSurfacePresentation.dayMeaningText(for: summary.day, style: .wakeRow))
-                    .font(DesignTokens.cardTitleFont)
+                AppHeroMetric(
+                    value: TimeFormatters.timeFormatter.string(from: summary.day.schedule.wakeDate),
+                    title: ProductSurfacePresentation.dayMeaningText(for: summary.day, style: .wakeRow)
+                )
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(ProductSurfacePresentation.wakeRelationText(

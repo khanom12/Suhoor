@@ -23,6 +23,7 @@ struct QadaCompanionView: View {
             .padding(.horizontal, DesignTokens.spacingL)
             .padding(.vertical, DesignTokens.spacingL)
         }
+        .appScrollableChrome()
         .navigationTitle("Qada")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -36,7 +37,7 @@ struct QadaCompanionView: View {
 
     @ViewBuilder
     private var headerCard: some View {
-        GlassCard(style: .header, tintColor: FastPrimaryIntent.qadaMakeup.style.color, tintOpacity: 0.12) {
+        AppGlassSurface(variant: .hero, tint: FastPrimaryIntent.qadaMakeup.style.color) {
             VStack(alignment: .leading, spacing: 8) {
                 Text(headerTitle)
                     .font(.title3.weight(.semibold))
@@ -50,7 +51,7 @@ struct QadaCompanionView: View {
     @ViewBuilder
     private var recoveryCard: some View {
         if case .needsRecovery(let snapshot) = state {
-            GlassCard(tintColor: FastPrimaryIntent.qadaMakeup.style.color, tintOpacity: 0.08) {
+            AppGlassSurface(variant: .quiet, tint: FastPrimaryIntent.qadaMakeup.style.color) {
                 VStack(alignment: .leading, spacing: 10) {
                     Text("One planned Qada day still needs to be rescheduled.")
                         .font(.headline.weight(.semibold))
@@ -66,8 +67,7 @@ struct QadaCompanionView: View {
                     Button("Reschedule day") {
                         onRecoverMissedDay()
                     }
-                    .buttonStyle(.borderedProminent)
-                    .tint(DawnColor.accent)
+                    .appControlStyle(.primary)
                 }
             }
         }
@@ -76,7 +76,7 @@ struct QadaCompanionView: View {
     private var batchCard: some View {
         let snapshot = currentSnapshot
 
-        return GlassCard {
+        return AppGlassSurface(variant: .quiet, tint: FastPrimaryIntent.qadaMakeup.style.color) {
             VStack(alignment: .leading, spacing: 12) {
                 if let nextDate = snapshot?.nextPlannedDate {
                     summaryRow(title: "Next Qada", value: mediumDate(nextDate))
@@ -97,27 +97,25 @@ struct QadaCompanionView: View {
     }
 
     private var actionCard: some View {
-        GlassCard {
+        AppGlassSurface(variant: .standard, tint: DawnColor.lightGold200) {
             VStack(alignment: .leading, spacing: 12) {
                 Button(primaryActionTitle) {
                     primaryAction()
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(DawnColor.accent)
+                .appControlStyle(.primary)
 
                 if showsViewCurrentBatchSecondaryAction {
                     Button("View current batch") {
                         onViewCurrentBatch()
                     }
-                    .buttonStyle(.bordered)
+                    .appControlStyle(.secondary)
                 }
 
                 Button("Adjust total") {
                     onAdjustTotal()
                 }
-                .buttonStyle(.plain)
                 .font(.footnote.weight(.semibold))
-                .foregroundStyle(.secondary)
+                .appControlStyle(.quiet)
             }
         }
     }

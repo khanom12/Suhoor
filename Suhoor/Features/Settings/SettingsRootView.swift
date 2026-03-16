@@ -9,81 +9,95 @@ struct SettingsRootView: View {
     @State private var showingCopiedAlert = false
 
     var body: some View {
-        Form {
+        SettingsScrollPage {
             if !issues.isEmpty {
-                Section {
+                SettingsGroup(title: Strings.Settings.needsAttentionSection) {
                     ForEach(issues) { issue in
                         NavigationLink {
                             destinationView(for: issue.destination)
                         } label: {
-                            SettingsSummaryRow(
-                                title: issue.title,
-                                subtitle: issue.message,
-                                systemImage: issue.systemImage,
-                                badgeText: issue.statusText,
-                                badgeTone: badgeTone(for: issue.tone)
-                            )
+                            SettingsRow {
+                                SettingsSummaryRow(
+                                    title: issue.title,
+                                    subtitle: issue.message,
+                                    systemImage: issue.systemImage,
+                                    badgeText: issue.statusText,
+                                    badgeTone: badgeTone(for: issue.tone),
+                                    showsDisclosureIndicator: true
+                                )
+                            }
+                        }
+
+                        if issue.id != issues.last?.id {
+                            AppGroupDivider()
                         }
                     }
-                } header: {
-                    SettingsSectionHeader(title: Strings.Settings.needsAttentionSection)
                 }
             }
 
             ForEach(SettingsDestinationGroup.allCases) { group in
-                Section {
-                    ForEach(group.destinations) { destination in
+                SettingsGroup(title: group.title) {
+                    ForEach(Array(group.destinations.enumerated()), id: \.element.id) { index, destination in
                         NavigationLink {
                             destinationView(for: destination)
                         } label: {
-                            SettingsSummaryRow(
-                                title: destination.title,
-                                subtitle: summary(for: destination),
-                                systemImage: destination.systemImage,
-                                badgeText: badgeText(for: destination),
-                                badgeTone: badgeTone(for: destination)
-                            )
+                            SettingsRow {
+                                SettingsSummaryRow(
+                                    title: destination.title,
+                                    subtitle: summary(for: destination),
+                                    systemImage: destination.systemImage,
+                                    badgeText: badgeText(for: destination),
+                                    badgeTone: badgeTone(for: destination),
+                                    showsDisclosureIndicator: true
+                                )
+                            }
+                        }
+
+                        if index < group.destinations.count - 1 {
+                            AppGroupDivider()
                         }
                     }
-                } header: {
-                    SettingsSectionHeader(title: group.title)
                 }
             }
 
-            Section {
+            SettingsGroup(
+                title: "Support",
+                footer: "Diagnostics leave out precise location unless you add it yourself."
+            ) {
                 Button {
                     openFeedbackEmail()
                 } label: {
-                    SettingsSummaryRow(
-                        title: "Send Feedback",
-                        subtitle: "Share feedback or report a problem.",
-                        systemImage: "envelope",
-                        badgeText: nil,
-                        badgeTone: .neutral
-                    )
+                    SettingsRow {
+                        SettingsSummaryRow(
+                            title: "Send Feedback",
+                            subtitle: "Share feedback or report a problem.",
+                            systemImage: "envelope",
+                            badgeText: nil,
+                            badgeTone: .neutral
+                        )
+                    }
                 }
                 .buttonStyle(.plain)
+
+                AppGroupDivider()
 
                 Button {
                     UIPasteboard.general.string = diagnosticsText
                     showingCopiedAlert = true
                 } label: {
-                    SettingsSummaryRow(
-                        title: "Copy Diagnostics",
-                        subtitle: "Version, device, locale, and permission summary.",
-                        systemImage: "doc.on.doc",
-                        badgeText: nil,
-                        badgeTone: .neutral
-                    )
+                    SettingsRow {
+                        SettingsSummaryRow(
+                            title: "Copy Diagnostics",
+                            subtitle: "Version, device, locale, and permission summary.",
+                            systemImage: "doc.on.doc",
+                            badgeText: nil,
+                            badgeTone: .neutral
+                        )
+                    }
                 }
                 .buttonStyle(.plain)
-            } header: {
-                SettingsSectionHeader(title: "Support")
-            } footer: {
-                Text("Diagnostics leave out precise location unless you add it yourself.")
             }
         }
-        .formStyle(.grouped)
         .navigationTitle(Strings.Settings.title)
         .navigationBarTitleDisplayMode(.large)
         .toolbar {
@@ -91,6 +105,7 @@ struct SettingsRootView: View {
                 Button("Done") {
                     dismiss()
                 }
+                .buttonStyle(.plain)
             }
         }
         .alert("Copied", isPresented: $showingCopiedAlert) {

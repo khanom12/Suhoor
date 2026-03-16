@@ -12,7 +12,7 @@ struct TodayForbiddenFastDayCard: View {
 
     var body: some View {
         if let model = ForbiddenFastDayEngine.model(kind: kind, mode: mode, now: Date()) {
-            GlassCard(style: .header) {
+            AppGlassSurface(variant: .tinted, tint: accentColor) {
                 VStack(alignment: .leading, spacing: DesignTokens.dashboardCardInternalSpacing) {
                     HStack(alignment: .center, spacing: DesignTokens.spacingS) {
                         VStack(alignment: .leading, spacing: DesignTokens.spacingXS) {
@@ -43,10 +43,7 @@ struct TodayForbiddenFastDayCard: View {
                                     .font(.caption.weight(.semibold))
                                     .foregroundStyle(.secondary)
                                     .frame(width: 28, height: 28)
-                                    .background(
-                                        Circle()
-                                            .fill(Color(.secondarySystemGroupedBackground))
-                                    )
+                                    .appToolbarButtonChrome()
                             }
                             .buttonStyle(.plain)
                             .accessibilityLabel("Dismiss card")
