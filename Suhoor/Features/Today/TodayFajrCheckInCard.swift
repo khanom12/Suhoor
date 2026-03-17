@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct TodayFajrCheckInCard: View {
-    @EnvironmentObject private var fajrLogStore: FajrLogStore
+    @EnvironmentObject private var scheduleManager: ScheduleManager
     let presentation: FajrHomeSupportPresentation
     var onLater: (() -> Void)? = nil
 
@@ -20,7 +20,10 @@ struct TodayFajrCheckInCard: View {
                 HStack(spacing: DesignTokens.spacingS) {
                     Button {
                         withAnimation(.easeInOut(duration: 0.22)) {
-                            fajrLogStore.setStatus(.completed, for: presentation.dateKey, now: Date())
+                            scheduleManager.performCompletionEdit(
+                                .setPrayerStatus(dateKey: presentation.dateKey, status: .completed),
+                                source: .homeCard
+                            )
                         }
                     } label: {
                         Text(Strings.HomeSurface.fajrPromptPrimary)
@@ -30,7 +33,10 @@ struct TodayFajrCheckInCard: View {
 
                     Button {
                         withAnimation(.easeInOut(duration: 0.22)) {
-                            fajrLogStore.setStatus(.missed, for: presentation.dateKey, now: Date())
+                            scheduleManager.performCompletionEdit(
+                                .setPrayerStatus(dateKey: presentation.dateKey, status: .missed),
+                                source: .homeCard
+                            )
                         }
                     } label: {
                         Text(Strings.HomeSurface.fajrPromptSecondary)

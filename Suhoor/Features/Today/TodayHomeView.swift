@@ -2,7 +2,7 @@ import SwiftUI
 
 struct TodayHomeView: View {
     @EnvironmentObject private var appNavigator: AppNavigator
-    @EnvironmentObject private var scheduleManager: ScheduleManager
+    @EnvironmentObject private var completionSurfaceStore: CompletionSurfaceStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @StateObject private var dismissalStore = TodayCardDismissalStore()
 
@@ -11,7 +11,7 @@ struct TodayHomeView: View {
 
         TimelineView(.periodic(from: Date(), by: 60)) { context in
             let now = context.date
-            let snapshot = scheduleManager.homeSurfaceSnapshot(
+            let snapshot = completionSurfaceStore.homeSurfaceSnapshot(
                 now: now,
                 dismissedWarnings: dismissedWarnings(on: now)
             )
@@ -53,7 +53,6 @@ struct TodayHomeView: View {
                     .accessibilityLabel("Open Settings")
                 }
             }
-            .onAppear { _ = scheduleManager.lastUpdated }
         }
     }
 
@@ -76,7 +75,7 @@ struct TodayHomeView: View {
     ) -> some View {
         switch presentation {
         case .blockingIssue(let permissionKind):
-            if let presentation = scheduleManager.permissionSnapshot.presentations[permissionKind] {
+            if let presentation = completionSurfaceStore.homeContext.permissionSnapshot.presentations[permissionKind] {
                 TodayBlockingIssueCard(presentation: presentation)
             }
         case .fajrCompletionPrompt(let presentation):

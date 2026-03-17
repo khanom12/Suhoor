@@ -1,10 +1,10 @@
 import SwiftUI
 
 struct ProgressRootView: View {
-    @EnvironmentObject private var scheduleManager: ScheduleManager
+    @EnvironmentObject private var completionSurfaceStore: CompletionSurfaceStore
 
     var body: some View {
-        let snapshot = scheduleManager.progressSurfaceSnapshot()
+        let snapshot = completionSurfaceStore.state.progressSnapshot
 
         ScrollView {
             LazyVStack(alignment: .leading, spacing: DesignTokens.spacingXL) {

@@ -47,7 +47,12 @@ struct SuhoorApp: App {
         _fajrLogStore = StateObject(wrappedValue: fajrLogStore)
         _qadaBacklogStore = StateObject(wrappedValue: qadaBacklogStore)
         _qadaBatchStore = StateObject(wrappedValue: qadaBatchStore)
-        fastLogStore.normalizeStaleInProgress(todayKey: DateHelpers.dayIdentifier(for: Date(), timeZone: .current))
+        scheduleManager.normalizeCompletionStateForLaunch()
+        NotificationEventDelegate.shared.configure(
+            fastCompletionPromptHandler: ScheduleManagerFastCompletionPromptHandler(
+                scheduleManager: scheduleManager
+            )
+        )
         UNUserNotificationCenter.current().delegate = NotificationEventDelegate.shared
     }
 
@@ -61,6 +66,7 @@ struct SuhoorApp: App {
                 .environmentObject(alarmConfigStore)
                 .environmentObject(locationService)
                 .environmentObject(scheduleManager)
+                .environmentObject(scheduleManager.completionSurfaceStore)
                 .environmentObject(fastTagStore)
                 .environmentObject(fastLogStore)
                 .environmentObject(fajrLogStore)

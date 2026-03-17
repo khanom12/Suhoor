@@ -42,6 +42,17 @@ struct ProgressSurfaceSnapshot: Equatable, Sendable {
     let fastSummary: String
     let qadaProgress: QadaProgressSnapshot
     let wakeProgress: WakeProgressSnapshot
+
+    static let empty = ProgressSurfaceSnapshot(
+        headlineText: nil,
+        fastSectionTitle: "Fasts",
+        fajrTodaySummary: "Not logged",
+        fajrSummary: "No logged mornings yet",
+        fastTodaySummary: "Not logged",
+        fastSummary: "No logged fasts yet",
+        qadaProgress: QadaProgressSnapshot(remaining: 0, completed: 0, baselineOwed: 0),
+        wakeProgress: .empty
+    )
 }
 
 enum ProductSurfaceSnapshots {

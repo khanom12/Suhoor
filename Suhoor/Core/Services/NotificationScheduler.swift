@@ -339,7 +339,18 @@ final class NotificationScheduler {
     private func registerNotificationCategories() {
         let iftarCategory = UNNotificationCategory(
             identifier: Self.iftarCategoryIdentifier,
-            actions: [],
+            actions: [
+                UNNotificationAction(
+                    identifier: FastCompletionNotificationAction.completed,
+                    title: "Completed",
+                    options: []
+                ),
+                UNNotificationAction(
+                    identifier: FastCompletionNotificationAction.notCompleted,
+                    title: "Not completed",
+                    options: []
+                ),
+            ],
             intentIdentifiers: [],
             options: []
         )

@@ -2,11 +2,12 @@ import SwiftUI
 
 struct FastHistoryView: View {
     @EnvironmentObject private var scheduleManager: ScheduleManager
+    @EnvironmentObject private var completionSurfaceStore: CompletionSurfaceStore
 
     private let days = 30
 
     var body: some View {
-        let snapshot = scheduleManager.fastHistorySurfaceSnapshot(days: days)
+        let snapshot = completionSurfaceStore.state.fastHistorySnapshot
 
         List {
             Section {
@@ -17,7 +18,7 @@ struct FastHistoryView: View {
                 } else {
                     ForEach(snapshot.rows) { row in
                         HistoryRow(row: row) { intent in
-                            scheduleManager.performCompletionEdit(intent)
+                            scheduleManager.performCompletionEdit(intent, source: .historyEdit)
                         }
                     }
                 }

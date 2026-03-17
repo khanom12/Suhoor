@@ -41,6 +41,8 @@ final class ScheduleManager: ObservableObject {
     private let qadaBacklogStore: QadaBacklogStore
     private let qadaBatchStore: QadaBatchStore
     private let cacheStore: ScheduleCacheStore
+    private let completionRepository: any CompletionRepository
+    let completionSurfaceStore: CompletionSurfaceStore
     private let completionSurfaceProvider = CompletionSurfaceProvider()
     private let wakeSurfaceProvider = WakeSurfaceProvider()
     private let fajrWindowSurfaceProvider = FajrWindowSurfaceProvider()
@@ -173,7 +175,8 @@ final class ScheduleManager: ObservableObject {
         qadaBatchStore: QadaBatchStore = QadaBatchStore(),
         hijriAdjustmentStore: HijriMonthAdjustmentStore = HijriMonthAdjustmentStore(),
         hijriAdjustmentChangeStore: HijriAdjustmentChangeStore = HijriAdjustmentChangeStore(),
-        cacheStore: ScheduleCacheStore = ScheduleCacheStore()
+        cacheStore: ScheduleCacheStore = ScheduleCacheStore(),
+        completionSurfaceStore: CompletionSurfaceStore? = nil
     ) {
         self.settingsStore = settingsStore
         self.alarmConfigStore = alarmConfigStore
@@ -191,13 +194,18 @@ final class ScheduleManager: ObservableObject {
         self.hijriAdjustmentStore = hijriAdjustmentStore
         self.hijriAdjustmentChangeStore = hijriAdjustmentChangeStore
         self.cacheStore = cacheStore
-        self.completionCommandGateway = CompletionCommandGateway(
+        self.completionRepository = LegacyCompletionRepository(
             fajrLogStore: fajrLogStore,
-            fastLogStore: fastLogStore
+            fastLogStore: fastLogStore,
+            qadaBacklogStore: qadaBacklogStore
         )
+        self.completionCommandGateway = CompletionCommandGateway(repository: completionRepository)
         let hijriCalendarService = HijriCalendarService(adjustmentStore: hijriAdjustmentStore)
         let adjustedHijriCalendar = AdjustedHijriCalendar(calendarService: hijriCalendarService)
         self.adjustedHijriCalendar = adjustedHijriCalendar
+        self.completionSurfaceStore = completionSurfaceStore ?? CompletionSurfaceStore(
+            adjustedHijriCalendar: adjustedHijriCalendar
+        )
         var resolvedAlarmKit: AlarmKitScheduler?
         #if !targetEnvironment(simulator)
         if #available(iOS 26.0, *) {
@@ -273,27 +281,28 @@ final class ScheduleManager: ObservableObject {
         fastLogStore.$currentRevision
             .dropFirst()
             .sink { [weak self] _ in
-                self?.objectWillChange.send()
+                self?.refreshCachedCompletionSurfaces(reason: "fast-log-revision")
             }
             .store(in: &cancellables)
 
         fajrLogStore.$currentRevision
             .dropFirst()
             .sink { [weak self] _ in
-                self?.objectWillChange.send()
+                self?.refreshCachedCompletionSurfaces(reason: "fajr-log-revision")
             }
             .store(in: &cancellables)
 
         qadaBacklogStore.$state
             .dropFirst()
             .sink { [weak self] _ in
-                self?.objectWillChange.send()
+                self?.refreshCachedCompletionSurfaces(reason: "qada-backlog")
             }
             .store(in: &cancellables)
 
         settingsStore.$settings
             .sink { [weak self] _ in
                 self?.updateBootstrapState()
+                self?.refreshCachedCompletionSurfaces(reason: "settings")
             }
             .store(in: &cancellables)
 
@@ -310,6 +319,7 @@ final class ScheduleManager: ObservableObject {
             .store(in: &cancellables)
 
         updateBootstrapState()
+        refreshCachedCompletionSurfaces(reason: "init")
         monthTagResultLookup.handler = { [weak self] date, dateKey, fallback, timeZone in
             guard let self else { return fallback }
             return self.monthTagResultProvider.resolvedTagResult(
@@ -481,35 +491,17 @@ final class ScheduleManager: ObservableObject {
         now: Date,
         dismissedWarnings: Set<FastWarning>
     ) -> HomeSurfaceSnapshot {
-        let input = homeSurfaceAssembler.makeInput(
+        completionSurfaceStore.homeSurfaceSnapshot(
             now: now,
-            dismissedWarnings: dismissedWarnings,
-            activeWindowSnapshot: activeWindowSnapshot,
-            nextWakeEventSummary: nextWakeEventSummary,
-            settings: settingsStore.settings,
-            permissionSnapshot: permissionSnapshot,
-            adjustedHijriCalendar: adjustedHijriCalendar,
-            scheduleLookup: { [unowned self] date in
-                schedule(for: date)
-            }
-        )
-
-        return homeSurfaceProvider.homeSurfaceSnapshot(
-            input: input,
-            settings: settingsStore.settings,
-            permissionSnapshot: permissionSnapshot
+            dismissedWarnings: dismissedWarnings
         )
     }
 
     func progressSurfaceSnapshot(
         wakeProgressSource: WakeProgressSource = DebugEventLogWakeProgressSource()
     ) -> ProgressSurfaceSnapshot {
-        return completionSurfaceProvider.progressSurfaceSnapshot(
-            activeWindowSnapshot: activeWindowSnapshot,
-            completionState: currentCompletionStateSnapshot(),
-            settings: settingsStore.settings,
-            wakeProgress: wakeProgressSource.snapshot(limit: 20)
-        )
+        _ = wakeProgressSource
+        return completionSurfaceStore.state.progressSnapshot
     }
 
     func fajrHistorySurfaceSnapshot(
@@ -536,9 +528,25 @@ final class ScheduleManager: ObservableObject {
 
     func performCompletionEdit(
         _ intent: CompletionEditIntent,
+        source: CompletionMutationSource = .historyEdit,
         now: Date = Date()
     ) {
-        completionCommandGateway.perform(intent, now: now)
+        PerformanceTrace.measure(
+            "completion.command",
+            metadata: "source=\(source.rawValue)"
+        ) {
+            completionCommandGateway.perform(intent, source: source, now: now)
+            refreshCachedCompletionSurfaces(reason: "completion-\(source.rawValue)", now: now)
+        }
+    }
+
+    func normalizeCompletionStateForLaunch(
+        todayKey: String? = nil,
+        now: Date = Date()
+    ) {
+        let resolvedTodayKey = todayKey ?? DateHelpers.dayIdentifier(for: now, timeZone: .current)
+        completionRepository.normalizeStaleInProgress(todayKey: resolvedTodayKey, now: now)
+        refreshCachedCompletionSurfaces(reason: "launch-normalization", now: now)
     }
 
     var currentHijriAdjustmentYear: Int {
@@ -1184,15 +1192,66 @@ final class ScheduleManager: ObservableObject {
     }
 
     private func currentCompletionStateSnapshot() -> CompletionStateSnapshot {
-        let legacySnapshot = LegacyCompletionAdapter.records(
-            fajrEntries: fajrLogStore.entriesByDateKey,
-            fastEntries: fastLogStore.entriesByDateKey,
-            qadaBacklogState: qadaBacklogStore.state
-        )
-        return CompletionStateAssembler.assemble(
-            completionRecords: legacySnapshot.records,
-            qadaLedgerSnapshot: legacySnapshot.qadaLedgerSnapshot
-        )
+        completionSurfaceStore.state.completionStateSnapshot
+    }
+
+    private func refreshCachedCompletionSurfaces(
+        reason: String,
+        now: Date = Date()
+    ) {
+        PerformanceTrace.measure(
+            "completion.surface-refresh",
+            metadata: reason
+        ) {
+            let repositorySnapshot = completionRepository.snapshot()
+            let completionState = CompletionStateAssembler.assemble(
+                completionRecords: repositorySnapshot.records,
+                qadaLedgerSnapshot: repositorySnapshot.qadaLedgerSnapshot
+            )
+            let progressSnapshot = completionSurfaceProvider.progressSurfaceSnapshot(
+                activeWindowSnapshot: activeWindowSnapshot,
+                now: now,
+                completionState: completionState,
+                settings: settingsStore.settings,
+                wakeProgress: DebugEventLogWakeProgressSource().snapshot(limit: 20)
+            )
+            let fajrHistorySnapshot = completionSurfaceProvider.fajrHistorySurfaceSnapshot(
+                days: 30,
+                now: now,
+                resolver: completionHistoryResolver
+            )
+            let fastHistorySnapshot = completionSurfaceProvider.fastHistorySurfaceSnapshot(
+                days: 30,
+                now: now,
+                resolver: completionHistoryResolver
+            )
+            let homeContext = CompletionSurfaceStore.HomeContext(
+                activeWindowSnapshot: activeWindowSnapshot,
+                todaySchedule: schedule(for: now),
+                nextWakeEventSummary: nextWakeEventSummary,
+                settings: settingsStore.settings,
+                permissionSnapshot: permissionSnapshot
+            )
+            let nextRevision = completionSurfaceStore.state.revision + 1
+            completionSurfaceStore.update(
+                state: CompletionSurfaceState(
+                    completionStateSnapshot: completionState,
+                    progressSnapshot: progressSnapshot,
+                    fajrHistorySnapshot: fajrHistorySnapshot,
+                    fastHistorySnapshot: fastHistorySnapshot,
+                    revision: nextRevision
+                ),
+                homeContext: homeContext
+            )
+            #if DEBUG
+            let recordCount = completionState.recordsByDateKey.values.reduce(0) { partialResult, records in
+                partialResult + records.count
+            }
+            Logging.diagnostics.debug(
+                "[perf] completion.surface-state revision=\(nextRevision, privacy: .public) records=\(recordCount, privacy: .public)"
+            )
+            #endif
+        }
     }
 
     private func calendarPlanningDependencies() -> CalendarPlanningProvider.Dependencies {
@@ -1282,6 +1341,7 @@ final class ScheduleManager: ObservableObject {
                         tagSelectionRevision: activeTagSelectionRevision
                     )
                 )
+                refreshCachedCompletionSurfaces(reason: "month-tag-adjustment")
             }
             await refreshPermissionSummary()
             return
@@ -1435,6 +1495,7 @@ final class ScheduleManager: ObservableObject {
         activeWindowSnapshot = adjustedSnapshot
         schedules = adjustedSnapshot.visibleDays.map(\.schedule)
         lastUpdated = Date()
+        refreshCachedCompletionSurfaces(reason: "schedule-refresh")
         Logging.diagnostics.debug("[perf] active-window.visible-count \(result.visibleDays.count, privacy: .public)")
         Logging.diagnostics.debug("[perf] active-window.scheduled-count \(result.scheduledDays.count, privacy: .public)")
 
@@ -1497,6 +1558,7 @@ final class ScheduleManager: ObservableObject {
                 )
             )
             updateBootstrapState()
+            refreshCachedCompletionSurfaces(reason: "reschedule-day-removed")
             return
         }
 
@@ -1543,6 +1605,7 @@ final class ScheduleManager: ObservableObject {
             )
         )
         updateBootstrapState()
+        refreshCachedCompletionSurfaces(reason: "reschedule-day")
     }
 
     func schedule(for date: Date) -> DaySchedule? {
@@ -1787,6 +1850,7 @@ final class ScheduleManager: ObservableObject {
         alarmAuthorizationText = snapshot.alarmAuthorizationText
         notificationAuthorizationText = snapshot.notificationAuthorizationText
         updateBootstrapState()
+        refreshCachedCompletionSurfaces(reason: "permission-summary")
         EventTimelineLog.shared.record(category: "permissions", message: "Permission summary: \(snapshot.summaryText)")
     }
 
@@ -1817,6 +1881,7 @@ final class ScheduleManager: ObservableObject {
         permissionSnapshot = .empty
         activeWindowSnapshot = .empty
         updateBootstrapState()
+        refreshCachedCompletionSurfaces(reason: "reset-all")
         cacheStore.clear()
         alarmConfigStore.resetScheduledDateSources()
         settingsStore.reset()
@@ -2435,6 +2500,7 @@ final class ScheduleManager: ObservableObject {
                 tagSelectionRevision: activeTagSelectionRevision
             )
         )
+        refreshCachedCompletionSurfaces(reason: reason)
     }
 
     private func buildActiveDayIfNeeded(

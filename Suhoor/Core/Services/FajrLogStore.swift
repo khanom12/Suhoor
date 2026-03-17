@@ -22,6 +22,19 @@ struct FajrLogEntry: Codable, Equatable, Sendable {
     let dateKey: String
     var status: FajrCompletionStatus
     var updatedAt: Date
+    var source: String?
+
+    init(
+        dateKey: String,
+        status: FajrCompletionStatus,
+        updatedAt: Date,
+        source: String? = nil
+    ) {
+        self.dateKey = dateKey
+        self.status = status
+        self.updatedAt = updatedAt
+        self.source = source
+    }
 }
 
 final class FajrLogStore: ObservableObject {
@@ -58,7 +71,8 @@ final class FajrLogStore: ObservableObject {
     func setStatus(
         _ status: FajrCompletionStatus,
         for dateKey: String,
-        now: Date = Date()
+        now: Date = Date(),
+        source: String? = nil
     ) {
         if status == .unknown {
             updateEntry(nil, for: dateKey)
@@ -72,6 +86,7 @@ final class FajrLogStore: ObservableObject {
         )
         entry.status = status
         entry.updatedAt = now
+        entry.source = source ?? entry.source
         updateEntry(entry, for: dateKey)
     }
 

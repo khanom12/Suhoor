@@ -18,7 +18,7 @@ enum LegacyCompletionAdapter {
                 kind: .fajr,
                 status: completionStatus(from: entry.status),
                 updatedAt: entry.updatedAt,
-                source: "fajrLog",
+                source: entry.source ?? "fajrLog",
                 metadata: [:]
             )
         }
@@ -30,11 +30,8 @@ enum LegacyCompletionAdapter {
                 kind: .fast,
                 status: completionStatus(from: entry.status),
                 updatedAt: entry.updatedAt,
-                source: "fastLog",
-                metadata: [
-                    "primaryIntent": entry.intentSnapshot?.primaryIntent.rawValue ?? FastPrimaryIntent.other.rawValue,
-                    "legacyStatus": entry.status.rawValue
-                ]
+                source: entry.source ?? "fastLog",
+                metadata: metadata(for: entry)
             )
         }
 
@@ -79,5 +76,25 @@ enum LegacyCompletionAdapter {
         case .inProgress, .unknown:
             return .unknown
         }
+    }
+
+    private static func metadata(for entry: FastLogEntry) -> [String: String] {
+        var metadata: [String: String] = [
+            "primaryIntent": entry.intentSnapshot?.primaryIntent.rawValue ?? FastPrimaryIntent.other.rawValue,
+            "legacyStatus": entry.status.rawValue,
+        ]
+
+        if let qadaEffect = entry.qadaEffect {
+            metadata["qadaCountsToward"] = qadaEffect.countsTowardQada ? "true" : "false"
+            metadata["qadaCompletedDelta"] = String(qadaEffect.completedDelta)
+            if let remaining = qadaEffect.remainingAfterEffect {
+                metadata["qadaRemainingAfterEffect"] = String(remaining)
+            }
+            if let explanation = qadaEffect.explanation {
+                metadata["qadaExplanation"] = explanation
+            }
+        }
+
+        return metadata
     }
 }

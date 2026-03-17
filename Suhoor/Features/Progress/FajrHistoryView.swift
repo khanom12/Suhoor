@@ -2,11 +2,12 @@ import SwiftUI
 
 struct FajrHistoryView: View {
     @EnvironmentObject private var scheduleManager: ScheduleManager
+    @EnvironmentObject private var completionSurfaceStore: CompletionSurfaceStore
 
     private let days = 30
 
     var body: some View {
-        let snapshot = scheduleManager.fajrHistorySurfaceSnapshot(days: days)
+        let snapshot = completionSurfaceStore.state.fajrHistorySnapshot
 
         List {
             Section {
@@ -17,7 +18,7 @@ struct FajrHistoryView: View {
                 } else {
                     ForEach(snapshot.rows) { row in
                         HistoryRow(row: row) { intent in
-                            scheduleManager.performCompletionEdit(intent)
+                            scheduleManager.performCompletionEdit(intent, source: .historyEdit)
                         }
                     }
                 }

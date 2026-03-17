@@ -1,7 +1,8 @@
 import SwiftUI
 
 struct TodayFastCheckInCard: View {
-    @EnvironmentObject private var fastLogStore: FastLogStore
+    @EnvironmentObject private var scheduleManager: ScheduleManager
+    @EnvironmentObject private var completionSurfaceStore: CompletionSurfaceStore
     @State private var isPulsing = false
 
     let presentation: FastingHomeSupportPresentation
@@ -28,11 +29,11 @@ struct TodayFastCheckInCard: View {
         }
     }
 
-    private var currentStatus: FastLogStatus {
-        fastLogStore.status(for: presentation.dateKey)
+    private var currentStatus: FastCompletionStatus {
+        completionSurfaceStore.fastStatus(for: presentation.dateKey)
     }
 
-    private var effectiveStatus: FastLogStatus {
+    private var effectiveStatus: FastCompletionStatus {
         if presentation.phase == .fastCompletionLogged, currentStatus == .inProgress {
             return .completed
         }
@@ -61,7 +62,14 @@ struct TodayFastCheckInCard: View {
                 if let primaryActionTitle = presentation.primaryActionTitle {
                     Button {
                         withAnimation(.easeInOut(duration: 0.22)) {
-                            fastLogStore.setStatus(primaryActionStatus, for: presentation.dateKey, intentSnapshot: presentation.intentSnapshot)
+                            scheduleManager.performCompletionEdit(
+                                .setFastStatus(
+                                    dateKey: presentation.dateKey,
+                                    status: primaryActionCompletionStatus,
+                                    intentSnapshot: presentation.intentSnapshot
+                                ),
+                                source: .homeCard
+                            )
                         }
                     } label: {
                         Text(primaryActionTitle)
@@ -73,7 +81,14 @@ struct TodayFastCheckInCard: View {
                 if let secondaryActionTitle = presentation.secondaryActionTitle {
                     Button {
                         withAnimation(.easeInOut(duration: 0.22)) {
-                            fastLogStore.setStatus(.missed, for: presentation.dateKey, intentSnapshot: presentation.intentSnapshot)
+                            scheduleManager.performCompletionEdit(
+                                .setFastStatus(
+                                    dateKey: presentation.dateKey,
+                                    status: .notCompleted,
+                                    intentSnapshot: presentation.intentSnapshot
+                                ),
+                                source: .homeCard
+                            )
                         }
                     } label: {
                         Text(secondaryActionTitle)
@@ -153,7 +168,10 @@ struct TodayFastCheckInCard: View {
     private var undoButton: some View {
         Button {
             withAnimation(.easeInOut(duration: 0.22)) {
-                fastLogStore.setStatus(.unknown, for: presentation.dateKey)
+                scheduleManager.performCompletionEdit(
+                    .clearFastStatus(dateKey: presentation.dateKey),
+                    source: .homeCard
+                )
             }
         } label: {
             Text("Clear")
@@ -163,7 +181,7 @@ struct TodayFastCheckInCard: View {
         .accessibilityLabel("Clear fasting status")
     }
 
-    private var primaryActionStatus: FastLogStatus {
+    private var primaryActionCompletionStatus: FastCompletionStatus {
         switch presentation.phase {
         case .fastingStatusPrompt:
             return .inProgress
@@ -184,9 +202,9 @@ struct TodayFastCheckInCard: View {
             return "Fasting in progress"
         case .completed:
             return "Fast completed"
-        case .missed:
+        case .notCompleted:
             return "Not completed"
-        case .unknown:
+        case .unknown, .notRequired:
             return ""
         }
     }
@@ -199,7 +217,7 @@ struct TodayFastCheckInCard: View {
             return .orange
         case .completed:
             return .green
-        case .missed:
+        case .notCompleted, .notRequired:
             return .secondary
         }
     }
@@ -208,6 +226,13 @@ struct TodayFastCheckInCard: View {
         guard presentation.phase == .fastCompletionLogged, currentStatus == .inProgress else {
             return
         }
-        fastLogStore.setStatus(.completed, for: presentation.dateKey, intentSnapshot: presentation.intentSnapshot)
+        scheduleManager.performCompletionEdit(
+            .setFastStatus(
+                dateKey: presentation.dateKey,
+                status: .completed,
+                intentSnapshot: presentation.intentSnapshot
+            ),
+            source: .homeCard
+        )
     }
 }

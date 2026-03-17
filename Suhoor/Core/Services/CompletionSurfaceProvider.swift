@@ -9,13 +9,12 @@ struct CompletionSurfaceProvider {
         wakeProgress: WakeProgressSnapshot
     ) -> ProgressSurfaceSnapshot {
         let todayKey = DateHelpers.dayIdentifier(for: now, timeZone: .current)
-        let todayCompletion = activeWindowSnapshot.byDateKey[todayKey]?.dailyCompletion
-            ?? DailyCompletionResolver.resolve(
-                dateKey: todayKey,
-                resolvedDayContext: activeWindowSnapshot.byDateKey[todayKey]?.resolvedDayContext ?? .standard,
-                completionState: completionState
-            )
         let todayResolvedDayContext = activeWindowSnapshot.byDateKey[todayKey]?.resolvedDayContext
+        let todayCompletion = DailyCompletionResolver.resolve(
+            dateKey: todayKey,
+            resolvedDayContext: todayResolvedDayContext ?? .standard,
+            completionState: completionState
+        )
         return CompletionProjectionBuilder.buildProgress(
             todayCompletion: todayCompletion,
             todayResolvedDayContext: todayResolvedDayContext,
