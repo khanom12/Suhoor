@@ -25,7 +25,7 @@ struct SettingsSectionHeader: View {
         AppSectionHeader(title, subtitle: supportingText) {
             if let meta {
                 Text(meta)
-                    .font(.footnote.weight(.semibold))
+                    .font(AppTypography.metricLabel)
                     .foregroundStyle(.secondary)
             }
         }
@@ -54,15 +54,15 @@ struct SettingsInfoBanner<Action: View>: View {
         AppGlassSurface(variant: .quiet) {
             HStack(alignment: .top, spacing: DesignTokens.spacingM) {
                 Image(systemName: systemImage)
-                    .font(.headline)
+                    .font(AppTypography.bannerSymbol)
                     .foregroundStyle(.secondary)
-                    .padding(.top, 2)
+                    .padding(.top, DesignTokens.accessoryInset)
 
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: DesignTokens.textSpacingCompact) {
                     Text(title)
-                        .font(.body.weight(.semibold))
+                        .font(AppTypography.rowTitle)
                     Text(message)
-                        .font(.footnote)
+                        .font(AppTypography.cardBody)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                     action()
@@ -106,11 +106,11 @@ struct SettingsEditorCard<Content: View>: View {
                     HStack(alignment: .top, spacing: DesignTokens.spacingM) {
                         if let onToggleExpanded {
                             Button(action: onToggleExpanded) {
-                                HStack(alignment: .top, spacing: 12) {
+                                HStack(alignment: .top, spacing: DesignTokens.space12) {
                                     headerText
                                     Spacer(minLength: 0)
                                     Image(systemName: "chevron.right")
-                                        .font(.footnote.weight(.semibold))
+                                        .font(AppTypography.navAccessory)
                                         .foregroundStyle(.secondary)
                                         .rotationEffect(.degrees(isExpanded ? 90 : 0))
                                         .animation(Motion.standard(reduceMotion: reduceMotion), value: isExpanded)
@@ -142,14 +142,14 @@ struct SettingsEditorCard<Content: View>: View {
 
     @ViewBuilder
     private var headerText: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: DesignTokens.textSpacingTight) {
             if let title {
                 Text(title)
-                    .font(.body.weight(.semibold))
+                    .font(AppTypography.rowTitle)
             }
             if let subtitle {
                 Text(subtitle)
-                    .font(.footnote)
+                    .font(AppTypography.rowBody)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -167,37 +167,38 @@ struct RelativeOffsetControl: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: DesignTokens.spacingM) {
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: DesignTokens.textSpacingTight) {
                 Text(label)
+                    .font(AppTypography.rowTitle)
                     .foregroundStyle(.primary)
                 Text(detail)
-                    .font(.footnote)
+                    .font(AppTypography.rowBody)
                     .foregroundStyle(.secondary)
             }
             Spacer()
-            HStack(spacing: 8) {
+            HStack(spacing: DesignTokens.inlineSpacingMedium) {
                 Button {
                     value = max(range.lowerBound, value - step)
                 } label: {
                     Image(systemName: "minus")
-                        .font(.system(size: 14, weight: .semibold))
-                        .frame(width: 28, height: 28)
+                        .font(AppTypography.compactControlIcon)
+                        .frame(width: DesignTokens.smallControlFrame, height: DesignTokens.smallControlFrame)
                 }
                 .appControlStyle(.secondary)
                 .disabled(isDisabled || value <= range.lowerBound)
 
                 Text("\(value)")
-                    .font(.callout)
+                    .font(AppTypography.metricValue)
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
-                    .frame(minWidth: 28)
+                    .frame(minWidth: DesignTokens.smallControlFrame)
 
                 Button {
                     value = min(range.upperBound, value + step)
                 } label: {
                     Image(systemName: "plus")
-                        .font(.system(size: 14, weight: .semibold))
-                        .frame(width: 28, height: 28)
+                        .font(AppTypography.compactControlIcon)
+                        .frame(width: DesignTokens.smallControlFrame, height: DesignTokens.smallControlFrame)
                 }
                 .appControlStyle(.secondary)
                 .disabled(isDisabled || value >= range.upperBound)
@@ -247,11 +248,11 @@ struct AlarmTimingEditor: View {
                                 selection: $fixedTime,
                                 displayedComponents: [.hourAndMinute]
                             ) {
-                                VStack(alignment: .leading, spacing: 4) {
+                                VStack(alignment: .leading, spacing: DesignTokens.textSpacingTight) {
                                     Text(fixedLabel)
                                     if let fixedDetail {
                                         Text(fixedDetail)
-                                            .font(.footnote)
+                                            .font(AppTypography.rowBody)
                                             .foregroundStyle(.secondary)
                                     }
                                 }
@@ -270,7 +271,7 @@ struct AlarmTimingEditor: View {
 
                         if let warningText {
                             Text(warningText)
-                                .font(.footnote)
+                                .font(AppTypography.rowBody)
                                 .foregroundStyle(.orange)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
@@ -282,20 +283,21 @@ struct AlarmTimingEditor: View {
     }
 
     private var header: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: DesignTokens.space12) {
             Button(action: toggleExpanded) {
-                HStack(spacing: 12) {
-                    VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: DesignTokens.space12) {
+                    VStack(alignment: .leading, spacing: DesignTokens.textSpacingTight) {
                         Text(title)
+                            .font(AppTypography.rowTitle)
                             .foregroundStyle(.primary)
                         Text(summary)
-                            .font(.footnote)
+                            .font(AppTypography.rowBody)
                             .foregroundStyle(.secondary)
                     }
                     Spacer()
                     if onToggleExpanded != nil {
                         Image(systemName: "chevron.right")
-                            .font(.footnote.weight(.semibold))
+                            .font(AppTypography.navAccessory)
                             .foregroundStyle(.secondary)
                             .rotationEffect(.degrees(isExpanded ? 90 : 0))
                             .animation(Motion.standard(reduceMotion: reduceMotion), value: isExpanded)

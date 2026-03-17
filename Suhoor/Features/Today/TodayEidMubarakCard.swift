@@ -26,7 +26,7 @@ struct TodayEidMubarakCard: View {
 
                     if reduceMotion {
                         Image(systemName: "sparkles")
-                            .font(.system(size: 44, weight: .semibold))
+                            .font(.largeTitle.weight(.semibold))
                             .foregroundStyle(DawnColor.highlight.opacity(pulse ? 0.95 : 0.55))
                             .scaleEffect(pulse ? 1.08 : 0.92)
                     } else {
@@ -36,11 +36,11 @@ struct TodayEidMubarakCard: View {
 
                     VStack(alignment: .leading, spacing: DesignTokens.dashboardCardInternalSpacing) {
                         HStack(alignment: .center, spacing: DesignTokens.spacingS) {
-                            VStack(alignment: .leading, spacing: 2) {
+                            VStack(alignment: .leading, spacing: DesignTokens.textSpacingMicro) {
                                 Text("Eid Mubarak")
-                                    .font(DesignTokens.cardTitleFont)
+                                    .font(AppTypography.cardTitle)
                                 Text(model.subtitle)
-                                    .font(DesignTokens.cardSubtitleFont)
+                                    .font(AppTypography.cardBody)
                                     .foregroundStyle(.secondary)
                             }
 

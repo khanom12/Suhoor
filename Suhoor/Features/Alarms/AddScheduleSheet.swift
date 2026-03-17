@@ -48,7 +48,7 @@ struct AddScheduleSheet: View {
                 .pickerStyle(.segmented)
 
                 Text(modeHelperText)
-                    .font(.footnote)
+                    .font(AppTypography.cardBody)
                     .foregroundStyle(.secondary)
             }
 
@@ -64,7 +64,7 @@ struct AddScheduleSheet: View {
             if let disabledReason, mode != .islamicDates {
                 Section {
                     Text(disabledReason)
-                        .font(.footnote)
+                        .font(AppTypography.cardBody)
                         .foregroundStyle(.secondary)
                 }
             }
@@ -168,7 +168,7 @@ struct AddScheduleSheet: View {
                     onOpenExistingDay(selectedDate)
                     isPresented = false
                 }
-                .font(.footnote.weight(.semibold))
+                .font(AppTypography.metricLabel)
             }
         }
 
@@ -177,16 +177,17 @@ struct AddScheduleSheet: View {
                 showsTagPicker = true
             } label: {
                 HStack {
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: DesignTokens.textSpacingTight) {
                         Text("Edit day meaning")
+                            .font(AppTypography.rowTitle)
                             .foregroundStyle(.primary)
                         Text(singleDayDetail.tagSummary)
-                            .font(.footnote)
+                            .font(AppTypography.rowBody)
                             .foregroundStyle(.secondary)
                     }
                     Spacer()
                     Image(systemName: "chevron.right")
-                        .font(.subheadline.weight(.semibold))
+                        .font(AppTypography.navAccessory)
                         .foregroundStyle(.tertiary)
                 }
             }
@@ -221,19 +222,19 @@ struct AddScheduleSheet: View {
             }
 
             Text(Strings.AddSchedule.purposeHelper)
-                .font(.footnote)
+                .font(AppTypography.cardBody)
                 .foregroundStyle(.secondary)
 
             DisclosureGroup(Strings.AddSchedule.detailsTitle) {
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: DesignTokens.textSpacingCompact) {
                     Text(rangePurposeSelection.detailText)
                     Text("Secondary observance tags stay automatic and are derived per date after add.")
                 }
-                .font(.footnote)
+                .font(AppTypography.cardBody)
                 .foregroundStyle(.secondary)
-                .padding(.top, 4)
+                .padding(.top, DesignTokens.textSpacingTight)
             }
-            .font(.footnote.weight(.semibold))
+            .font(AppTypography.metricLabel)
             .foregroundStyle(.secondary)
         }
 
@@ -245,7 +246,7 @@ struct AddScheduleSheet: View {
             )
 
             Text(Strings.AddSchedule.rangePreviewFooter)
-                .font(.footnote)
+                .font(AppTypography.cardBody)
                 .foregroundStyle(.secondary)
         }
     }
@@ -260,7 +261,7 @@ struct AddScheduleSheet: View {
                 NavigationLink(Strings.AddSchedule.manageCorrections) {
                     HijriCalendarSettingsView()
                 }
-                .font(.footnote.weight(.semibold))
+                .font(AppTypography.metricLabel)
             }
         }
 
@@ -649,7 +650,7 @@ struct AshuraQuickAddSheet: View {
         Form {
             Section {
                 Text("Suhoor recommends observing Ashura as a two-day pattern.")
-                    .font(.footnote)
+                    .font(AppTypography.cardBody)
                     .foregroundStyle(.secondary)
             }
 
@@ -684,17 +685,17 @@ struct AshuraQuickAddSheet: View {
     private func ashuraPatternRow(_ pattern: AshuraQuickAddPattern) -> some View {
         let availability = scheduleManager.ashuraQuickAddAvailability(pattern)
 
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .top, spacing: 12) {
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack(spacing: 8) {
+        VStack(alignment: .leading, spacing: DesignTokens.textSpacingRegular) {
+            HStack(alignment: .top, spacing: DesignTokens.space12) {
+                VStack(alignment: .leading, spacing: DesignTokens.textSpacingTight) {
+                    HStack(spacing: DesignTokens.inlineSpacingMedium) {
                         Text(pattern.title)
-                            .font(.body.weight(.medium))
+                            .font(AppTypography.rowTitle)
                         if availability.isRecommended {
                             Text("Recommended")
-                                .font(.caption.weight(.semibold))
-                                .padding(.vertical, 3)
-                                .padding(.horizontal, 8)
+                                .font(AppTypography.badge)
+                                .padding(.vertical, DesignTokens.accessoryInset + 1)
+                                .padding(.horizontal, DesignTokens.badgeHorizontalPadding)
                                 .background(
                                     Capsule()
                                         .fill(Color.orange.opacity(0.16))
@@ -703,7 +704,7 @@ struct AshuraQuickAddSheet: View {
                         }
                     }
                     Text(pattern.detailText)
-                        .font(.footnote)
+                        .font(AppTypography.cardBody)
                         .foregroundStyle(.secondary)
                 }
 
@@ -719,20 +720,20 @@ struct AshuraQuickAddSheet: View {
 
             if let preview = availability.preview {
                 Text(preview.previewText)
-                    .font(.footnote)
+                    .font(AppTypography.cardBody)
                     .foregroundStyle(.secondary)
                 Text(preview.availabilityText)
-                    .font(.footnote)
+                    .font(AppTypography.cardBody)
                     .foregroundStyle(.secondary)
             }
 
             if let reasonText = availability.reasonText {
                 Text(reasonText)
-                    .font(.footnote)
+                    .font(AppTypography.cardBody)
                     .foregroundStyle(availability.state == .disabled ? Color.secondary : .orange)
             }
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, DesignTokens.accessoryInset)
     }
 
     private func ashuraActionTitle(for availability: AshuraQuickAddAvailability) -> String {
@@ -874,7 +875,7 @@ private struct RangeSelectionCard: View {
             Divider()
             rangeRow(title: endTitle, gregorian: endGregorian, hijri: endHijri, action: onSelectEnd)
         }
-        .padding(.vertical, 6)
+        .padding(.vertical, DesignTokens.textSpacingCompact)
         .background(
             RoundedRectangle(cornerRadius: DesignTokens.innerCardRadius, style: .continuous)
                 .fill(Color(.secondarySystemGroupedBackground))
@@ -884,22 +885,23 @@ private struct RangeSelectionCard: View {
     private func rangeRow(title: String, gregorian: String, hijri: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: DesignTokens.textSpacingTight) {
                     Text(title)
-                        .font(.subheadline.weight(.semibold))
+                        .font(AppTypography.rowTitle)
                         .foregroundStyle(.primary)
                     Text(gregorian)
-                        .font(.footnote)
+                        .font(AppTypography.rowBody)
                         .foregroundStyle(.secondary)
                     Text(hijri)
-                        .font(.footnote)
+                        .font(AppTypography.rowBody)
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
                 Image(systemName: "calendar")
+                    .font(AppTypography.controlIcon)
                     .foregroundStyle(.secondary)
             }
-            .padding(.vertical, 10)
+            .padding(.vertical, DesignTokens.compactRowVerticalPadding)
             .padding(.horizontal, DesignTokens.spacingM)
         }
         .buttonStyle(.plain)
@@ -920,16 +922,16 @@ private struct RangePreviewGrid: View {
             previewCell(title: "Already active", value: skipped, accent: skipped == 0 ? .secondary : .orange)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 4)
+        .padding(.vertical, DesignTokens.textSpacingTight)
     }
 
     private func previewCell(title: String, value: Int, accent: Color) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: DesignTokens.textSpacingTight) {
             Text(title)
-                .font(.footnote)
+                .font(AppTypography.metricLabel)
                 .foregroundStyle(.secondary)
             Text("\(value)")
-                .font(.headline.weight(.semibold))
+                .font(AppTypography.summaryMetricValue)
                 .foregroundStyle(accent)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -945,18 +947,20 @@ private struct CalendarSelectionButton: View {
     var body: some View {
         Button(action: action) {
             HStack {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: DesignTokens.textSpacingTight) {
                     Text(title)
+                        .font(AppTypography.rowTitle)
                         .foregroundStyle(.primary)
                     Text(gregorianText)
-                        .font(.footnote)
+                        .font(AppTypography.rowBody)
                         .foregroundStyle(.secondary)
                     Text(hijriText)
-                        .font(.footnote)
+                        .font(AppTypography.rowBody)
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
                 Image(systemName: "calendar")
+                    .font(AppTypography.controlIcon)
                     .foregroundStyle(.secondary)
             }
         }

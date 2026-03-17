@@ -76,7 +76,7 @@ struct WakeScreen: View {
                                 HStack(spacing: DesignTokens.spacingS) {
                                     ProgressView()
                                     Text("Loading more mornings")
-                                        .font(.footnote)
+                                        .font(AppTypography.rowBody)
                                         .foregroundStyle(.secondary)
                                 }
                                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -91,7 +91,7 @@ struct WakeScreen: View {
                                         destination = .day(entry.schedule)
                                     }
                                     .padding(.horizontal, DesignTokens.spacingL)
-                                    .padding(.vertical, 10)
+                                    .padding(.vertical, DesignTokens.compactRowVerticalPadding)
 
                                     if index < section.entries.count - 1 {
                                         AppGroupDivider()
@@ -141,9 +141,9 @@ struct WakeScreen: View {
     private var emptyStateView: some View {
         VStack(alignment: .leading, spacing: DesignTokens.spacingS) {
             Text("No mornings are ready yet")
-                .font(.headline.weight(.semibold))
+                .font(AppTypography.cardTitle)
             Text(emptyStateDetail)
-                .font(.subheadline)
+                .font(AppTypography.rowBody)
                 .foregroundStyle(.secondary)
             PermissionStackView(
                 kinds: [.location, .alarmKit, .notifications],
@@ -307,32 +307,29 @@ private struct FeaturedTomorrowCard: View {
         AppGlassSurface(variant: .standard, prominence: .high) {
             VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
                 Text("Next morning")
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                    .textCase(.uppercase)
-                    .tracking(0.4)
+                    .appTextRole(.eyebrow)
 
                 AppHeroMetric(
                     value: TimeFormatters.timeFormatter.string(from: summary.day.schedule.wakeDate),
                     title: ProductSurfacePresentation.dayMeaningText(for: summary.day, style: .wakeRow)
                 )
 
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: DesignTokens.textSpacingTight) {
                     Text(ProductSurfacePresentation.wakeRelationText(
                         delta: summary.day.decisionLog.resolvedDelta,
                         anchor: summary.day.decisionLog.resolvedAnchor.type
                     ))
-                    .font(.subheadline.weight(.semibold))
+                    .font(AppTypography.rowTitle)
                     .foregroundStyle(.secondary)
 
                     Text("Fajr begins at \(TimeFormatters.timeFormatter.string(from: summary.day.schedule.fajrDate))")
-                        .font(.footnote)
+                        .font(AppTypography.rowBody)
                         .foregroundStyle(.secondary)
                         .monospacedDigit()
 
                     if hasOverride {
                         Text("Adjusted for this date")
-                            .font(.footnote)
+                            .font(AppTypography.metricLabel)
                             .foregroundStyle(DawnColor.accent)
                     }
                 }

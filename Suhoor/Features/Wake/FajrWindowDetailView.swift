@@ -125,7 +125,7 @@ struct FajrWindowDetailView: View {
 
                         if let loadingOverlay = store.loadingOverlay {
                             Text("Loading \(loadingOverlay.title.lowercased())...")
-                                .font(.footnote)
+                                .font(AppTypography.cardBody)
                                 .foregroundStyle(.secondary)
                                 .accessibilityLabel("Loading \(loadingOverlay.title.lowercased())")
                         }
@@ -160,14 +160,14 @@ struct FajrWindowDetailView: View {
     }
 
     private func header(snapshot: FajrWindowSurfaceSnapshot) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: DesignTokens.textSpacingCompact) {
             Text("Fajr Window")
-                .font(.title2.weight(.semibold))
+                .font(DesignTokens.screenTitleFont)
             Text(snapshot.period.subtitle)
-                .font(.footnote.weight(.semibold))
+                .font(AppTypography.metricLabel)
                 .foregroundStyle(.secondary)
             Text("See how your wake sits inside each morning's supported Fajr window.")
-                .font(.footnote)
+                .font(AppTypography.cardBody)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }

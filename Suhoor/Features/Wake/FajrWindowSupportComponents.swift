@@ -5,7 +5,7 @@ struct FajrWindowPeriodPicker: View {
     let onSelect: (FajrWindowPeriod) -> Void
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: DesignTokens.inlineSpacingMedium) {
             ForEach(FajrWindowPeriod.allCases) { period in
                 Button(period.shortTitle) {
                     onSelect(period)
@@ -24,13 +24,13 @@ struct FajrWindowOverlayPicker: View {
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
+            HStack(spacing: DesignTokens.inlineSpacingMedium) {
                 ForEach(overlays) { overlay in
                     Button {
                         onSelect(overlay)
                     }
                     label: {
-                        HStack(spacing: 6) {
+                        HStack(spacing: DesignTokens.textSpacingCompact) {
                             Text(overlay.title)
                             if loadingOverlay == overlay {
                                 ProgressView()
@@ -44,7 +44,7 @@ struct FajrWindowOverlayPicker: View {
                     .accessibilityValue(accessibilityValue(for: overlay))
                 }
             }
-            .padding(.vertical, 2)
+            .padding(.vertical, DesignTokens.accessoryInset)
         }
     }
 
@@ -61,10 +61,10 @@ private struct FajrWindowPickerButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.footnote.weight(.semibold))
+            .font(AppTypography.badge)
             .foregroundStyle(isSelected ? Color.black : Color.primary)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
+            .padding(.horizontal, DesignTokens.space12)
+            .padding(.vertical, DesignTokens.space10)
             .background(
                 Capsule()
                     .fill(isSelected ? DawnColor.lightGold200 : Color(.secondarySystemGroupedBackground))
@@ -86,11 +86,11 @@ struct FajrWindowSummaryBlock: View {
     var body: some View {
         GlassCard(tintColor: tintColor, tintOpacity: tintOpacity) {
             VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: DesignTokens.textSpacingCompact) {
                     Text(summary.title)
-                        .font(.headline.weight(.semibold))
+                        .font(AppTypography.cardTitle)
                     Text(summary.body)
-                        .font(.footnote)
+                        .font(AppTypography.cardBody)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -100,11 +100,11 @@ struct FajrWindowSummaryBlock: View {
                         ForEach(summary.metrics) { metric in
                             HStack(alignment: .firstTextBaseline, spacing: DesignTokens.spacingM) {
                                 Text(metric.label)
-                                    .font(.footnote)
+                                    .font(AppTypography.metricLabel)
                                     .foregroundStyle(.secondary)
                                 Spacer(minLength: DesignTokens.spacingS)
                                 Text(metric.value)
-                                    .font(.footnote.weight(.semibold))
+                                    .font(AppTypography.metricValue)
                                     .monospacedDigit()
                             }
                         }
@@ -122,14 +122,14 @@ struct FajrWindowInsightList: View {
         GlassCard(tintColor: DawnColor.accent, tintOpacity: 0.08) {
             VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
                 Text("What stands out")
-                    .font(.headline.weight(.semibold))
+                    .font(AppTypography.cardTitle)
 
                 ForEach(items) { item in
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: DesignTokens.textSpacingTight) {
                         Text(item.title)
-                            .font(.subheadline.weight(.semibold))
+                            .font(AppTypography.rowTitle)
                         Text(item.detail)
-                            .font(.footnote)
+                            .font(AppTypography.rowBody)
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -150,20 +150,20 @@ struct FajrWindowActionRows: View {
                     onSelect(item.intent)
                 } label: {
                     HStack(alignment: .center, spacing: DesignTokens.spacingM) {
-                        VStack(alignment: .leading, spacing: 4) {
+                        VStack(alignment: .leading, spacing: DesignTokens.textSpacingTight) {
                             Text(item.title)
-                                .font(.subheadline.weight(.semibold))
+                                .font(AppTypography.rowTitle)
                                 .foregroundStyle(.primary)
                             if let subtitle = item.subtitle {
                                 Text(subtitle)
-                                    .font(.footnote)
+                                    .font(AppTypography.rowBody)
                                     .foregroundStyle(.secondary)
                                     .fixedSize(horizontal: false, vertical: true)
                             }
                         }
                         Spacer(minLength: DesignTokens.spacingM)
                         Image(systemName: "chevron.right")
-                            .font(.footnote.weight(.semibold))
+                            .font(AppTypography.navAccessory)
                             .foregroundStyle(.tertiary)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -212,7 +212,7 @@ struct FajrWindowDayStepper: View {
             .accessibilityHint("Moves to the earlier day in this view.")
 
             Text(selectedTitle)
-                .font(.footnote.weight(.semibold))
+                .font(AppTypography.metricLabel)
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity)
                 .multilineTextAlignment(.center)
@@ -228,7 +228,7 @@ struct FajrWindowDayStepper: View {
             .disabled(!canMoveForward)
             .accessibilityHint("Moves to the later day in this view.")
         }
-        .font(.footnote)
+        .font(AppTypography.metricValue)
         .accessibilityElement(children: .contain)
     }
 }

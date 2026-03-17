@@ -7,22 +7,21 @@ struct FajrWindowSelectedDayCard: View {
         GlassCard(tintColor: DawnColor.lightGold200, tintOpacity: 0.14) {
             VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
                 HStack(alignment: .top, spacing: DesignTokens.spacingM) {
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: DesignTokens.textSpacingTight) {
                         Text("Selected day")
-                            .font(DesignTokens.cardMetaFont)
-                            .foregroundStyle(.secondary)
+                            .appTextRole(.eyebrow)
                         Text(snapshot.title)
-                            .font(.headline.weight(.semibold))
+                            .font(AppTypography.cardTitle)
                     }
 
                     Spacer(minLength: DesignTokens.spacingS)
 
                     if let statusText = snapshot.statusText {
                         Text(statusText)
-                            .font(.caption.weight(.semibold))
+                            .font(AppTypography.badge)
                             .foregroundStyle(DawnColor.accent)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 6)
+                            .padding(.horizontal, DesignTokens.chipHorizontalPaddingCompact)
+                            .padding(.vertical, DesignTokens.compactChipVerticalPadding)
                             .background(
                                 Capsule()
                                     .fill(DawnColor.accent.opacity(0.12))
@@ -53,13 +52,13 @@ struct FajrWindowSelectedDayCard: View {
                 }
 
                 if !snapshot.contextTags.isEmpty {
-                    HStack(spacing: 8) {
+                    HStack(spacing: DesignTokens.inlineSpacingMedium) {
                         ForEach(snapshot.contextTags, id: \.self) { tag in
                             Text(tag)
-                                .font(.caption.weight(.semibold))
+                                .font(AppTypography.badge)
                                 .foregroundStyle(.secondary)
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 6)
+                                .padding(.horizontal, DesignTokens.chipHorizontalPaddingCompact)
+                                .padding(.vertical, DesignTokens.compactChipVerticalPadding)
                                 .background(
                                     Capsule()
                                         .fill(Color(.secondarySystemGroupedBackground))
@@ -69,7 +68,7 @@ struct FajrWindowSelectedDayCard: View {
                 }
 
                 Text(snapshot.explanationText)
-                    .font(.footnote)
+                    .font(AppTypography.cardBody)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -83,13 +82,13 @@ struct FajrWindowSelectedDayCard: View {
     private func itemRow(_ item: FajrWindowValueItem) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: DesignTokens.spacingM) {
             Text(item.label)
-                .font(item.emphasis == .primary ? .subheadline.weight(.semibold) : .footnote)
+                .font(item.emphasis == .primary ? AppTypography.rowTitle : AppTypography.metricLabel)
                 .foregroundStyle(labelColor(for: item.emphasis))
 
             Spacer(minLength: DesignTokens.spacingS)
 
             Text(item.value)
-                .font(item.emphasis == .primary ? .subheadline.weight(.semibold) : .footnote.weight(.semibold))
+                .font(item.emphasis == .primary ? AppTypography.summaryMetricValue : AppTypography.metricValue)
                 .foregroundStyle(valueColor(for: item.emphasis))
                 .monospacedDigit()
         }

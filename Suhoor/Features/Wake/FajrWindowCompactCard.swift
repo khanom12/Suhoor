@@ -9,26 +9,25 @@ struct FajrWindowCompactCard: View {
             GlassCard(style: .header) {
                 VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
                     HStack(alignment: .top, spacing: DesignTokens.spacingM) {
-                        VStack(alignment: .leading, spacing: 4) {
+                        VStack(alignment: .leading, spacing: DesignTokens.textSpacingTight) {
                             Text("Fajr Window")
-                                .font(.headline.weight(.semibold))
-                                .foregroundStyle(.primary)
+                                .font(AppTypography.cardTitle)
                             Text(snapshot.period.subtitle)
-                                .font(.footnote)
+                                .font(AppTypography.cardBody)
                                 .foregroundStyle(.secondary)
                         }
 
                         Spacer(minLength: DesignTokens.spacingS)
 
                         Image(systemName: "sun.horizon")
-                            .font(.title3.weight(.semibold))
+                            .font(AppTypography.cardSymbol)
                             .foregroundStyle(.secondary)
                     }
 
                     FajrWindowChartView(chart: snapshot.chart, layoutStyle: .compact)
 
                     Text(snapshot.compactInsight)
-                        .font(.footnote)
+                        .font(AppTypography.cardBody)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }

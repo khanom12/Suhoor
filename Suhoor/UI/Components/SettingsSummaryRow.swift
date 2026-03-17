@@ -11,18 +11,18 @@ struct SettingsSummaryRow: View {
     var body: some View {
         HStack(spacing: DesignTokens.spacingM) {
             Image(systemName: systemImage)
-                .font(.system(size: 15, weight: .semibold))
+                .font(AppTypography.controlIcon)
                 .foregroundStyle(.primary)
-                .frame(width: 34, height: 34)
+                .frame(width: DesignTokens.regularControlFrame, height: DesignTokens.regularControlFrame)
                 .background(iconBackground)
 
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: DesignTokens.textSpacingMicro) {
                 Text(title)
-                    .font(.body.weight(.semibold))
+                    .font(AppTypography.rowTitle)
                     .foregroundStyle(.primary)
 
                 Text(subtitle)
-                    .font(.footnote)
+                    .font(AppTypography.rowBody)
                     .foregroundStyle(.secondary)
                     .lineLimit(3)
                     .fixedSize(horizontal: false, vertical: true)
@@ -36,11 +36,11 @@ struct SettingsSummaryRow: View {
 
             if showsDisclosureIndicator {
                 Image(systemName: "chevron.right")
-                    .font(.footnote.weight(.semibold))
+                    .font(AppTypography.navAccessory)
                     .foregroundStyle(.tertiary)
             }
         }
-        .frame(minHeight: 56)
+        .frame(minHeight: DesignTokens.settingsSummaryMinHeight)
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
     }
@@ -94,10 +94,10 @@ struct SettingsStatusBadge: View {
 
     var body: some View {
         Text(text)
-            .font(.caption.weight(.semibold))
+            .font(AppTypography.badge)
             .foregroundStyle(tone.foregroundStyle)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
+            .padding(.horizontal, DesignTokens.badgeHorizontalPadding)
+            .padding(.vertical, DesignTokens.badgeVerticalPadding)
             .background(
                 Capsule(style: .continuous)
                     .fill(tone.backgroundStyle)

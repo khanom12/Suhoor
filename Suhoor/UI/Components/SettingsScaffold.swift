@@ -52,7 +52,7 @@ struct SettingsGroup<Content: View>: View {
                 AppSectionHeader(title, subtitle: supportingText)
             } else if let supportingText {
                 Text(supportingText)
-                    .font(.footnote)
+                    .font(AppTypography.cardBody)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -63,10 +63,10 @@ struct SettingsGroup<Content: View>: View {
 
             if let footer {
                 Text(footer)
-                    .font(.footnote)
+                    .font(AppTypography.cardBody)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
-                    .padding(.horizontal, 2)
+                    .padding(.horizontal, DesignTokens.accessoryInset)
             }
         }
     }
@@ -77,7 +77,7 @@ struct SettingsRow<Content: View>: View {
     @ViewBuilder let content: () -> Content
 
     init(
-        verticalPadding: CGFloat = 14,
+        verticalPadding: CGFloat = DesignTokens.settingsRowVerticalPadding,
         @ViewBuilder content: @escaping () -> Content
     ) {
         self.verticalPadding = verticalPadding
@@ -99,11 +99,13 @@ struct SettingsValueRow: View {
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: DesignTokens.spacingM) {
             Text(title)
+                .font(AppTypography.rowTitle)
                 .foregroundStyle(.primary)
 
             Spacer(minLength: DesignTokens.spacingM)
 
             Text(value)
+                .font(AppTypography.rowBody)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.trailing)
         }
@@ -122,7 +124,7 @@ struct SettingsNavigationRow<Content: View>: View {
             content()
             Spacer(minLength: DesignTokens.spacingS)
             Image(systemName: "chevron.right")
-                .font(.footnote.weight(.semibold))
+                .font(AppTypography.navAccessory)
                 .foregroundStyle(.tertiary)
         }
     }

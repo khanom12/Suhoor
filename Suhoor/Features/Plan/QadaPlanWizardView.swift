@@ -133,19 +133,18 @@ struct QadaPlanWizardView: View {
     }
 
     private var setupIntro: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 10) {
+        VStack(alignment: .leading, spacing: DesignTokens.textSpacingMedium) {
+            HStack(spacing: DesignTokens.textSpacingMedium) {
                 pageIndicators
                 Text(viewModel.setupProgressText)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
+                    .appTextRole(.badge)
             }
 
             Text(viewModel.setupTitle)
-                .font(.title2.weight(.semibold))
+                .font(DesignTokens.screenTitleFont)
 
             Text(viewModel.setupSubtitle)
-                .font(.footnote)
+                .font(AppTypography.cardBody)
                 .foregroundStyle(.secondary)
         }
     }
@@ -154,11 +153,11 @@ struct QadaPlanWizardView: View {
         VStack(alignment: .leading, spacing: DesignTokens.spacingL) {
             if let suggestion = viewModel.backlogSuggestion, draftCountIsEmpty {
                 GlassCard(style: .header) {
-                    VStack(alignment: .leading, spacing: 10) {
+                    VStack(alignment: .leading, spacing: DesignTokens.textSpacingMedium) {
                         Text("Ramadan check-ins suggest \(suggestion.suggestedOwed) fast\(suggestion.suggestedOwed == 1 ? "" : "s") to make up.")
-                            .font(.subheadline.weight(.semibold))
+                            .font(AppTypography.rowTitle)
                         Text("Use this as your starting count, or enter your own total below.")
-                            .font(.footnote)
+                            .font(AppTypography.cardBody)
                             .foregroundStyle(.secondary)
                         Button("Use \(suggestion.suggestedOwed)") {
                             viewModel.useSuggestedBacklog()
@@ -169,7 +168,7 @@ struct QadaPlanWizardView: View {
             }
 
             GlassCard {
-                VStack(alignment: .leading, spacing: 14) {
+                VStack(alignment: .leading, spacing: DesignTokens.settingsRowVerticalPadding) {
                     HStack(alignment: .center) {
                         sectionLabel("Fasts to make up")
                         Spacer()
@@ -183,23 +182,23 @@ struct QadaPlanWizardView: View {
                             Text("Total to make up")
                             Spacer()
                             Text("\(viewModel.draft.baselineOwed)")
-                                .font(.headline.weight(.semibold))
+                                .font(AppTypography.summaryMetricValue)
                         }
                     }
 
                     if let progressLine = viewModel.progressLineText {
                         Text(progressLine)
-                            .font(.footnote)
+                            .font(AppTypography.cardBody)
                             .foregroundStyle(.secondary)
                     } else {
                         Text("Start with the best total you know. You can adjust it later.")
-                        .font(.footnote)
+                            .font(AppTypography.cardBody)
                         .foregroundStyle(.secondary)
                     }
 
                     if let helper = viewModel.intakeSuggestionHelperText {
                         Text(helper)
-                            .font(.footnote)
+                            .font(AppTypography.cardBody)
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -208,7 +207,7 @@ struct QadaPlanWizardView: View {
     }
 
     private var pacePage: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: DesignTokens.textSpacingComfortable) {
             ForEach(QadaPlanPace.allCases) { pace in
                 QadaPaceCard(
                     pace: pace,
@@ -222,7 +221,7 @@ struct QadaPlanWizardView: View {
     private var preferencesPage: some View {
         VStack(alignment: .leading, spacing: DesignTokens.spacingL) {
             GlassCard {
-                VStack(alignment: .leading, spacing: 14) {
+                VStack(alignment: .leading, spacing: DesignTokens.settingsRowVerticalPadding) {
                     HStack(alignment: .center) {
                         sectionLabel("Keep these dates free")
                         Spacer()
@@ -230,7 +229,7 @@ struct QadaPlanWizardView: View {
                             activeInfoSheet = .protectedDays
                         } label: {
                             Image(systemName: "info.circle")
-                                .font(.subheadline.weight(.semibold))
+                                .font(AppTypography.controlIcon)
                                 .foregroundStyle(.secondary)
                                 .appToolbarButtonChrome()
                         }
@@ -238,7 +237,7 @@ struct QadaPlanWizardView: View {
                     }
 
                     Text(viewModel.protectedDatesHelperText)
-                        .font(.footnote)
+                        .font(AppTypography.cardBody)
                         .foregroundStyle(.secondary)
 
                     Toggle("Keep Shawwal free (for the 6 fasts)", isOn: Binding(
@@ -246,22 +245,22 @@ struct QadaPlanWizardView: View {
                         set: viewModel.updateAvoidShawwal
                     ))
 
-                    VStack(alignment: .leading, spacing: 6) {
+                    VStack(alignment: .leading, spacing: DesignTokens.textSpacingCompact) {
                         Toggle("Keep important Sunnah fasts separate", isOn: Binding(
                             get: { viewModel.draft.avoidImportantSunnah },
                             set: viewModel.updateAvoidImportantSunnah
                         ))
 
                         Text("Arafah, Ashura, White Days, Dhul Hijjah…")
-                            .font(.footnote)
+                            .font(AppTypography.cardBody)
                             .foregroundStyle(.secondary)
-                            .padding(.leading, 4)
+                            .padding(.leading, DesignTokens.textSpacingTight)
                     }
                 }
             }
 
             GlassCard {
-                VStack(alignment: .leading, spacing: 14) {
+                VStack(alignment: .leading, spacing: DesignTokens.settingsRowVerticalPadding) {
                     sectionLabel("Plan this batch")
 
                     Stepper(value: Binding(
@@ -272,17 +271,17 @@ struct QadaPlanWizardView: View {
                             Text("How many fasts")
                             Spacer()
                             Text("\(viewModel.draft.planBatchCount)")
-                                .font(.headline.weight(.semibold))
+                                .font(AppTypography.summaryMetricValue)
                         }
                     }
 
                     Text(viewModel.batchRecommendationText)
-                        .font(.footnote)
+                        .font(AppTypography.cardBody)
                         .foregroundStyle(.secondary)
 
                     if let estimatedFinish = viewModel.estimatedBatchFinishText {
                         Text("Estimated finish for this batch: \(estimatedFinish)")
-                            .font(.footnote)
+                            .font(AppTypography.cardBody)
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -296,9 +295,9 @@ struct QadaPlanWizardView: View {
 
             if let fallback = viewModel.fallbackDisplayCopy {
                 Text(fallback)
-                    .font(.footnote)
+                    .font(AppTypography.cardBody)
                     .foregroundStyle(.secondary)
-                    .padding(.horizontal, 4)
+                    .padding(.horizontal, DesignTokens.textSpacingTight)
             }
 
             HStack(spacing: 16) {
@@ -310,17 +309,17 @@ struct QadaPlanWizardView: View {
                 Button("Edit setup") {
                     viewModel.editSetup()
                 }
-                .font(.footnote.weight(.semibold))
+                .font(AppTypography.metricLabel)
                 .appControlStyle(.quiet)
             }
 
             GlassCard {
-                VStack(alignment: .leading, spacing: 14) {
+                VStack(alignment: .leading, spacing: DesignTokens.settingsRowVerticalPadding) {
                     HStack {
-                        VStack(alignment: .leading, spacing: 4) {
+                        VStack(alignment: .leading, spacing: DesignTokens.textSpacingTight) {
                             sectionLabel("Review your calendar")
                             Text("Tap a date to add, remove, or inspect it.")
-                                .font(.footnote)
+                                .font(AppTypography.cardBody)
                                 .foregroundStyle(.secondary)
                         }
                         Spacer()
@@ -346,23 +345,23 @@ struct QadaPlanWizardView: View {
 
     private var summaryCard: some View {
         GlassCard(style: .header) {
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: DesignTokens.textSpacingMedium) {
                 Text("\(viewModel.planSummary.plannedCount) fast\(viewModel.planSummary.plannedCount == 1 ? "" : "s") planned")
-                    .font(.title3.weight(.semibold))
+                    .font(DesignTokens.screenTitleFont)
 
                 if let dateRange = viewModel.summaryDateRange {
                     Text(dateRange)
-                        .font(.footnote)
+                        .font(AppTypography.cardBody)
                         .foregroundStyle(.secondary)
                 }
 
                 Text(viewModel.planSummary.paceTitle)
-                    .font(.footnote.weight(.medium))
+                    .font(AppTypography.metricValue)
                     .foregroundStyle(.secondary)
 
                 if !viewModel.planSummaryProtectionChips.isEmpty {
                     ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 8) {
+                        HStack(spacing: DesignTokens.inlineSpacingMedium) {
                             ForEach(viewModel.planSummaryProtectionChips, id: \.self) { chip in
                                 summaryChip(chip)
                             }
@@ -371,15 +370,15 @@ struct QadaPlanWizardView: View {
                 }
 
                 DisclosureGroup("Plan details", isExpanded: $showsSummaryDetails) {
-                    VStack(alignment: .leading, spacing: 10) {
+                    VStack(alignment: .leading, spacing: DesignTokens.textSpacingMedium) {
                         summaryRow(title: "Starts", value: formattedDate(viewModel.planSummary.startDate))
                         summaryRow(title: "Estimated finish", value: formattedDate(viewModel.planSummary.finishDate))
                         summaryRow(title: "Pace", value: viewModel.planSummary.paceTitle)
                         summaryRow(title: "Protected", value: viewModel.planSummary.protectedSummary)
                     }
-                    .padding(.top, 8)
+                    .padding(.top, DesignTokens.textSpacingRegular)
                 }
-                .font(.footnote.weight(.semibold))
+                .font(AppTypography.metricLabel)
             }
         }
     }
@@ -387,7 +386,7 @@ struct QadaPlanWizardView: View {
     private var setupBottomBar: some View {
         VStack(spacing: 0) {
             Divider()
-            HStack(spacing: 12) {
+            HStack(spacing: DesignTokens.space12) {
                 pageIndicators
 
                 Spacer()
@@ -407,9 +406,9 @@ struct QadaPlanWizardView: View {
     private var reviewBottomBar: some View {
         VStack(spacing: 0) {
             Divider()
-            HStack(spacing: 12) {
+            HStack(spacing: DesignTokens.space12) {
                 Text("\(viewModel.selectedKeys.count) / \(viewModel.draft.planBatchCount) selected")
-                    .font(.footnote.weight(.semibold))
+                    .font(AppTypography.metricLabel)
                     .foregroundStyle(.secondary)
 
                 Spacer()
@@ -430,16 +429,16 @@ struct QadaPlanWizardView: View {
     private var successSheet: some View {
         VStack(alignment: .leading, spacing: DesignTokens.spacingL) {
             Text("Your Qada plan is ready.")
-                .font(.title3.weight(.semibold))
+                .font(DesignTokens.screenTitleFont)
 
             if let nextDate = viewModel.nextPlannedDate {
                 Text("Next Qada fast: \(formattedDate(nextDate))")
-                    .font(.body)
+                    .font(AppTypography.rowTitle)
                     .foregroundStyle(.secondary)
             }
 
             Text("If you miss a day, you can move it to the next available date.")
-                .font(.footnote)
+                .font(AppTypography.cardBody)
                 .foregroundStyle(.secondary)
 
             Button("Go to Wake") {
@@ -450,7 +449,7 @@ struct QadaPlanWizardView: View {
             Button("Done") {
                 viewModel.finishFlow()
             }
-            .font(.footnote.weight(.semibold))
+            .font(AppTypography.metricLabel)
             .appControlStyle(.quiet)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -468,7 +467,7 @@ struct QadaPlanWizardView: View {
             Button("Done") {
                 viewModel.dismissDateDetail()
             }
-            .font(.footnote.weight(.semibold))
+            .font(AppTypography.metricLabel)
             .appControlStyle(.quiet)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -481,17 +480,17 @@ struct QadaPlanWizardView: View {
         case .protectedDays:
             VStack(alignment: .leading, spacing: DesignTokens.spacingL) {
                 Text("Important Sunnah fasts")
-                    .font(.title3.weight(.semibold))
+                    .font(DesignTokens.screenTitleFont)
                 Text("These are observances many people prefer to keep separate from Qada.")
-                    .font(.footnote)
+                    .font(AppTypography.cardBody)
                     .foregroundStyle(.secondary)
                 Text("This includes Arafah, Ashura, the White Days, and the early days of Dhul Hijjah. Shawwal-related observances are also kept separate when they apply.")
-                    .font(.body)
+                    .font(AppTypography.rowTitle)
                     .foregroundStyle(.secondary)
                 Button("Done") {
                     activeInfoSheet = nil
                 }
-                .font(.footnote.weight(.semibold))
+                .font(AppTypography.metricLabel)
                 .appControlStyle(.quiet)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -500,7 +499,7 @@ struct QadaPlanWizardView: View {
     }
 
     private var pageIndicators: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: DesignTokens.textSpacingCompact) {
             ForEach(QadaSetupPage.allCases, id: \.self) { page in
                 Capsule(style: .continuous)
                     .fill(page == viewModel.setupPage ? DawnColor.accent : Color.secondary.opacity(0.18))
@@ -526,14 +525,14 @@ struct QadaPlanWizardView: View {
 
     private func sectionLabel(_ text: String) -> some View {
         Text(text)
-            .font(.headline.weight(.semibold))
+            .font(AppTypography.cardTitle)
     }
 
     private func summaryChip(_ text: String) -> some View {
         Text(text)
-            .font(.caption.weight(.semibold))
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
+            .font(AppTypography.badge)
+            .padding(.horizontal, DesignTokens.chipHorizontalPaddingCompact)
+            .padding(.vertical, DesignTokens.compactChipVerticalPadding)
             .background(Color.secondary.opacity(0.10))
             .foregroundStyle(.secondary)
             .clipShape(Capsule(style: .continuous))
@@ -542,9 +541,11 @@ struct QadaPlanWizardView: View {
     private func summaryRow(title: String, value: String?) -> some View {
         HStack {
             Text(title)
+                .font(AppTypography.metricLabel)
                 .foregroundStyle(.secondary)
             Spacer()
             Text(value ?? "-")
+                .font(AppTypography.metricValue)
                 .multilineTextAlignment(.trailing)
         }
     }

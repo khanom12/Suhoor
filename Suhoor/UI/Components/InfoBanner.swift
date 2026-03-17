@@ -18,12 +18,12 @@ struct InfoBanner<Action: View>: View {
     var body: some View {
         HStack(alignment: .top, spacing: DesignTokens.spacingM) {
             Image(systemName: systemImage)
-                .font(.headline)
+                .font(AppTypography.bannerSymbol)
                 .foregroundStyle(DawnColor.accent)
-                .padding(.top, 2)
-            VStack(alignment: .leading, spacing: 6) {
+                .padding(.top, DesignTokens.accessoryInset)
+            VStack(alignment: .leading, spacing: DesignTokens.textSpacingCompact) {
                 Text(text)
-                    .font(.footnote)
+                    .font(AppTypography.cardBody)
                     .foregroundStyle(.secondary)
                 action()
             }

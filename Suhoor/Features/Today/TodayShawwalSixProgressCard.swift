@@ -79,9 +79,9 @@ struct TodayShawwalSixProgressCard: View {
     @ViewBuilder
     private func header(model: ShawwalSixProgressEngine.Model) -> some View {
         HStack(alignment: .center, spacing: DesignTokens.spacingS) {
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: DesignTokens.textSpacingMicro) {
                 Text("Shawwal \(String(model.hijriYear))")
-                    .font(DesignTokens.cardTitleFont)
+                    .font(AppTypography.cardTitle)
             }
 
             Spacer()
@@ -120,7 +120,7 @@ struct TodayShawwalSixProgressCard: View {
                 .opacity(hasCelebratedCompletion ? 1.0 : 0.0)
 
             Text("All six Shawwal fasts are completed.")
-                .font(DesignTokens.cardSubtitleFont.weight(.semibold))
+                .font(AppTypography.metricLabel)
                 .foregroundStyle(shawwalColor)
         }
         .animation(Motion.spring(reduceMotion: reduceMotion), value: hasCelebratedCompletion)
@@ -129,7 +129,7 @@ struct TodayShawwalSixProgressCard: View {
     private var helperRow: some View {
         HStack(alignment: .center, spacing: DesignTokens.spacingS) {
             Text("Mark Shawwal days as Voluntary to start tracking.")
-                .font(DesignTokens.cardSubtitleFont)
+                .font(AppTypography.cardBody)
                 .foregroundStyle(.secondary)
         }
     }
@@ -139,9 +139,9 @@ struct TodayShawwalSixProgressCard: View {
             FastHistoryView()
         } label: {
             Image(systemName: "clock.arrow.circlepath")
-                .font(DesignTokens.cardMetaFont.weight(.semibold))
+                .font(AppTypography.controlIcon)
                 .foregroundStyle(shawwalColor)
-                .frame(width: 30, height: 30)
+                .frame(width: DesignTokens.regularControlFrame, height: DesignTokens.regularControlFrame)
                 .background(
                     Circle()
                         .fill(Color(.secondarySystemGroupedBackground))

@@ -3,7 +3,7 @@ import SwiftUI
 struct CalendarLegendRow: View {
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 12) {
+            HStack(spacing: DesignTokens.textSpacingComfortable) {
                 LegendItem(label: "Selected") {
                     Circle()
                         .fill(DawnColor.accent.opacity(0.22))
@@ -34,7 +34,7 @@ struct CalendarLegendRow: View {
                         .overlay(Circle().fill(DawnColor.highlight).frame(width: 4, height: 4))
                 }
             }
-            .padding(.vertical, 2)
+            .padding(.vertical, DesignTokens.accessoryInset)
         }
     }
 }
@@ -44,11 +44,11 @@ private struct LegendItem<Indicator: View>: View {
     @ViewBuilder let indicator: () -> Indicator
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: DesignTokens.inlineSpacingMedium) {
             indicator()
-                .frame(width: 14, height: 14)
+                .frame(width: DesignTokens.space14, height: DesignTokens.space14)
             Text(label)
-                .font(.caption)
+                .font(AppTypography.badge)
                 .foregroundStyle(.secondary)
         }
     }

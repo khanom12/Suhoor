@@ -396,7 +396,7 @@ struct AlarmDayDetailView: View {
                         selectedAbout = warning.about
                     }
                 )
-                .padding(.vertical, 12)
+                .padding(.vertical, DesignTokens.rowVerticalPadding)
                 .padding(.horizontal, 16)
             }
             .listRowSeparator(.hidden)
@@ -407,18 +407,19 @@ struct AlarmDayDetailView: View {
                     showsTagPicker = true
                 } label: {
                     HStack {
-                        VStack(alignment: .leading, spacing: 4) {
+                        VStack(alignment: .leading, spacing: DesignTokens.textSpacingTight) {
                             Text("Shape this morning's meaning")
+                                .font(AppTypography.rowTitle)
                                 .foregroundStyle(.primary)
                             Text(intentSummaryText)
-                                .font(.footnote)
+                                .font(AppTypography.rowBody)
                                 .foregroundStyle(.secondary)
                                 .lineLimit(2)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                         Spacer()
                         Image(systemName: "chevron.right")
-                            .font(.subheadline.weight(.semibold))
+                            .font(AppTypography.navAccessory)
                             .foregroundStyle(.tertiary)
                     }
                 }
@@ -515,7 +516,7 @@ struct AlarmDayDetailView: View {
                         if effectiveConfig.iftarEnabled {
                             VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
                                 Text("Calculated from sunset. Adjust globally from Prayer times.")
-                                    .font(.footnote)
+                                    .font(AppTypography.rowBody)
                                     .foregroundStyle(.secondary)
 
                                 Toggle("Notification", isOn: iftarNotificationBinding)
@@ -528,7 +529,7 @@ struct AlarmDayDetailView: View {
                         }
                     }
                 }
-                .padding(.vertical, 4)
+                .padding(.vertical, DesignTokens.textSpacingTight)
             } header: {
                 Text("Wake sequence")
                     .textCase(nil)
@@ -904,7 +905,6 @@ private struct SummaryHeader: View {
     let intentSelection: FastIntentSelection
     let warnings: [FastWarning]
     let onWarningInfo: (FastWarning) -> Void
-    @ScaledMetric(relativeTo: .largeTitle) private var timeFontSize: CGFloat = 42
 
     private static let timeMainFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -933,52 +933,46 @@ private struct SummaryHeader: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: DesignTokens.textSpacingMicro) {
                 Text(gregorianText)
                     .font(.callout)
                     .foregroundStyle(.secondary)
 
                 Text(hijriText)
-                    .font(.footnote)
+                    .font(AppTypography.rowBody)
                     .foregroundStyle(.secondary)
 
                 Text(titleLabel)
-                    .font(.footnote)
+                    .font(AppTypography.rowBody)
                     .foregroundStyle(.secondary)
             }
 
             Spacer()
-                .frame(height: 12)
+                .frame(height: DesignTokens.rowVerticalPadding)
 
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(primaryTimeMain)
-                    .font(.system(size: timeFontSize, weight: .light))
-                    .foregroundStyle(isOff ? .secondary : .primary)
-                    .monospacedDigit()
-                    .minimumScaleFactor(0.8)
-
-                if let primaryTimeSuffix {
-                    Text(primaryTimeSuffix)
-                        .font(.system(size: timeFontSize * 0.6, weight: .medium))
-                        .foregroundStyle(isOff ? .secondary : .primary)
-                        .opacity(isOff ? 1 : 0.84)
-                        .baselineOffset(1)
-                }
-            }
+            AppTimeDisplay(
+                main: primaryTimeMain,
+                suffix: primaryTimeSuffix,
+                style: .detail,
+                mainWeight: .light,
+                suffixWeight: .medium,
+                mainColor: isOff ? .secondary : .primary,
+                suffixColor: isOff ? .secondary : nil
+            )
 
             Spacer()
-                .frame(height: 7)
+                .frame(height: DesignTokens.textSpacingRegular)
 
             Text(fajrText)
-                .font(.footnote)
+                .font(AppTypography.rowBody)
                 .foregroundStyle(.secondary)
                 .monospacedDigit()
 
             if !tagElements.isEmpty {
                 Spacer()
-                    .frame(height: 10)
+                    .frame(height: DesignTokens.textSpacingMedium)
 
-                FlowLayout(spacing: 6) {
+                FlowLayout(spacing: DesignTokens.textSpacingCompact) {
                     FastPrimaryIntentCapsule(intent: intentSelection.primaryIntent)
                     ForEach(intentSelection.secondaryTags.sorted { $0.title < $1.title }, id: \.self) { tag in
                         FastSecondaryTagCapsule(tag: tag)
@@ -1068,11 +1062,11 @@ private struct WarningChipWithInfo: View {
     let onInfo: () -> Void
 
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: DesignTokens.textSpacingTight) {
             FastWarningCapsule(warning: warning)
             Button(action: onInfo) {
                 Image(systemName: "info.circle")
-                    .font(.caption)
+                    .font(AppTypography.rowMeta)
                     .foregroundStyle(.secondary)
                     .frame(width: 24, height: 24)
             }
@@ -1114,10 +1108,10 @@ private struct CapsuleLabelView: View {
     let useIconOnly: Bool
 
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: DesignTokens.textSpacingTight) {
             if let systemImage {
                 Image(systemName: systemImage)
-                    .font(.caption2.weight(.semibold))
+                    .font(font)
             }
             if !useIconOnly {
                 Text(displayText)
@@ -1127,8 +1121,8 @@ private struct CapsuleLabelView: View {
         }
         .font(font)
         .foregroundStyle(foregroundColor)
-        .padding(.vertical, 4)
-        .padding(.horizontal, 8)
+        .padding(.vertical, DesignTokens.badgeVerticalPadding)
+        .padding(.horizontal, DesignTokens.badgeHorizontalPadding)
         .background(background)
         .clipShape(Capsule())
         .overlay(
@@ -1265,15 +1259,16 @@ private struct ScheduleSourceCard: View {
     let presentation: ScheduleSourcePresentation
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: DesignTokens.textSpacingTight) {
             Text(presentation.title)
+                .font(AppTypography.rowTitle)
                 .foregroundStyle(.primary)
             Text(presentation.subtitle)
-                .font(.footnote)
+                .font(AppTypography.rowBody)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, DesignTokens.accessoryInset)
     }
 }
 
@@ -1286,16 +1281,17 @@ private struct DetailActionButton: View {
 
     var body: some View {
         Button(role: role, action: action) {
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: DesignTokens.textSpacingTight) {
                 Text(title)
+                    .font(AppTypography.rowTitle)
                     .foregroundStyle(foregroundStyle)
                 Text(subtitle)
-                    .font(.footnote)
+                    .font(AppTypography.rowBody)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.vertical, 2)
+            .padding(.vertical, DesignTokens.accessoryInset)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

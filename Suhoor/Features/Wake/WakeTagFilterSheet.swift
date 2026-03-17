@@ -105,19 +105,20 @@ struct WakeTagFilterSheet: View {
         HStack(spacing: DesignTokens.spacingS) {
             filterRowIcon(style: style, isEnabled: isEnabled)
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: DesignTokens.textSpacingTight) {
                 Text(title)
+                    .font(AppTypography.rowTitle)
                     .foregroundStyle(isEnabled ? .primary : .secondary)
                 if let subtitle {
                     Text(subtitle)
-                        .font(.footnote)
+                        .font(AppTypography.rowBody)
                         .foregroundStyle(.secondary)
                 }
             }
             Spacer()
             if isSelected {
                 Image(systemName: "checkmark")
-                    .font(.body.weight(.semibold))
+                    .font(AppTypography.controlIcon)
                     .foregroundStyle(DawnColor.accent)
             }
         }
@@ -132,18 +133,18 @@ struct WakeTagFilterSheet: View {
         ZStack {
             Circle()
                 .fill(tint.opacity(isEnabled ? 0.12 : 0.08))
-                .frame(width: 28, height: 28)
+                .frame(width: DesignTokens.smallControlFrame, height: DesignTokens.smallControlFrame)
 
             if let systemImage = style?.systemImage {
                 Image(systemName: systemImage)
-                    .font(.footnote.weight(.semibold))
+                    .font(AppTypography.compactControlIcon)
                     .foregroundStyle(isEnabled ? tint : .secondary)
             } else {
                 Circle()
                     .fill(isEnabled ? tint : Color.secondary)
-                    .frame(width: 8, height: 8)
+                    .frame(width: DesignTokens.inlineSpacingMedium, height: DesignTokens.inlineSpacingMedium)
             }
         }
-        .frame(width: 28, height: 28)
+        .frame(width: DesignTokens.smallControlFrame, height: DesignTokens.smallControlFrame)
     }
 }

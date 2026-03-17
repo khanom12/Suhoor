@@ -52,11 +52,55 @@ struct DawnColor {
 }
 
 enum DesignTokens {
+    static let space2: CGFloat = 2
+    static let space4: CGFloat = 4
+    static let space6: CGFloat = 6
+    static let space8: CGFloat = 8
+    static let space10: CGFloat = 10
+    static let space12: CGFloat = 12
+    static let space14: CGFloat = 14
+    static let space16: CGFloat = 16
+
     static let spacingXS: CGFloat = 6
     static let spacingS: CGFloat = 10
     static let spacingM: CGFloat = 14
     static let spacingL: CGFloat = 18
     static let spacingXL: CGFloat = 24
+
+    static let textSpacingMicro: CGFloat = space2
+    static let textSpacingTight: CGFloat = space4
+    static let textSpacingCompact: CGFloat = space6
+    static let textSpacingRegular: CGFloat = space8
+    static let textSpacingMedium: CGFloat = space10
+    static let textSpacingComfortable: CGFloat = space12
+
+    static let inlineSpacingSmall: CGFloat = space6
+    static let inlineSpacingMedium: CGFloat = space8
+
+    static let compactRowVerticalPadding: CGFloat = space10
+    static let rowVerticalPadding: CGFloat = space12
+    static let settingsRowVerticalPadding: CGFloat = space14
+
+    static let badgeHorizontalPadding: CGFloat = space8
+    static let badgeVerticalPadding: CGFloat = space4
+    static let accessoryInset: CGFloat = space2
+    static let compactChipVerticalPadding: CGFloat = space4
+    static let compactChipHorizontalPadding: CGFloat = space8
+    static let chipHorizontalPaddingCompact: CGFloat = space10
+
+    static let smallControlFrame: CGFloat = 28
+    static let regularControlFrame: CGFloat = 34
+    static let settingsSummaryMinHeight: CGFloat = 56
+
+    static let heroMetricPointSize: CGFloat = 46
+    static let timeDisplayProminentPointSize: CGFloat = 46
+    static let timeDisplayDetailPointSize: CGFloat = 42
+    static let heroMetricMinScaleFactor: CGFloat = 0.72
+    static let timeDisplayMinScaleFactor: CGFloat = 0.8
+    static let timeDisplayProminentSuffixScale: CGFloat = 0.55
+    static let timeDisplayDetailSuffixScale: CGFloat = 0.60
+    static let timeSuffixBaselineOffset: CGFloat = 1
+    static let eyebrowTracking: CGFloat = 0.5
 
     static let glassCardRadius: CGFloat = 28
     static let innerCardRadius: CGFloat = 22
@@ -82,16 +126,16 @@ enum DesignTokens {
     static let shadowAmbient = ShadowStyle(y: 8, blur: 24, opacity: 0.10)
     static let shadowContact = ShadowStyle(y: 2, blur: 8, opacity: 0.08)
 
-    static let screenTitleFont: Font = .title2.weight(.semibold)
-    static let sectionHeaderFont: Font = .headline.weight(.semibold)
-    static let rowTitleFont: Font = .headline.weight(.semibold)
-    static let primaryTimeFont: Font = .title3.weight(.semibold)
-    static let rowSubtitleFont: Font = .subheadline
-    static let badgeFont: Font = .caption.weight(.semibold)
-    static let cardTitleFont: Font = .body.weight(.semibold)
-    static let cardSubtitleFont: Font = .footnote
-    static let cardMetaFont: Font = .footnote.weight(.semibold)
-    static let dashboardTimeFontSize: CGFloat = 46
+    static let screenTitleFont: Font = .title2.weight(.regular)
+    static let sectionHeaderFont: Font = AppTypography.eyebrow
+    static let rowTitleFont: Font = AppTypography.rowTitle
+    static let primaryTimeFont: Font = AppTypography.summaryMetricValue
+    static let rowSubtitleFont: Font = AppTypography.rowBody
+    static let badgeFont: Font = AppTypography.badge
+    static let cardTitleFont: Font = AppTypography.cardTitle
+    static let cardSubtitleFont: Font = AppTypography.cardBody
+    static let cardMetaFont: Font = AppTypography.metricLabel
+    static let dashboardTimeFontSize: CGFloat = timeDisplayProminentPointSize
 }
 
 struct ShadowStyle {

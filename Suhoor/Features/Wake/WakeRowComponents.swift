@@ -4,8 +4,6 @@ struct WakeRowView: View {
     let entry: WakeRowEntry
     let onSelect: () -> Void
 
-    @ScaledMetric(relativeTo: .largeTitle) private var timeFontSize: CGFloat = 46
-
     private static let timeMainFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateFormat = "h:mm"
@@ -32,47 +30,41 @@ struct WakeRowView: View {
 
     var body: some View {
         Button(action: onSelect) {
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: DesignTokens.textSpacingTight) {
                 Text(dateLabel)
-                    .font(.footnote)
+                    .font(AppTypography.rowBody)
                     .foregroundStyle(isDisabled ? .tertiary : .secondary)
 
                 HStack(alignment: .center, spacing: DesignTokens.spacingM) {
-                    HStack(alignment: .firstTextBaseline, spacing: 6) {
-                        Text(primaryTimeMain)
-                            .font(.system(size: timeFontSize, weight: .regular, design: .default))
-                            .monospacedDigit()
-                            .foregroundStyle(isDisabled ? .tertiary : .primary)
-                            .minimumScaleFactor(0.8)
-
-                        if let primaryTimeSuffix {
-                            Text(primaryTimeSuffix)
-                                .font(.system(size: timeFontSize * 0.55, weight: .regular, design: .default))
-                                .monospacedDigit()
-                                .foregroundStyle(isDisabled ? .tertiary : .secondary)
-                                .baselineOffset(1)
-                        }
-                    }
+                    AppTimeDisplay(
+                        main: primaryTimeMain,
+                        suffix: primaryTimeSuffix,
+                        style: .prominent,
+                        mainWeight: .light,
+                        suffixWeight: .regular,
+                        mainColor: isDisabled ? .secondary : .primary,
+                        suffixColor: .secondary
+                    )
 
                     Spacer(minLength: DesignTokens.spacingM)
 
                     Image(systemName: "chevron.right")
-                        .font(.footnote.weight(.semibold))
+                        .font(AppTypography.navAccessory)
                         .foregroundStyle(.tertiary)
                 }
 
                 Text(entry.rowPresentation.meaningText)
-                    .font(.subheadline.weight(.semibold))
+                    .font(AppTypography.cardTitle)
                     .foregroundStyle(isDisabled ? .tertiary : .primary)
 
                 Text(entry.rowPresentation.detailText)
-                    .font(.callout)
+                    .font(AppTypography.rowBody)
                     .foregroundStyle(isDisabled ? .tertiary : .secondary)
                     .monospacedDigit()
 
                 if let provenanceText = entry.rowPresentation.provenanceText {
                     Text(provenanceText)
-                        .font(.caption)
+                        .font(AppTypography.rowMeta)
                         .foregroundStyle(isDisabled ? .tertiary : .secondary)
                 }
             }
@@ -83,7 +75,7 @@ struct WakeRowView: View {
             .accessibilityLabel(accessibilitySummary)
         }
         .buttonStyle(.plain)
-        .padding(.vertical, 6)
+        .padding(.vertical, DesignTokens.textSpacingCompact)
     }
 
     private var primaryTimeMain: String {
@@ -119,10 +111,10 @@ struct WakeContextChip: View {
 
     var body: some View {
         Text(title)
-            .font(.caption.weight(.semibold))
+            .font(AppTypography.badge)
             .foregroundStyle(Color.secondary)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
+            .padding(.horizontal, DesignTokens.badgeHorizontalPadding)
+            .padding(.vertical, DesignTokens.badgeVerticalPadding)
             .background(
                 Capsule()
                     .fill(Color.secondary.opacity(0.10))
@@ -139,10 +131,10 @@ struct MonthWakeCountBadge: View {
 
     var body: some View {
         Text("\(count)")
-            .font(.caption.weight(.semibold))
+            .font(AppTypography.badge)
             .foregroundStyle(.secondary)
-            .padding(.vertical, 4)
-            .padding(.horizontal, 10)
+            .padding(.vertical, DesignTokens.badgeVerticalPadding)
+            .padding(.horizontal, DesignTokens.chipHorizontalPaddingCompact)
             .background(
                 Capsule()
                     .fill(Color.secondary.opacity(0.10))
@@ -275,10 +267,10 @@ struct WakeFilterChip: View {
                     .lineLimit(1)
             }
         }
-        .font((isCompact ? Font.caption2 : Font.caption).weight(.semibold))
+        .font(AppTypography.badge)
         .foregroundStyle(base)
-        .padding(.vertical, isCompact ? 3 : 4)
-        .padding(.horizontal, isCompact ? 6 : 8)
+        .padding(.vertical, isCompact ? DesignTokens.compactChipVerticalPadding : DesignTokens.badgeVerticalPadding)
+        .padding(.horizontal, isCompact ? DesignTokens.compactChipHorizontalPadding : DesignTokens.badgeHorizontalPadding)
         .background(Capsule().fill(base.opacity(fillOpacity)))
         .overlay(
             Capsule()

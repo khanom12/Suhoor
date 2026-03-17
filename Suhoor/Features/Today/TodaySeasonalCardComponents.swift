@@ -6,10 +6,10 @@ struct TodaySeasonalBadge: View {
 
     var body: some View {
         Text(text)
-            .font(DesignTokens.cardMetaFont)
+            .font(AppTypography.badge)
             .foregroundStyle(accent ?? .secondary)
             .padding(.horizontal, DesignTokens.spacingS)
-            .padding(.vertical, 6)
+            .padding(.vertical, DesignTokens.compactChipVerticalPadding)
             .background(
                 Capsule(style: .continuous)
                     .fill(Color(.secondarySystemGroupedBackground))
@@ -65,9 +65,9 @@ struct TodayOpenScheduleButton: View {
             appNavigator.switchToWake()
         } label: {
             Image(systemName: "calendar.badge.clock")
-                .font(DesignTokens.cardMetaFont.weight(.semibold))
+                .font(AppTypography.controlIcon)
                 .foregroundStyle(accent ?? DawnColor.accent)
-                .frame(width: 30, height: 30)
+                .frame(width: DesignTokens.regularControlFrame, height: DesignTokens.regularControlFrame)
                 .background(
                     Circle()
                         .fill(Color(.secondarySystemGroupedBackground))

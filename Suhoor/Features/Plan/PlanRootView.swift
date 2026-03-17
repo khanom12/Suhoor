@@ -131,18 +131,18 @@ private struct DefaultMorningPlanCard: View {
         AppGlassSurface(variant: .hero, prominence: .high) {
             VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
                 HStack(alignment: .top, spacing: DesignTokens.spacingM) {
-                    VStack(alignment: .leading, spacing: 6) {
+                    VStack(alignment: .leading, spacing: DesignTokens.textSpacingCompact) {
                         Text("Default Morning Plan")
-                            .font(.headline.weight(.semibold))
+                            .font(AppTypography.cardTitle)
                         Text(Strings.PlansSurface.defaultSubtitle)
-                            .font(.footnote)
+                            .font(AppTypography.cardBody)
                             .foregroundStyle(.secondary)
                     }
 
                     Spacer()
 
                     Image(systemName: "sun.horizon")
-                        .font(.title3.weight(.semibold))
+                        .font(AppTypography.cardSymbol)
                         .foregroundStyle(.primary)
                 }
 
@@ -171,45 +171,45 @@ private struct ConfiguredPlansCard: View {
         AppGlassSurface(variant: .standard) {
             VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
                 HStack(alignment: .top, spacing: DesignTokens.spacingM) {
-                    VStack(alignment: .leading, spacing: 6) {
+                    VStack(alignment: .leading, spacing: DesignTokens.textSpacingCompact) {
                         Text("Upcoming special plans")
-                            .font(.headline.weight(.semibold))
+                            .font(AppTypography.cardTitle)
                         Text(Strings.PlansSurface.upcomingSubtitle)
-                            .font(.footnote)
+                            .font(AppTypography.cardBody)
                             .foregroundStyle(.secondary)
                     }
 
                     Spacer()
 
                     Image(systemName: "calendar.badge.clock")
-                        .font(.title3.weight(.semibold))
+                        .font(AppTypography.cardSymbol)
                         .foregroundStyle(.secondary)
                 }
 
                 if snapshot.hasUpcomingSpecialMornings {
                     VStack(alignment: .leading, spacing: DesignTokens.spacingS) {
                         ForEach(snapshot.upcomingSpecialMornings) { item in
-                            VStack(alignment: .leading, spacing: 4) {
+                            VStack(alignment: .leading, spacing: DesignTokens.textSpacingTight) {
                                 Text(item.subtitle)
-                                    .font(.subheadline.weight(.semibold))
+                                    .font(AppTypography.rowTitle)
                                 Text(item.title)
-                                    .font(.footnote)
+                                    .font(AppTypography.rowBody)
                                     .foregroundStyle(.secondary)
                             }
                         }
 
                         if snapshot.additionalSpecialMorningCount > 0 {
                             Text(additionalSummary)
-                                .font(.footnote.weight(.semibold))
+                                .font(AppTypography.metricLabel)
                                 .foregroundStyle(.secondary)
                         }
                     }
                 } else {
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: DesignTokens.textSpacingTight) {
                         Text(Strings.PlansSurface.upcomingEmptyTitle)
-                            .font(.footnote.weight(.semibold))
+                            .font(AppTypography.metricLabel)
                         Text(Strings.PlansSurface.upcomingEmptyBody)
-                            .font(.footnote)
+                            .font(AppTypography.cardBody)
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -231,18 +231,18 @@ private struct DatePlanningCard: View {
     var body: some View {
         AppGlassSurface(variant: .quiet) {
             HStack(alignment: .top, spacing: DesignTokens.spacingM) {
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: DesignTokens.textSpacingCompact) {
                     Text("Plan by date")
-                        .font(.headline.weight(.semibold))
+                        .font(AppTypography.cardTitle)
                     Text("Choose a future date and shape one morning.")
-                        .font(.footnote)
+                        .font(AppTypography.cardBody)
                         .foregroundStyle(.secondary)
                 }
 
                 Spacer()
 
                 Image(systemName: "calendar.badge.plus")
-                    .font(.title3.weight(.semibold))
+                    .font(AppTypography.cardSymbol)
                     .foregroundStyle(.secondary)
             }
         }
@@ -308,26 +308,26 @@ private struct PlanningSupportRow: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: DesignTokens.spacingM) {
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: DesignTokens.textSpacingCompact) {
                 Text(title)
-                    .font(.headline.weight(.semibold))
+                    .font(AppTypography.rowTitle)
                     .foregroundStyle(.primary)
                 Text(subtitle)
-                    .font(.footnote)
+                    .font(AppTypography.rowBody)
                     .foregroundStyle(.secondary)
                 Text(value)
-                    .font(.footnote.weight(.semibold))
+                    .font(AppTypography.metricLabel)
                     .foregroundStyle(valueColor ?? Color.secondary)
             }
 
             Spacer(minLength: DesignTokens.spacingM)
 
             Image(systemName: symbol)
-                .font(.title3.weight(.semibold))
+                .font(AppTypography.cardSymbol)
                 .foregroundStyle(accent ?? Color.secondary)
         }
         .padding(.horizontal, DesignTokens.spacingL)
-        .padding(.vertical, DesignTokens.spacingM)
+        .padding(.vertical, DesignTokens.rowVerticalPadding)
     }
 }
 
@@ -338,17 +338,17 @@ private struct SummaryRow: View {
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: DesignTokens.spacingM) {
             Text(label)
-                .font(.footnote.weight(.semibold))
+                .font(AppTypography.metricLabel)
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             Text(value)
-                .font(.footnote)
+                .font(AppTypography.metricValue)
                 .foregroundStyle(.primary)
                 .multilineTextAlignment(.trailing)
         }
         .padding(.horizontal, DesignTokens.spacingM)
-        .padding(.vertical, 12)
+        .padding(.vertical, DesignTokens.rowVerticalPadding)
     }
 }
 
@@ -366,20 +366,20 @@ private struct PlanTileView: View {
 
     var body: some View {
         AppGlassSurface(variant: .quiet) {
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: DesignTokens.textSpacingMedium) {
                 HStack(alignment: .top) {
-                    VStack(alignment: .leading, spacing: 6) {
+                    VStack(alignment: .leading, spacing: DesignTokens.textSpacingCompact) {
                         Text(tile.title)
-                            .font(.headline.weight(.semibold))
+                            .font(AppTypography.cardTitle)
                         Text(tile.subtitle)
-                            .font(.footnote)
+                            .font(AppTypography.cardBody)
                             .foregroundStyle(.secondary)
                     }
                     Spacer()
                     Image(systemName: "plus")
-                        .font(.subheadline.weight(.bold))
+                        .font(AppTypography.controlIcon)
                         .foregroundStyle(.secondary)
-                        .padding(8)
+                        .padding(DesignTokens.inlineSpacingMedium)
                         .background(
                             Circle()
                                 .fill(Color.secondary.opacity(0.10))
@@ -413,32 +413,32 @@ struct UpcomingSpecialPlansView: View {
             Section {
                 if snapshot.upcomingSpecialMornings.isEmpty {
                     Text("Nothing special is planned yet.")
-                        .font(.footnote)
+                        .font(AppTypography.cardBody)
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(snapshot.upcomingSpecialMornings) { item in
-                        VStack(alignment: .leading, spacing: 4) {
+                        VStack(alignment: .leading, spacing: DesignTokens.textSpacingTight) {
                             Text(item.subtitle)
-                                .font(.headline.weight(.semibold))
+                                .font(AppTypography.cardTitle)
                             Text(item.title)
-                                .font(.subheadline)
+                                .font(AppTypography.rowTitle)
                             Text(WakeRowPresentation.accessibilityDateLabel(for: item.date))
-                                .font(.footnote)
+                                .font(AppTypography.rowBody)
                                 .foregroundStyle(.secondary)
                         }
-                        .padding(.vertical, 4)
+                        .padding(.vertical, DesignTokens.textSpacingTight)
                     }
 
                     if snapshot.additionalSpecialMorningCount > 0 {
                         Text("\(snapshot.additionalSpecialMorningCount) more mornings are already shaped.")
-                            .font(.footnote)
+                            .font(AppTypography.cardBody)
                             .foregroundStyle(.secondary)
                     }
                 }
             } footer: {
                 NavigationLink(value: PlanDestination.calendar) {
                     Text("View by date")
-                        .font(.footnote.weight(.semibold))
+                        .font(AppTypography.metricLabel)
                         .foregroundStyle(.secondary)
                 }
             }

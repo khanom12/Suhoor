@@ -8,15 +8,15 @@ struct QadaPaceCard: View {
     var body: some View {
         Button(action: action) {
             HStack(alignment: .top, spacing: DesignTokens.spacingM) {
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: DesignTokens.textSpacingCompact) {
                     Text(pace.title)
-                        .font(.headline.weight(.semibold))
+                        .font(AppTypography.cardTitle)
                         .foregroundStyle(.primary)
                     Text(pace.description)
-                        .font(.footnote)
+                        .font(AppTypography.cardBody)
                         .foregroundStyle(.secondary)
                     Text(pace.differentiatorLine)
-                        .font(.caption)
+                        .font(AppTypography.rowMeta)
                         .foregroundStyle(.secondary)
                 }
 
@@ -24,7 +24,7 @@ struct QadaPaceCard: View {
 
                 if isSelected {
                     Image(systemName: "checkmark.circle.fill")
-                        .font(.title3.weight(.semibold))
+                        .font(AppTypography.cardSymbol)
                         .foregroundStyle(DawnColor.accent)
                 }
             }

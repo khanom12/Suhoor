@@ -43,12 +43,12 @@ struct TodayFastCheckInCard: View {
     private var promptContent: some View {
         VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
             HStack(alignment: .top, spacing: DesignTokens.spacingM) {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: DesignTokens.textSpacingTight) {
                     Text(presentation.title)
-                        .font(DesignTokens.cardTitleFont)
+                        .font(AppTypography.cardTitle)
 
                     Text(presentation.detail)
-                        .font(DesignTokens.cardSubtitleFont)
+                        .font(AppTypography.cardBody)
                         .foregroundStyle(.secondary)
                 }
 
@@ -88,7 +88,7 @@ struct TodayFastCheckInCard: View {
 
             if let onLater {
                 Button(Strings.HomeSurface.fajrPromptLater, action: onLater)
-                    .font(.footnote.weight(.semibold))
+                    .font(AppTypography.metricLabel)
                     .appControlStyle(.quiet)
             }
         }
@@ -99,14 +99,14 @@ struct TodayFastCheckInCard: View {
         ZStack(alignment: .top) {
             VStack(spacing: DesignTokens.spacingXS) {
                 Text(presentation.statusTitle ?? statusTitle)
-                    .font(.title3.weight(.semibold))
+                    .font(AppTypography.cardSymbol)
                     .foregroundStyle(statusColor)
                     .frame(maxWidth: .infinity, alignment: .center)
                     .opacity(shouldPulse ? (isPulsing ? 1.0 : 0.82) : 1.0)
                     .scaleEffect(shouldPulse ? (isPulsing ? 1.0 : 0.99) : 1.0)
 
                 Text(presentation.detail)
-                    .font(DesignTokens.cardSubtitleFont)
+                    .font(AppTypography.cardBody)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
             }
@@ -143,7 +143,7 @@ struct TodayFastCheckInCard: View {
             FastHistoryView()
         } label: {
             Text("View history")
-                .font(.footnote.weight(.semibold))
+                .font(AppTypography.metricLabel)
         }
         .appControlStyle(.quiet)
         .accessibilityLabel("Open fast completion history")
@@ -157,7 +157,7 @@ struct TodayFastCheckInCard: View {
             }
         } label: {
             Text("Clear")
-                .font(.footnote.weight(.semibold))
+                .font(AppTypography.metricLabel)
         }
         .appControlStyle(.quiet)
         .accessibilityLabel("Clear fasting status")

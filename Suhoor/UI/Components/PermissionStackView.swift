@@ -9,7 +9,7 @@ struct PermissionStackView: View {
     let onOpenSettings: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: DesignTokens.textSpacingComfortable) {
             ForEach(filteredPresentations) { presentation in
                 PermissionCardView(
                     presentation: presentation,

@@ -21,9 +21,9 @@ struct TodayDhulHijjahProgressCard: View {
                 GlassCard(style: .header) {
                     VStack(alignment: .leading, spacing: DesignTokens.dashboardCardInternalSpacing) {
                         HStack(alignment: .center, spacing: DesignTokens.spacingS) {
-                            VStack(alignment: .leading, spacing: 2) {
+                            VStack(alignment: .leading, spacing: DesignTokens.textSpacingMicro) {
                                 Text("Dhul Hijjah \(String(model.hijriYear))")
-                                    .font(DesignTokens.cardTitleFont)
+                                    .font(AppTypography.cardTitle)
                             }
 
                             Spacer()
@@ -47,7 +47,7 @@ struct TodayDhulHijjahProgressCard: View {
                         .animation(Motion.spring(reduceMotion: reduceMotion), value: model.displayFilledCount)
 
                         Text(summaryText(for: model))
-                            .font(DesignTokens.cardSubtitleFont)
+                            .font(AppTypography.cardBody)
                             .foregroundStyle(.secondary)
                     }
                 }

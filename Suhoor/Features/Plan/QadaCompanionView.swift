@@ -39,18 +39,18 @@ struct QadaCompanionView: View {
     private var headerCard: some View {
         AppGlassSurface(variant: .hero) {
             HStack(alignment: .top, spacing: DesignTokens.spacingM) {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: DesignTokens.textSpacingRegular) {
                     Text(headerTitle)
-                        .font(.title3.weight(.semibold))
+                        .font(AppTypography.heroTitle)
                     Text(headerSubtitle)
-                        .font(.footnote)
+                        .font(AppTypography.cardBody)
                         .foregroundStyle(.secondary)
                 }
 
                 Spacer(minLength: DesignTokens.spacingM)
 
                 Image(systemName: "checklist")
-                    .font(.title3.weight(.semibold))
+                    .font(AppTypography.cardSymbol)
                     .foregroundStyle(FastPrimaryIntent.qadaMakeup.style.color)
             }
         }
@@ -60,16 +60,16 @@ struct QadaCompanionView: View {
     private var recoveryCard: some View {
         if case .needsRecovery(let snapshot) = state {
             AppGlassSurface(variant: .tinted, tint: .orange) {
-                VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: DesignTokens.textSpacingMedium) {
                     Text("One planned Qada day still needs to be rescheduled.")
-                        .font(.headline.weight(.semibold))
+                        .font(AppTypography.cardTitle)
                     if let missedDate = snapshot.missedDate {
                         Text("Last planned date: \(mediumDate(missedDate)). Move it to the next available date when you're ready.")
-                            .font(.footnote)
+                            .font(AppTypography.cardBody)
                             .foregroundStyle(.secondary)
                     } else {
                         Text("Move it to the next available date when you're ready.")
-                            .font(.footnote)
+                            .font(AppTypography.cardBody)
                             .foregroundStyle(.secondary)
                     }
                     Button("Reschedule day") {
@@ -85,7 +85,7 @@ struct QadaCompanionView: View {
         let snapshot = currentSnapshot
 
         return AppGlassSurface(variant: .quiet) {
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: DesignTokens.textSpacingComfortable) {
                 if let nextDate = snapshot?.nextPlannedDate {
                     summaryRow(title: "Next Qada", value: mediumDate(nextDate))
                 } else {
@@ -97,7 +97,7 @@ struct QadaCompanionView: View {
                     summaryRow(title: "Overall", value: snapshot.remainingText)
                 } else {
                     Text("Plan the next small batch when you’re ready.")
-                        .font(.footnote)
+                        .font(AppTypography.cardBody)
                         .foregroundStyle(.secondary)
                 }
             }
@@ -106,7 +106,7 @@ struct QadaCompanionView: View {
 
     private var actionCard: some View {
         AppGlassSurface(variant: .standard) {
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: DesignTokens.textSpacingComfortable) {
                 Button(primaryActionTitle) {
                     primaryAction()
                 }
@@ -122,7 +122,7 @@ struct QadaCompanionView: View {
                 Button("Adjust total") {
                     onAdjustTotal()
                 }
-                .font(.footnote.weight(.semibold))
+                .font(AppTypography.metricLabel)
                 .appControlStyle(.quiet)
             }
         }
@@ -208,11 +208,11 @@ struct QadaCompanionView: View {
     private func summaryRow(title: String, value: String) -> some View {
         HStack(alignment: .top) {
             Text(title)
-                .font(.footnote.weight(.semibold))
+                .font(AppTypography.metricLabel)
                 .foregroundStyle(.secondary)
             Spacer()
             Text(value)
-                .font(.footnote)
+                .font(AppTypography.metricValue)
                 .multilineTextAlignment(.trailing)
         }
     }

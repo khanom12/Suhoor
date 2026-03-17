@@ -46,7 +46,7 @@ struct FajrWindowChartView: View {
             .frame(height: layoutStyle.height)
             .overlay(
                 Text("Upcoming mornings will appear here.")
-                    .font(.footnote)
+                    .font(AppTypography.cardBody)
                     .foregroundStyle(.secondary)
             )
     }

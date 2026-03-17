@@ -330,16 +330,13 @@ struct AppSectionHeader<Trailing: View>: View {
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: DesignTokens.spacingM) {
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: DesignTokens.textSpacingTight) {
                 Text(title)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                    .textCase(.uppercase)
-                    .tracking(0.5)
+                    .appTextRole(.eyebrow)
 
                 if let subtitle {
                     Text(subtitle)
-                        .font(.footnote)
+                        .font(AppTypography.cardBody)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -356,6 +353,8 @@ struct AppHeroMetric: View {
     let title: String?
     let subtitle: String?
 
+    @ScaledMetric(relativeTo: .largeTitle) private var heroMetricPointSize: CGFloat = DesignTokens.heroMetricPointSize
+
     init(
         value: String,
         title: String? = nil,
@@ -367,20 +366,20 @@ struct AppHeroMetric: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: DesignTokens.inlineSpacingMedium) {
             Text(value)
-                .font(.system(size: 46, weight: .semibold, design: .rounded))
+                .font(AppTypography.heroMetricFont(size: heroMetricPointSize))
                 .monospacedDigit()
-                .minimumScaleFactor(0.7)
+                .minimumScaleFactor(DesignTokens.heroMetricMinScaleFactor)
 
             if let title {
                 Text(title)
-                    .font(.headline.weight(.semibold))
+                    .font(AppTypography.heroTitle)
             }
 
             if let subtitle {
                 Text(subtitle)
-                    .font(.footnote)
+                    .font(AppTypography.cardBody)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }

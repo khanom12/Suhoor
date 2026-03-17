@@ -49,20 +49,20 @@ struct ProgressRootView: View {
                     ) {
                         VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
                             HStack(alignment: .top, spacing: DesignTokens.spacingM) {
-                                VStack(alignment: .leading, spacing: 6) {
+                                VStack(alignment: .leading, spacing: DesignTokens.textSpacingCompact) {
                                     Text(snapshot.qadaProgress.baselineOwed > 0 ? "Qada progress" : "Qada tracking")
-                                        .font(.headline.weight(.semibold))
+                                        .font(AppTypography.cardTitle)
                                     Text(snapshot.qadaProgress.baselineOwed > 0
                                          ? "Completed Qada fasts reduce what remains."
                                          : Strings.ProgressSurface.qadaEnablePrompt)
-                                        .font(.footnote)
+                                        .font(AppTypography.cardBody)
                                         .foregroundStyle(.secondary)
                                 }
 
                                 Spacer()
 
                                 Image(systemName: "checklist")
-                                    .font(.title3.weight(.semibold))
+                                    .font(AppTypography.cardSymbol)
                                     .foregroundStyle(FastPrimaryIntent.qadaMakeup.style.color)
                             }
 
@@ -90,11 +90,11 @@ struct ProgressRootView: View {
                         VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
                             if let summaryTitle = snapshot.wakeProgress.summaryTitle {
                                 Text(summaryTitle)
-                                    .font(.headline.weight(.semibold))
+                                    .font(AppTypography.cardTitle)
 
                                 if let summaryDetail = snapshot.wakeProgress.summaryDetail {
                                     Text(summaryDetail)
-                                        .font(.footnote)
+                                        .font(AppTypography.cardBody)
                                         .foregroundStyle(.secondary)
                                 }
 
@@ -102,11 +102,11 @@ struct ProgressRootView: View {
                                     AppInsetGroup {
                                         ForEach(Array(snapshot.wakeProgress.recentActivityLines.enumerated()), id: \.offset) { index, line in
                                             Text(line)
-                                                .font(.footnote)
+                                                .font(AppTypography.rowBody)
                                                 .foregroundStyle(.secondary)
                                                 .frame(maxWidth: .infinity, alignment: .leading)
                                                 .padding(.horizontal, DesignTokens.spacingM)
-                                                .padding(.vertical, 12)
+                                                .padding(.vertical, DesignTokens.rowVerticalPadding)
 
                                             if index < snapshot.wakeProgress.recentActivityLines.count - 1 {
                                                 AppGroupDivider(inset: DesignTokens.spacingM)
@@ -116,7 +116,7 @@ struct ProgressRootView: View {
                                 }
                             } else if let emptyStateText = snapshot.wakeProgress.emptyStateText {
                                 Text(emptyStateText)
-                                    .font(.footnote)
+                                    .font(AppTypography.cardBody)
                                     .foregroundStyle(.secondary)
                             }
                         }
@@ -142,14 +142,11 @@ private struct ProgressSummaryCard: View {
         ) {
             VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
                 Text("Progress summary")
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                    .textCase(.uppercase)
-                    .tracking(0.4)
+                    .appTextRole(.eyebrow)
 
                 if let headlineText = snapshot.headlineText {
                     Text(headlineText)
-                        .font(.headline.weight(.semibold))
+                        .font(AppTypography.heroTitle)
                 }
 
                 HStack(alignment: .top, spacing: DesignTokens.spacingM) {
@@ -167,14 +164,14 @@ private struct ProgressSummaryMetric: View {
     let value: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: DesignTokens.textSpacingTight) {
             Text(title)
-                .font(.caption.weight(.semibold))
+                .font(AppTypography.badge)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
 
             Text(value)
-                .font(.subheadline.weight(.semibold))
+                .font(AppTypography.summaryMetricValue)
                 .foregroundStyle(.primary)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -191,10 +188,7 @@ private struct ProgressHistoryCard: View {
         AppGlassSurface(variant: .standard) {
             VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
                 Text(eyebrow)
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                    .textCase(.uppercase)
-                    .tracking(0.4)
+                    .appTextRole(.eyebrow)
 
                 AppInsetGroup {
                     ProgressMetricRow(label: "Today", value: title)
@@ -217,17 +211,17 @@ private struct ProgressMetricRow: View {
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: DesignTokens.spacingM) {
             Text(label)
-                .font(.footnote.weight(.semibold))
+                .font(AppTypography.metricLabel)
                 .foregroundStyle(.secondary)
 
             Spacer(minLength: DesignTokens.spacingM)
 
             Text(value)
-                .font(.footnote)
+                .font(AppTypography.metricValue)
                 .multilineTextAlignment(.trailing)
                 .foregroundStyle(valueColor ?? Color.primary)
         }
         .padding(.horizontal, DesignTokens.spacingM)
-        .padding(.vertical, 12)
+        .padding(.vertical, DesignTokens.rowVerticalPadding)
     }
 }

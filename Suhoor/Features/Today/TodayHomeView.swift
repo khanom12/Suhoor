@@ -46,7 +46,7 @@ struct TodayHomeView: View {
                         appNavigator.openSettings()
                     } label: {
                         Image(systemName: "gearshape")
-                            .font(.system(size: 16, weight: .semibold))
+                            .font(AppTypography.toolbarIcon)
                             .appToolbarButtonChrome()
                     }
                     .buttonStyle(.plain)
@@ -127,9 +127,9 @@ private struct TodayDateBlock: View {
         ) {
             HStack(spacing: DesignTokens.spacingS) {
                 Image(systemName: "calendar")
-                    .font(.footnote.weight(.semibold))
+                    .font(AppTypography.navAccessory)
                     .foregroundStyle(.secondary)
-                    .frame(width: 28, height: 28)
+                    .frame(width: DesignTokens.smallControlFrame, height: DesignTokens.smallControlFrame)
                     .background(
                         Circle()
                             .fill(Color.secondary.opacity(0.10))
@@ -138,17 +138,17 @@ private struct TodayDateBlock: View {
                             }
                     )
 
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: DesignTokens.textSpacingMicro) {
                     Text(snapshot.gregorianText)
-                        .font(.subheadline.weight(.semibold))
+                        .font(AppTypography.rowTitle)
                         .foregroundStyle(.primary)
                     Text(snapshot.hijriText)
-                        .font(.footnote)
+                        .font(AppTypography.rowBody)
                         .foregroundStyle(.secondary)
                 }
             }
             .padding(.horizontal, DesignTokens.spacingM)
-            .padding(.vertical, 12)
+            .padding(.vertical, DesignTokens.rowVerticalPadding)
         }
     }
 }
@@ -162,10 +162,10 @@ private struct TodayBlockingIssueCard: View {
         AppGlassSurface(variant: .tinted, tint: .orange) {
             VStack(alignment: .leading, spacing: DesignTokens.dashboardCardInternalSpacing) {
                 Text(presentation.title)
-                    .font(DesignTokens.cardTitleFont)
+                    .font(AppTypography.cardTitle)
 
                 Text(presentation.message)
-                    .font(DesignTokens.cardSubtitleFont)
+                    .font(AppTypography.cardBody)
                     .foregroundStyle(.secondary)
 
                 Button(presentation.actionTitle ?? "Open Settings") {
@@ -191,10 +191,7 @@ private struct TodayNextWakeHeroCard: View {
         ) {
             VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
                 Text(label ?? Strings.HomeSurface.heroTitle)
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                    .textCase(.uppercase)
-                    .tracking(0.4)
+                    .appTextRole(.eyebrow)
 
                 if let summary {
                     VStack(alignment: .leading, spacing: DesignTokens.spacingS) {
@@ -211,9 +208,9 @@ private struct TodayNextWakeHeroCard: View {
                 } else {
                     VStack(alignment: .leading, spacing: DesignTokens.spacingS) {
                         Text(Strings.HomeSurface.heroEmptyTitle)
-                            .font(.headline.weight(.semibold))
+                            .font(AppTypography.heroTitle)
                         Text(Strings.HomeSurface.heroEmptyBody)
-                            .font(.footnote)
+                            .font(AppTypography.cardBody)
                             .foregroundStyle(.secondary)
 
                         Button(Strings.HomeSurface.heroEmptyAction) {
