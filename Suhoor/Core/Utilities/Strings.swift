@@ -513,11 +513,11 @@ enum Strings {
     }
 
     enum HomeSurface {
-        static let heroTitle = "Next morning"
+        static let heroTitle = "Next wake"
         static let heroEmptyTitle = "Set up your mornings"
         static let heroEmptyBody = "Start with your default morning plan."
         static let heroEmptyAction = "Open Plans"
-        static let heroAction = "Open Wake"
+        static let heroAction = "View wake"
         static let fajrPromptTitle = "Did you pray Fajr?"
         static let fajrPromptBody = "Record today before you move on."
         static let fajrPromptPrimary = "Yes, I did"

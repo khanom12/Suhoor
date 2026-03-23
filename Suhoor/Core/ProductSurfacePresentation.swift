@@ -190,13 +190,16 @@ enum ProductSurfacePresentation {
         if resolved.primaryContext == .tahajjud {
             return "Tahajjud planned"
         }
-        if tags.contains(.ramadan) {
-            return "Fasting tomorrow"
-        }
         if let observance = observanceTitle(from: resolved) {
             return observance
         }
-        if resolved.primaryContext == .fasting || resolved.primaryContext == .sunnahFast || resolved.primaryContext == .suhoor {
+        if tags.contains(.ramadan) {
+            return "Ramadan fast"
+        }
+        if resolved.primaryContext == .sunnahFast {
+            return "Sunnah fast"
+        }
+        if resolved.primaryContext == .fasting || resolved.primaryContext == .suhoor {
             return "Fasting tomorrow"
         }
 
@@ -204,15 +207,15 @@ enum ProductSurfacePresentation {
     }
 
     static func homeHeroLabel(for day: ActiveAlarmDay) -> String {
-        homeHeroMeaningText(for: day) == nil ? "Next morning" : "Tomorrow's morning"
+        homeHeroMeaningText(for: day) == nil ? "Next wake" : "Tomorrow's wake"
     }
 
     static func homeHeroSubline(for day: ActiveAlarmDay) -> String {
-        let fajrText = "Fajr begins at \(TimeFormatters.timeFormatter.string(from: day.schedule.fajrDate))"
+        let fajrText = "Fajr at \(TimeFormatters.timeFormatter.string(from: day.schedule.fajrDate))"
         if let meaning = homeHeroMeaningText(for: day) {
             return "\(meaning) • \(fajrText)"
         }
-        return fajrText
+        return "For \(fajrText)"
     }
 
     static func scheduleChipTitles(
@@ -285,6 +288,20 @@ enum ProductSurfacePresentation {
         }
     }
 
+    static func wakeListSecondaryText(
+        for day: ActiveAlarmDay,
+        hasDayOverride: Bool
+    ) -> String {
+        let relationText = hasDayOverride
+            ? "Adjusted"
+            : wakeRelationText(
+                delta: day.decisionLog.resolvedDelta,
+                anchor: day.decisionLog.resolvedAnchor.type
+            )
+        let fajrText = "Fajr at \(TimeFormatters.timeFormatter.string(from: day.schedule.fajrDate))"
+        return "\(relationText) · \(fajrText)"
+    }
+
     static func configuredPlansSnapshot(
         upcomingDays: [ActiveAlarmDay],
         overrideDateKeys: Set<String>,
@@ -326,14 +343,10 @@ enum ProductSurfacePresentation {
             provenanceText = labels.joined(separator: " • ")
         }
 
-        let relationText = wakeRelationText(delta: day.decisionLog.resolvedDelta, anchor: day.decisionLog.resolvedAnchor.type)
-        let detailPrefix = hasDayOverride ? "Adjusted for this morning" : relationText
-        let detailText = "\(detailPrefix) • Fajr begins at \(TimeFormatters.timeFormatter.string(from: day.schedule.fajrDate))"
-
         return ScheduleRowPresentation(
             wakeTime: day.schedule.wakeDate,
             meaningText: dayMeaningText(for: day, style: .wakeRow),
-            detailText: detailText,
+            detailText: wakeListSecondaryText(for: day, hasDayOverride: hasDayOverride),
             chipTitles: [],
             provenanceText: provenanceText
         )

@@ -2,13 +2,10 @@ import SwiftUI
 import UIKit
 
 private enum WakeDestination: Identifiable, Hashable {
-    case fajrWindow
     case day(DaySchedule)
 
     var id: String {
         switch self {
-        case .fajrWindow:
-            return "fajr-window"
         case .day(let schedule):
             return "day-\(schedule.id)"
         }
@@ -25,94 +22,62 @@ private enum WakeDestination: Identifiable, Hashable {
 
 struct WakeScreen: View {
     @EnvironmentObject private var scheduleManager: ScheduleManager
+    @EnvironmentObject private var alarmConfigStore: AlarmConfigStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
 
     @State private var viewState = WakeListState()
     @State private var destination: WakeDestination?
-    @State private var compactFajrWindowSnapshot: FajrWindowCompactSnapshot?
     @State private var lastRefreshContext: FajrWindowRefreshContext?
 
     var body: some View {
         let wakeSnapshot = scheduleManager.wakeSurfaceSnapshot
 
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: DesignTokens.spacingXL) {
-                VStack(alignment: .leading, spacing: DesignTokens.spacingL) {
-                    if let compactFajrWindowSnapshot {
-                        FajrWindowCompactCard(snapshot: compactFajrWindowSnapshot) {
-                            destination = .fajrWindow
-                        }
-                    }
+            LazyVStack(alignment: .leading, spacing: DesignTokens.spacingL) {
+                if upcomingEntries.isEmpty {
+                    emptyStateView
+                } else {
+                    AppInsetGroup {
+                        ForEach(Array(upcomingEntries.enumerated()), id: \.element.id) { index, entry in
+                            WakeRowView(
+                                entry: entry,
+                                isEnabled: dayEnabledBinding(for: entry)
+                            ) {
+                                destination = .day(entry.schedule)
+                            }
+                            .padding(.horizontal, DesignTokens.spacingM)
+                            .padding(.vertical, DesignTokens.space8)
 
-                    if let summary = wakeSnapshot.nextWakeEventSummary {
-                        Button {
-                            destination = .day(summary.day.schedule)
-                        } label: {
-                            FeaturedTomorrowCard(
-                                summary: summary,
-                                hasOverride: wakeSnapshot.overrideDateKeys.contains(summary.day.dateKey)
-                            )
-                        }
-                        .buttonStyle(.plain)
-                    } else {
-                        emptyStateView
-                    }
-                }
-
-                if !visibleSections.isEmpty {
-                    AppSectionHeader(
-                        "Upcoming mornings",
-                        subtitle: "Your next stretch of mornings, with each day ready for edits."
-                    )
-                }
-
-                ForEach(visibleSections) { section in
-                    VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
-                        headerLabel(for: section)
-
-                        AppInsetGroup {
-                            if section.entries.isEmpty {
-                                HStack(spacing: DesignTokens.spacingS) {
-                                    ProgressView()
-                                    Text("Loading more mornings")
-                                        .font(AppTypography.rowBody)
-                                        .foregroundStyle(.secondary)
-                                }
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(.horizontal, DesignTokens.spacingL)
-                                .padding(.vertical, DesignTokens.spacingL)
-                                .task {
-                                    ensureMonthEntriesLoaded(for: section)
-                                }
-                            } else {
-                                ForEach(Array(section.entries.enumerated()), id: \.element.id) { index, entry in
-                                    WakeRowView(entry: entry) {
-                                        destination = .day(entry.schedule)
-                                    }
-                                    .padding(.horizontal, DesignTokens.spacingL)
-                                    .padding(.vertical, DesignTokens.compactRowVerticalPadding)
-
-                                    if index < section.entries.count - 1 {
-                                        AppGroupDivider()
-                                    }
-                                }
+                            if index < upcomingEntries.count - 1 {
+                                AppGroupDivider(inset: DesignTokens.spacingM)
                             }
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .shadow(color: Color.black.opacity(0.03), radius: 12, x: 0, y: 4)
+
+                    if additionalUpcomingCount > 0 {
+                        Text("\(additionalUpcomingCount) more mornings coming up after this list.")
+                            .font(AppTypography.rowBody)
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, DesignTokens.spacingS)
+                    }
                 }
             }
             .padding(.horizontal, DesignTokens.spacingL)
-            .padding(.vertical, DesignTokens.spacingL)
+            .padding(.top, DesignTokens.spacingS)
+            .padding(.bottom, DesignTokens.spacingL)
+        }
+        .safeAreaInset(edge: .bottom) {
+            Color.clear
+                .frame(height: DesignTokens.tabBarHeight + DesignTokens.spacingL)
         }
         .appScrollableChrome()
         .navigationTitle("Wake")
         .navigationBarTitleDisplayMode(.large)
         .navigationDestination(item: $destination) { destination in
             switch destination {
-            case .fajrWindow:
-                FajrWindowDetailView(initialPeriod: .sevenDays)
             case .day(let schedule):
                 AlarmDayDetailView(schedule: schedule)
             }
@@ -122,6 +87,9 @@ struct WakeScreen: View {
         }
         .onChange(of: scheduleManager.currentRevision) { _, _ in
             refreshWakeSurfaceIfNeeded()
+        }
+        .onChange(of: alarmConfigStore.currentRevision) { _, _ in
+            refreshWakeSurfaceIfNeeded(force: true)
         }
         .onChange(of: scenePhase) { _, newPhase in
             guard newPhase == .active else { return }
@@ -170,10 +138,17 @@ struct WakeScreen: View {
         }
     }
 
-    private var visibleSections: [WakeMonthSection] {
-        viewState.listSnapshot.sections.filter {
-            !$0.entries.isEmpty || viewState.loadingSectionIDs.contains($0.id) || !$0.isLoaded
-        }
+    private var upcomingEntries: [WakeRowEntry] {
+        Array(
+            wakeEntries(
+                from: scheduleManager.wakeSurfaceSnapshot
+            )
+            .prefix(7)
+        )
+    }
+
+    private var additionalUpcomingCount: Int {
+        max(wakeEntries(from: scheduleManager.wakeSurfaceSnapshot).count - upcomingEntries.count, 0)
     }
 
     private var currentTimeZone: TimeZone {
@@ -192,7 +167,6 @@ struct WakeScreen: View {
         guard force || lastRefreshContext != nextContext else { return }
         lastRefreshContext = nextContext
         refreshListSnapshot(animated: false)
-        refreshCompactFajrWindowSnapshot()
     }
 
     private func refreshListSnapshot(animated: Bool) {
@@ -221,32 +195,6 @@ struct WakeScreen: View {
         }
     }
 
-    private func refreshCompactFajrWindowSnapshot() {
-        let snapshot = scheduleManager.fajrWindowCompactSnapshot(timeZone: currentTimeZone)
-        var transaction = Transaction()
-        transaction.animation = nil
-        withTransaction(transaction) {
-            compactFajrWindowSnapshot = snapshot
-        }
-    }
-
-    @ViewBuilder
-    private func headerLabel(for section: WakeMonthSection) -> some View {
-        AppSectionHeader(section.key.title, subtitle: previewText(for: section)) {
-            MonthWakeCountBadge(count: section.visibleAlarmCount)
-        }
-    }
-
-    private func previewText(for section: WakeMonthSection) -> String? {
-        guard let preview = section.preview else { return nil }
-
-        if let adjustment = adjustmentTag(for: preview.offsetDays) {
-            return "\(monthStartLabel(for: preview.startDate)) · \(adjustment)"
-        }
-
-        return monthStartLabel(for: preview.startDate)
-    }
-
     private func ensureVisibleSectionsLoaded() {
         for section in viewState.listSnapshot.sections {
             ensureMonthEntriesLoaded(for: section)
@@ -267,73 +215,31 @@ struct WakeScreen: View {
         }
     }
 
-    private func adjustmentTag(for offsetDays: Int) -> String? {
-        switch offsetDays {
-        case -1:
-            return Strings.Settings.hijriAdjustedMinusOneDay
-        case 1:
-            return Strings.Settings.hijriAdjustedPlusOneDay
-        default:
-            return nil
+    private func wakeEntries(from snapshot: WakeSurfaceSnapshot) -> [WakeRowEntry] {
+        snapshot.visibleDays.map {
+            WakeRowActionResolver.makeEntry(
+                activeDay: $0,
+                overrideDateKeys: snapshot.overrideDateKeys
+            )
         }
     }
 
-    private func monthStartLabel(
-        for date: Date,
-        currentDate: Date = Date(),
-        timeZone: TimeZone = .autoupdatingCurrent
-    ) -> String {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = timeZone
-        let startOfToday = calendar.startOfDay(for: currentDate)
-        let startOfMonth = calendar.startOfDay(for: date)
-        if startOfMonth < startOfToday {
-            return Strings.AlarmsTab.hijriMonthStarted(shortDate(date))
-        }
-        return Strings.AlarmsTab.hijriMonthStarts(shortDate(date))
-    }
-
-    private func shortDate(_ date: Date) -> String {
-        DateFormatter.localizedString(from: date, dateStyle: .medium, timeStyle: .none)
-    }
-
-}
-
-private struct FeaturedTomorrowCard: View {
-    let summary: NextWakeEventSummary
-    let hasOverride: Bool
-
-    var body: some View {
-        AppGlassSurface(variant: .standard, prominence: .high) {
-            VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
-                Text("Next morning")
-                    .appTextRole(.eyebrow)
-
-                AppHeroMetric(
-                    value: TimeFormatters.timeFormatter.string(from: summary.day.schedule.wakeDate),
-                    title: ProductSurfacePresentation.dayMeaningText(for: summary.day, style: .wakeRow)
+    private func dayEnabledBinding(for entry: WakeRowEntry) -> Binding<Bool> {
+        Binding(
+            get: {
+                wakeEntries(from: scheduleManager.wakeSurfaceSnapshot)
+                    .first(where: { $0.id == entry.id })?
+                    .isEnabled ?? entry.isEnabled
+            },
+            set: { newValue in
+                alarmConfigStore.setDayEnabled(
+                    newValue,
+                    for: entry.schedule.date,
+                    timeZone: currentTimeZone
                 )
-
-                VStack(alignment: .leading, spacing: DesignTokens.textSpacingTight) {
-                    Text(ProductSurfacePresentation.wakeRelationText(
-                        delta: summary.day.decisionLog.resolvedDelta,
-                        anchor: summary.day.decisionLog.resolvedAnchor.type
-                    ))
-                    .font(AppTypography.rowTitle)
-                    .foregroundStyle(.secondary)
-
-                    Text("Fajr begins at \(TimeFormatters.timeFormatter.string(from: summary.day.schedule.fajrDate))")
-                        .font(AppTypography.rowBody)
-                        .foregroundStyle(.secondary)
-                        .monospacedDigit()
-
-                    if hasOverride {
-                        Text("Adjusted for this date")
-                            .font(AppTypography.metricLabel)
-                            .foregroundStyle(DawnColor.accent)
-                    }
-                }
+                scheduleManager.requestRescheduleDay(entry.schedule.date)
+                refreshWakeSurfaceIfNeeded(force: true)
             }
-        }
+        )
     }
 }

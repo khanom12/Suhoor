@@ -2,88 +2,54 @@ import SwiftUI
 
 struct WakeRowView: View {
     let entry: WakeRowEntry
+    let isEnabled: Binding<Bool>
     let onSelect: () -> Void
-
-    private static let timeMainFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "h:mm"
-        formatter.timeZone = .current
-        formatter.locale = .current
-        return formatter
-    }()
-
-    private static let timeSuffixFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "a"
-        formatter.timeZone = .current
-        formatter.locale = .current
-        return formatter
-    }()
 
     init(
         entry: WakeRowEntry,
+        isEnabled: Binding<Bool>,
         onSelect: @escaping () -> Void
     ) {
         self.entry = entry
+        self.isEnabled = isEnabled
         self.onSelect = onSelect
     }
 
     var body: some View {
-        Button(action: onSelect) {
-            VStack(alignment: .leading, spacing: DesignTokens.textSpacingTight) {
-                Text(dateLabel)
-                    .font(AppTypography.rowBody)
-                    .foregroundStyle(isDisabled ? .tertiary : .secondary)
+        HStack(alignment: .center, spacing: DesignTokens.space12) {
+            Button(action: onSelect) {
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(dateLabel)
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(dateLabelColor)
 
-                HStack(alignment: .center, spacing: DesignTokens.spacingM) {
-                    AppTimeDisplay(
-                        main: primaryTimeMain,
-                        suffix: primaryTimeSuffix,
-                        style: .prominent,
-                        mainWeight: .light,
-                        suffixWeight: .regular,
-                        mainColor: isDisabled ? .secondary : .primary,
-                        suffixColor: .secondary
+                    WakeAlarmTimeLockup(
+                        date: entry.schedule.wakeDate,
+                        isDisabled: isDisabled
                     )
+                    .padding(.top, DesignTokens.space4)
 
-                    Spacer(minLength: DesignTokens.spacingM)
-
-                    Image(systemName: "chevron.right")
-                        .font(AppTypography.navAccessory)
-                        .foregroundStyle(.tertiary)
+                    Text(entry.rowPresentation.detailText)
+                        .font(.caption)
+                        .foregroundStyle(supportingTextColor)
+                        .monospacedDigit()
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .padding(.top, DesignTokens.space4)
                 }
-
-                Text(entry.rowPresentation.meaningText)
-                    .font(AppTypography.cardTitle)
-                    .foregroundStyle(isDisabled ? .tertiary : .primary)
-
-                Text(entry.rowPresentation.detailText)
-                    .font(AppTypography.rowBody)
-                    .foregroundStyle(isDisabled ? .tertiary : .secondary)
-                    .monospacedDigit()
-
-                if let provenanceText = entry.rowPresentation.provenanceText {
-                    Text(provenanceText)
-                        .font(AppTypography.rowMeta)
-                        .foregroundStyle(isDisabled ? .tertiary : .secondary)
-                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .layoutPriority(1)
+                .contentShape(Rectangle())
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(accessibilitySummary)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .layoutPriority(1)
-            .contentShape(Rectangle())
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(accessibilitySummary)
+            .buttonStyle(.plain)
+
+            Toggle("", isOn: isEnabled)
+                .labelsHidden()
+                .accessibilityLabel(toggleAccessibilityLabel)
         }
-        .buttonStyle(.plain)
-        .padding(.vertical, DesignTokens.textSpacingCompact)
-    }
-
-    private var primaryTimeMain: String {
-        Self.timeMainFormatter.string(from: entry.schedule.wakeDate)
-    }
-
-    private var primaryTimeSuffix: String? {
-        Self.timeSuffixFormatter.string(from: entry.schedule.wakeDate)
+        .padding(.vertical, DesignTokens.space4)
     }
 
     private var dateLabel: String {
@@ -91,17 +57,34 @@ struct WakeRowView: View {
     }
 
     private var accessibilitySummary: String {
-        var summary = "\(WakeRowPresentation.accessibilityDateLabel(for: entry.schedule.date)). Wake at \(primaryTimeText). \(entry.rowPresentation.meaningText). \(entry.rowPresentation.detailText)."
-        if let provenanceText = entry.rowPresentation.provenanceText {
-            summary += " \(provenanceText)."
+        var parts = [
+            WakeRowPresentation.accessibilityDateLabel(for: entry.schedule.date),
+            "Wake at \(primaryTimeText)",
+            entry.rowPresentation.detailText,
+            isDisabled ? "Off" : "On"
+        ]
+        if entry.rowPresentation.meaningText != ProductSurfacePresentation.ordinaryDaySummaryText {
+            parts.insert(entry.rowPresentation.meaningText, at: 2)
         }
-        return summary
+        return parts.joined(separator: ". ") + "."
     }
 
-    private var isDisabled: Bool { !entry.isEnabled }
+    private var isDisabled: Bool { !isEnabled.wrappedValue }
+
+    private var dateLabelColor: Color {
+        isDisabled ? Color(UIColor.tertiaryLabel) : Color.primary.opacity(0.84)
+    }
+
+    private var supportingTextColor: Color {
+        isDisabled ? Color(UIColor.tertiaryLabel) : .secondary
+    }
 
     private var primaryTimeText: String {
         TimeFormatters.timeFormatter.string(from: entry.schedule.wakeDate)
+    }
+
+    private var toggleAccessibilityLabel: String {
+        "\(isEnabled.wrappedValue ? "Turn off" : "Turn on") wake for \(WakeRowPresentation.accessibilityDateLabel(for: entry.schedule.date))"
     }
 }
 
@@ -124,6 +107,45 @@ struct WakeContextChip: View {
             )
             .opacity(isDisabled ? 0.55 : 1.0)
     }
+}
+
+private struct WakeAlarmTimeLockup: View {
+    let date: Date
+    let isDisabled: Bool
+
+    @ScaledMetric(relativeTo: .title2) private var timePointSize: CGFloat = 40
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 3) {
+            Text(Self.timeMainFormatter.string(from: date))
+                .font(AppTypography.timeDisplayFont(size: timePointSize, weight: .light))
+                .foregroundStyle(isDisabled ? Color.secondary : Color.primary)
+                .monospacedDigit()
+                .minimumScaleFactor(DesignTokens.timeDisplayMinScaleFactor)
+
+            Text(Self.timeSuffixFormatter.string(from: date))
+                .font(AppTypography.timeDisplayFont(size: timePointSize * 0.45, weight: .regular))
+                .foregroundStyle(isDisabled ? Color(UIColor.tertiaryLabel) : Color.secondary)
+                .monospacedDigit()
+                .baselineOffset(2)
+        }
+    }
+
+    private static let timeMainFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "h:mm"
+        formatter.timeZone = .current
+        formatter.locale = .current
+        return formatter
+    }()
+
+    private static let timeSuffixFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "a"
+        formatter.timeZone = .current
+        formatter.locale = .current
+        return formatter
+    }()
 }
 
 struct MonthWakeCountBadge: View {

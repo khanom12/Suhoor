@@ -3,7 +3,6 @@ import SwiftUI
 struct AlarmDayDetailView: View {
     let schedule: DaySchedule
 
-    @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var settingsStore: SuhoorSettingsStore
     @EnvironmentObject private var alarmConfigStore: AlarmConfigStore
     @EnvironmentObject private var scheduleManager: ScheduleManager
@@ -13,12 +12,9 @@ struct AlarmDayDetailView: View {
     private let timeZone: TimeZone = .current
     @State private var reminderTimeClamped = false
     @State private var showsResetConfirmation = false
-    @State private var showsExclusionDialog = false
     @State private var expandedAlarm: ExpandedAlarm?
-    @State private var showsTagPicker = false
     @State private var selectedAbout: FastTagAbout?
     @State private var cachedEditorContext: DayAlarmEditorContext?
-    @State private var cachedTagPickerSeeds: [ActiveTagComputationSeed] = []
 
     var body: some View {
         configurationList
@@ -36,38 +32,6 @@ struct AlarmDayDetailView: View {
                 Button(Strings.Settings.cancel, role: .cancel) {}
             } message: {
                 Text(Strings.AlarmsTab.resetDayMessage)
-            }
-            .confirmationDialog(
-                "Exclude this date from which schedule?",
-                isPresented: $showsExclusionDialog,
-                titleVisibility: .visible
-            ) {
-                ForEach(stoppableProvenances, id: \.id) { provenance in
-                    Button("Exclude from \(provenance.label)") {
-                        Task {
-                            await scheduleManager.skipScheduledDate(
-                                schedule.date,
-                                scope: suppressionScope(for: provenance)
-                            )
-                            dismiss()
-                        }
-                    }
-                }
-                Button(Strings.Settings.cancel, role: .cancel) {}
-            }
-            .sheet(isPresented: $showsTagPicker) {
-                NavigationStack {
-                    FastTagPickerSheet(
-                        date: schedule.date,
-                        initialSelection: userIntentSelection,
-                        seeds: cachedTagPickerSeeds,
-                        selections: fastTagStore.selections,
-                        onSave: { selection in
-                            fastTagStore.setSelection(selection, for: schedule.date, timeZone: timeZone)
-                        }
-                    )
-                }
-                .presentationDetents([.medium, .large])
             }
             .sheet(item: $selectedAbout) { about in
                 AboutTagSheet(about: about)
@@ -122,10 +86,6 @@ struct AlarmDayDetailView: View {
         alarmConfigStore.override(for: schedule.date, timeZone: timeZone) != nil
     }
 
-    private var userIntentSelection: FastIntentSelection {
-        editorContext.userIntentSelection
-    }
-
     private var intentWarnings: [FastWarning] {
         editorContext.intentWarnings
     }
@@ -134,47 +94,6 @@ struct AlarmDayDetailView: View {
         editorContext.computedIntentSelection
     }
 
-    private var sourceProvenances: [ResolvedScheduledDateProvenance] {
-        editorContext.sourceProvenances
-    }
-
-    private var explicitSourceProvenances: [ResolvedScheduledDateProvenance] {
-        sourceProvenances.filter(\.isExplicitOneOff)
-    }
-
-    private var stoppableProvenances: [ResolvedScheduledDateProvenance] {
-        var seen = Set<String>()
-        return sourceProvenances.filter { provenance in
-            guard provenance.canStopSeries else { return false }
-            let key = "\(provenance.groupID?.uuidString ?? provenance.sourceID.uuidString)-\(provenance.stopSeriesLabel ?? "")"
-            if seen.contains(key) {
-                return false
-            }
-            seen.insert(key)
-            return true
-        }
-    }
-
-    private var intentSummaryText: String {
-        var parts: [String] = [computedIntentSelection.primaryIntent.shortTitle]
-        let secondary = computedIntentSelection.secondaryTags.sorted { $0.title < $1.title }
-        if !secondary.isEmpty {
-            parts.append(secondary.map { $0.shortTitle }.joined(separator: ", "))
-        }
-        return parts.joined(separator: " • ")
-    }
-
-    private var sourcePresentations: [ScheduleSourcePresentation] {
-        sourceProvenances.map(ScheduleSourcePresentation.init)
-    }
-
-    private var dayActiveBinding: Binding<Bool> {
-        Binding(get: {
-            isDayEnabled
-        }, set: { newValue in
-            setDayEnabled(newValue)
-        })
-    }
 
     private var suhoorEnabledBinding: Binding<Bool> {
         Binding(get: {
@@ -197,59 +116,6 @@ struct AlarmDayDetailView: View {
             effectiveConfig.fajrEnabled
         }, set: { newValue in
             updateOverride { $0.fajrEnabled = newValue }
-        })
-    }
-
-    private var iftarEnabledBinding: Binding<Bool> {
-        Binding(get: {
-            effectiveConfig.iftarEnabled
-        }, set: { newValue in
-            updateOverride { $0.iftarEnabled = newValue }
-        })
-    }
-
-    private var iftarNotificationBinding: Binding<Bool> {
-        Binding(get: {
-            effectiveConfig.iftarDelivery.notification
-        }, set: { newValue in
-            updateOverride { override in
-                let base = override.iftarDeliveryOverride ?? effectiveConfig.iftarDelivery
-                override.iftarDeliveryOverride = IftarDeliverySelection(
-                    notification: newValue,
-                    alarm: base.alarm,
-                    adhan: base.adhan
-                ).normalized()
-            }
-        })
-    }
-
-    private var iftarAlarmBinding: Binding<Bool> {
-        Binding(get: {
-            effectiveConfig.iftarDelivery.normalized().alarm
-        }, set: { newValue in
-            updateOverride { override in
-                let base = override.iftarDeliveryOverride ?? effectiveConfig.iftarDelivery
-                override.iftarDeliveryOverride = IftarDeliverySelection(
-                    notification: base.notification,
-                    alarm: newValue,
-                    adhan: base.adhan
-                ).normalized()
-            }
-        })
-    }
-
-    private var iftarAdhanBinding: Binding<Bool> {
-        Binding(get: {
-            effectiveConfig.iftarDelivery.normalized().adhan
-        }, set: { newValue in
-            updateOverride { override in
-                let base = override.iftarDeliveryOverride ?? effectiveConfig.iftarDelivery
-                override.iftarDeliveryOverride = IftarDeliverySelection(
-                    notification: base.notification,
-                    alarm: base.alarm,
-                    adhan: newValue
-                ).normalized()
-            }
         })
     }
 
@@ -403,44 +269,6 @@ struct AlarmDayDetailView: View {
             .listRowBackground(Color(.secondarySystemGroupedBackground))
 
             Section {
-                Button {
-                    showsTagPicker = true
-                } label: {
-                    HStack {
-                        VStack(alignment: .leading, spacing: DesignTokens.textSpacingTight) {
-                            Text("Shape this morning's meaning")
-                                .font(AppTypography.rowTitle)
-                                .foregroundStyle(.primary)
-                            Text(intentSummaryText)
-                                .font(AppTypography.rowBody)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(2)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                        Spacer()
-                        Image(systemName: "chevron.right")
-                            .font(AppTypography.navAccessory)
-                            .foregroundStyle(.tertiary)
-                    }
-                }
-                if canQuickMarkFastingDay {
-                    Button("Mark as Fasting Day") {
-                        fastTagStore.setSelection(
-                            FastIntentSelection(primaryIntent: .voluntary, secondaryTags: []),
-                            for: schedule.date,
-                            timeZone: timeZone
-                        )
-                        rebuildViewState()
-                    }
-                }
-            } header: {
-                Text("Morning meaning")
-                    .textCase(nil)
-            } footer: {
-                Text("Use this to make the date a fasting morning, Qada morning, or another meaningful morning.")
-            }
-
-            Section {
                 Toggle("Keep this morning active", isOn: dayToggleBinding)
             } header: {
                 Text("This morning only")
@@ -502,37 +330,13 @@ struct AlarmDayDetailView: View {
                     ) {
                         EmptyView()
                     }
-
-                    SettingsEditorCard(
-                        title: "Iftar / Maghrib",
-                        subtitle: iftarSummaryText,
-                        trailing: AnyView(
-                            Toggle("", isOn: iftarEnabledBinding)
-                                .labelsHidden()
-                        ),
-                        isExpanded: expandedAlarm == .iftar,
-                        onToggleExpanded: { toggleExpanded(.iftar) }
-                    ) {
-                        if effectiveConfig.iftarEnabled {
-                            VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
-                                Text("Calculated from sunset. Adjust globally from Prayer times.")
-                                    .font(AppTypography.rowBody)
-                                    .foregroundStyle(.secondary)
-
-                                Toggle("Notification", isOn: iftarNotificationBinding)
-                                    .disabled(isSkippingDay || !effectiveConfig.iftarEnabled)
-                                Toggle("Alarm", isOn: iftarAlarmBinding)
-                                    .disabled(isSkippingDay || !effectiveConfig.iftarEnabled)
-                                Toggle("Adhan", isOn: iftarAdhanBinding)
-                                    .disabled(isSkippingDay || !effectiveConfig.iftarEnabled)
-                            }
-                        }
-                    }
                 }
                 .padding(.vertical, DesignTokens.textSpacingTight)
             } header: {
-                Text("Wake sequence")
+                Text("Wake alarms")
                     .textCase(nil)
+            } footer: {
+                Text("Adjust this morning's wake, reminder, and Fajr adhan without changing your broader plan.")
             }
             .animation(Motion.standard(reduceMotion: reduceMotion), value: expandedAlarm)
             .disabled(!dayToggleBinding.wrappedValue)
@@ -548,71 +352,6 @@ struct AlarmDayDetailView: View {
                         .textCase(nil)
                 } footer: {
                     Text(Strings.AlarmsTab.resetDayHelper)
-                }
-            }
-
-            if !sourcePresentations.isEmpty {
-                Section {
-                    ForEach(sourcePresentations) { presentation in
-                        ScheduleSourceCard(presentation: presentation)
-                    }
-                } header: {
-                    Text("Why This Morning")
-                        .textCase(nil)
-                }
-            }
-
-            if !explicitSourceProvenances.isEmpty || !stoppableProvenances.isEmpty {
-                Section {
-                    if !explicitSourceProvenances.isEmpty {
-                        DetailActionButton(
-                            title: Strings.AlarmsTab.sourceDeleteDay,
-                            subtitle: Strings.AlarmsTab.sourceDeleteDayHelper,
-                            role: .destructive
-                        ) {
-                            Task {
-                                await scheduleManager.deleteExplicitScheduledDate(schedule.date)
-                                dismiss()
-                            }
-                        }
-                    }
-
-                    if !stoppableProvenances.isEmpty {
-                        DetailActionButton(
-                            title: Strings.AlarmsTab.sourceDayExclusion,
-                            subtitle: Strings.AlarmsTab.sourceDayExclusionHelper,
-                            tint: DawnColor.accent
-                        ) {
-                            if stoppableProvenances.count == 1, let provenance = stoppableProvenances.first {
-                                Task {
-                                    await scheduleManager.skipScheduledDate(
-                                        schedule.date,
-                                        scope: suppressionScope(for: provenance)
-                                    )
-                                    dismiss()
-                                }
-                            } else {
-                                showsExclusionDialog = true
-                            }
-                        }
-
-                        ForEach(stoppableProvenances, id: \.id) { provenance in
-                            let actionPresentation = SourceManagementActionPresentation(provenance: provenance)
-                            DetailActionButton(
-                                title: actionPresentation.title,
-                                subtitle: actionPresentation.subtitle,
-                                role: .destructive
-                            ) {
-                                Task {
-                                    await scheduleManager.stopSeries(for: provenance)
-                                    dismiss()
-                                }
-                            }
-                        }
-                    }
-                } header: {
-                    Text("Adjust Planned Source")
-                        .textCase(nil)
                 }
             }
         }
@@ -643,14 +382,6 @@ struct AlarmDayDetailView: View {
             return Strings.AlarmList.offLabel
         }
         return Strings.AlarmsTab.willPlayAt(TimeFormatters.timeFormatter.string(from: currentSchedule.fajrDate))
-    }
-
-    private var iftarSummaryText: String {
-        guard effectiveConfig.iftarEnabled, dayToggleBinding.wrappedValue else {
-            return Strings.AlarmList.offLabel
-        }
-        let timeText = TimeFormatters.timeFormatter.string(from: currentSchedule.iftarDate ?? currentSchedule.maghribDate)
-        return "\(effectiveConfig.iftarDelivery.summaryText) · \(timeText)"
     }
 
     private func toggleExpanded(_ alarm: ExpandedAlarm) {
@@ -728,12 +459,7 @@ struct AlarmDayDetailView: View {
     }
 
     private func rebuildViewState() {
-        cachedTagPickerSeeds = scheduleManager.activeWindowSnapshot.visibleDays.map(\.tagSeed)
         rebuildEditorContext()
-    }
-
-    private var canQuickMarkFastingDay: Bool {
-        intentWarnings.isEmpty && computedIntentSelection.primaryIntent == .other
     }
 
     private func buildEditorContext() -> DayAlarmEditorContext {
@@ -756,13 +482,11 @@ struct AlarmDayDetailView: View {
         return DayAlarmEditorContext(
             ruleSummary: summary,
             effectiveConfig: effectiveConfig,
-            userIntentSelection: userIntentSelection,
             computedIntentSelection: FastIntentSelection(
                 primaryIntent: computedTagResult.computedPrimaryIntent,
                 secondaryTags: computedTagResult.computedSecondaryTags
             ),
-            intentWarnings: FastIntentEngine.warnings(for: schedule.date, timeZone: timeZone),
-            sourceProvenances: activeDay?.provenances ?? scheduleManager.provenance(for: schedule.date, timeZone: timeZone)
+            intentWarnings: FastIntentEngine.warnings(for: schedule.date, timeZone: timeZone)
         )
     }
 
@@ -882,16 +606,13 @@ struct AlarmDayDetailView: View {
 private enum ExpandedAlarm {
     case suhoor
     case reminder
-    case iftar
 }
 
 private struct DayAlarmEditorContext {
     let ruleSummary: RuleSummary
     let effectiveConfig: EffectiveDailyConfig
-    let userIntentSelection: FastIntentSelection
     let computedIntentSelection: FastIntentSelection
     let intentWarnings: [FastWarning]
-    let sourceProvenances: [ResolvedScheduledDateProvenance]
 }
 
 private struct SummaryHeader: View {

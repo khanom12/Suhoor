@@ -21,7 +21,7 @@ struct HomeSurfaceProvider {
         let heroDay = input.nextWakeEventSummary?.day
 
         return HomeSurfaceSnapshot(
-            gregorianText: GregorianDateFormatter.shared.headerString(for: contextDate),
+            gregorianText: GregorianDateFormatter.shared.cardString(for: contextDate),
             hijriText: HijriDateFormatter.shared.string(from: contextDate),
             heroLabel: heroDay.map(ProductSurfacePresentation.homeHeroLabel(for:)),
             heroSubline: heroDay.map(ProductSurfacePresentation.homeHeroSubline(for:)),

@@ -18,7 +18,7 @@ struct TodayHomeView: View {
 
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: DesignTokens.spacingXL) {
-                    TodayDateBlock(snapshot: snapshot)
+                    TodayDateContextBlock(snapshot: snapshot)
 
                     TodayNextWakeHeroCard(
                         summary: snapshot.nextWakeEventSummary,
@@ -34,8 +34,8 @@ struct TodayHomeView: View {
                         )
                     }
                 }
-                .padding(.horizontal, DesignTokens.spacingL)
-                .padding(.top, DesignTokens.spacingL)
+                .padding(.horizontal, DesignTokens.spacingXL)
+                .padding(.top, DesignTokens.spacingXS)
                 .padding(.bottom, DesignTokens.spacingXL)
             }
             .appScrollableChrome()
@@ -46,8 +46,17 @@ struct TodayHomeView: View {
                         appNavigator.openSettings()
                     } label: {
                         Image(systemName: "gearshape")
-                            .font(AppTypography.toolbarIcon)
-                            .appToolbarButtonChrome()
+                            .font(AppTypography.navAccessory)
+                            .foregroundStyle(.secondary)
+                            .padding(7)
+                            .background(
+                                Circle()
+                                    .fill(Color.white.opacity(0.12))
+                                    .overlay {
+                                        Circle()
+                                            .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                                    }
+                            )
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Open Settings")
@@ -60,8 +69,18 @@ struct TodayHomeView: View {
         _ presentation: HomeSupportCardPresentation,
         now: Date
     ) -> Bool {
+        guard shouldRenderSupportCardOnHome(presentation) else { return false }
         guard let dismissalKey = presentation.dismissalKey else { return true }
         return !dismissalStore.isSupportCardDismissed(dismissalKey, on: now)
+    }
+
+    private func shouldRenderSupportCardOnHome(_ presentation: HomeSupportCardPresentation) -> Bool {
+        switch presentation {
+        case .blockingIssue:
+            return true
+        case .fajrCompletionPrompt, .forbiddenFastNotice, .fasting:
+            return false
+        }
     }
 
     private func dismissedWarnings(on now: Date) -> Set<FastWarning> {
@@ -114,41 +133,22 @@ struct TodayHomeView: View {
     }
 }
 
-private struct TodayDateBlock: View {
+private struct TodayDateContextBlock: View {
     let snapshot: HomeSurfaceSnapshot
 
     var body: some View {
-        AppGlassSurface(
-            variant: .quiet,
-            contentPadding: 0,
-            maxWidth: 320,
-            alignment: .leading
-        ) {
-            HStack(spacing: DesignTokens.spacingS) {
-                Image(systemName: "calendar")
-                    .font(AppTypography.navAccessory)
-                    .foregroundStyle(.secondary)
-                    .frame(width: DesignTokens.smallControlFrame, height: DesignTokens.smallControlFrame)
-                    .background(
-                        Circle()
-                            .fill(Color.secondary.opacity(0.10))
-                            .overlay {
-                                Circle().stroke(Color.white.opacity(0.08), lineWidth: 1)
-                            }
-                    )
+        VStack(alignment: .leading, spacing: DesignTokens.textSpacingMicro) {
+            Text(snapshot.gregorianText)
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(.secondary)
 
-                VStack(alignment: .leading, spacing: DesignTokens.textSpacingMicro) {
-                    Text(snapshot.gregorianText)
-                        .font(AppTypography.rowTitle)
-                        .foregroundStyle(.primary)
-                    Text(snapshot.hijriText)
-                        .font(AppTypography.rowBody)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .padding(.horizontal, DesignTokens.spacingM)
-            .padding(.vertical, DesignTokens.rowVerticalPadding)
+            Text(snapshot.hijriText)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.top, DesignTokens.space2)
+        .padding(.bottom, DesignTokens.space4)
     }
 }
 
@@ -178,6 +178,7 @@ private struct TodayBlockingIssueCard: View {
 
 private struct TodayNextWakeHeroCard: View {
     @EnvironmentObject private var appNavigator: AppNavigator
+    @Environment(\.colorScheme) private var colorScheme
 
     let summary: NextWakeEventSummary?
     let label: String?
@@ -186,43 +187,116 @@ private struct TodayNextWakeHeroCard: View {
     var body: some View {
         AppGlassSurface(
             variant: .hero,
-            prominence: .high
+            prominence: .high,
+            tint: DawnColor.lightGold100,
+            contentPadding: 20
         ) {
-            VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
+            VStack(alignment: .leading, spacing: 0) {
                 Text(label ?? Strings.HomeSurface.heroTitle)
                     .appTextRole(.eyebrow)
 
                 if let summary {
-                    VStack(alignment: .leading, spacing: DesignTokens.spacingS) {
-                        AppHeroMetric(
-                            value: TimeFormatters.timeFormatter.string(from: summary.day.schedule.wakeDate),
-                            title: subline ?? heroLine(for: summary)
-                        )
+                    VStack(alignment: .leading, spacing: 0) {
+                        HeroWakeTimeLockup(date: summary.day.schedule.wakeDate)
+                            .padding(.top, DesignTokens.space10)
+
+                        Text(subline ?? heroLine(for: summary))
+                            .font(.body.weight(.medium))
+                            .foregroundStyle(
+                                colorScheme == .dark
+                                ? Color.white.opacity(0.82)
+                                : Color.primary.opacity(0.78)
+                            )
+                            .fixedSize(horizontal: false, vertical: true)
+                            .padding(.top, DesignTokens.space12)
 
                         Button(Strings.HomeSurface.heroAction) {
                             appNavigator.switchToWake()
                         }
-                        .appControlStyle(.primary)
+                        .appControlStyle(.primary, tint: DawnColor.accent)
+                        .padding(.top, 20)
                     }
                 } else {
-                    VStack(alignment: .leading, spacing: DesignTokens.spacingS) {
+                    VStack(alignment: .leading, spacing: 0) {
                         Text(Strings.HomeSurface.heroEmptyTitle)
                             .font(AppTypography.heroTitle)
+                            .padding(.top, DesignTokens.space10)
+
                         Text(Strings.HomeSurface.heroEmptyBody)
                             .font(AppTypography.cardBody)
                             .foregroundStyle(.secondary)
+                            .padding(.top, DesignTokens.space10)
 
                         Button(Strings.HomeSurface.heroEmptyAction) {
                             appNavigator.openDefaultMorningPlan()
                         }
-                        .appControlStyle(.primary)
+                        .appControlStyle(.primary, tint: DawnColor.accent)
+                        .padding(.top, 18)
                     }
                 }
             }
         }
+        .overlay {
+            RoundedRectangle(cornerRadius: 32, style: .continuous)
+                .stroke(
+                    LinearGradient(
+                        colors: [
+                            Color.white.opacity(colorScheme == .dark ? 0.18 : 0.34),
+                            Color.white.opacity(colorScheme == .dark ? 0.05 : 0.10)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 1
+                )
+        }
+        .shadow(
+            color: DawnColor.accent.opacity(colorScheme == .dark ? 0.06 : 0.10),
+            radius: 20,
+            x: 0,
+            y: 10
+        )
     }
 
     private func heroLine(for summary: NextWakeEventSummary) -> String {
         ProductSurfacePresentation.homeHeroSubline(for: summary.day)
     }
+}
+
+private struct HeroWakeTimeLockup: View {
+    let date: Date
+
+    @ScaledMetric(relativeTo: .largeTitle) private var timePointSize: CGFloat = 46
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 4) {
+            Text(Self.timeMainFormatter.string(from: date))
+                .font(AppTypography.timeDisplayFont(size: timePointSize, weight: .light))
+                .foregroundStyle(.primary)
+                .monospacedDigit()
+                .minimumScaleFactor(DesignTokens.heroMetricMinScaleFactor)
+
+            Text(Self.timeSuffixFormatter.string(from: date))
+                .font(AppTypography.timeDisplayFont(size: timePointSize * 0.48, weight: .regular))
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
+                .baselineOffset(2)
+        }
+    }
+
+    private static let timeMainFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "h:mm"
+        formatter.timeZone = .current
+        formatter.locale = .current
+        return formatter
+    }()
+
+    private static let timeSuffixFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "a"
+        formatter.timeZone = .current
+        formatter.locale = .current
+        return formatter
+    }()
 }
