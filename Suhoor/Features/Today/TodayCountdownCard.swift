@@ -56,15 +56,15 @@ struct TodayCountdownCard: View {
                 }
                 .font(DesignTokens.cardMetaFont)
             } else if scheduleManager.activeWindowSnapshot.visibleDays.isEmpty {
-                Text("No upcoming wake days are scheduled yet.")
+                Text(Strings.AlarmsTab.noUpcomingAlarms)
                     .font(DesignTokens.cardSubtitleFont)
                     .foregroundStyle(.secondary)
-                Button("Open Wake") {
+                Button(Strings.AlarmsTab.openAlarm) {
                     appNavigator.switchToWake()
                 }
                 .font(DesignTokens.cardMetaFont)
             } else {
-                Text("Your wake view is still updating.")
+                Text(Strings.AlarmsTab.listUpdating)
                     .font(DesignTokens.cardSubtitleFont)
                     .foregroundStyle(.secondary)
                 Button("Open Settings") {

@@ -74,6 +74,6 @@ struct TodayOpenScheduleButton: View {
                 )
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Open Wake")
+        .accessibilityLabel(Strings.AlarmsTab.openAlarm)
     }
 }

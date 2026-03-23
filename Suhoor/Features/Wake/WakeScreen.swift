@@ -74,7 +74,7 @@ struct WakeScreen: View {
                 .frame(height: DesignTokens.tabBarHeight + DesignTokens.spacingL)
         }
         .appScrollableChrome()
-        .navigationTitle("Wake")
+        .navigationTitle(Strings.AlarmsTab.title)
         .navigationBarTitleDisplayMode(.large)
         .navigationDestination(item: $destination) { destination in
             switch destination {
@@ -108,7 +108,7 @@ struct WakeScreen: View {
 
     private var emptyStateView: some View {
         VStack(alignment: .leading, spacing: DesignTokens.spacingS) {
-            Text("No mornings are ready yet")
+            Text(Strings.AlarmsTab.emptyTitle)
                 .font(AppTypography.cardTitle)
             Text(emptyStateDetail)
                 .font(AppTypography.rowBody)
@@ -129,7 +129,7 @@ struct WakeScreen: View {
         if !scheduleManager.statusText.isEmpty {
             return scheduleManager.statusText
         }
-        return "Shape your daily morning plan in Plans and Suhoor will bring the next wake here."
+        return Strings.AlarmsTab.emptySubtitle
     }
 
     private func openAppSettings() {
@@ -140,15 +140,13 @@ struct WakeScreen: View {
 
     private var upcomingEntries: [WakeRowEntry] {
         Array(
-            wakeEntries(
-                from: scheduleManager.wakeSurfaceSnapshot
-            )
+            visibleAlarmEntries
             .prefix(7)
         )
     }
 
     private var additionalUpcomingCount: Int {
-        max(wakeEntries(from: scheduleManager.wakeSurfaceSnapshot).count - upcomingEntries.count, 0)
+        max(visibleAlarmEntries.count - upcomingEntries.count, 0)
     }
 
     private var currentTimeZone: TimeZone {
@@ -222,6 +220,48 @@ struct WakeScreen: View {
                 overrideDateKeys: snapshot.overrideDateKeys
             )
         }
+    }
+
+    private var visibleAlarmEntries: [WakeRowEntry] {
+        let now = Date()
+        return wakeEntries(from: scheduleManager.wakeSurfaceSnapshot).filter {
+            shouldShowOnAlarmScreen($0, now: now)
+        }
+    }
+
+    private func shouldShowOnAlarmScreen(_ entry: WakeRowEntry, now: Date) -> Bool {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = currentTimeZone
+
+        let entryDay = calendar.startOfDay(for: entry.schedule.date)
+        let today = calendar.startOfDay(for: now)
+
+        if entryDay > today {
+            return true
+        }
+
+        guard entryDay == today else {
+            return false
+        }
+
+        let lastMorningAlarm = entry.activeDay.scheduledEvents
+            .filter(\.isUserVisible)
+            .filter { event in
+                switch event.type {
+                case .wakeReminder, .wakeAlarm, .wakeFollowUp, .fajrBoundaryNotice:
+                    return true
+                case .iftarReminder:
+                    return false
+                }
+            }
+            .map(\.fireDate)
+            .max()
+
+        guard let lastMorningAlarm else {
+            return true
+        }
+
+        return lastMorningAlarm >= now
     }
 
     private func dayEnabledBinding(for entry: WakeRowEntry) -> Binding<Bool> {

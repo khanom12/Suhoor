@@ -57,15 +57,13 @@ struct WakeRowView: View {
     }
 
     private var accessibilitySummary: String {
-        var parts = [
-            WakeRowPresentation.accessibilityDateLabel(for: entry.schedule.date),
-            "Wake at \(primaryTimeText)",
-            entry.rowPresentation.detailText,
-            isDisabled ? "Off" : "On"
-        ]
+        var parts = [WakeRowPresentation.accessibilityDateLabel(for: entry.schedule.date)]
+        parts.append("Alarm at \(primaryTimeText)")
         if entry.rowPresentation.meaningText != ProductSurfacePresentation.ordinaryDaySummaryText {
-            parts.insert(entry.rowPresentation.meaningText, at: 2)
+            parts.append(entry.rowPresentation.meaningText)
         }
+        parts.append(contentsOf: entry.rowPresentation.detailText.components(separatedBy: " · "))
+        parts.append(isDisabled ? "Off" : "On")
         return parts.joined(separator: ". ") + "."
     }
 
@@ -84,7 +82,7 @@ struct WakeRowView: View {
     }
 
     private var toggleAccessibilityLabel: String {
-        "\(isEnabled.wrappedValue ? "Turn off" : "Turn on") wake for \(WakeRowPresentation.accessibilityDateLabel(for: entry.schedule.date))"
+        "\(isEnabled.wrappedValue ? "Turn off" : "Turn on") alarm for \(WakeRowPresentation.accessibilityDateLabel(for: entry.schedule.date))"
     }
 }
 

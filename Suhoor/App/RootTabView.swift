@@ -34,7 +34,7 @@ struct RootTabView: View {
                 AlarmsHomeView()
             }
             .tabItem {
-                Label("Wake", systemImage: "alarm")
+                Label(Strings.AlarmsTab.title, systemImage: "alarm")
             }
             .tag(RootTab.wake)
 

@@ -269,12 +269,12 @@ struct AlarmDayDetailView: View {
             .listRowBackground(Color(.secondarySystemGroupedBackground))
 
             Section {
-                Toggle("Keep this morning active", isOn: dayToggleBinding)
+                Toggle(Strings.AlarmsTab.dayToggleTitle, isOn: dayToggleBinding)
             } header: {
-                Text("This morning only")
+                Text(Strings.AlarmsTab.dayToggleSectionTitle)
                     .textCase(nil)
             } footer: {
-                Text(hasOneDayChanges ? "This morning is using date-specific changes." : "This morning is using your default morning plan.")
+                Text(hasOneDayChanges ? Strings.AlarmsTab.dayToggleOverrideFooter : Strings.AlarmsTab.dayToggleDefaultFooter)
             }
             .animation(Motion.standard(reduceMotion: reduceMotion), value: dayToggleBinding.wrappedValue)
 
@@ -333,10 +333,10 @@ struct AlarmDayDetailView: View {
                 }
                 .padding(.vertical, DesignTokens.textSpacingTight)
             } header: {
-                Text("Wake alarms")
+                Text(Strings.AlarmsTab.settingsSectionTitle)
                     .textCase(nil)
             } footer: {
-                Text("Adjust this morning's wake, reminder, and Fajr adhan without changing your broader plan.")
+                Text(Strings.AlarmsTab.settingsSectionFooter)
             }
             .animation(Motion.standard(reduceMotion: reduceMotion), value: expandedAlarm)
             .disabled(!dayToggleBinding.wrappedValue)
