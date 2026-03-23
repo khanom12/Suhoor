@@ -61,12 +61,24 @@ enum ProductSurfaceSnapshots {
         settings: AppSettings
     ) -> DefaultMorningPlanSurfaceSummary {
         let wakeLead: String
-        switch defaults.defaultSuhoorTimeMode {
-        case .relativeToFajrMinusMinutes:
-            wakeLead = "\(defaults.defaultSuhoorOffsetMinutes) min before Fajr"
-        case .fixedTime:
-            let timeText = SettingsSummaryFormatter.timeText(minutesFromMidnight: defaults.defaultSuhoorOffsetMinutes)
-            wakeLead = "Fixed at \(timeText)"
+        switch defaults.defaultWakeState {
+        case .preFajr:
+            wakeLead = "\(defaults.defaultWakeDeltaMinutes) min before Fajr"
+        case .inFajr:
+            if defaults.normalizedDefaultWakeAnchorType == .fajrEnd {
+                wakeLead = "\(defaults.defaultWakeDeltaMinutes) min before Fajr ends"
+            } else {
+                wakeLead = "\(defaults.defaultWakeDeltaMinutes) min after Fajr starts"
+            }
+        }
+
+        let extraWakeBuffer: String
+        if let latestWakeCap = defaults.defaultLatestWakeCapMinutesFromMidnight {
+            extraWakeBuffer = "Cap at \(SettingsSummaryFormatter.timeText(minutesFromMidnight: latestWakeCap))"
+        } else if settings.snoozeEnabled {
+            extraWakeBuffer = "\(settings.snoozeMinutes) min follow-up"
+        } else {
+            extraWakeBuffer = "Off"
         }
 
         let reminderSummary: String
@@ -88,10 +100,10 @@ enum ProductSurfaceSnapshots {
 
         return DefaultMorningPlanSurfaceSummary(
             wakeLead: wakeLead,
-            extraWakeBuffer: settings.snoozeEnabled ? "\(settings.snoozeMinutes) min follow-up" : "Off",
+            extraWakeBuffer: extraWakeBuffer,
             reminders: reminderSummary,
             prayerTimes: prayerTimes,
-            tahajjudBehavior: nil
+            tahajjudBehavior: "Reserve \(settings.clampedReserveBeforeEndMinutes) min before Fajr ends"
         )
     }
 

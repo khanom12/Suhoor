@@ -744,8 +744,8 @@ struct ProductSurfacePresentationTests {
 
         let subline = ProductSurfacePresentation.homeHeroSubline(for: day)
 
-        #expect(subline.contains("Fajr begins at"))
-        #expect(subline.contains("Fajr at") == false)
+        #expect(subline.contains("Fajr at"))
+        #expect(subline.contains("Fajr begins at") == false)
     }
 
     @Test
@@ -760,9 +760,10 @@ struct ProductSurfacePresentationTests {
         let defaultPresentation = ProductSurfacePresentation.scheduleRowPresentation(for: day, hasDayOverride: false)
         let adjustedPresentation = ProductSurfacePresentation.scheduleRowPresentation(for: day, hasDayOverride: true)
 
-        #expect(defaultPresentation.detailText.contains("Fajr begins at"))
+        #expect(defaultPresentation.detailText.contains("Fajr at"))
         #expect(defaultPresentation.detailText.contains("Adjusted") == false)
-        #expect(adjustedPresentation.detailText.contains("Adjusted for this morning"))
+        #expect(adjustedPresentation.detailText.contains("Adjusted"))
+        #expect(adjustedPresentation.chipTitles.contains("Adjusted"))
     }
 
     @Test
@@ -895,6 +896,10 @@ struct ProductSurfacePresentationTests {
             reminderEnabled: true,
             fajrEnabled: true,
             iftarEnabled: false,
+            defaultWakeRule: DefaultAlarmConfig.default.defaultWakeRule,
+            resolvedWakeRule: DefaultAlarmConfig.default.defaultWakeRule,
+            wakeRuleWasOverridden: false,
+            tahajjudRefinement: false,
             suhoorTimeMode: .relativeToFajrMinusMinutes,
             suhoorOffsetMinutes: 30,
             reminderTimeMode: .beforeFajr,
@@ -981,6 +986,11 @@ struct ProductSurfacePresentationTests {
             id: "plan-\(day)",
             title: "Daily plan",
             kind: .defaultDaily,
+            wakeRule: MorningWakeRule(
+                state: .preFajr,
+                anchorType: .fajrStart,
+                deltaMinutes: 30
+            ),
             wakeAnchorType: .fajrStart,
             wakeDelta: WakeDelta(relation: .before, minutes: 30),
             fixedWakeTimeCompatibilityMinutesFromMidnight: nil,

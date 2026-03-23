@@ -131,6 +131,12 @@ struct SettingsRootView: View {
             return SettingsSummaryFormatter.prayerTimesSummary(settings: settingsStore.settings)
         case .hijriCalendarCorrections:
             return SettingsSummaryFormatter.hijriCorrectionsSummary(scheduleManager: scheduleManager)
+        case .alarmBehavior:
+            return [
+                "Reserve \(settingsStore.settings.clampedReserveBeforeEndMinutes) min",
+                "Pre-Fajr \(settingsStore.settings.preFajrWakeSoundSelectionGlobal.displayName)",
+                "Fajr start \(settingsStore.settings.fajrStartSoundSelectionGlobal.displayName)"
+            ].joined(separator: " · ")
         case .permissionsReliability:
             return SettingsSummaryFormatter.permissionsSummary(
                 settings: settingsStore.settings,
@@ -152,7 +158,7 @@ struct SettingsRootView: View {
 
     private func badgeText(for destination: SettingsDestination) -> String? {
         switch destination {
-        case .prayerTimes, .hijriCalendarCorrections, .about:
+        case .prayerTimes, .hijriCalendarCorrections, .alarmBehavior, .about:
             return nil
         case .quietPeriod:
             return settingsStore.settings.quietPeriodEnabled ? "On" : nil
@@ -192,7 +198,7 @@ struct SettingsRootView: View {
                 return badgeTone(for: issue.tone)
             }
             return .neutral
-        case .prayerTimes, .hijriCalendarCorrections, .about:
+        case .prayerTimes, .hijriCalendarCorrections, .alarmBehavior, .about:
             return .neutral
         case .quietPeriod:
             return settingsStore.settings.quietPeriodEnabled ? .warning : .neutral
@@ -217,6 +223,8 @@ struct SettingsRootView: View {
             PrayerTimeSettingsView()
         case .hijriCalendarCorrections:
             HijriCalendarSettingsView()
+        case .alarmBehavior:
+            AlarmBehaviorSettingsView()
         case .permissionsReliability:
             PermissionsReliabilityView()
         case .quietPeriod:
@@ -271,5 +279,94 @@ struct SettingsRootView: View {
 
         let urlString = "mailto:?subject=\(encode(subject))&body=\(encode(body))"
         return URL(string: urlString)
+    }
+}
+
+private struct AlarmBehaviorSettingsView: View {
+    @EnvironmentObject private var settingsStore: SuhoorSettingsStore
+    @EnvironmentObject private var scheduleManager: ScheduleManager
+
+    var body: some View {
+        SettingsScrollPage {
+            SettingsGroup(
+                title: "Morning Rules / Alarm Behavior",
+                supportingText: "These settings control sound-role mapping and the reserve kept before Fajr ends for start-anchored in-Fajr defaults."
+            ) {
+                soundPickerRow(
+                    title: "Pre-Fajr wake sound",
+                    binding: soundBinding(\.preFajrWakeSoundSelectionGlobal)
+                )
+                AppGroupDivider()
+                soundPickerRow(
+                    title: "At Fajr start sound",
+                    binding: soundBinding(\.fajrStartSoundSelectionGlobal)
+                )
+                AppGroupDivider()
+                soundPickerRow(
+                    title: "Wake during Fajr sound",
+                    binding: soundBinding(\.inFajrWakeSoundSelectionGlobal)
+                )
+                AppGroupDivider()
+                soundPickerRow(
+                    title: "Wake after Fajr sound",
+                    binding: soundBinding(\.postFajrWakeSoundSelectionGlobal)
+                )
+                AppGroupDivider()
+                soundPickerRow(
+                    title: "Fixed wake sound",
+                    binding: soundBinding(\.fixedWakeSoundSelectionGlobal)
+                )
+            }
+
+            SettingsGroup(
+                title: "Reserve Before Fajr Ends",
+                supportingText: "Applies when the default wake is In-Fajr and anchored to Fajr start."
+            ) {
+                SettingsRow {
+                    Stepper(value: reserveBinding, in: 1...60, step: 1) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Reserve")
+                            Text("\(settingsStore.settings.clampedReserveBeforeEndMinutes) min")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+        }
+        .navigationTitle("Alarm Behavior")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func soundPickerRow(title: String, binding: Binding<SoundChoice>) -> some View {
+        SettingsRow {
+            Picker(title, selection: binding) {
+                ForEach(SoundChoice.allCases) { choice in
+                    Text(choice.displayName).tag(choice)
+                }
+            }
+        }
+    }
+
+    private func soundBinding(_ keyPath: WritableKeyPath<AppSettings, SoundChoice>) -> Binding<SoundChoice> {
+        Binding(get: {
+            settingsStore.settings[keyPath: keyPath]
+        }, set: { newValue in
+            settingsStore.update { draft in
+                draft[keyPath: keyPath] = newValue
+            }
+            scheduleManager.requestRefresh(reason: .settingsChanged)
+        })
+    }
+
+    private var reserveBinding: Binding<Int> {
+        Binding(get: {
+            settingsStore.settings.clampedReserveBeforeEndMinutes
+        }, set: { newValue in
+            settingsStore.update { draft in
+                draft.reserveBeforeEndMinutes = max(1, newValue)
+            }
+            scheduleManager.requestRefresh(reason: .settingsChanged)
+        })
     }
 }

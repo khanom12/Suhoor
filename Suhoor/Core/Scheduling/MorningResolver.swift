@@ -10,6 +10,15 @@ struct MorningScheduleResolutionInput: Sendable {
     let stateSnapshot: MorningStateSnapshot
 }
 
+struct WakeResolutionResult: Sendable {
+    let candidateWakeTime: Date
+    let finalWakeTime: Date
+    let resolvedWakeState: ResolvedWakeState
+    let latestWakeCapMinutesFromMidnight: Int?
+    let latestWakeCapApplied: Bool
+    let latestWakeCapShiftedState: Bool
+}
+
 enum MorningScheduleResolver {
     static let resolverVersion = 1
 
@@ -17,7 +26,13 @@ enum MorningScheduleResolver {
         input: MorningScheduleResolutionInput,
         calculator: PrayerTimeCalculator = PrayerTimeCalculator()
     ) -> ResolvedDaySnapshot? {
-        let prayerWindow = resolvePrayerWindow(input: input, calculator: calculator)
+        let prayerWindow = resolvePrayerWindow(
+            date: input.date,
+            coordinate: input.stateSnapshot.coordinate,
+            timeZone: input.stateSnapshot.timeZone,
+            settings: input.stateSnapshot.settings,
+            calculator: calculator
+        )
         guard let prayerWindow else { return nil }
 
         let planSelection = MorningPlanResolver.resolve(
@@ -29,15 +44,18 @@ enum MorningScheduleResolver {
         )
         let wakeAnchor = resolveWakeAnchor(
             prayerWindow: prayerWindow,
-            anchorType: planSelection.selectedPlan.wakeAnchorType
-        )
-        let wakeTime = resolveWakeTime(
             day: input.date,
+            wakeRule: planSelection.selectedPlan.wakeRule,
+            timeZone: input.stateSnapshot.timeZone
+        )
+        let wakeResolution = resolveWakeTime(
+            day: input.date,
+            prayerWindow: prayerWindow,
             anchor: wakeAnchor,
-            effectiveConfig: input.effectiveConfig,
             selectedPlan: planSelection.selectedPlan,
             timeZone: input.stateSnapshot.timeZone
         )
+        let wakeTime = wakeResolution.finalWakeTime
         let wakeDelta = resolveWakeDelta(anchor: wakeAnchor, wakeTime: wakeTime)
         let resolvedContext = ResolvedDayContextResolver.resolve(
             date: input.date,
@@ -52,20 +70,22 @@ enum MorningScheduleResolver {
             input: input,
             selectedPlan: planSelection.selectedPlan,
             resolvedContext: resolvedContext,
-            wakeDelta: wakeDelta
+            wakeDelta: wakeDelta,
+            wakeResolution: wakeResolution
         )
         let reminder = resolveReminderTime(
             input: input,
+            prayerWindow: prayerWindow,
             wakeTime: wakeTime,
-            anchor: wakeAnchor,
             timeZone: input.stateSnapshot.timeZone
         )
         let iftarDate = behaviorProfile.iftarReminderEnabled ? prayerWindow.maghrib : nil
-        let boundaryDate = behaviorProfile.fajrBoundaryNoticeEnabled ? prayerWindow.fajrStart : nil
+        let boundaryDate = wakeResolution.resolvedWakeState == .preFajr ? prayerWindow.fajrStart : nil
         let materializedEvents = materializeEvents(
             input: input,
             prayerWindow: prayerWindow,
             wakeAnchor: wakeAnchor,
+            wakeResolution: wakeResolution,
             wakeTime: wakeTime,
             reminder: reminder,
             boundaryDate: boundaryDate,
@@ -80,7 +100,10 @@ enum MorningScheduleResolver {
                     eventType: $0.type,
                     relativeTo: $0.relativeTo,
                     isUserVisible: $0.isUserVisible,
-                    affectsCompletion: $0.affectsCompletion
+                    affectsCompletion: $0.affectsCompletion,
+                    soundRole: $0.soundRole,
+                    wakeSessionRole: $0.wakeSessionRole,
+                    fajrStartBehavior: $0.fajrStartBehavior
                 )
             }
         )
@@ -105,12 +128,20 @@ enum MorningScheduleResolver {
             resolvedBehaviorProfile: behaviorProfile,
             resolvedAnchor: wakeAnchor,
             resolvedDelta: wakeDelta,
+            candidateWakeTime: wakeResolution.candidateWakeTime,
             resolvedWakeTime: wakeTime,
+            resolvedWakeState: wakeResolution.resolvedWakeState,
+            plannedWakeState: planSelection.selectedPlan.wakeRule.state,
+            latestWakeCapMinutesFromMidnight: wakeResolution.latestWakeCapMinutesFromMidnight,
+            latestWakeCapApplied: wakeResolution.latestWakeCapApplied,
+            latestWakeCapShiftedState: wakeResolution.latestWakeCapShiftedState,
+            suppressDefaultPrayerPrompt: behaviorProfile.suppressDefaultPrayerPrompt,
             resolvedSequenceTemplate: sequenceTemplate,
             materializedEvents: materializedEvents,
             compatibilityNotes: compatibilityNotes(
                 input: input,
-                selectedPlan: planSelection.selectedPlan
+                selectedPlan: planSelection.selectedPlan,
+                wakeResolution: wakeResolution
             )
         )
         let completionState = CompletionStateAssembler.assemble(
@@ -142,46 +173,73 @@ enum MorningScheduleResolver {
         )
     }
 
-    private static func resolvePrayerWindow(
+    static func resolvePrayerWindow(
         input: MorningScheduleResolutionInput,
         calculator: PrayerTimeCalculator
     ) -> DailyPrayerWindow? {
-        guard let fajrStart = calculator.fajrDate(
-            for: input.date,
-            location: input.stateSnapshot.coordinate,
+        resolvePrayerWindow(
+            date: input.date,
+            coordinate: input.stateSnapshot.coordinate,
             timeZone: input.stateSnapshot.timeZone,
-            method: input.stateSnapshot.settings.calculationMethod,
-            adjustmentMinutes: input.stateSnapshot.settings.fajrAdjustmentMinutes
+            settings: input.stateSnapshot.settings,
+            calculator: calculator
+        )
+    }
+
+    static func resolvePrayerWindow(
+        date: Date,
+        coordinate: CLLocationCoordinate2D,
+        timeZone: TimeZone,
+        settings: AppSettings,
+        calculator: PrayerTimeCalculator
+    ) -> DailyPrayerWindow? {
+        guard let fajrStart = calculator.fajrDate(
+            for: date,
+            location: coordinate,
+            timeZone: timeZone,
+            method: settings.calculationMethod,
+            adjustmentMinutes: settings.fajrAdjustmentMinutes
         ),
         let maghrib = calculator.maghribDate(
-            for: input.date,
-            location: input.stateSnapshot.coordinate,
-            timeZone: input.stateSnapshot.timeZone,
-            adjustmentMinutes: input.stateSnapshot.settings.maghribAdjustmentMinutes
+            for: date,
+            location: coordinate,
+            timeZone: timeZone,
+            adjustmentMinutes: settings.maghribAdjustmentMinutes
         ) else {
             return nil
         }
 
         let fajrEnd = calculator.sunriseDate(
-            for: input.date,
-            location: input.stateSnapshot.coordinate,
-            timeZone: input.stateSnapshot.timeZone,
+            for: date,
+            location: coordinate,
+            timeZone: timeZone,
             adjustmentMinutes: 0
         )
 
         return DailyPrayerWindow(
-            date: input.date,
+            date: date,
             fajrStart: fajrStart,
             fajrEnd: fajrEnd,
             maghrib: maghrib
         )
     }
 
-    private static func resolveWakeAnchor(
+    static func resolveWakeAnchor(
         prayerWindow: DailyPrayerWindow,
-        anchorType: WakeAnchorType
+        day: Date,
+        wakeRule: MorningWakeRule,
+        timeZone: TimeZone
     ) -> WakeAnchor {
-        switch anchorType {
+        if let fixedWakeTime = wakeRule.fixedWakeTimeMinutesFromMidnight,
+           wakeRule.state == .fixedWake || wakeRule.isLegacyFixedWakeCompatibility {
+            return WakeAnchor(
+                type: .clockTime,
+                date: dateFromMidnight(for: day, minutes: fixedWakeTime, timeZone: timeZone),
+                providerNotes: wakeRule.isLegacyFixedWakeCompatibility ? "legacy_fixed_wake_compatibility" : "fixed_clock_time"
+            )
+        }
+
+        switch wakeRule.anchorType ?? .fajrStart {
         case .fajrStart:
             return WakeAnchor(type: .fajrStart, date: prayerWindow.fajrStart, providerNotes: nil)
         case .fajrEnd:
@@ -192,33 +250,60 @@ enum MorningScheduleResolver {
             )
         case .masjidFajr:
             return WakeAnchor(type: .masjidFajr, date: prayerWindow.fajrStart, providerNotes: "fallback:fajr_start")
+        case .clockTime:
+            return WakeAnchor(type: .clockTime, date: prayerWindow.fajrStart, providerNotes: "fallback:clock_time_missing")
         }
     }
 
-    private static func resolveWakeTime(
+    static func resolveWakeTime(
         day: Date,
+        prayerWindow: DailyPrayerWindow,
         anchor: WakeAnchor,
-        effectiveConfig: EffectiveDailyConfig,
         selectedPlan: MorningPlan,
         timeZone: TimeZone
-    ) -> Date {
-        if let overrideMinutes = effectiveConfig.suhoorTimeOverrideMinutesFromMidnight {
-            return dateFromMidnight(for: day, minutes: overrideMinutes, timeZone: timeZone)
+    ) -> WakeResolutionResult {
+        let wakeRule = selectedPlan.wakeRule
+        let deltaMinutes = max(0, wakeRule.deltaMinutes)
+        let candidateWakeTime: Date
+
+        switch wakeRule.state {
+        case .preFajr:
+            candidateWakeTime = Calendar.current.date(byAdding: .minute, value: -deltaMinutes, to: anchor.date) ?? anchor.date
+        case .inFajr:
+            let offset = (anchor.type == .fajrEnd) ? -deltaMinutes : deltaMinutes
+            candidateWakeTime = Calendar.current.date(byAdding: .minute, value: offset, to: anchor.date) ?? anchor.date
+        case .postFajr:
+            candidateWakeTime = Calendar.current.date(byAdding: .minute, value: deltaMinutes, to: anchor.date) ?? anchor.date
+        case .fixedWake:
+            candidateWakeTime = wakeRule.fixedWakeTimeMinutesFromMidnight
+                .map { dateFromMidnight(for: day, minutes: $0, timeZone: timeZone) }
+                ?? anchor.date
         }
 
-        if effectiveConfig.suhoorTimeMode == .fixedTime {
-            return dateFromMidnight(for: day, minutes: effectiveConfig.suhoorOffsetMinutes, timeZone: timeZone)
+        let candidateState = classifyWakeState(candidateWakeTime, prayerWindow: prayerWindow)
+        let latestWakeCapDate = wakeRule.latestWakeCapMinutesFromMidnight
+            .map { dateFromMidnight(for: day, minutes: $0, timeZone: timeZone) }
+        let finalWakeTime: Date
+        let latestWakeCapApplied: Bool
+        if wakeRule.usesLatestWakeCap,
+           let latestWakeCapDate,
+           latestWakeCapDate < candidateWakeTime {
+            finalWakeTime = latestWakeCapDate
+            latestWakeCapApplied = true
+        } else {
+            finalWakeTime = candidateWakeTime
+            latestWakeCapApplied = false
         }
 
-        if let fixedCompatibilityMinutes = selectedPlan.fixedWakeTimeCompatibilityMinutesFromMidnight {
-            return dateFromMidnight(for: day, minutes: fixedCompatibilityMinutes, timeZone: timeZone)
-        }
-
-        let resolvedDelta = WakeDelta(
-            relation: selectedPlan.wakeDelta.relation,
-            minutes: max(0, effectiveConfig.suhoorOffsetMinutes)
+        let resolvedWakeState = classifyWakeState(finalWakeTime, prayerWindow: prayerWindow)
+        return WakeResolutionResult(
+            candidateWakeTime: candidateWakeTime,
+            finalWakeTime: finalWakeTime,
+            resolvedWakeState: resolvedWakeState,
+            latestWakeCapMinutesFromMidnight: wakeRule.latestWakeCapMinutesFromMidnight,
+            latestWakeCapApplied: latestWakeCapApplied,
+            latestWakeCapShiftedState: candidateState != resolvedWakeState
         )
-        return Calendar.current.date(byAdding: .minute, value: resolvedDelta.signedMinutes, to: anchor.date) ?? anchor.date
     }
 
     private static func resolveWakeDelta(anchor: WakeAnchor, wakeTime: Date) -> WakeDelta {
@@ -233,27 +318,42 @@ enum MorningScheduleResolver {
         input: MorningScheduleResolutionInput,
         selectedPlan: MorningPlan,
         resolvedContext: ResolvedDayContext,
-        wakeDelta: WakeDelta
+        wakeDelta: WakeDelta,
+        wakeResolution: WakeResolutionResult
     ) -> MorningBehaviorProfile {
         let fastingContexts: Set<MorningContextType> = [.fasting, .qadaFast, .sunnahFast]
         let iftarReminderEnabled = selectedPlan.iftarReminderEnabled && fastingContexts.contains(resolvedContext.primaryContext)
+        let primaryWakeSoundRole = primaryWakeSoundRole(
+            plannedWakeState: selectedPlan.wakeRule.state,
+            resolvedWakeState: wakeResolution.resolvedWakeState
+        )
+        let suppressDefaultPrayerPrompt = selectedPlan.kind == .explicitDateOverride
+            && selectedPlan.wakeRule.state == .postFajr
 
         return MorningBehaviorProfile(
-            wakeAnchorType: selectedPlan.wakeAnchorType,
+            wakeAnchorType: selectedPlan.wakeRule.compatibilityWakeAnchorType,
             wakeDelta: wakeDelta,
             fixedWakeTimeCompatibilityMinutesFromMidnight: selectedPlan.fixedWakeTimeCompatibilityMinutesFromMidnight,
             reminderEnabled: input.effectiveConfig.reminderEnabled,
             wakeAlarmEnabled: input.effectiveConfig.suhoorEnabled,
             wakeFollowUpEnabled: FeatureFlags.enableSnooze && input.stateSnapshot.settings.snoozeEnabled,
             fajrBoundaryNoticeEnabled: input.effectiveConfig.fajrEnabled,
-            iftarReminderEnabled: iftarReminderEnabled
+            iftarReminderEnabled: iftarReminderEnabled,
+            resolvedWakeState: wakeResolution.resolvedWakeState,
+            plannedWakeState: selectedPlan.wakeRule.state,
+            latestWakeCapMinutesFromMidnight: wakeResolution.latestWakeCapMinutesFromMidnight,
+            latestWakeCapApplied: wakeResolution.latestWakeCapApplied,
+            latestWakeCapShiftedState: wakeResolution.latestWakeCapShiftedState,
+            primaryWakeSoundRole: primaryWakeSoundRole,
+            takesOverAtFajrStart: wakeResolution.resolvedWakeState == .preFajr,
+            suppressDefaultPrayerPrompt: suppressDefaultPrayerPrompt
         )
     }
 
     private static func resolveReminderTime(
         input: MorningScheduleResolutionInput,
+        prayerWindow: DailyPrayerWindow,
         wakeTime: Date,
-        anchor: WakeAnchor,
         timeZone: TimeZone
     ) -> Date {
         if let overrideMinutes = input.effectiveConfig.reminderTimeOverrideMinutesFromMidnight {
@@ -271,8 +371,8 @@ enum MorningScheduleResolver {
         let candidate = Calendar.current.date(
             byAdding: .minute,
             value: -input.effectiveConfig.reminderMinutesBeforeFajr,
-            to: anchor.date
-        ) ?? anchor.date
+            to: prayerWindow.fajrStart
+        ) ?? prayerWindow.fajrStart
         return max(candidate, wakeTime)
     }
 
@@ -280,6 +380,7 @@ enum MorningScheduleResolver {
         input: MorningScheduleResolutionInput,
         prayerWindow: DailyPrayerWindow,
         wakeAnchor: WakeAnchor,
+        wakeResolution: WakeResolutionResult,
         wakeTime: Date,
         reminder: Date,
         boundaryDate: Date?,
@@ -287,6 +388,7 @@ enum MorningScheduleResolver {
         behaviorProfile: MorningBehaviorProfile
     ) -> [ScheduledEvent] {
         var events: [ScheduledEvent] = []
+        let wakeSessionID = "\(input.dateKey).wake-session"
 
         if behaviorProfile.reminderEnabled {
             let reference: ScheduledEventRelativeReference
@@ -306,23 +408,21 @@ enum MorningScheduleResolver {
                     relativeTo: reference,
                     isUserVisible: true,
                     affectsCompletion: false,
-                    deliveryKinds: [.reminder]
+                    deliveryKinds: [.reminder],
+                    soundRole: .reminder,
+                    wakeSessionID: wakeSessionID,
+                    wakeSessionRole: .companion
                 )
             )
         }
 
         if behaviorProfile.wakeAlarmEnabled {
-            let reference: ScheduledEventRelativeReference
-            if let overrideMinutes = input.effectiveConfig.suhoorTimeOverrideMinutesFromMidnight {
-                reference = .fixedClock(minutesFromMidnight: overrideMinutes)
-            } else if input.effectiveConfig.suhoorTimeMode == .fixedTime,
-                      input.effectiveConfig.suhoorOffsetMinutes >= 0 {
-                reference = .fixedClock(minutesFromMidnight: input.effectiveConfig.suhoorOffsetMinutes)
-            } else if let fixedCompatibilityMinutes = behaviorProfile.fixedWakeTimeCompatibilityMinutesFromMidnight {
-                reference = .fixedClock(minutesFromMidnight: fixedCompatibilityMinutes)
-            } else {
-                reference = .wakeAnchor(type: wakeAnchor.type, offsetMinutes: resolveWakeDelta(anchor: wakeAnchor, wakeTime: wakeTime).signedMinutes)
-            }
+            let reference = wakeRelativeReference(
+                wakeAnchor: wakeAnchor,
+                wakeTime: wakeTime,
+                wakeResolution: wakeResolution,
+                behaviorProfile: behaviorProfile
+            )
             events.append(
                 ScheduledEvent(
                     id: "\(input.dateKey).wakeAlarm",
@@ -332,7 +432,10 @@ enum MorningScheduleResolver {
                     relativeTo: reference,
                     isUserVisible: true,
                     affectsCompletion: true,
-                    deliveryKinds: [.wake]
+                    deliveryKinds: [.wake],
+                    soundRole: behaviorProfile.primaryWakeSoundRole,
+                    wakeSessionID: wakeSessionID,
+                    wakeSessionRole: .primaryWake
                 )
             )
         }
@@ -348,7 +451,10 @@ enum MorningScheduleResolver {
                     relativeTo: .wakeAlarm(offsetMinutes: input.stateSnapshot.settings.snoozeMinutes),
                     isUserVisible: true,
                     affectsCompletion: false,
-                    deliveryKinds: []
+                    deliveryKinds: [],
+                    soundRole: behaviorProfile.primaryWakeSoundRole,
+                    wakeSessionID: wakeSessionID,
+                    wakeSessionRole: .companion
                 )
             )
         }
@@ -363,7 +469,13 @@ enum MorningScheduleResolver {
                     relativeTo: .prayerBoundary(boundary: .fajrStart, offsetMinutes: 0),
                     isUserVisible: true,
                     affectsCompletion: false,
-                    deliveryKinds: [.boundary]
+                    deliveryKinds: behaviorProfile.fajrBoundaryNoticeEnabled ? [.boundary] : [],
+                    soundRole: .fajrStart,
+                    wakeSessionID: wakeSessionID,
+                    wakeSessionRole: .checkpoint,
+                    fajrStartBehavior: behaviorProfile.takesOverAtFajrStart
+                        ? .takeoverIfUnresolvedOtherwiseCue
+                        : .cueOnly
                 )
             )
         }
@@ -378,7 +490,9 @@ enum MorningScheduleResolver {
                     relativeTo: .prayerBoundary(boundary: .maghrib, offsetMinutes: 0),
                     isUserVisible: true,
                     affectsCompletion: false,
-                    deliveryKinds: iftarDeliveryKinds(for: input.effectiveConfig)
+                    deliveryKinds: iftarDeliveryKinds(for: input.effectiveConfig),
+                    soundRole: .iftar,
+                    wakeSessionRole: .companion
                 )
             )
         }
@@ -405,10 +519,11 @@ enum MorningScheduleResolver {
 
     private static func compatibilityNotes(
         input: MorningScheduleResolutionInput,
-        selectedPlan: MorningPlan
+        selectedPlan: MorningPlan,
+        wakeResolution: WakeResolutionResult
     ) -> [String] {
         var notes: [String] = []
-        if selectedPlan.fixedWakeTimeCompatibilityMinutesFromMidnight != nil {
+        if selectedPlan.fixedWakeTimeCompatibilityMinutesFromMidnight != nil || selectedPlan.wakeRule.isLegacyFixedWakeCompatibility {
             notes.append("fixed_time_wake_compatibility")
         }
         if input.stateSnapshot.morningPlanState.activationMode == .legacyCompat {
@@ -419,6 +534,14 @@ enum MorningScheduleResolver {
         }
         if selectedPlan.wakeAnchorType == .fajrEnd {
             notes.append("abstract_fajr_end_anchor")
+        }
+        if wakeResolution.latestWakeCapApplied {
+            notes.append("latest_wake_cap_applied")
+        } else if wakeResolution.latestWakeCapMinutesFromMidnight != nil {
+            notes.append("latest_wake_cap_available")
+        }
+        if wakeResolution.latestWakeCapShiftedState {
+            notes.append("latest_wake_cap_shifted_state")
         }
         return notes
     }
@@ -452,6 +575,68 @@ enum MorningScheduleResolver {
         return "\(dateKey)|\(planID)|\(wakeTime.timeIntervalSince1970)|\(eventFragment)"
     }
 
+    private static func classifyWakeState(
+        _ wakeTime: Date,
+        prayerWindow: DailyPrayerWindow
+    ) -> ResolvedWakeState {
+        let fajrEnd = prayerWindow.fajrEnd ?? prayerWindow.fajrStart
+        if wakeTime < prayerWindow.fajrStart {
+            return .preFajr
+        }
+        if wakeTime < fajrEnd {
+            return .inFajr
+        }
+        return .postFajr
+    }
+
+    private static func primaryWakeSoundRole(
+        plannedWakeState: MorningWakeRuleState,
+        resolvedWakeState: ResolvedWakeState
+    ) -> MorningSoundRole {
+        switch plannedWakeState {
+        case .fixedWake:
+            return .fixedWake
+        case .postFajr:
+            return .postFajrWake
+        case .preFajr, .inFajr:
+            switch resolvedWakeState {
+            case .preFajr:
+                return .preFajrWake
+            case .inFajr:
+                return .inFajrWake
+            case .postFajr:
+                return .postFajrWake
+            }
+        }
+    }
+
+    private static func wakeRelativeReference(
+        wakeAnchor: WakeAnchor,
+        wakeTime: Date,
+        wakeResolution: WakeResolutionResult,
+        behaviorProfile: MorningBehaviorProfile
+    ) -> ScheduledEventRelativeReference {
+        if wakeResolution.latestWakeCapApplied,
+           let minutes = wakeResolution.latestWakeCapMinutesFromMidnight {
+            return .fixedClock(minutesFromMidnight: minutes)
+        }
+
+        if let fixedCompatibilityMinutes = behaviorProfile.fixedWakeTimeCompatibilityMinutesFromMidnight,
+           wakeAnchor.type == .clockTime {
+            return .fixedClock(minutesFromMidnight: fixedCompatibilityMinutes)
+        }
+
+        if wakeAnchor.type == .clockTime {
+            let minutes = DateHelpers.minutesFromMidnight(for: wakeTime, timeZone: .current)
+            return .fixedClock(minutesFromMidnight: minutes)
+        }
+
+        return .wakeAnchor(
+            type: wakeAnchor.type,
+            offsetMinutes: resolveWakeDelta(anchor: wakeAnchor, wakeTime: wakeTime).signedMinutes
+        )
+    }
+
     private static func dateFromMidnight(
         for day: Date,
         minutes: Int,
@@ -461,5 +646,141 @@ enum MorningScheduleResolver {
         calendar.timeZone = timeZone
         let start = calendar.startOfDay(for: day)
         return calendar.date(byAdding: .minute, value: minutes, to: start) ?? start
+    }
+}
+
+struct DefaultWakeRuleValidationResult: Equatable, Sendable {
+    let isValid: Bool
+    let firstInvalidDateKey: String?
+    let message: String?
+    let capPulledIntoPreFajrCount: Int
+
+    static let valid = DefaultWakeRuleValidationResult(
+        isValid: true,
+        firstInvalidDateKey: nil,
+        message: nil,
+        capPulledIntoPreFajrCount: 0
+    )
+}
+
+enum DefaultWakeRuleValidator {
+    static func validate(
+        startDate: Date,
+        timeZone: TimeZone,
+        coordinate: CLLocationCoordinate2D,
+        settings: AppSettings,
+        defaultConfig: DefaultAlarmConfig,
+        calculator: PrayerTimeCalculator = PrayerTimeCalculator(),
+        horizonDays: Int = 365
+    ) -> DefaultWakeRuleValidationResult {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let normalizedStart = calendar.startOfDay(for: startDate)
+        var capPulledIntoPreFajrCount = 0
+        let defaultWakeRule = defaultConfig.defaultWakeRule
+        let validationPlan = MorningPlan(
+            id: "validator",
+            title: "Validator plan",
+            kind: .defaultDaily,
+            wakeRule: defaultWakeRule,
+            wakeAnchorType: defaultWakeRule.compatibilityWakeAnchorType,
+            wakeDelta: defaultWakeRule.compatibilityWakeDelta,
+            fixedWakeTimeCompatibilityMinutesFromMidnight: defaultWakeRule.fixedWakeTimeMinutesFromMidnight,
+            reminderEnabled: defaultConfig.reminderEnabledDefault,
+            wakeAlarmEnabled: defaultConfig.suhoorEnabledDefault,
+            fajrBoundaryNoticeEnabled: defaultConfig.fajrEnabledDefault,
+            iftarReminderEnabled: defaultConfig.iftarEnabledDefault
+        )
+
+        for dayOffset in 0..<max(1, horizonDays) {
+            guard let day = calendar.date(byAdding: .day, value: dayOffset, to: normalizedStart) else {
+                continue
+            }
+            guard let prayerWindow = MorningScheduleResolver.resolvePrayerWindow(
+                    date: day,
+                    coordinate: coordinate,
+                    timeZone: timeZone,
+                    settings: settings,
+                    calculator: calculator
+                  ) else {
+                let key = DateHelpers.dayIdentifier(for: day, timeZone: timeZone)
+                return DefaultWakeRuleValidationResult(
+                    isValid: false,
+                    firstInvalidDateKey: key,
+                    message: "Prayer times were unavailable for \(key).",
+                    capPulledIntoPreFajrCount: capPulledIntoPreFajrCount
+                )
+            }
+
+            let wakeAnchor = MorningScheduleResolver.resolveWakeAnchor(
+                prayerWindow: prayerWindow,
+                day: day,
+                wakeRule: defaultWakeRule,
+                timeZone: timeZone
+            )
+            let wakeResolution = MorningScheduleResolver.resolveWakeTime(
+                day: day,
+                prayerWindow: prayerWindow,
+                anchor: wakeAnchor,
+                selectedPlan: validationPlan,
+                timeZone: timeZone
+            )
+
+            if wakeResolution.latestWakeCapApplied,
+               wakeResolution.resolvedWakeState == .preFajr,
+               defaultConfig.defaultWakeState == .inFajr {
+                capPulledIntoPreFajrCount += 1
+            }
+
+            let key = DateHelpers.dayIdentifier(for: day, timeZone: timeZone)
+            let fajrEnd = prayerWindow.fajrEnd ?? prayerWindow.fajrStart
+
+            switch defaultWakeRule.state {
+            case .preFajr:
+                if wakeResolution.candidateWakeTime >= prayerWindow.fajrStart {
+                    return DefaultWakeRuleValidationResult(
+                        isValid: false,
+                        firstInvalidDateKey: key,
+                        message: "Pre-Fajr defaults must resolve before Fajr starts.",
+                        capPulledIntoPreFajrCount: capPulledIntoPreFajrCount
+                    )
+                }
+            case .inFajr:
+                if defaultWakeRule.anchorType == .fajrEnd {
+                    if wakeResolution.candidateWakeTime < prayerWindow.fajrStart {
+                        return DefaultWakeRuleValidationResult(
+                            isValid: false,
+                            firstInvalidDateKey: key,
+                            message: "End-anchored in-Fajr wakes must stay inside the raw Fajr window.",
+                            capPulledIntoPreFajrCount: capPulledIntoPreFajrCount
+                        )
+                    }
+                } else {
+                    let reserveCutoff = fajrEnd.addingTimeInterval(TimeInterval(-settings.clampedReserveBeforeEndMinutes * 60))
+                    if wakeResolution.candidateWakeTime > reserveCutoff {
+                        return DefaultWakeRuleValidationResult(
+                            isValid: false,
+                            firstInvalidDateKey: key,
+                            message: "Start-anchored in-Fajr wakes must preserve the reserve before Fajr ends.",
+                            capPulledIntoPreFajrCount: capPulledIntoPreFajrCount
+                        )
+                    }
+                }
+            case .postFajr, .fixedWake:
+                return DefaultWakeRuleValidationResult(
+                    isValid: false,
+                    firstInvalidDateKey: key,
+                    message: "Defaults may only use Pre-Fajr or In-Fajr wake states.",
+                    capPulledIntoPreFajrCount: capPulledIntoPreFajrCount
+                )
+            }
+        }
+
+        return DefaultWakeRuleValidationResult(
+            isValid: true,
+            firstInvalidDateKey: nil,
+            message: nil,
+            capPulledIntoPreFajrCount: capPulledIntoPreFajrCount
+        )
     }
 }

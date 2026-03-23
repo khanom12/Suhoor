@@ -45,4 +45,18 @@ struct SchedulingIdentifiers {
     static func testAlarmID(for kind: ScheduleEventKind) -> UUID {
         DateHelpers.stableUUID(from: testIdentifier(for: kind))
     }
+
+    static func identifier(
+        for event: ScheduledEvent,
+        deliveryKind: ScheduleEventKind
+    ) -> String {
+        "\(event.id).\(deliveryKind.rawValue)"
+    }
+
+    static func alarmID(
+        for event: ScheduledEvent,
+        deliveryKind: ScheduleEventKind
+    ) -> UUID {
+        DateHelpers.stableUUID(from: identifier(for: event, deliveryKind: deliveryKind))
+    }
 }

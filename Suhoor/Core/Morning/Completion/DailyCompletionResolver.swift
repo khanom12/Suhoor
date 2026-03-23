@@ -125,11 +125,11 @@ enum DailyCompletionResolver {
         resolvedDayContext: ResolvedDayContext
     ) -> FastCompletionState {
         let fallbackIntent = fastIntentSnapshot(for: resolvedDayContext)
-        guard isFastingRelevant(resolvedDayContext: resolvedDayContext) else {
-            return .notRequired
-        }
-
         guard let record = records.first(where: { $0.kind == .fast }) else {
+            guard isFastingRelevant(resolvedDayContext: resolvedDayContext) else {
+                return .notRequired
+            }
+
             return FastCompletionState(
                 status: .unknown,
                 intentSnapshot: fallbackIntent,

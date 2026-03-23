@@ -7,6 +7,34 @@ struct DailyPrayerWindow: Codable, Equatable, Hashable, Sendable {
     let maghrib: Date
 }
 
+enum MorningSoundRole: String, Codable, CaseIterable, Identifiable, Sendable {
+    case preFajrWake
+    case fajrStart
+    case inFajrWake
+    case postFajrWake
+    case fixedWake
+    case reminder
+    case iftar
+
+    var id: String { rawValue }
+}
+
+enum WakeSessionEventRole: String, Codable, CaseIterable, Identifiable, Sendable {
+    case primaryWake
+    case checkpoint
+    case companion
+
+    var id: String { rawValue }
+}
+
+enum FajrStartBehavior: String, Codable, CaseIterable, Identifiable, Sendable {
+    case none
+    case cueOnly
+    case takeoverIfUnresolvedOtherwiseCue
+
+    var id: String { rawValue }
+}
+
 enum ScheduledEventType: String, Codable, CaseIterable, Identifiable, Sendable {
     case wakeReminder
     case wakeAlarm
@@ -118,6 +146,87 @@ struct ScheduledEvent: Codable, Equatable, Hashable, Identifiable, Sendable {
     let isUserVisible: Bool
     let affectsCompletion: Bool
     let deliveryKinds: [ScheduleEventKind]
+    let soundRole: MorningSoundRole?
+    let wakeSessionID: String?
+    let wakeSessionRole: WakeSessionEventRole?
+    let fajrStartBehavior: FajrStartBehavior
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case type
+        case dateKey
+        case fireDate
+        case relativeTo
+        case isUserVisible
+        case affectsCompletion
+        case deliveryKinds
+        case soundRole
+        case wakeSessionID
+        case wakeSessionRole
+        case fajrStartBehavior
+    }
+
+    init(
+        id: String,
+        type: ScheduledEventType,
+        dateKey: String,
+        fireDate: Date,
+        relativeTo: ScheduledEventRelativeReference,
+        isUserVisible: Bool,
+        affectsCompletion: Bool,
+        deliveryKinds: [ScheduleEventKind],
+        soundRole: MorningSoundRole? = nil,
+        wakeSessionID: String? = nil,
+        wakeSessionRole: WakeSessionEventRole? = nil,
+        fajrStartBehavior: FajrStartBehavior = .none
+    ) {
+        self.id = id
+        self.type = type
+        self.dateKey = dateKey
+        self.fireDate = fireDate
+        self.relativeTo = relativeTo
+        self.isUserVisible = isUserVisible
+        self.affectsCompletion = affectsCompletion
+        self.deliveryKinds = deliveryKinds
+        self.soundRole = soundRole
+        self.wakeSessionID = wakeSessionID
+        self.wakeSessionRole = wakeSessionRole
+        self.fajrStartBehavior = fajrStartBehavior
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            id: try container.decode(String.self, forKey: .id),
+            type: try container.decode(ScheduledEventType.self, forKey: .type),
+            dateKey: try container.decode(String.self, forKey: .dateKey),
+            fireDate: try container.decode(Date.self, forKey: .fireDate),
+            relativeTo: try container.decode(ScheduledEventRelativeReference.self, forKey: .relativeTo),
+            isUserVisible: try container.decode(Bool.self, forKey: .isUserVisible),
+            affectsCompletion: try container.decode(Bool.self, forKey: .affectsCompletion),
+            deliveryKinds: try container.decode([ScheduleEventKind].self, forKey: .deliveryKinds),
+            soundRole: try container.decodeIfPresent(MorningSoundRole.self, forKey: .soundRole),
+            wakeSessionID: try container.decodeIfPresent(String.self, forKey: .wakeSessionID),
+            wakeSessionRole: try container.decodeIfPresent(WakeSessionEventRole.self, forKey: .wakeSessionRole),
+            fajrStartBehavior: try container.decodeIfPresent(FajrStartBehavior.self, forKey: .fajrStartBehavior) ?? .none
+        )
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(type, forKey: .type)
+        try container.encode(dateKey, forKey: .dateKey)
+        try container.encode(fireDate, forKey: .fireDate)
+        try container.encode(relativeTo, forKey: .relativeTo)
+        try container.encode(isUserVisible, forKey: .isUserVisible)
+        try container.encode(affectsCompletion, forKey: .affectsCompletion)
+        try container.encode(deliveryKinds, forKey: .deliveryKinds)
+        try container.encodeIfPresent(soundRole, forKey: .soundRole)
+        try container.encodeIfPresent(wakeSessionID, forKey: .wakeSessionID)
+        try container.encodeIfPresent(wakeSessionRole, forKey: .wakeSessionRole)
+        try container.encode(fajrStartBehavior, forKey: .fajrStartBehavior)
+    }
 }
 
 struct WakeSequenceStep: Codable, Equatable, Hashable, Sendable {
@@ -125,6 +234,61 @@ struct WakeSequenceStep: Codable, Equatable, Hashable, Sendable {
     let relativeTo: ScheduledEventRelativeReference
     let isUserVisible: Bool
     let affectsCompletion: Bool
+    let soundRole: MorningSoundRole?
+    let wakeSessionRole: WakeSessionEventRole?
+    let fajrStartBehavior: FajrStartBehavior
+
+    private enum CodingKeys: String, CodingKey {
+        case eventType
+        case relativeTo
+        case isUserVisible
+        case affectsCompletion
+        case soundRole
+        case wakeSessionRole
+        case fajrStartBehavior
+    }
+
+    init(
+        eventType: ScheduledEventType,
+        relativeTo: ScheduledEventRelativeReference,
+        isUserVisible: Bool,
+        affectsCompletion: Bool,
+        soundRole: MorningSoundRole? = nil,
+        wakeSessionRole: WakeSessionEventRole? = nil,
+        fajrStartBehavior: FajrStartBehavior = .none
+    ) {
+        self.eventType = eventType
+        self.relativeTo = relativeTo
+        self.isUserVisible = isUserVisible
+        self.affectsCompletion = affectsCompletion
+        self.soundRole = soundRole
+        self.wakeSessionRole = wakeSessionRole
+        self.fajrStartBehavior = fajrStartBehavior
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            eventType: try container.decode(ScheduledEventType.self, forKey: .eventType),
+            relativeTo: try container.decode(ScheduledEventRelativeReference.self, forKey: .relativeTo),
+            isUserVisible: try container.decode(Bool.self, forKey: .isUserVisible),
+            affectsCompletion: try container.decode(Bool.self, forKey: .affectsCompletion),
+            soundRole: try container.decodeIfPresent(MorningSoundRole.self, forKey: .soundRole),
+            wakeSessionRole: try container.decodeIfPresent(WakeSessionEventRole.self, forKey: .wakeSessionRole),
+            fajrStartBehavior: try container.decodeIfPresent(FajrStartBehavior.self, forKey: .fajrStartBehavior) ?? .none
+        )
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(eventType, forKey: .eventType)
+        try container.encode(relativeTo, forKey: .relativeTo)
+        try container.encode(isUserVisible, forKey: .isUserVisible)
+        try container.encode(affectsCompletion, forKey: .affectsCompletion)
+        try container.encodeIfPresent(soundRole, forKey: .soundRole)
+        try container.encodeIfPresent(wakeSessionRole, forKey: .wakeSessionRole)
+        try container.encode(fajrStartBehavior, forKey: .fajrStartBehavior)
+    }
 }
 
 struct WakeSequenceTemplate: Codable, Equatable, Hashable, Identifiable, Sendable {
@@ -146,10 +310,197 @@ struct RuleDecisionLog: Codable, Equatable, Hashable, Sendable {
     let resolvedBehaviorProfile: MorningBehaviorProfile
     let resolvedAnchor: WakeAnchor
     let resolvedDelta: WakeDelta
+    let candidateWakeTime: Date
     let resolvedWakeTime: Date
+    let resolvedWakeState: ResolvedWakeState
+    let plannedWakeState: MorningWakeRuleState
+    let latestWakeCapMinutesFromMidnight: Int?
+    let latestWakeCapApplied: Bool
+    let latestWakeCapShiftedState: Bool
+    let suppressDefaultPrayerPrompt: Bool
     let resolvedSequenceTemplate: WakeSequenceTemplate
     let materializedEvents: [ScheduledEvent]
     let compatibilityNotes: [String]
+
+    private enum CodingKeys: String, CodingKey {
+        case dateKey
+        case resolverVersion
+        case decisionHash
+        case prayerWindow
+        case candidateContexts
+        case resolvedDayContext
+        case candidatePlans
+        case selectedPlanID
+        case precedenceReason
+        case resolvedBehaviorProfile
+        case resolvedAnchor
+        case resolvedDelta
+        case candidateWakeTime
+        case resolvedWakeTime
+        case resolvedWakeState
+        case plannedWakeState
+        case latestWakeCapMinutesFromMidnight
+        case latestWakeCapApplied
+        case latestWakeCapShiftedState
+        case suppressDefaultPrayerPrompt
+        case resolvedSequenceTemplate
+        case materializedEvents
+        case compatibilityNotes
+    }
+
+    init(
+        dateKey: String,
+        resolverVersion: Int,
+        decisionHash: String,
+        prayerWindow: DailyPrayerWindow,
+        candidateContexts: [MorningContextType],
+        resolvedDayContext: ResolvedDayContext,
+        candidatePlans: [RulePlanCandidate],
+        selectedPlanID: String,
+        precedenceReason: String,
+        resolvedBehaviorProfile: MorningBehaviorProfile,
+        resolvedAnchor: WakeAnchor,
+        resolvedDelta: WakeDelta,
+        candidateWakeTime: Date,
+        resolvedWakeTime: Date,
+        resolvedWakeState: ResolvedWakeState,
+        plannedWakeState: MorningWakeRuleState,
+        latestWakeCapMinutesFromMidnight: Int? = nil,
+        latestWakeCapApplied: Bool = false,
+        latestWakeCapShiftedState: Bool = false,
+        suppressDefaultPrayerPrompt: Bool = false,
+        resolvedSequenceTemplate: WakeSequenceTemplate,
+        materializedEvents: [ScheduledEvent],
+        compatibilityNotes: [String]
+    ) {
+        self.dateKey = dateKey
+        self.resolverVersion = resolverVersion
+        self.decisionHash = decisionHash
+        self.prayerWindow = prayerWindow
+        self.candidateContexts = candidateContexts
+        self.resolvedDayContext = resolvedDayContext
+        self.candidatePlans = candidatePlans
+        self.selectedPlanID = selectedPlanID
+        self.precedenceReason = precedenceReason
+        self.resolvedBehaviorProfile = resolvedBehaviorProfile
+        self.resolvedAnchor = resolvedAnchor
+        self.resolvedDelta = resolvedDelta
+        self.candidateWakeTime = candidateWakeTime
+        self.resolvedWakeTime = resolvedWakeTime
+        self.resolvedWakeState = resolvedWakeState
+        self.plannedWakeState = plannedWakeState
+        self.latestWakeCapMinutesFromMidnight = latestWakeCapMinutesFromMidnight
+        self.latestWakeCapApplied = latestWakeCapApplied
+        self.latestWakeCapShiftedState = latestWakeCapShiftedState
+        self.suppressDefaultPrayerPrompt = suppressDefaultPrayerPrompt
+        self.resolvedSequenceTemplate = resolvedSequenceTemplate
+        self.materializedEvents = materializedEvents
+        self.compatibilityNotes = compatibilityNotes
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let dateKey = try container.decode(String.self, forKey: .dateKey)
+        let prayerWindow = try container.decode(DailyPrayerWindow.self, forKey: .prayerWindow)
+        let materializedEvents = try container.decodeIfPresent([ScheduledEvent].self, forKey: .materializedEvents) ?? []
+        let resolvedWakeTime = try container.decode(Date.self, forKey: .resolvedWakeTime)
+        let resolvedWakeState = try container.decodeIfPresent(ResolvedWakeState.self, forKey: .resolvedWakeState)
+            ?? Self.classifyWakeState(resolvedWakeTime, prayerWindow: prayerWindow)
+        let plannedWakeState = try container.decodeIfPresent(MorningWakeRuleState.self, forKey: .plannedWakeState)
+            ?? Self.fallbackPlannedWakeState(for: resolvedWakeState)
+        let fallbackSequence = WakeSequenceTemplate(
+            id: "\(dateKey).decoded-sequence",
+            name: "Decoded sequence",
+            steps: materializedEvents.map {
+                WakeSequenceStep(
+                    eventType: $0.type,
+                    relativeTo: $0.relativeTo,
+                    isUserVisible: $0.isUserVisible,
+                    affectsCompletion: $0.affectsCompletion,
+                    soundRole: $0.soundRole,
+                    wakeSessionRole: $0.wakeSessionRole,
+                    fajrStartBehavior: $0.fajrStartBehavior
+                )
+            }
+        )
+
+        self.init(
+            dateKey: dateKey,
+            resolverVersion: try container.decode(Int.self, forKey: .resolverVersion),
+            decisionHash: try container.decode(String.self, forKey: .decisionHash),
+            prayerWindow: prayerWindow,
+            candidateContexts: try container.decode([MorningContextType].self, forKey: .candidateContexts),
+            resolvedDayContext: try container.decode(ResolvedDayContext.self, forKey: .resolvedDayContext),
+            candidatePlans: try container.decode([RulePlanCandidate].self, forKey: .candidatePlans),
+            selectedPlanID: try container.decode(String.self, forKey: .selectedPlanID),
+            precedenceReason: try container.decode(String.self, forKey: .precedenceReason),
+            resolvedBehaviorProfile: try container.decode(MorningBehaviorProfile.self, forKey: .resolvedBehaviorProfile),
+            resolvedAnchor: try container.decode(WakeAnchor.self, forKey: .resolvedAnchor),
+            resolvedDelta: try container.decode(WakeDelta.self, forKey: .resolvedDelta),
+            candidateWakeTime: try container.decodeIfPresent(Date.self, forKey: .candidateWakeTime) ?? resolvedWakeTime,
+            resolvedWakeTime: resolvedWakeTime,
+            resolvedWakeState: resolvedWakeState,
+            plannedWakeState: plannedWakeState,
+            latestWakeCapMinutesFromMidnight: try container.decodeIfPresent(Int.self, forKey: .latestWakeCapMinutesFromMidnight),
+            latestWakeCapApplied: try container.decodeIfPresent(Bool.self, forKey: .latestWakeCapApplied) ?? false,
+            latestWakeCapShiftedState: try container.decodeIfPresent(Bool.self, forKey: .latestWakeCapShiftedState) ?? false,
+            suppressDefaultPrayerPrompt: try container.decodeIfPresent(Bool.self, forKey: .suppressDefaultPrayerPrompt) ?? false,
+            resolvedSequenceTemplate: try container.decodeIfPresent(WakeSequenceTemplate.self, forKey: .resolvedSequenceTemplate) ?? fallbackSequence,
+            materializedEvents: materializedEvents,
+            compatibilityNotes: try container.decodeIfPresent([String].self, forKey: .compatibilityNotes) ?? []
+        )
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(dateKey, forKey: .dateKey)
+        try container.encode(resolverVersion, forKey: .resolverVersion)
+        try container.encode(decisionHash, forKey: .decisionHash)
+        try container.encode(prayerWindow, forKey: .prayerWindow)
+        try container.encode(candidateContexts, forKey: .candidateContexts)
+        try container.encode(resolvedDayContext, forKey: .resolvedDayContext)
+        try container.encode(candidatePlans, forKey: .candidatePlans)
+        try container.encode(selectedPlanID, forKey: .selectedPlanID)
+        try container.encode(precedenceReason, forKey: .precedenceReason)
+        try container.encode(resolvedBehaviorProfile, forKey: .resolvedBehaviorProfile)
+        try container.encode(resolvedAnchor, forKey: .resolvedAnchor)
+        try container.encode(resolvedDelta, forKey: .resolvedDelta)
+        try container.encode(candidateWakeTime, forKey: .candidateWakeTime)
+        try container.encode(resolvedWakeTime, forKey: .resolvedWakeTime)
+        try container.encode(resolvedWakeState, forKey: .resolvedWakeState)
+        try container.encode(plannedWakeState, forKey: .plannedWakeState)
+        try container.encodeIfPresent(latestWakeCapMinutesFromMidnight, forKey: .latestWakeCapMinutesFromMidnight)
+        try container.encode(latestWakeCapApplied, forKey: .latestWakeCapApplied)
+        try container.encode(latestWakeCapShiftedState, forKey: .latestWakeCapShiftedState)
+        try container.encode(suppressDefaultPrayerPrompt, forKey: .suppressDefaultPrayerPrompt)
+        try container.encode(resolvedSequenceTemplate, forKey: .resolvedSequenceTemplate)
+        try container.encode(materializedEvents, forKey: .materializedEvents)
+        try container.encode(compatibilityNotes, forKey: .compatibilityNotes)
+    }
+
+    private static func classifyWakeState(
+        _ wakeTime: Date,
+        prayerWindow: DailyPrayerWindow
+    ) -> ResolvedWakeState {
+        if wakeTime < prayerWindow.fajrStart {
+            return .preFajr
+        }
+        if let fajrEnd = prayerWindow.fajrEnd, wakeTime >= fajrEnd {
+            return .postFajr
+        }
+        return .inFajr
+    }
+
+    private static func fallbackPlannedWakeState(for resolvedWakeState: ResolvedWakeState) -> MorningWakeRuleState {
+        switch resolvedWakeState {
+        case .preFajr:
+            return .preFajr
+        case .inFajr:
+            return .inFajr
+        case .postFajr:
+            return .postFajr
+        }
+    }
 }
 
 extension ScheduledEventType {
@@ -251,7 +602,10 @@ extension RuleDecisionLog {
                     eventType: $0.type,
                     relativeTo: $0.relativeTo,
                     isUserVisible: $0.isUserVisible,
-                    affectsCompletion: $0.affectsCompletion
+                    affectsCompletion: $0.affectsCompletion,
+                    soundRole: $0.soundRole,
+                    wakeSessionRole: $0.wakeSessionRole,
+                    fajrStartBehavior: $0.fajrStartBehavior
                 )
             }
         )
@@ -289,7 +643,14 @@ extension RuleDecisionLog {
             ),
             resolvedAnchor: anchor,
             resolvedDelta: delta,
+            candidateWakeTime: schedule.wakeDate,
             resolvedWakeTime: schedule.wakeDate,
+            resolvedWakeState: schedule.wakeDate < schedule.fajrDate ? .preFajr : .inFajr,
+            plannedWakeState: .preFajr,
+            latestWakeCapMinutesFromMidnight: nil,
+            latestWakeCapApplied: false,
+            latestWakeCapShiftedState: false,
+            suppressDefaultPrayerPrompt: false,
             resolvedSequenceTemplate: sequence,
             materializedEvents: events,
             compatibilityNotes: ["cache_compatibility_fallback"]

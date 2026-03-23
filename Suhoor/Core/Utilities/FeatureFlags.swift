@@ -6,6 +6,6 @@ enum FeatureFlags {
     static let enableAlarmKitTestMode = false
 
     static var useAlarmCoordinatorForScheduling: Bool {
-        enableCountdown || enableAlarmKitTestMode
+        true
     }
 }

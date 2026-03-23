@@ -344,6 +344,10 @@ struct ScheduleManagerHijriTests {
             reminderEnabledDefault: false,
             fajrEnabledDefault: false,
             iftarEnabledDefault: true,
+            defaultWakeState: .preFajr,
+            defaultWakeAnchorType: .fajrStart,
+            defaultWakeDeltaMinutes: 30,
+            defaultLatestWakeCapMinutesFromMidnight: nil,
             defaultSuhoorTimeMode: .relativeToFajrMinusMinutes,
             defaultSuhoorOffsetMinutes: 30,
             defaultReminderTimeMode: .beforeFajr,
@@ -1238,11 +1242,14 @@ struct ScheduleManagerHijriTests {
         )
 
         let resolution = MorningScheduleResolver.resolve(input: input)
+        let boundaryEvent = resolution?.decisionLog.materializedEvents.first(where: { $0.type == .fajrBoundaryNotice })
 
         #expect(resolution != nil)
         #expect(resolution?.decisionLog.dateKey == dateKey)
         #expect(resolution?.decisionLog.materializedEvents.isEmpty == false)
-        #expect(resolution?.decisionLog.materializedEvents.contains(where: { $0.type == .fajrBoundaryNotice }) == false)
+        #expect(boundaryEvent != nil)
+        #expect(boundaryEvent?.deliveryKinds.isEmpty == true)
+        #expect(boundaryEvent?.fajrStartBehavior == .takeoverIfUnresolvedOtherwiseCue)
         #expect(resolution?.resolvedDayContext.primaryContext == .standard)
     }
 
@@ -1345,10 +1352,16 @@ struct ScheduleManagerHijriTests {
 
     @Test
     func morningPlanResolverPrefersExplicitOverrideOverContextPlans() {
+        let wakeRule = MorningWakeRule(
+            state: .preFajr,
+            anchorType: .fajrStart,
+            deltaMinutes: 45
+        )
         let defaultPlan = MorningPlan(
             id: "default-daily",
             title: "Daily morning plan",
             kind: .defaultDaily,
+            wakeRule: wakeRule,
             wakeAnchorType: .fajrStart,
             wakeDelta: WakeDelta(relation: .before, minutes: 45),
             fixedWakeTimeCompatibilityMinutesFromMidnight: nil,
@@ -1618,7 +1631,7 @@ struct ScheduleManagerHijriTests {
         #expect(wakeSnapshot.overrideDateKeys.contains(tomorrowKey))
         #expect(wakeSnapshot.visibleDays.contains(where: { $0.dateKey == tomorrowKey }))
         #expect(homeSnapshot.heroLabel?.isEmpty == false)
-        #expect(homeSnapshot.heroSubline?.contains("Fajr begins at") == true)
+        #expect(homeSnapshot.heroSubline?.contains("Fajr at") == true)
         #expect(plansSnapshot.configuredPlansSnapshot.upcomingSpecialMornings.isEmpty == false)
         #expect(plansSnapshot.defaultMorningPlanSummary.wakeLead.isEmpty == false)
         #expect(progressSnapshot.fajrTodaySummary == "Fajr completed")
@@ -1981,9 +1994,9 @@ struct ScheduleManagerHijriTests {
 
         let presentation = ProductSurfacePresentation.scheduleRowPresentation(for: activeDay, hasDayOverride: true)
         #expect(presentation.meaningText.isEmpty == false)
-        #expect(presentation.detailText.contains("Adjusted for this morning"))
-        #expect(presentation.detailText.contains("Fajr begins at"))
-        #expect(presentation.chipTitles.isEmpty)
+        #expect(presentation.detailText.contains("Adjusted"))
+        #expect(presentation.detailText.contains("Fajr at"))
+        #expect(presentation.chipTitles.contains("Adjusted"))
     }
 
     private static func makeDate(
@@ -2057,7 +2070,14 @@ struct ScheduleManagerHijriTests {
         fajrEnabled: Bool,
         hasOverrides: Bool = false
     ) -> EffectiveDailyConfig {
-        EffectiveDailyConfig(
+        let wakeRule = MorningWakeRule(
+            state: suhoorTimeMode == .fixedTime ? .fixedWake : .preFajr,
+            anchorType: suhoorTimeMode == .fixedTime ? .clockTime : .fajrStart,
+            deltaMinutes: suhoorTimeMode == .fixedTime ? 0 : suhoorOffsetMinutes,
+            fixedWakeTimeMinutesFromMidnight: suhoorTimeMode == .fixedTime ? suhoorOffsetMinutes : nil,
+            isLegacyFixedWakeCompatibility: suhoorTimeMode == .fixedTime
+        )
+        return EffectiveDailyConfig(
             date: date,
             defaultsActive: true,
             skipDay: false,
@@ -2065,6 +2085,10 @@ struct ScheduleManagerHijriTests {
             reminderEnabled: true,
             fajrEnabled: fajrEnabled,
             iftarEnabled: false,
+            defaultWakeRule: wakeRule,
+            resolvedWakeRule: wakeRule,
+            wakeRuleWasOverridden: hasOverrides,
+            tahajjudRefinement: false,
             suhoorTimeMode: suhoorTimeMode,
             suhoorOffsetMinutes: suhoorOffsetMinutes,
             reminderTimeMode: .beforeFajr,

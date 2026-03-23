@@ -120,6 +120,29 @@ final class NotificationScheduler {
         }
     }
 
+    func scheduleNotification(
+        identifier: String,
+        event: ScheduledEvent,
+        deliveryKind: ScheduleEventKind,
+        settings: AppSettings,
+        schedule: DaySchedule
+    ) async -> Bool {
+        do {
+            _ = try await addNotificationRequest(
+                identifier: identifier,
+                kind: deliveryKind,
+                date: event.fireDate,
+                settings: settings,
+                schedule: schedule,
+                soundRole: event.soundRole
+            )
+            return true
+        } catch {
+            Logging.scheduler.error("Notification scheduling error: \(error.localizedDescription)")
+            return false
+        }
+    }
+
     func cancelAll() async {
         let identifiers = upcomingIdentifiers(days: 30) + legacyUpcomingIdentifiers(days: 30)
         await cancelNotifications(identifiers: identifiers)
@@ -197,12 +220,13 @@ final class NotificationScheduler {
         kind: ScheduleEventKind,
         date: Date,
         settings: AppSettings,
-        schedule: DaySchedule
+        schedule: DaySchedule,
+        soundRole: MorningSoundRole? = nil
     ) async throws -> UNNotificationRequest {
         let content = UNMutableNotificationContent()
         content.title = notificationTitle(for: kind, settings: settings)
         content.body = notificationBody(for: kind)
-        content.sound = notificationSound(for: kind, schedule: schedule, settings: settings)
+        content.sound = notificationSound(for: soundRole, kind: kind, schedule: schedule, settings: settings)
         if kind == .iftarNotification {
             content.categoryIdentifier = Self.iftarCategoryIdentifier
         }
@@ -308,24 +332,60 @@ final class NotificationScheduler {
         }
     }
 
-    private func notificationSound(for kind: ScheduleEventKind, schedule: DaySchedule, settings: AppSettings) -> UNNotificationSound? {
+    private func notificationSound(
+        for kind: ScheduleEventKind,
+        schedule: DaySchedule,
+        settings: AppSettings
+    ) -> UNNotificationSound? {
+        notificationSound(for: nil, kind: kind, schedule: schedule, settings: settings)
+    }
+
+    private func notificationSound(
+        for soundRole: MorningSoundRole?,
+        kind: ScheduleEventKind,
+        schedule: DaySchedule,
+        settings: AppSettings
+    ) -> UNNotificationSound? {
+        if let soundRole {
+            return notificationSound(for: settings.soundChoice(for: soundRole), role: soundRole)
+        }
+
         switch kind {
         case .wake:
             return .default
         case .reminder:
             return .default
         case .boundary:
-            let soundChoice = schedule.fajrSoundChoice ?? settings.atFajrSoundSelectionGlobal
-            if soundChoice == .adhanSoft,
-               Bundle.main.url(forResource: "adhan_fajr", withExtension: "caf") != nil {
-                return UNNotificationSound(named: UNNotificationSoundName("adhan_fajr.caf"))
-            }
-            return .default
+            return notificationSound(for: schedule.fajrSoundChoice ?? settings.atFajrSoundSelectionGlobal, role: .fajrStart)
         case .iftarNotification:
             return .default
         case .iftarAlarm:
             return .default
         case .iftarAdhan:
+            if Bundle.main.url(forResource: "adhan", withExtension: "caf") != nil {
+                return UNNotificationSound(named: UNNotificationSoundName("adhan.caf"))
+            }
+            if Bundle.main.url(forResource: "adhan_maghrib", withExtension: "caf") != nil {
+                return UNNotificationSound(named: UNNotificationSoundName("adhan_maghrib.caf"))
+            }
+            return .default
+        }
+    }
+
+    private func notificationSound(
+        for soundChoice: SoundChoice,
+        role: MorningSoundRole
+    ) -> UNNotificationSound? {
+        guard soundChoice == .adhanSoft else { return .default }
+        switch role {
+        case .preFajrWake, .fajrStart, .inFajrWake, .postFajrWake, .fixedWake:
+            if Bundle.main.url(forResource: "adhan_fajr", withExtension: "caf") != nil {
+                return UNNotificationSound(named: UNNotificationSoundName("adhan_fajr.caf"))
+            }
+            return .default
+        case .reminder:
+            return .default
+        case .iftar:
             if Bundle.main.url(forResource: "adhan", withExtension: "caf") != nil {
                 return UNNotificationSound(named: UNNotificationSoundName("adhan.caf"))
             }

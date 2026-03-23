@@ -212,10 +212,11 @@ enum ProductSurfacePresentation {
 
     static func homeHeroSubline(for day: ActiveAlarmDay) -> String {
         let fajrText = "Fajr at \(TimeFormatters.timeFormatter.string(from: day.schedule.fajrDate))"
+        let wakeText = wakeExplanationText(for: day, hasDayOverride: day.effectiveConfig.wakeRuleWasOverridden)
         if let meaning = homeHeroMeaningText(for: day) {
-            return "\(meaning) • \(fajrText)"
+            return "\(meaning) • \(wakeText) • \(fajrText)"
         }
-        return "For \(fajrText)"
+        return "\(wakeText) • \(fajrText)"
     }
 
     static func scheduleChipTitles(
@@ -224,7 +225,14 @@ enum ProductSurfacePresentation {
         limit: Int = 2
     ) -> [String] {
         var titles = meaningfulSecondaryContextTitles(from: day.resolvedDayContext, limit: limit)
-        if hasDayOverride && titles.count < limit {
+        if day.decisionLog.latestWakeCapApplied && titles.count < limit {
+            titles.append("Cap")
+        }
+        if day.decisionLog.plannedWakeState == .postFajr && titles.count < limit {
+            titles.append("Post-Fajr")
+        } else if day.decisionLog.plannedWakeState == .fixedWake && titles.count < limit {
+            titles.append("Fixed")
+        } else if hasDayOverride && titles.count < limit {
             titles.append("Adjusted")
         }
         return Array(titles.prefix(limit))
@@ -273,6 +281,8 @@ enum ProductSurfacePresentation {
             anchorTitle = "Fajr ends"
         case .masjidFajr:
             anchorTitle = "masjid Fajr"
+        case .clockTime:
+            return "Fixed wake"
         }
 
         if delta.minutes == 0 {
@@ -292,12 +302,7 @@ enum ProductSurfacePresentation {
         for day: ActiveAlarmDay,
         hasDayOverride: Bool
     ) -> String {
-        let relationText = hasDayOverride
-            ? "Adjusted"
-            : wakeRelationText(
-                delta: day.decisionLog.resolvedDelta,
-                anchor: day.decisionLog.resolvedAnchor.type
-            )
+        let relationText = wakeExplanationText(for: day, hasDayOverride: hasDayOverride)
         let fajrText = "Fajr at \(TimeFormatters.timeFormatter.string(from: day.schedule.fajrDate))"
         return "\(relationText) · \(fajrText)"
     }
@@ -347,9 +352,48 @@ enum ProductSurfacePresentation {
             wakeTime: day.schedule.wakeDate,
             meaningText: dayMeaningText(for: day, style: .wakeRow),
             detailText: wakeListSecondaryText(for: day, hasDayOverride: hasDayOverride),
-            chipTitles: [],
+            chipTitles: scheduleChipTitles(for: day, hasDayOverride: hasDayOverride),
             provenanceText: provenanceText
         )
+    }
+
+    static func wakeExplanationText(
+        for day: ActiveAlarmDay,
+        hasDayOverride: Bool
+    ) -> String {
+        let decision = day.decisionLog
+        let stateText: String
+        switch decision.resolvedWakeState {
+        case .preFajr:
+            stateText = wakeRelationText(delta: decision.resolvedDelta, anchor: decision.resolvedAnchor.type)
+        case .inFajr:
+            stateText = decision.resolvedAnchor.type == .fajrEnd
+                ? wakeRelationText(delta: decision.resolvedDelta, anchor: .fajrEnd)
+                : "During Fajr"
+        case .postFajr:
+            if decision.plannedWakeState == .fixedWake {
+                stateText = "Fixed wake"
+            } else {
+                stateText = "After Fajr"
+            }
+        }
+
+        if decision.latestWakeCapApplied,
+           let cap = decision.latestWakeCapMinutesFromMidnight {
+            return "\(stateText) · capped at \(SettingsSummaryFormatter.timeText(minutesFromMidnight: cap))"
+        }
+
+        if hasDayOverride && decision.plannedWakeState == .fixedWake {
+            return "Fixed wake override"
+        }
+        if hasDayOverride && decision.plannedWakeState == .postFajr {
+            return "Post-Fajr override"
+        }
+        if hasDayOverride {
+            return "\(stateText) · Adjusted"
+        }
+
+        return stateText
     }
 
     static func wakeProgressSnapshot(from events: [DebugEvent]) -> WakeProgressSnapshot {
@@ -438,7 +482,7 @@ enum ProductSurfacePresentation {
 
         var subtitleParts = [
             WakeRowPresentation.dateLabel(for: day.date),
-            wakeRelationText(delta: day.decisionLog.resolvedDelta, anchor: day.decisionLog.resolvedAnchor.type)
+            wakeExplanationText(for: day, hasDayOverride: hasOverride)
         ]
 
         if hasOverride && nonDefaultProvenances.isEmpty {

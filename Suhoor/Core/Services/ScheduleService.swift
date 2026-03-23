@@ -500,8 +500,13 @@ final class ScheduleManager: ObservableObject {
     func progressSurfaceSnapshot(
         wakeProgressSource: WakeProgressSource = DebugEventLogWakeProgressSource()
     ) -> ProgressSurfaceSnapshot {
-        _ = wakeProgressSource
-        return completionSurfaceStore.state.progressSnapshot
+        completionSurfaceProvider.progressSurfaceSnapshot(
+            activeWindowSnapshot: activeWindowSnapshot,
+            now: Date(),
+            completionState: completionSurfaceStore.state.completionStateSnapshot,
+            settings: settingsStore.settings,
+            wakeProgress: wakeProgressSource.snapshot(limit: 20)
+        )
     }
 
     func fajrHistorySurfaceSnapshot(
@@ -1582,14 +1587,13 @@ final class ScheduleManager: ObservableObject {
                 "[toggle] scheduleDay \(key, privacy: .public) suhoor=\(updatedDay.effectiveConfig.suhoorEnabled, privacy: .public) reminder=\(updatedDay.effectiveConfig.reminderEnabled, privacy: .public) fajr=\(updatedDay.effectiveConfig.fajrEnabled, privacy: .public)"
             )
             _ = await alarmScheduler.scheduleDay(
-                schedule: updatedDay.schedule,
-                config: updatedDay.effectiveConfig,
+                day: updatedDay,
                 settings: settings,
                 canUseAlarmKit: canUseAlarmKit
             )
         } else {
             Logging.diagnostics.debug("[toggle] cancelDay \(key, privacy: .public) via schedule window")
-            await alarmScheduler.cancelDay(schedule: updatedDay.schedule)
+            await alarmScheduler.cancelDay(day: updatedDay)
         }
 
         lastUpdated = Date()
@@ -1610,6 +1614,18 @@ final class ScheduleManager: ObservableObject {
 
     func schedule(for date: Date) -> DaySchedule? {
         activeDayResolver.scheduleAndConfig(for: date, builder: dayScheduleBuilder)?.schedule
+    }
+
+    func defaultWakeValidation(timeZone: TimeZone = .current) -> DefaultWakeRuleValidationResult? {
+        guard let coordinate = currentCoordinate() else { return nil }
+        return DefaultWakeRuleValidator.validate(
+            startDate: Date(),
+            timeZone: timeZone,
+            coordinate: coordinate,
+            settings: settingsStore.settings,
+            defaultConfig: alarmConfigStore.defaults,
+            calculator: calculator
+        )
     }
 
     func scheduleTomorrowActivation() async -> ActivationScheduleResult {
@@ -1646,8 +1662,26 @@ final class ScheduleManager: ObservableObject {
         }
 
         let scheduled = await alarmScheduler.scheduleDay(
-            schedule: result.schedule,
-            config: result.config,
+            day: activeWindowSnapshot.byDateKey[result.schedule.id]
+                ?? ActiveAlarmDay(
+                    date: result.schedule.date,
+                    dateKey: result.schedule.id,
+                    schedule: result.schedule,
+                    effectiveConfig: result.config,
+                    provenances: [],
+                    isImplicitRamadan: false,
+                    isExplicitOneOff: false,
+                    tagResult: .empty,
+                    primaryDisplay: result.config.primaryDisplay(schedule: result.schedule),
+                    sourceSummaryText: "",
+                    resolvedDayContext: .standard,
+                    scheduledEvents: RuleDecisionLog.compatibilityFallback(
+                        dateKey: result.schedule.id,
+                        schedule: result.schedule,
+                        resolvedDayContext: .standard,
+                        primaryDisplay: result.config.primaryDisplay(schedule: result.schedule)
+                    ).materializedEvents
+                ),
             settings: settingsStore.settings,
             canUseAlarmKit: canUseAlarmKit
         )
@@ -1660,10 +1694,10 @@ final class ScheduleManager: ObservableObject {
     }
 
     func cancelDay(_ date: Date) async {
-        guard let schedule = scheduleForCancellation(on: date) else { return }
-        let key = DateHelpers.dayIdentifier(for: schedule.date, timeZone: .current)
+        guard let day = dayForCancellation(on: date) else { return }
+        let key = DateHelpers.dayIdentifier(for: day.date, timeZone: .current)
         Logging.diagnostics.debug("[toggle] cancelDay \(key, privacy: .public) via cancelDay()")
-        await alarmScheduler.cancelDay(schedule: schedule)
+        await alarmScheduler.cancelDay(day: day)
     }
 
     func requestAlarmAuthorization() async -> Bool {
@@ -2714,13 +2748,34 @@ final class ScheduleManager: ObservableObject {
         alarmStateStore.clear()
     }
 
-    private func scheduleForCancellation(on date: Date) -> DaySchedule? {
+    private func dayForCancellation(on date: Date) -> ActiveAlarmDay? {
         let timeZone = TimeZone.current
         let key = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
-        if let existing = activeWindowSnapshot.byDateKey[key]?.schedule {
+        if let existing = activeWindowSnapshot.byDateKey[key] {
             return existing
         }
-        return schedule(for: date)
+        guard let result = activeDayResolver.scheduleAndConfig(for: date, builder: dayScheduleBuilder, timeZone: timeZone) else {
+            return nil
+        }
+        return ActiveAlarmDay(
+            date: result.schedule.date,
+            dateKey: result.schedule.id,
+            schedule: result.schedule,
+            effectiveConfig: result.config,
+            provenances: [],
+            isImplicitRamadan: false,
+            isExplicitOneOff: false,
+            tagResult: .empty,
+            primaryDisplay: result.config.primaryDisplay(schedule: result.schedule),
+            sourceSummaryText: "",
+            resolvedDayContext: .standard,
+            scheduledEvents: RuleDecisionLog.compatibilityFallback(
+                dateKey: result.schedule.id,
+                schedule: result.schedule,
+                resolvedDayContext: .standard,
+                primaryDisplay: result.config.primaryDisplay(schedule: result.schedule)
+            ).materializedEvents
+        )
     }
 
 }
@@ -2765,13 +2820,18 @@ struct NextWakeEventSummary: Equatable, Sendable {
         let delta = day.decisionLog.resolvedDelta
         switch event.type {
         case .wakeAlarm:
-            return relationText(for: delta, anchor: day.decisionLog.resolvedAnchor.type)
+            return ProductSurfacePresentation.wakeExplanationText(
+                for: day,
+                hasDayOverride: day.effectiveConfig.wakeRuleWasOverridden
+            )
         case .wakeReminder:
             return "Reminder before the main wake."
         case .wakeFollowUp:
             return "Follow-up after the main wake."
         case .fajrBoundaryNotice:
-            return "At the Fajr boundary."
+            return event.fajrStartBehavior == .takeoverIfUnresolvedOtherwiseCue
+                ? "Fajr-start checkpoint with takeover if the wake is still active."
+                : "At the Fajr boundary."
         case .iftarReminder:
             return "At Maghrib."
         }
@@ -2786,6 +2846,8 @@ struct NextWakeEventSummary: Equatable, Sendable {
             anchorTitle = "Fajr ends"
         case .masjidFajr:
             anchorTitle = "masjid Fajr"
+        case .clockTime:
+            return "Fixed wake."
         }
 
         if delta.minutes == 0 {

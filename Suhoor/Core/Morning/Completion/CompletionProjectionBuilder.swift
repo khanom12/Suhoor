@@ -56,13 +56,17 @@ enum CompletionProjectionBuilder {
                 dailyCompletion: day.dailyCompletion
             )
         }
-        let fajrPrompt = currentDay.flatMap { day in
-            fajrPromptPresentation(
+        let fajrPrompt: FajrHomeSupportPresentation? = {
+            guard let day = currentDay,
+                  !day.decisionLog.suppressDefaultPrayerPrompt else {
+                return nil
+            }
+            return fajrPromptPresentation(
                 now: now,
                 schedule: todaySchedule,
                 dailyCompletion: day.dailyCompletion
             )
-        }
+        }()
         let prayerPromptsSuppressed = settings.quietPeriodEnabled && settings.pausePrayerPrompts
         let fastingPromptsSuppressed = settings.quietPeriodEnabled && settings.pauseFastingPrompts
 

@@ -8,11 +8,15 @@ struct SettingsSummaryFormatter {
         if !config.suhoorEnabledDefault {
             wakeSummary = Strings.SettingsSummary.wakeOff
         } else {
-            switch config.defaultSuhoorTimeMode {
-            case .relativeToFajrMinusMinutes:
-                wakeSummary = Strings.SettingsSummary.wakeBeforeFajr(config.defaultSuhoorOffsetMinutes)
-            case .fixedTime:
-                wakeSummary = Strings.SettingsSummary.wakeFixed(timeText(minutesFromMidnight: config.defaultSuhoorOffsetMinutes))
+            switch config.defaultWakeState {
+            case .preFajr:
+                wakeSummary = Strings.SettingsSummary.wakeBeforeFajr(config.defaultWakeDeltaMinutes)
+            case .inFajr:
+                if config.normalizedDefaultWakeAnchorType == .fajrEnd {
+                    wakeSummary = "Wake \(config.defaultWakeDeltaMinutes) min before Fajr ends"
+                } else {
+                    wakeSummary = "Wake \(config.defaultWakeDeltaMinutes) min after Fajr"
+                }
             }
         }
 
@@ -36,7 +40,11 @@ struct SettingsSummaryFormatter {
             ? "Iftar \(config.defaultIftarDelivery.summaryText)"
             : "Iftar Off"
 
-        return [wakeSummary, reminderSummary, fajrSummary, iftarSummary].joined(separator: " · ")
+        var parts = [wakeSummary, reminderSummary, fajrSummary, iftarSummary]
+        if let latestCap = config.defaultLatestWakeCapMinutesFromMidnight {
+            parts.append("Cap \(timeText(minutesFromMidnight: latestCap))")
+        }
+        return parts.joined(separator: " · ")
     }
 
     static func locationSummary(settings: AppSettings, locationService: LocationService) -> String {
@@ -243,6 +251,7 @@ enum SettingsDestination: String, CaseIterable, Identifiable {
     case location
     case prayerTimes
     case hijriCalendarCorrections
+    case alarmBehavior
     case permissionsReliability
     case quietPeriod
     case about
@@ -257,6 +266,8 @@ enum SettingsDestination: String, CaseIterable, Identifiable {
             return Strings.Settings.prayerTimesTitle
         case .hijriCalendarCorrections:
             return Strings.Settings.hijriCalendarTitle
+        case .alarmBehavior:
+            return "Alarm Behavior"
         case .permissionsReliability:
             return Strings.Settings.permissionsReliabilityTitle
         case .quietPeriod:
@@ -274,6 +285,8 @@ enum SettingsDestination: String, CaseIterable, Identifiable {
             return "moon.stars"
         case .hijriCalendarCorrections:
             return "calendar.badge.clock"
+        case .alarmBehavior:
+            return "speaker.wave.3"
         case .permissionsReliability:
             return "checkmark.shield"
         case .quietPeriod:
@@ -286,6 +299,7 @@ enum SettingsDestination: String, CaseIterable, Identifiable {
 
 enum SettingsDestinationGroup: CaseIterable, Identifiable {
     case calendarTimes
+    case morningRules
     case appHealth
     case about
 
@@ -293,6 +307,8 @@ enum SettingsDestinationGroup: CaseIterable, Identifiable {
         switch self {
         case .calendarTimes:
             return "calendar-times"
+        case .morningRules:
+            return "morning-rules"
         case .appHealth:
             return "app-health"
         case .about:
@@ -304,6 +320,8 @@ enum SettingsDestinationGroup: CaseIterable, Identifiable {
         switch self {
         case .calendarTimes:
             return Strings.Settings.calendarTimesGroup
+        case .morningRules:
+            return "Morning Rules"
         case .appHealth:
             return Strings.Settings.appHealthGroup
         case .about:
@@ -315,6 +333,8 @@ enum SettingsDestinationGroup: CaseIterable, Identifiable {
         switch self {
         case .calendarTimes:
             return [.location, .prayerTimes, .hijriCalendarCorrections]
+        case .morningRules:
+            return [.alarmBehavior]
         case .appHealth:
             return [.permissionsReliability, .quietPeriod]
         case .about:

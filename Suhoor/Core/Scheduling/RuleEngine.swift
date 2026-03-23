@@ -56,7 +56,7 @@ struct RuleEngine: Sendable {
         if let override = overridesByDay[key]?.fajrSoundOverride {
             return override
         }
-        return settings.atFajrSoundSelectionGlobal
+        return settings.fajrStartSoundSelectionGlobal
     }
 
     func effectiveReminderMinutes(for date: Date) -> Int {
@@ -68,18 +68,18 @@ struct RuleEngine: Sendable {
     }
 
     func ruleSummary(for date: Date) -> RuleSummary {
-        let baseOffset = defaultConfig.defaultSuhoorOffsetMinutes
+        let baseOffset = defaultConfig.defaultWakeDeltaMinutes
         let key = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
         if let override = overridesByDay[key] {
             if override.skipDay {
                 return RuleSummary(
                     baseOffsetMinutes: baseOffset,
                     finalOffsetMinutes: baseOffset,
-                    overrideOffsetMinutes: override.suhoorOffsetOverrideMinutes,
+                    overrideOffsetMinutes: override.wakeDeltaOverrideMinutes ?? override.suhoorOffsetOverrideMinutes,
                     disabledForDay: true
                 )
             }
-            if let overrideMinutes = override.suhoorOffsetOverrideMinutes {
+            if let overrideMinutes = override.wakeDeltaOverrideMinutes ?? override.suhoorOffsetOverrideMinutes {
                 return RuleSummary(
                     baseOffsetMinutes: baseOffset,
                     finalOffsetMinutes: overrideMinutes,

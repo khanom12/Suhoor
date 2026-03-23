@@ -8,6 +8,12 @@ struct AppSettings: Codable, Equatable, Sendable {
     var reminderMinutesBeforeFajrGlobal: Int
     var atFajrEnabledGlobal: Bool
     var atFajrSoundSelectionGlobal: SoundChoice
+    var preFajrWakeSoundSelectionGlobal: SoundChoice
+    var fajrStartSoundSelectionGlobal: SoundChoice
+    var inFajrWakeSoundSelectionGlobal: SoundChoice
+    var postFajrWakeSoundSelectionGlobal: SoundChoice
+    var fixedWakeSoundSelectionGlobal: SoundChoice
+    var reserveBeforeEndMinutes: Int
     var snoozeEnabled: Bool
     var snoozeMinutes: Int
     var label: String
@@ -31,6 +37,12 @@ struct AppSettings: Codable, Equatable, Sendable {
         reminderMinutesBeforeFajrGlobal: 10,
         atFajrEnabledGlobal: true,
         atFajrSoundSelectionGlobal: .adhanSoft,
+        preFajrWakeSoundSelectionGlobal: .systemDefault,
+        fajrStartSoundSelectionGlobal: .adhanSoft,
+        inFajrWakeSoundSelectionGlobal: .adhanSoft,
+        postFajrWakeSoundSelectionGlobal: .systemDefault,
+        fixedWakeSoundSelectionGlobal: .systemDefault,
+        reserveBeforeEndMinutes: 15,
         snoozeEnabled: true,
         snoozeMinutes: 5,
         label: "Suhoor",
@@ -77,6 +89,12 @@ extension AppSettings {
         case reminderMinutesBeforeFajrGlobal
         case atFajrEnabledGlobal
         case atFajrSoundSelectionGlobal
+        case preFajrWakeSoundSelectionGlobal
+        case fajrStartSoundSelectionGlobal
+        case inFajrWakeSoundSelectionGlobal
+        case postFajrWakeSoundSelectionGlobal
+        case fixedWakeSoundSelectionGlobal
+        case reserveBeforeEndMinutes
         case reminderEnabled
         case reminderMinutes
         case boundaryEnabled
@@ -137,9 +155,34 @@ extension AppSettings {
         atFajrEnabledGlobal = try container.decodeIfPresent(Bool.self, forKey: .atFajrEnabledGlobal)
             ?? legacyBoundaryEnabled
             ?? false
-        atFajrSoundSelectionGlobal = try container.decodeIfPresent(SoundChoice.self, forKey: .atFajrSoundSelectionGlobal)
+        let legacyAtFajrSound = try container.decodeIfPresent(SoundChoice.self, forKey: .atFajrSoundSelectionGlobal)
             ?? legacySoundChoice
             ?? .adhanSoft
+        atFajrSoundSelectionGlobal = legacyAtFajrSound
+        preFajrWakeSoundSelectionGlobal = try container.decodeIfPresent(
+            SoundChoice.self,
+            forKey: .preFajrWakeSoundSelectionGlobal
+        ) ?? .systemDefault
+        fajrStartSoundSelectionGlobal = try container.decodeIfPresent(
+            SoundChoice.self,
+            forKey: .fajrStartSoundSelectionGlobal
+        ) ?? legacyAtFajrSound
+        inFajrWakeSoundSelectionGlobal = try container.decodeIfPresent(
+            SoundChoice.self,
+            forKey: .inFajrWakeSoundSelectionGlobal
+        ) ?? legacyAtFajrSound
+        postFajrWakeSoundSelectionGlobal = try container.decodeIfPresent(
+            SoundChoice.self,
+            forKey: .postFajrWakeSoundSelectionGlobal
+        ) ?? .systemDefault
+        fixedWakeSoundSelectionGlobal = try container.decodeIfPresent(
+            SoundChoice.self,
+            forKey: .fixedWakeSoundSelectionGlobal
+        ) ?? .systemDefault
+        reserveBeforeEndMinutes = max(
+            1,
+            try container.decodeIfPresent(Int.self, forKey: .reserveBeforeEndMinutes) ?? 15
+        )
         snoozeEnabled = try container.decodeIfPresent(Bool.self, forKey: .snoozeEnabled) ?? true
         snoozeMinutes = try container.decodeIfPresent(Int.self, forKey: .snoozeMinutes) ?? 5
         label = try container.decodeIfPresent(String.self, forKey: .label) ?? "Suhoor"
@@ -166,6 +209,12 @@ extension AppSettings {
         try container.encode(reminderMinutesBeforeFajrGlobal, forKey: .reminderMinutesBeforeFajrGlobal)
         try container.encode(atFajrEnabledGlobal, forKey: .atFajrEnabledGlobal)
         try container.encode(atFajrSoundSelectionGlobal, forKey: .atFajrSoundSelectionGlobal)
+        try container.encode(preFajrWakeSoundSelectionGlobal, forKey: .preFajrWakeSoundSelectionGlobal)
+        try container.encode(fajrStartSoundSelectionGlobal, forKey: .fajrStartSoundSelectionGlobal)
+        try container.encode(inFajrWakeSoundSelectionGlobal, forKey: .inFajrWakeSoundSelectionGlobal)
+        try container.encode(postFajrWakeSoundSelectionGlobal, forKey: .postFajrWakeSoundSelectionGlobal)
+        try container.encode(fixedWakeSoundSelectionGlobal, forKey: .fixedWakeSoundSelectionGlobal)
+        try container.encode(max(1, reserveBeforeEndMinutes), forKey: .reserveBeforeEndMinutes)
         try container.encode(snoozeEnabled, forKey: .snoozeEnabled)
         try container.encode(snoozeMinutes, forKey: .snoozeMinutes)
         try container.encode(label, forKey: .label)
@@ -265,6 +314,10 @@ struct FixedLocation: Codable, Equatable, Sendable {
 }
 
 extension AppSettings {
+    var clampedReserveBeforeEndMinutes: Int {
+        max(1, reserveBeforeEndMinutes)
+    }
+
     var hasAnyReminderEnabled: Bool {
         reminderEnabledGlobal
     }
@@ -278,7 +331,9 @@ extension AppSettings {
     }
 
     var hasAnyAtFajrNonDefaultSound: Bool {
-        atFajrEnabledGlobal && atFajrSoundSelectionGlobal != .systemDefault
+        (atFajrEnabledGlobal && atFajrSoundSelectionGlobal != .systemDefault)
+            || fajrStartSoundSelectionGlobal != .systemDefault
+            || inFajrWakeSoundSelectionGlobal != .systemDefault
     }
 
     func requiresReschedule(comparedTo other: AppSettings) -> Bool {
@@ -296,5 +351,25 @@ extension AppSettings {
         var copy = self
         copy.isEnabled = isEnabled
         return copy
+    }
+
+    func soundChoice(for role: MorningSoundRole?) -> SoundChoice {
+        guard let role else { return .systemDefault }
+        switch role {
+        case .preFajrWake:
+            return preFajrWakeSoundSelectionGlobal
+        case .fajrStart:
+            return fajrStartSoundSelectionGlobal
+        case .inFajrWake:
+            return inFajrWakeSoundSelectionGlobal
+        case .postFajrWake:
+            return postFajrWakeSoundSelectionGlobal
+        case .fixedWake:
+            return fixedWakeSoundSelectionGlobal
+        case .reminder:
+            return .systemDefault
+        case .iftar:
+            return .adhanSoft
+        }
     }
 }
