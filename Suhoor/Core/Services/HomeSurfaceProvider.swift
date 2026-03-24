@@ -23,8 +23,7 @@ struct HomeSurfaceProvider {
         return HomeSurfaceSnapshot(
             gregorianText: GregorianDateFormatter.shared.cardString(for: contextDate),
             hijriText: HijriDateFormatter.shared.string(from: contextDate),
-            heroLabel: heroDay.map(ProductSurfacePresentation.homeHeroLabel(for:)),
-            heroSubline: heroDay.map(ProductSurfacePresentation.homeHeroSubline(for:)),
+            heroPresentation: heroDay.map(ProductSurfacePresentation.homeHeroPresentation(for:)),
             nextWakeEventSummary: input.nextWakeEventSummary,
             supportDecision: input.supportDecision ?? fallbackSupportDecision(
                 currentDay: input.currentDay,

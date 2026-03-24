@@ -3,14 +3,37 @@ import Foundation
 struct HomeSurfaceSnapshot: Equatable, Sendable {
     let gregorianText: String
     let hijriText: String
-    let heroLabel: String?
-    let heroSubline: String?
+    let heroPresentation: HomeHeroPresentation?
     let nextWakeEventSummary: NextWakeEventSummary?
     let supportDecision: HomeSupportDecision?
+
+    var heroLabel: String? {
+        heroPresentation?.label
+    }
+
+    var heroSubline: String? {
+        guard let heroPresentation else { return nil }
+        return [
+            heroPresentation.meaningText,
+            heroPresentation.stateText,
+            heroPresentation.timingText,
+            heroPresentation.secondaryText
+        ]
+        .compactMap { $0 }
+        .joined(separator: " • ")
+    }
 
     var supportCard: HomeSupportCardPresentation? {
         supportDecision?.presentation
     }
+}
+
+struct HomeHeroPresentation: Equatable, Sendable {
+    let label: String
+    let meaningText: String?
+    let stateText: String
+    let timingText: String
+    let secondaryText: String?
 }
 
 struct WakeSurfaceSnapshot: Equatable, Sendable {

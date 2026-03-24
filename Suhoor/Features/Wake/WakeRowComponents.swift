@@ -18,28 +18,38 @@ struct WakeRowView: View {
     var body: some View {
         HStack(alignment: .center, spacing: DesignTokens.space12) {
             Button(action: onSelect) {
-                VStack(alignment: .leading, spacing: 0) {
-                    Text(dateLabel)
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(dateLabelColor)
-
-                    WakeAlarmTimeLockup(
-                        date: entry.schedule.wakeDate,
-                        isDisabled: isDisabled
-                    )
-                    .padding(.top, DesignTokens.space4)
-
-                    if entry.rowPresentation.meaningText != ProductSurfacePresentation.ordinaryDaySummaryText {
-                        Text(entry.rowPresentation.meaningText)
+                VStack(alignment: .leading, spacing: DesignTokens.textSpacingTight) {
+                    HStack(alignment: .firstTextBaseline, spacing: DesignTokens.spacingS) {
+                        Text(dateLabel)
                             .font(.subheadline.weight(.medium))
-                            .foregroundStyle(supportingTextColor)
-                            .padding(.top, DesignTokens.space6)
+                            .foregroundStyle(dateLabelColor)
+
+                        if entry.rowPresentation.meaningText != ProductSurfacePresentation.ordinaryDaySummaryText {
+                            Text(entry.rowPresentation.meaningText)
+                                .font(.footnote.weight(.medium))
+                                .foregroundStyle(supportingTextColor)
+                                .lineLimit(1)
+                        }
                     }
 
-                    Text(entry.rowPresentation.stateLabel)
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(isDisabled ? Color(UIColor.tertiaryLabel) : Color.primary.opacity(0.8))
-                        .padding(.top, DesignTokens.space4)
+                    HStack(alignment: .firstTextBaseline, spacing: DesignTokens.spacingM) {
+                        WakeAlarmTimeLockup(
+                            date: entry.schedule.wakeDate,
+                            isDisabled: isDisabled
+                        )
+
+                        VStack(alignment: .leading, spacing: DesignTokens.textSpacingMicro) {
+                            Text(entry.rowPresentation.stateLabel)
+                                .font(.footnote.weight(.semibold))
+                                .foregroundStyle(isDisabled ? Color(UIColor.tertiaryLabel) : Color.primary.opacity(0.8))
+
+                            Text(entry.rowPresentation.detailText)
+                                .font(.caption)
+                                .foregroundStyle(supportingTextColor)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                        }
+                    }
 
                     if let secondaryExplanation = entry.rowPresentation.secondaryExplanation {
                         Text(secondaryExplanation)
@@ -47,24 +57,15 @@ struct WakeRowView: View {
                             .foregroundStyle(supportingTextColor)
                             .lineLimit(1)
                             .truncationMode(.tail)
-                            .padding(.top, DesignTokens.space2)
                     }
 
-                    Text(entry.rowPresentation.detailText)
-                        .font(.caption)
-                        .foregroundStyle(supportingTextColor)
-                        .monospacedDigit()
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                        .padding(.top, DesignTokens.space4)
-
-                    if !entry.rowPresentation.chipTitles.isEmpty {
+                    let visibleChips = Array(entry.rowPresentation.chipTitles.prefix(2))
+                    if !visibleChips.isEmpty {
                         FlowLayout(spacing: DesignTokens.textSpacingCompact) {
-                            ForEach(entry.rowPresentation.chipTitles, id: \.self) { title in
+                            ForEach(visibleChips, id: \.self) { title in
                                 WakeContextChip(title: title, isDisabled: isDisabled)
                             }
                         }
-                        .padding(.top, DesignTokens.space6)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -88,7 +89,7 @@ struct WakeRowView: View {
 
     private var accessibilitySummary: String {
         var parts = [WakeRowPresentation.accessibilityDateLabel(for: entry.schedule.date)]
-        parts.append("Alarm at \(primaryTimeText)")
+        parts.append("Wake at \(primaryTimeText)")
         if entry.rowPresentation.meaningText != ProductSurfacePresentation.ordinaryDaySummaryText {
             parts.append(entry.rowPresentation.meaningText)
         }
@@ -116,7 +117,7 @@ struct WakeRowView: View {
     }
 
     private var toggleAccessibilityLabel: String {
-        "\(isEnabled.wrappedValue ? "Turn off" : "Turn on") alarm for \(WakeRowPresentation.accessibilityDateLabel(for: entry.schedule.date))"
+        "\(isEnabled.wrappedValue ? "Turn off" : "Turn on") wake for \(WakeRowPresentation.accessibilityDateLabel(for: entry.schedule.date))"
     }
 }
 
@@ -126,16 +127,18 @@ struct WakeFeaturedEntryCard: View {
     let onSelect: () -> Void
 
     var body: some View {
-        AppGlassSurface(variant: .hero, prominence: .high) {
-            VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
+        AppGlassSurface(variant: .standard, prominence: .high) {
+            VStack(alignment: .leading, spacing: DesignTokens.spacingS) {
                 HStack(alignment: .top, spacing: DesignTokens.spacingM) {
                     VStack(alignment: .leading, spacing: DesignTokens.textSpacingCompact) {
                         Text(WakeRowPresentation.dateLabel(for: entry.schedule.date))
                             .font(AppTypography.badge)
                             .foregroundStyle(.secondary)
 
-                        Text(entry.rowPresentation.meaningText)
-                            .font(AppTypography.cardTitle)
+                        if entry.rowPresentation.meaningText != ProductSurfacePresentation.ordinaryDaySummaryText {
+                            Text(entry.rowPresentation.meaningText)
+                                .font(AppTypography.cardTitle)
+                        }
                     }
 
                     Spacer()
@@ -153,21 +156,22 @@ struct WakeFeaturedEntryCard: View {
                     Text(entry.rowPresentation.stateLabel)
                         .font(AppTypography.rowTitle)
 
-                    if let secondaryExplanation = entry.rowPresentation.secondaryExplanation {
-                        Text(secondaryExplanation)
-                            .font(AppTypography.rowBody)
-                            .foregroundStyle(.secondary)
-                    }
-
                     Text(entry.rowPresentation.detailText)
                         .font(AppTypography.rowBody)
                         .foregroundStyle(.secondary)
-                        .monospacedDigit()
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    if let secondaryExplanation = entry.rowPresentation.secondaryExplanation {
+                        Text(secondaryExplanation)
+                            .font(AppTypography.metricLabel)
+                            .foregroundStyle(.secondary)
+                    }
                 }
 
-                if !entry.rowPresentation.chipTitles.isEmpty {
+                let visibleChips = Array(entry.rowPresentation.chipTitles.prefix(2))
+                if !visibleChips.isEmpty {
                     FlowLayout(spacing: DesignTokens.textSpacingCompact) {
-                        ForEach(entry.rowPresentation.chipTitles, id: \.self) { title in
+                        ForEach(visibleChips, id: \.self) { title in
                             WakeContextChip(title: title, isDisabled: !isEnabled.wrappedValue)
                         }
                     }
@@ -205,7 +209,7 @@ struct WakeContextChip: View {
             .padding(.vertical, DesignTokens.badgeVerticalPadding)
             .background(
                 Capsule()
-                    .fill(Color.secondary.opacity(0.10))
+                    .fill(Color.secondary.opacity(0.08))
                     .overlay {
                         Capsule().stroke(Color.white.opacity(0.08), lineWidth: 1)
                     }

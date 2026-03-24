@@ -5,11 +5,15 @@ struct DefaultAlarmsSettingsView: View {
     @EnvironmentObject private var alarmConfigStore: AlarmConfigStore
     @EnvironmentObject private var scheduleManager: ScheduleManager
     @EnvironmentObject private var settingsStore: SuhoorSettingsStore
+    @State private var draftDefaults = DefaultAlarmConfig.default
+    @State private var draftSettings = AppSettings.default
+    @State private var hasPendingCommit = false
+    @State private var commitTask: Task<Void, Never>?
 
     var body: some View {
         SettingsScrollPage {
             SettingsGroup(
-                title: "Default Morning Plan",
+                title: "Summary",
                 supportingText: "Choose how mornings normally relate to Fajr."
             ) {
                 SettingsRow {
@@ -43,7 +47,7 @@ struct DefaultAlarmsSettingsView: View {
 
             SettingsGroup(
                 title: "Morning Rules",
-                supportingText: "Defaults can be before Fajr or during Fajr."
+                supportingText: "Set the usual relationship between your wake and Fajr."
             ) {
                 SettingsRow {
                     Picker("Wake timing", selection: defaultWakeStateBinding) {
@@ -53,7 +57,7 @@ struct DefaultAlarmsSettingsView: View {
                     }
                 }
 
-                if alarmConfigStore.defaults.defaultWakeState == .inFajr {
+                if draftDefaults.defaultWakeState == .inFajr {
                     AppGroupDivider()
                     SettingsRow {
                         Picker("Anchor", selection: defaultWakeAnchorBinding) {
@@ -81,7 +85,7 @@ struct DefaultAlarmsSettingsView: View {
                         Stepper(value: reserveBeforeEndBinding, in: 1...60, step: 1) {
                             VStack(alignment: .leading, spacing: 4) {
                                 Text("Reserve before Fajr ends")
-                                Text("\(settingsStore.settings.clampedReserveBeforeEndMinutes) min")
+                                Text("\(normalizedDraftSettings.clampedReserveBeforeEndMinutes) min")
                                     .font(.footnote)
                                     .foregroundStyle(.secondary)
                             }
@@ -102,7 +106,7 @@ struct DefaultAlarmsSettingsView: View {
                     Toggle("Latest wake", isOn: latestWakeCapEnabledBinding)
                 }
 
-                if alarmConfigStore.defaults.defaultLatestWakeCapMinutesFromMidnight != nil {
+                if draftDefaults.defaultLatestWakeCapMinutesFromMidnight != nil {
                     AppGroupDivider()
                     SettingsRow {
                         DatePicker(
@@ -124,7 +128,7 @@ struct DefaultAlarmsSettingsView: View {
 
             SettingsGroup(
                 title: "Cues",
-                supportingText: "These cues support the same morning plan instead of becoming separate alarm definitions."
+                supportingText: "These cues support the same morning instead of becoming separate wake setups."
             ) {
                 SettingsRow {
                     Toggle("Play cue at Fajr start when waking before Fajr", isOn: fajrDefaultBinding)
@@ -134,13 +138,13 @@ struct DefaultAlarmsSettingsView: View {
                     Toggle("Use fasting reminder on fasting mornings", isOn: fastingReminderDefaultBinding)
                 }
 
-                if alarmConfigStore.defaults.fastingReminderEnabledDefault {
+                if draftDefaults.fastingReminderEnabledDefault {
                     AppGroupDivider()
                     SettingsRow {
                         Stepper(value: reminderDefaultOffsetBinding, in: 1...180, step: 1) {
                             VStack(alignment: .leading, spacing: 4) {
                                 Text("Reminder lead")
-                                Text("\(alarmConfigStore.defaults.defaultReminderMinutesBeforeFajr) min before Fajr")
+                                Text("\(draftDefaults.defaultReminderMinutesBeforeFajr) min before Fajr")
                                     .font(.footnote)
                                     .foregroundStyle(.secondary)
                             }
@@ -153,7 +157,7 @@ struct DefaultAlarmsSettingsView: View {
                     Toggle("Wake follow-up", isOn: wakeFollowUpEnabledBinding)
                 }
 
-                if settingsStore.settings.snoozeEnabled {
+                if draftSettings.snoozeEnabled {
                     AppGroupDivider()
                     SettingsRow {
                         Picker("Follow-up delay", selection: wakeFollowUpMinutesBinding) {
@@ -167,14 +171,14 @@ struct DefaultAlarmsSettingsView: View {
 
             SettingsGroup(
                 title: "Sounds",
-                supportingText: "Sound-role choices and reserve-before-end also live in Settings."
+                supportingText: "Wake sounds and reserve-before-end live in Settings."
             ) {
                 Button {
                     appNavigator.openAlarmBehavior()
                 } label: {
                     SettingsRow {
                         SettingsSummaryRow(
-                            title: "Alarm Behavior",
+                            title: "Wake Sounds & Reserve",
                             subtitle: "Edit Pre-Fajr, Fajr-start, during-Fajr, after-Fajr, and fixed-wake sounds.",
                             systemImage: "speaker.wave.3",
                             badgeText: planSummary.sounds,
@@ -238,6 +242,20 @@ struct DefaultAlarmsSettingsView: View {
         }
         .navigationTitle(Strings.Settings.defaultAlarmsScreenTitle)
         .navigationBarTitleDisplayMode(.inline)
+        .task {
+            loadDraftFromStores()
+        }
+        .onChange(of: alarmConfigStore.currentRevision) { _, _ in
+            guard !hasPendingCommit else { return }
+            loadDraftFromStores()
+        }
+        .onChange(of: settingsStore.currentRevision) { _, _ in
+            guard !hasPendingCommit else { return }
+            loadDraftFromStores()
+        }
+        .onDisappear {
+            applyDraftIfNeeded()
+        }
     }
 
     private var validationResult: DefaultWakeRuleValidationResult? {
@@ -246,8 +264,8 @@ struct DefaultAlarmsSettingsView: View {
 
     private var planSummary: DefaultMorningPlanSurfaceSummary {
         ProductSurfaceSnapshots.defaultMorningPlanSummary(
-            defaults: alarmConfigStore.defaults,
-            settings: settingsStore.settings
+            defaults: normalizedDraftDefaults,
+            settings: normalizedDraftSettings
         )
     }
 
@@ -259,23 +277,23 @@ struct DefaultAlarmsSettingsView: View {
     }
 
     private var showsReserveEditor: Bool {
-        alarmConfigStore.defaults.defaultWakeState == .inFajr
-            && alarmConfigStore.defaults.normalizedDefaultWakeAnchorType == .fajrStart
+        draftDefaults.defaultWakeState == .inFajr
+            && draftDefaults.normalizedDefaultWakeAnchorType == .fajrStart
     }
 
     private var deltaRowTitle: String {
-        switch alarmConfigStore.defaults.defaultWakeState {
+        switch draftDefaults.defaultWakeState {
         case .preFajr:
             return "Minutes before Fajr"
         case .inFajr:
-            return alarmConfigStore.defaults.normalizedDefaultWakeAnchorType == .fajrEnd
+            return draftDefaults.normalizedDefaultWakeAnchorType == .fajrEnd
                 ? "Minutes before Fajr ends"
                 : "Minutes after Fajr begins"
         }
     }
 
     private var deltaSummaryText: String {
-        ProductSurfacePresentation.defaultWakeOffsetText(for: alarmConfigStore.defaults)
+        ProductSurfacePresentation.defaultWakeOffsetText(for: normalizedDraftDefaults)
     }
 
     @ViewBuilder
@@ -324,11 +342,11 @@ struct DefaultAlarmsSettingsView: View {
 
     private var defaultWakeStateBinding: Binding<DefaultWakeState> {
         Binding(get: {
-            alarmConfigStore.defaults.defaultWakeState
+            draftDefaults.defaultWakeState
         }, set: { newValue in
-            alarmConfigStore.defaults.defaultWakeState = newValue
+            draftDefaults.defaultWakeState = newValue
             if newValue == .preFajr {
-                alarmConfigStore.defaults.defaultWakeAnchorType = .fajrStart
+                draftDefaults.defaultWakeAnchorType = .fajrStart
             }
             commitWakeRuleEdit()
         })
@@ -336,32 +354,32 @@ struct DefaultAlarmsSettingsView: View {
 
     private var defaultWakeAnchorBinding: Binding<WakeAnchorType> {
         Binding(get: {
-            alarmConfigStore.defaults.normalizedDefaultWakeAnchorType
+            draftDefaults.normalizedDefaultWakeAnchorType
         }, set: { newValue in
-            alarmConfigStore.defaults.defaultWakeAnchorType = newValue == .fajrEnd ? .fajrEnd : .fajrStart
+            draftDefaults.defaultWakeAnchorType = newValue == .fajrEnd ? .fajrEnd : .fajrStart
             commitWakeRuleEdit()
         })
     }
 
     private var wakeDeltaBinding: Binding<Int> {
         Binding(get: {
-            alarmConfigStore.defaults.defaultWakeDeltaMinutes
+            draftDefaults.defaultWakeDeltaMinutes
         }, set: { newValue in
-            alarmConfigStore.defaults.defaultWakeDeltaMinutes = max(0, newValue)
+            draftDefaults.defaultWakeDeltaMinutes = max(0, newValue)
             commitWakeRuleEdit()
         })
     }
 
     private var latestWakeCapEnabledBinding: Binding<Bool> {
         Binding(get: {
-            alarmConfigStore.defaults.defaultLatestWakeCapMinutesFromMidnight != nil
+            draftDefaults.defaultLatestWakeCapMinutesFromMidnight != nil
         }, set: { newValue in
             if newValue {
-                alarmConfigStore.defaults.defaultLatestWakeCapMinutesFromMidnight
-                    = alarmConfigStore.defaults.defaultLatestWakeCapMinutesFromMidnight
+                draftDefaults.defaultLatestWakeCapMinutesFromMidnight
+                    = draftDefaults.defaultLatestWakeCapMinutesFromMidnight
                     ?? DateHelpers.minutesFromMidnight(for: Date(), timeZone: .current)
             } else {
-                alarmConfigStore.defaults.defaultLatestWakeCapMinutesFromMidnight = nil
+                draftDefaults.defaultLatestWakeCapMinutesFromMidnight = nil
             }
             rescheduleFromDefaults()
         })
@@ -371,11 +389,11 @@ struct DefaultAlarmsSettingsView: View {
         Binding(get: {
             dateFromMidnight(
                 for: Date(),
-                minutes: alarmConfigStore.defaults.defaultLatestWakeCapMinutesFromMidnight
+                minutes: draftDefaults.defaultLatestWakeCapMinutesFromMidnight
                     ?? DateHelpers.minutesFromMidnight(for: Date(), timeZone: .current)
             )
         }, set: { newValue in
-            alarmConfigStore.defaults.defaultLatestWakeCapMinutesFromMidnight = minutesFromMidnight(for: newValue)
+            draftDefaults.defaultLatestWakeCapMinutesFromMidnight = minutesFromMidnight(for: newValue)
             rescheduleFromDefaults()
         })
     }
@@ -391,38 +409,38 @@ struct DefaultAlarmsSettingsView: View {
 
     private var reminderDefaultBinding: Binding<Bool> {
         Binding(get: {
-            alarmConfigStore.defaults.reminderEnabledDefault
+            draftDefaults.reminderEnabledDefault
         }, set: { newValue in
-            alarmConfigStore.defaults.reminderEnabledDefault = newValue
-            alarmConfigStore.defaults.fastingReminderEnabledDefault = newValue
+            draftDefaults.reminderEnabledDefault = newValue
+            draftDefaults.fastingReminderEnabledDefault = newValue
             rescheduleFromDefaults()
         })
     }
 
     private var fastingReminderDefaultBinding: Binding<Bool> {
         Binding(get: {
-            alarmConfigStore.defaults.fastingReminderEnabledDefault
+            draftDefaults.fastingReminderEnabledDefault
         }, set: { newValue in
-            alarmConfigStore.defaults.fastingReminderEnabledDefault = newValue
-            alarmConfigStore.defaults.reminderEnabledDefault = newValue
+            draftDefaults.fastingReminderEnabledDefault = newValue
+            draftDefaults.reminderEnabledDefault = newValue
             rescheduleFromDefaults()
         })
     }
 
     private var reminderDefaultOffsetBinding: Binding<Int> {
         Binding(get: {
-            alarmConfigStore.defaults.defaultReminderMinutesBeforeFajr
+            draftDefaults.defaultReminderMinutesBeforeFajr
         }, set: { newValue in
-            alarmConfigStore.defaults.defaultReminderMinutesBeforeFajr = max(1, newValue)
+            draftDefaults.defaultReminderMinutesBeforeFajr = max(1, newValue)
             rescheduleFromDefaults()
         })
     }
 
     private var fajrDefaultBinding: Binding<Bool> {
         Binding(get: {
-            alarmConfigStore.defaults.fajrEnabledDefault
+            draftDefaults.fajrEnabledDefault
         }, set: { newValue in
-            alarmConfigStore.defaults.fajrEnabledDefault = newValue
+            draftDefaults.fajrEnabledDefault = newValue
             rescheduleFromDefaults()
         })
     }
@@ -438,33 +456,27 @@ struct DefaultAlarmsSettingsView: View {
 
     private var wakeFollowUpEnabledBinding: Binding<Bool> {
         Binding(get: {
-            settingsStore.settings.snoozeEnabled
+            draftSettings.snoozeEnabled
         }, set: { newValue in
-            settingsStore.update { draft in
-                draft.snoozeEnabled = newValue
-            }
+            draftSettings.snoozeEnabled = newValue
             rescheduleFromDefaults()
         })
     }
 
     private var wakeFollowUpMinutesBinding: Binding<Int> {
         Binding(get: {
-            settingsStore.settings.snoozeMinutes
+            draftSettings.snoozeMinutes
         }, set: { newValue in
-            settingsStore.update { draft in
-                draft.snoozeMinutes = newValue
-            }
+            draftSettings.snoozeMinutes = newValue
             rescheduleFromDefaults()
         })
     }
 
     private var reserveBeforeEndBinding: Binding<Int> {
         Binding(get: {
-            settingsStore.settings.clampedReserveBeforeEndMinutes
+            normalizedDraftSettings.clampedReserveBeforeEndMinutes
         }, set: { newValue in
-            settingsStore.update { draft in
-                draft.reserveBeforeEndMinutes = max(1, newValue)
-            }
+            draftSettings.reserveBeforeEndMinutes = max(1, newValue)
             rescheduleFromDefaults()
         })
     }
@@ -479,13 +491,13 @@ struct DefaultAlarmsSettingsView: View {
     }
 
     private func commitWakeRuleEdit() {
-        alarmConfigStore.defaults.defaultSuhoorTimeMode = .relativeToFajrMinusMinutes
-        alarmConfigStore.defaults.defaultSuhoorOffsetMinutes = alarmConfigStore.defaults.defaultWakeDeltaMinutes
+        draftDefaults.defaultSuhoorTimeMode = .relativeToFajrMinusMinutes
+        draftDefaults.defaultSuhoorOffsetMinutes = draftDefaults.defaultWakeDeltaMinutes
         rescheduleFromDefaults()
     }
 
     private func rescheduleFromDefaults() {
-        scheduleManager.requestRefresh(reason: .settingsChanged)
+        scheduleDraftCommit()
     }
 
     private func minutesFromMidnight(for date: Date) -> Int {
@@ -504,5 +516,58 @@ struct DefaultAlarmsSettingsView: View {
             return "Moved earlier by your latest wake"
         }
         return "No cap applied"
+    }
+
+    private var normalizedDraftDefaults: DefaultAlarmConfig {
+        var defaults = draftDefaults
+        defaults.defaultSuhoorTimeMode = .relativeToFajrMinusMinutes
+        defaults.defaultSuhoorOffsetMinutes = defaults.defaultWakeDeltaMinutes
+        if defaults.defaultWakeState == .preFajr {
+            defaults.defaultWakeAnchorType = .fajrStart
+        }
+        defaults.fastingReminderEnabledDefault = defaults.reminderEnabledDefault
+        return defaults
+    }
+
+    private var normalizedDraftSettings: AppSettings {
+        var settings = draftSettings
+        settings.reserveBeforeEndMinutes = max(1, settings.reserveBeforeEndMinutes)
+        return settings
+    }
+
+    private func loadDraftFromStores() {
+        draftDefaults = alarmConfigStore.defaults
+        draftSettings = settingsStore.settings
+    }
+
+    private func scheduleDraftCommit() {
+        hasPendingCommit = true
+        commitTask?.cancel()
+        commitTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 250_000_000)
+            applyDraftIfNeeded()
+        }
+    }
+
+    private func applyDraftIfNeeded() {
+        commitTask?.cancel()
+        commitTask = nil
+
+        let nextDefaults = normalizedDraftDefaults
+        let nextSettings = normalizedDraftSettings
+        let defaultsChanged = alarmConfigStore.defaults != nextDefaults
+        let settingsChanged = settingsStore.settings != nextSettings
+
+        if defaultsChanged {
+            alarmConfigStore.defaults = nextDefaults
+        }
+        if settingsChanged {
+            settingsStore.set(nextSettings)
+        }
+
+        hasPendingCommit = false
+        if defaultsChanged || settingsChanged {
+            scheduleManager.requestRefresh(reason: .settingsChanged)
+        }
     }
 }

@@ -1633,7 +1633,8 @@ struct ScheduleManagerHijriTests {
         #expect(wakeSnapshot.visibleDays.contains(where: { $0.dateKey == tomorrowKey }))
         #expect(homeSnapshot.heroLabel?.isEmpty == false)
         #expect(homeSnapshot.heroSubline?.contains("Fajr at") == false)
-        #expect(homeSnapshot.heroSubline?.contains("Fajr") == true)
+        #expect(homeSnapshot.heroPresentation?.stateText.isEmpty == false)
+        #expect(homeSnapshot.heroPresentation?.timingText.isEmpty == false)
         #expect(plansSnapshot.configuredPlansSnapshot.upcomingSpecialMornings.isEmpty == false)
         #expect(plansSnapshot.defaultMorningPlanSummary.wakeTiming.isEmpty == false)
         #expect(progressSnapshot.fajrTodaySummary == "Fajr completed")
@@ -1998,7 +1999,7 @@ struct ScheduleManagerHijriTests {
         #expect(presentation.meaningText.isEmpty == false)
         #expect(presentation.stateLabel.isEmpty == false)
         #expect(presentation.secondaryExplanation == "Adjusted for this date")
-        #expect(presentation.detailText.contains("Fajr at"))
+        #expect(presentation.detailText.contains("before Fajr"))
         #expect(presentation.chipTitles.contains("Adjusted"))
     }
 

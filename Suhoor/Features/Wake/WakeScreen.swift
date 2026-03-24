@@ -32,13 +32,13 @@ struct WakeScreen: View {
 
     var body: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: DesignTokens.spacingL) {
+            LazyVStack(alignment: .leading, spacing: DesignTokens.spacingM) {
                 if featuredEntry == nil && monthSections.isEmpty {
                     emptyStateView
                 } else {
                     if let featuredEntry {
                         VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
-                            AppSectionHeader("Next wake", subtitle: "Tomorrow stays calm here, and details open on tap.")
+                            AppSectionHeader("Next wake")
 
                             WakeFeaturedEntryCard(
                                 entry: featuredEntry,
@@ -58,7 +58,7 @@ struct WakeScreen: View {
 
                             if section.entries.isEmpty {
                                 AppGlassSurface(variant: .quiet) {
-                                    Text("Upcoming mornings in this month load as soon as they are needed.")
+                                    Text("More mornings load here when you need them.")
                                         .font(AppTypography.rowBody)
                                         .foregroundStyle(.secondary)
                                 }
@@ -80,7 +80,6 @@ struct WakeScreen: View {
                                     }
                                 }
                                 .frame(maxWidth: .infinity, alignment: .leading)
-                                .shadow(color: Color.black.opacity(0.03), radius: 12, x: 0, y: 4)
                             }
                         }
                     }
@@ -92,7 +91,7 @@ struct WakeScreen: View {
         }
         .safeAreaInset(edge: .bottom) {
             Color.clear
-                .frame(height: DesignTokens.tabBarHeight + DesignTokens.spacingL)
+                .frame(height: DesignTokens.spacingXL)
         }
         .appScrollableChrome()
         .navigationTitle(Strings.AlarmsTab.title)
@@ -246,7 +245,6 @@ struct WakeScreen: View {
                     timeZone: currentTimeZone
                 )
                 scheduleManager.requestRescheduleDay(entry.schedule.date)
-                refreshWakeSurfaceIfNeeded(force: true)
             }
         )
     }

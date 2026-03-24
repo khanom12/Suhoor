@@ -135,7 +135,7 @@ struct SettingsRootView: View {
             return [
                 "Sounds \(ProductSurfacePresentation.soundSummaryText(settings: settingsStore.settings))",
                 "Reserve \(settingsStore.settings.clampedReserveBeforeEndMinutes) min",
-                "At Fajr start \(settingsStore.settings.fajrStartSoundSelectionGlobal.displayName)"
+                "Fajr start \(settingsStore.settings.fajrStartSoundSelectionGlobal.displayName)"
             ].joined(separator: " · ")
         case .permissionsReliability:
             return SettingsSummaryFormatter.permissionsSummary(
@@ -285,12 +285,15 @@ struct SettingsRootView: View {
 struct AlarmBehaviorSettingsView: View {
     @EnvironmentObject private var settingsStore: SuhoorSettingsStore
     @EnvironmentObject private var scheduleManager: ScheduleManager
+    @State private var draftSettings = AppSettings.default
+    @State private var hasPendingCommit = false
+    @State private var commitTask: Task<Void, Never>?
 
     var body: some View {
         SettingsScrollPage {
             SettingsGroup(
-                title: "Morning Rules / Alarm Behavior",
-                supportingText: "These settings control sound-role mapping and the reserve kept before Fajr ends for start-anchored in-Fajr defaults."
+                title: "Wake Sounds",
+                supportingText: "Choose the sound used before Fajr, at Fajr start, during Fajr, after Fajr, and for fixed wakes."
             ) {
                 soundPickerRow(
                     title: "Pre-Fajr wake sound",
@@ -326,7 +329,7 @@ struct AlarmBehaviorSettingsView: View {
                     Stepper(value: reserveBinding, in: 1...60, step: 1) {
                         VStack(alignment: .leading, spacing: 4) {
                             Text("Reserve")
-                            Text("\(settingsStore.settings.clampedReserveBeforeEndMinutes) min")
+                            Text("\(normalizedDraftSettings.clampedReserveBeforeEndMinutes) min")
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
                         }
@@ -334,8 +337,18 @@ struct AlarmBehaviorSettingsView: View {
                 }
             }
         }
-        .navigationTitle("Alarm Behavior")
+        .navigationTitle("Wake Sounds & Reserve")
         .navigationBarTitleDisplayMode(.inline)
+        .task {
+            loadDraftFromStore()
+        }
+        .onChange(of: settingsStore.currentRevision) { _, _ in
+            guard !hasPendingCommit else { return }
+            loadDraftFromStore()
+        }
+        .onDisappear {
+            applyDraftIfNeeded()
+        }
     }
 
     private func soundPickerRow(title: String, binding: Binding<SoundChoice>) -> some View {
@@ -350,23 +363,49 @@ struct AlarmBehaviorSettingsView: View {
 
     private func soundBinding(_ keyPath: WritableKeyPath<AppSettings, SoundChoice>) -> Binding<SoundChoice> {
         Binding(get: {
-            settingsStore.settings[keyPath: keyPath]
+            draftSettings[keyPath: keyPath]
         }, set: { newValue in
-            settingsStore.update { draft in
-                draft[keyPath: keyPath] = newValue
-            }
-            scheduleManager.requestRefresh(reason: .settingsChanged)
+            draftSettings[keyPath: keyPath] = newValue
+            scheduleDraftCommit()
         })
     }
 
     private var reserveBinding: Binding<Int> {
         Binding(get: {
-            settingsStore.settings.clampedReserveBeforeEndMinutes
+            normalizedDraftSettings.clampedReserveBeforeEndMinutes
         }, set: { newValue in
-            settingsStore.update { draft in
-                draft.reserveBeforeEndMinutes = max(1, newValue)
-            }
-            scheduleManager.requestRefresh(reason: .settingsChanged)
+            draftSettings.reserveBeforeEndMinutes = max(1, newValue)
+            scheduleDraftCommit()
         })
+    }
+
+    private var normalizedDraftSettings: AppSettings {
+        var settings = draftSettings
+        settings.reserveBeforeEndMinutes = max(1, settings.reserveBeforeEndMinutes)
+        return settings
+    }
+
+    private func loadDraftFromStore() {
+        draftSettings = settingsStore.settings
+    }
+
+    private func scheduleDraftCommit() {
+        hasPendingCommit = true
+        commitTask?.cancel()
+        commitTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 250_000_000)
+            applyDraftIfNeeded()
+        }
+    }
+
+    private func applyDraftIfNeeded() {
+        commitTask?.cancel()
+        commitTask = nil
+        let nextSettings = normalizedDraftSettings
+        let changed = settingsStore.settings != nextSettings
+        hasPendingCommit = false
+        guard changed else { return }
+        settingsStore.set(nextSettings)
+        scheduleManager.requestRefresh(reason: .settingsChanged)
     }
 }

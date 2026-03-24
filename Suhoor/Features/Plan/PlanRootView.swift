@@ -128,7 +128,7 @@ private struct DefaultMorningPlanCard: View {
     let summary: DefaultMorningPlanSurfaceSummary
 
     var body: some View {
-        AppGlassSurface(variant: .hero, prominence: .high) {
+        AppGlassSurface(variant: .standard, prominence: .high) {
             VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
                 HStack(alignment: .top, spacing: DesignTokens.spacingM) {
                     VStack(alignment: .leading, spacing: DesignTokens.textSpacingCompact) {
@@ -240,7 +240,7 @@ private struct DatePlanningCard: View {
                 VStack(alignment: .leading, spacing: DesignTokens.textSpacingCompact) {
                     Text("Plan by date")
                         .font(AppTypography.cardTitle)
-                    Text("Choose a date and set a special wake or day meaning for that morning.")
+                    Text("Choose a date and set a special wake, including After Fajr, Fixed wake, or a different day meaning.")
                         .font(AppTypography.cardBody)
                         .foregroundStyle(.secondary)
                 }

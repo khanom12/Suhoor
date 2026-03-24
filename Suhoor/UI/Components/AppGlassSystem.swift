@@ -44,44 +44,44 @@ struct AppGlassStyle {
         switch (variant, prominence) {
         case (.hero, _), (_, .high):
             return AppGlassStyle(
-                cornerRadius: 32,
-                padding: 22,
+                cornerRadius: 30,
+                padding: 20,
                 fallbackMaterial: .regularMaterial,
-                baseOverlayOpacity: 0.16,
+                baseOverlayOpacity: 0.14,
                 warmOverlayOpacity: 0.0,
-                tintOpacity: 0.06,
-                strokeOpacityLight: 0.18,
-                strokeOpacityDark: 0.11,
-                ambientShadow: ShadowStyle(y: 14, blur: 34, opacity: 0.10),
-                contactShadow: ShadowStyle(y: 4, blur: 10, opacity: 0.08),
+                tintOpacity: 0.05,
+                strokeOpacityLight: 0.16,
+                strokeOpacityDark: 0.10,
+                ambientShadow: ShadowStyle(y: 10, blur: 24, opacity: 0.08),
+                contactShadow: ShadowStyle(y: 3, blur: 8, opacity: 0.06),
                 nativeGlassKind: .regular
             )
         case (.standard, _):
             return AppGlassStyle(
-                cornerRadius: 28,
-                padding: 18,
+                cornerRadius: 26,
+                padding: 16,
                 fallbackMaterial: .thinMaterial,
-                baseOverlayOpacity: 0.13,
+                baseOverlayOpacity: 0.11,
                 warmOverlayOpacity: 0.0,
                 tintOpacity: 0.04,
-                strokeOpacityLight: 0.14,
-                strokeOpacityDark: 0.09,
-                ambientShadow: ShadowStyle(y: 10, blur: 26, opacity: 0.07),
-                contactShadow: ShadowStyle(y: 3, blur: 8, opacity: 0.05),
+                strokeOpacityLight: 0.12,
+                strokeOpacityDark: 0.08,
+                ambientShadow: ShadowStyle(y: 7, blur: 18, opacity: 0.05),
+                contactShadow: ShadowStyle(y: 2, blur: 6, opacity: 0.04),
                 nativeGlassKind: .regular
             )
         case (.quiet, _):
             return AppGlassStyle(
-                cornerRadius: 24,
-                padding: 16,
+                cornerRadius: 22,
+                padding: 14,
                 fallbackMaterial: .thinMaterial,
-                baseOverlayOpacity: 0.09,
+                baseOverlayOpacity: 0.08,
                 warmOverlayOpacity: 0.0,
                 tintOpacity: 0.02,
-                strokeOpacityLight: 0.10,
+                strokeOpacityLight: 0.09,
                 strokeOpacityDark: 0.06,
-                ambientShadow: ShadowStyle(y: 6, blur: 18, opacity: 0.04),
-                contactShadow: ShadowStyle(y: 2, blur: 6, opacity: 0.03),
+                ambientShadow: ShadowStyle(y: 4, blur: 12, opacity: 0.03),
+                contactShadow: ShadowStyle(y: 1, blur: 4, opacity: 0.02),
                 nativeGlassKind: .clear
             )
         case (.tinted, _):
@@ -308,7 +308,7 @@ struct AppPageBackground: View {
         return [
             Color.white,
             Color(red: 0.965, green: 0.969, blue: 0.976),
-            Color(red: 0.948, green: 0.953, blue: 0.962)
+            Color(red: 0.952, green: 0.956, blue: 0.965)
         ]
     }
 }

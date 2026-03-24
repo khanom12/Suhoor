@@ -4,7 +4,7 @@ struct SettingsSummaryFormatter {
     private static let expectedPermissionCount = AppPermissionKind.allCases.count
 
     static func defaultAlarmsSummary(config: DefaultAlarmConfig) -> String {
-        let wakeSummary = ProductSurfacePresentation.defaultWakeOffsetText(for: config)
+        let wakeSummary = ProductSurfacePresentation.defaultWakeTimingText(for: config)
         let cueSummary = config.fastingReminderEnabledDefault
             ? "Fasting reminder on"
             : "Fasting reminder off"
@@ -236,7 +236,7 @@ enum SettingsDestination: String, CaseIterable, Identifiable {
         case .hijriCalendarCorrections:
             return Strings.Settings.hijriCalendarTitle
         case .alarmBehavior:
-            return "Alarm Behavior"
+            return "Wake Sounds & Reserve"
         case .permissionsReliability:
             return Strings.Settings.permissionsReliabilityTitle
         case .quietPeriod:

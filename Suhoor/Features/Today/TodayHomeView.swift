@@ -22,8 +22,7 @@ struct TodayHomeView: View {
 
                     TodayNextWakeHeroCard(
                         summary: snapshot.nextWakeEventSummary,
-                        label: snapshot.heroLabel,
-                        subline: snapshot.heroSubline
+                        presentation: snapshot.heroPresentation
                     )
 
                     if let supportDecision = snapshot.supportDecision,
@@ -48,15 +47,7 @@ struct TodayHomeView: View {
                         Image(systemName: "gearshape")
                             .font(AppTypography.navAccessory)
                             .foregroundStyle(.secondary)
-                            .padding(7)
-                            .background(
-                                Circle()
-                                    .fill(Color.white.opacity(0.12))
-                                    .overlay {
-                                        Circle()
-                                            .stroke(Color.white.opacity(0.08), lineWidth: 1)
-                                    }
-                            )
+                            .appToolbarButtonChrome()
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Open Settings")
@@ -173,11 +164,9 @@ private struct TodayBlockingIssueCard: View {
 
 private struct TodayNextWakeHeroCard: View {
     @EnvironmentObject private var appNavigator: AppNavigator
-    @Environment(\.colorScheme) private var colorScheme
 
     let summary: NextWakeEventSummary?
-    let label: String?
-    let subline: String?
+    let presentation: HomeHeroPresentation?
 
     var body: some View {
         AppGlassSurface(
@@ -186,75 +175,59 @@ private struct TodayNextWakeHeroCard: View {
             tint: DawnColor.lightGold100,
             contentPadding: 20
         ) {
-            VStack(alignment: .leading, spacing: 0) {
-                Text(label ?? Strings.HomeSurface.heroTitle)
+            VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
+                Text(presentation?.label ?? Strings.HomeSurface.heroTitle)
                     .appTextRole(.eyebrow)
 
                 if let summary {
-                    VStack(alignment: .leading, spacing: 0) {
+                    VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
                         HeroWakeTimeLockup(date: summary.day.schedule.wakeDate)
-                            .padding(.top, DesignTokens.space10)
 
-                        Text(subline ?? heroLine(for: summary))
-                            .font(.body.weight(.medium))
-                            .foregroundStyle(
-                                colorScheme == .dark
-                                ? Color.white.opacity(0.82)
-                                : Color.primary.opacity(0.78)
-                            )
-                            .fixedSize(horizontal: false, vertical: true)
-                            .padding(.top, DesignTokens.space12)
+                        VStack(alignment: .leading, spacing: DesignTokens.textSpacingCompact) {
+                            if let meaning = presentation?.meaningText {
+                                Text(meaning)
+                                    .font(AppTypography.cardTitle)
+                            }
+
+                            Text(presentation?.stateText ?? ProductSurfacePresentation.wakeStateLabel(for: summary.day))
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(.primary.opacity(0.82))
+
+                            Text(presentation?.timingText ?? ProductSurfacePresentation.homeHeroTimingText(for: summary.day))
+                                .font(AppTypography.cardBody)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+
+                            if let secondary = presentation?.secondaryText {
+                                Text(secondary)
+                                    .font(AppTypography.metricLabel)
+                                    .foregroundStyle(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
 
                         Button(Strings.HomeSurface.heroAction) {
                             appNavigator.switchToWake()
                         }
                         .appControlStyle(.primary, tint: DawnColor.accent)
-                        .padding(.top, 20)
                     }
                 } else {
-                    VStack(alignment: .leading, spacing: 0) {
+                    VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
                         Text(Strings.HomeSurface.heroEmptyTitle)
                             .font(AppTypography.heroTitle)
-                            .padding(.top, DesignTokens.space10)
 
                         Text(Strings.HomeSurface.heroEmptyBody)
                             .font(AppTypography.cardBody)
                             .foregroundStyle(.secondary)
-                            .padding(.top, DesignTokens.space10)
 
                         Button(Strings.HomeSurface.heroEmptyAction) {
                             appNavigator.openDefaultMorningPlan()
                         }
                         .appControlStyle(.primary, tint: DawnColor.accent)
-                        .padding(.top, 18)
                     }
                 }
             }
         }
-        .overlay {
-            RoundedRectangle(cornerRadius: 32, style: .continuous)
-                .stroke(
-                    LinearGradient(
-                        colors: [
-                            Color.white.opacity(colorScheme == .dark ? 0.18 : 0.34),
-                            Color.white.opacity(colorScheme == .dark ? 0.05 : 0.10)
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ),
-                    lineWidth: 1
-                )
-        }
-        .shadow(
-            color: DawnColor.accent.opacity(colorScheme == .dark ? 0.06 : 0.10),
-            radius: 20,
-            x: 0,
-            y: 10
-        )
-    }
-
-    private func heroLine(for summary: NextWakeEventSummary) -> String {
-        ProductSurfacePresentation.homeHeroSubline(for: summary.day)
     }
 }
 

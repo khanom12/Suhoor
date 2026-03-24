@@ -763,7 +763,7 @@ struct ProductSurfacePresentationTests {
         let defaultPresentation = ProductSurfacePresentation.scheduleRowPresentation(for: day, hasDayOverride: false)
         let adjustedPresentation = ProductSurfacePresentation.scheduleRowPresentation(for: day, hasDayOverride: true)
 
-        #expect(defaultPresentation.detailText.contains("Fajr at"))
+        #expect(defaultPresentation.detailText.contains("before Fajr"))
         #expect(defaultPresentation.stateLabel == "Before Fajr")
         #expect(defaultPresentation.secondaryExplanation == nil)
         #expect(adjustedPresentation.secondaryExplanation == "Adjusted for this date")

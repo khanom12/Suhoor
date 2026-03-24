@@ -218,12 +218,26 @@ enum ProductSurfacePresentation {
         homeHeroMeaningText(for: day) == nil ? "Next wake" : "Tomorrow's wake"
     }
 
+    static func homeHeroPresentation(for day: ActiveAlarmDay) -> HomeHeroPresentation {
+        HomeHeroPresentation(
+            label: homeHeroLabel(for: day),
+            meaningText: homeHeroMeaningText(for: day),
+            stateText: wakeStateLabel(for: day),
+            timingText: homeHeroTimingText(for: day),
+            secondaryText: homeHeroSecondaryText(for: day)
+        )
+    }
+
     static func homeHeroSubline(for day: ActiveAlarmDay) -> String {
         var parts: [String] = []
         if let meaning = homeHeroMeaningText(for: day) {
             parts.append(meaning)
         }
-        parts.append(homeHeroWakeLine(for: day))
+        parts.append(wakeStateLabel(for: day))
+        parts.append(homeHeroTimingText(for: day))
+        if let secondary = homeHeroSecondaryText(for: day) {
+            parts.append(secondary)
+        }
         return parts.joined(separator: " • ")
     }
 
@@ -324,13 +338,14 @@ enum ProductSurfacePresentation {
         }
     }
 
-    static func wakeListSecondaryText(
-        for day: ActiveAlarmDay,
-        hasDayOverride: Bool
-    ) -> String {
-        let relationText = wakeOffsetText(for: day)
-        let fajrText = "Fajr at \(TimeFormatters.timeFormatter.string(from: day.schedule.fajrDate))"
-        return "\(relationText) · \(fajrText)"
+    static func wakeListTimingText(for day: ActiveAlarmDay) -> String {
+        if day.decisionLog.plannedWakeState == .fixedWake {
+            return "Ignores latest wake"
+        }
+        if day.decisionLog.plannedWakeState == .postFajr {
+            return "One-day exception"
+        }
+        return wakeOffsetText(for: day)
     }
 
     static func configuredPlansSnapshot(
@@ -379,7 +394,7 @@ enum ProductSurfacePresentation {
             meaningText: dayMeaningText(for: day, style: .wakeRow),
             stateLabel: wakeStateLabel(for: day),
             secondaryExplanation: scheduleSecondaryExplanation(for: day, hasDayOverride: hasDayOverride),
-            detailText: wakeListSecondaryText(for: day, hasDayOverride: hasDayOverride),
+            detailText: wakeListTimingText(for: day),
             chipTitles: scheduleChipTitles(for: day, hasDayOverride: hasDayOverride),
             provenanceText: provenanceText
         )
@@ -490,22 +505,28 @@ enum ProductSurfacePresentation {
         }
     }
 
-    static func homeHeroWakeLine(for day: ActiveAlarmDay) -> String {
+    static func homeHeroTimingText(for day: ActiveAlarmDay) -> String {
         if day.decisionLog.plannedWakeState == .fixedWake {
-            return day.decisionLog.latestWakeCapApplied
-                ? "Wake moved earlier by your latest-wake limit"
-                : "Fixed wake tomorrow"
+            return "Set for \(TimeFormatters.timeFormatter.string(from: day.decisionLog.resolvedWakeTime))"
         }
+        return wakeOffsetText(for: day)
+    }
 
+    static func homeHeroSecondaryText(for day: ActiveAlarmDay) -> String? {
         if day.decisionLog.latestWakeCapApplied {
-            return "Wake moved earlier by your latest-wake limit"
+            return "Moved earlier by your latest wake"
         }
-
-        if day.decisionLog.resolvedWakeState == .inFajr {
-            return "\(wakeStateLabel(for: day)) • \(wakeOffsetText(for: day))"
+        if day.decisionLog.plannedWakeState == .fixedWake {
+            return "Fixed wake for this date"
         }
-
-        return "\(wakeStateLabel(for: day)) • \(wakeOffsetText(for: day))"
+        if day.decisionLog.plannedWakeState == .postFajr {
+            return "After-Fajr exception for this date"
+        }
+        if day.sourceSummaryText.isEmpty == false
+            && day.provenances.contains(where: { $0.sourceOrigin != .defaultDailyPlan }) {
+            return "Adjusted from your usual plan"
+        }
+        return nil
     }
 
     static func wakeOffsetText(for day: ActiveAlarmDay) -> String {
@@ -531,13 +552,10 @@ enum ProductSurfacePresentation {
             return "Fixed wake for this date"
         }
         if day.decisionLog.plannedWakeState == .postFajr && hasDayOverride {
-            return "Adjusted for after Fajr"
+            return "After-Fajr exception"
         }
         if hasDayOverride {
             return "Adjusted for this date"
-        }
-        if day.resolvedDayContext.primaryContext == .fasting || day.resolvedDayContext.supportingTags.contains(.ramadan) {
-            return "Fasting tomorrow"
         }
         return nil
     }
@@ -635,6 +653,23 @@ enum ProductSurfacePresentation {
         }
 
         return rows
+    }
+
+    static func wakeSourceSummaryText(for day: ActiveAlarmDay) -> String {
+        if day.sourceSummaryText.isEmpty == false {
+            return day.sourceSummaryText
+        }
+        return "This date comes from your default morning plan."
+    }
+
+    static func wakeSourceHelperText(for day: ActiveAlarmDay, hasDayOverride: Bool) -> String {
+        if hasDayOverride {
+            return "Change the underlying plan in Plans. The wake options above only change this date."
+        }
+        if day.provenances.contains(where: { $0.sourceOrigin != .defaultDailyPlan }) {
+            return "Change the broader plan from Plans if you want to affect every matching date."
+        }
+        return "Use Plans to change the default morning plan, or adjust this date above."
     }
 
     static func wakeProgressSnapshot(from events: [DebugEvent]) -> WakeProgressSnapshot {
