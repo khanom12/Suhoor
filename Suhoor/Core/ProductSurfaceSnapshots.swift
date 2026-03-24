@@ -20,9 +20,13 @@ struct WakeSurfaceSnapshot: Equatable, Sendable {
 }
 
 struct DefaultMorningPlanSurfaceSummary: Equatable, Sendable {
-    let wakeLead: String
-    let extraWakeBuffer: String
-    let reminders: String
+    let wakeTiming: String
+    let anchor: String
+    let wakeOffset: String
+    let reserveBeforeEnd: String
+    let latestWake: String
+    let fastingCues: String
+    let sounds: String
     let prayerTimes: String
     let tahajjudBehavior: String?
 }
@@ -60,50 +64,26 @@ enum ProductSurfaceSnapshots {
         defaults: DefaultAlarmConfig,
         settings: AppSettings
     ) -> DefaultMorningPlanSurfaceSummary {
-        let wakeLead: String
-        switch defaults.defaultWakeState {
-        case .preFajr:
-            wakeLead = "\(defaults.defaultWakeDeltaMinutes) min before Fajr"
-        case .inFajr:
-            if defaults.normalizedDefaultWakeAnchorType == .fajrEnd {
-                wakeLead = "\(defaults.defaultWakeDeltaMinutes) min before Fajr ends"
-            } else {
-                wakeLead = "\(defaults.defaultWakeDeltaMinutes) min after Fajr starts"
-            }
-        }
-
-        let extraWakeBuffer: String
-        if let latestWakeCap = defaults.defaultLatestWakeCapMinutesFromMidnight {
-            extraWakeBuffer = "Cap at \(SettingsSummaryFormatter.timeText(minutesFromMidnight: latestWakeCap))"
-        } else if settings.snoozeEnabled {
-            extraWakeBuffer = "\(settings.snoozeMinutes) min follow-up"
-        } else {
-            extraWakeBuffer = "Off"
-        }
-
-        let reminderSummary: String
-        switch defaults.defaultReminderTimeMode {
-        case .beforeFajr:
-            reminderSummary = defaults.reminderEnabledDefault
-                ? "Reminder \(defaults.defaultReminderMinutesBeforeFajr) min before Fajr"
-                : "Reminder off"
-        case .fixedTime:
-            let timeText = SettingsSummaryFormatter.timeText(minutesFromMidnight: defaults.defaultReminderFixedTimeMinutes)
-            reminderSummary = defaults.reminderEnabledDefault
-                ? "Reminder at \(timeText)"
-                : "Reminder off"
-        }
-
-        let prayerTimes = defaults.fajrEnabledDefault
-            ? "Fajr adhan on"
-            : "Fajr adhan off"
-
         return DefaultMorningPlanSurfaceSummary(
-            wakeLead: wakeLead,
-            extraWakeBuffer: extraWakeBuffer,
-            reminders: reminderSummary,
-            prayerTimes: prayerTimes,
-            tahajjudBehavior: "Reserve \(settings.clampedReserveBeforeEndMinutes) min before Fajr ends"
+            wakeTiming: ProductSurfacePresentation.defaultWakeTimingText(for: defaults),
+            anchor: ProductSurfacePresentation.defaultWakeAnchorText(for: defaults),
+            wakeOffset: ProductSurfacePresentation.defaultWakeOffsetText(for: defaults),
+            reserveBeforeEnd: ProductSurfacePresentation.defaultReserveSummaryText(
+                defaults: defaults,
+                settings: settings
+            ),
+            latestWake: ProductSurfacePresentation.latestWakeSummaryText(
+                minutesFromMidnight: defaults.defaultLatestWakeCapMinutesFromMidnight
+            ),
+            fastingCues: ProductSurfacePresentation.defaultFastingCueSummaryText(
+                defaults: defaults,
+                settings: settings
+            ),
+            sounds: ProductSurfacePresentation.soundSummaryText(settings: settings),
+            prayerTimes: defaults.fajrEnabledDefault ? "Fajr cue on" : "Fajr cue off",
+            tahajjudBehavior: defaults.defaultWakeState == .preFajr
+                ? "Tahajjud stays a date-level refinement."
+                : nil
         )
     }
 

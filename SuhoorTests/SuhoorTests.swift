@@ -1533,6 +1533,7 @@ struct SuhoorTests {
         let config = DefaultAlarmConfig(
             suhoorEnabledDefault: true,
             reminderEnabledDefault: false,
+            fastingReminderEnabledDefault: false,
             fajrEnabledDefault: false,
             iftarEnabledDefault: true,
             defaultWakeState: .preFajr,
@@ -1554,7 +1555,7 @@ struct SuhoorTests {
 
         let summary = SettingsSummaryFormatter.defaultAlarmsSummary(config: config)
 
-        #expect(summary == "Wake 30 min before Fajr · Reminder off · Fajr adhan off")
+        #expect(summary == "30 min before Fajr · Fasting reminder off")
     }
 
     @Test

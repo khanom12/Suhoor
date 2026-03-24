@@ -31,37 +31,58 @@ struct WakeScreen: View {
     @State private var lastRefreshContext: FajrWindowRefreshContext?
 
     var body: some View {
-        let wakeSnapshot = scheduleManager.wakeSurfaceSnapshot
-
         ScrollView {
             LazyVStack(alignment: .leading, spacing: DesignTokens.spacingL) {
-                if upcomingEntries.isEmpty {
+                if featuredEntry == nil && monthSections.isEmpty {
                     emptyStateView
                 } else {
-                    AppInsetGroup {
-                        ForEach(Array(upcomingEntries.enumerated()), id: \.element.id) { index, entry in
-                            WakeRowView(
-                                entry: entry,
-                                isEnabled: dayEnabledBinding(for: entry)
-                            ) {
-                                destination = .day(entry.schedule)
-                            }
-                            .padding(.horizontal, DesignTokens.spacingM)
-                            .padding(.vertical, DesignTokens.space8)
+                    if let featuredEntry {
+                        VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
+                            AppSectionHeader("Next wake", subtitle: "Tomorrow stays calm here, and details open on tap.")
 
-                            if index < upcomingEntries.count - 1 {
-                                AppGroupDivider(inset: DesignTokens.spacingM)
+                            WakeFeaturedEntryCard(
+                                entry: featuredEntry,
+                                isEnabled: dayEnabledBinding(for: featuredEntry)
+                            ) {
+                                destination = .day(featuredEntry.schedule)
                             }
                         }
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .shadow(color: Color.black.opacity(0.03), radius: 12, x: 0, y: 4)
 
-                    if additionalUpcomingCount > 0 {
-                        Text("\(additionalUpcomingCount) more mornings coming up after this list.")
-                            .font(AppTypography.rowBody)
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, DesignTokens.spacingS)
+                    ForEach(monthSections) { section in
+                        VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
+                            WakeMonthSectionHeader(
+                                title: section.key.title,
+                                count: section.visibleAlarmCount
+                            )
+
+                            if section.entries.isEmpty {
+                                AppGlassSurface(variant: .quiet) {
+                                    Text("Upcoming mornings in this month load as soon as they are needed.")
+                                        .font(AppTypography.rowBody)
+                                        .foregroundStyle(.secondary)
+                                }
+                            } else {
+                                AppInsetGroup {
+                                    ForEach(Array(section.entries.enumerated()), id: \.element.id) { index, entry in
+                                        WakeRowView(
+                                            entry: entry,
+                                            isEnabled: dayEnabledBinding(for: entry)
+                                        ) {
+                                            destination = .day(entry.schedule)
+                                        }
+                                        .padding(.horizontal, DesignTokens.spacingM)
+                                        .padding(.vertical, DesignTokens.space8)
+
+                                        if index < section.entries.count - 1 {
+                                            AppGroupDivider(inset: DesignTokens.spacingM)
+                                        }
+                                    }
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .shadow(color: Color.black.opacity(0.03), radius: 12, x: 0, y: 4)
+                            }
+                        }
                     }
                 }
             }
@@ -138,15 +159,12 @@ struct WakeScreen: View {
         }
     }
 
-    private var upcomingEntries: [WakeRowEntry] {
-        Array(
-            visibleAlarmEntries
-            .prefix(7)
-        )
+    private var featuredEntry: WakeRowEntry? {
+        viewState.listSnapshot.nextWakeEntries.first
     }
 
-    private var additionalUpcomingCount: Int {
-        max(visibleAlarmEntries.count - upcomingEntries.count, 0)
+    private var monthSections: [WakeMonthSection] {
+        viewState.listSnapshot.sections.filter { !$0.entries.isEmpty || !$0.isLoaded }
     }
 
     private var currentTimeZone: TimeZone {
@@ -213,63 +231,13 @@ struct WakeScreen: View {
         }
     }
 
-    private func wakeEntries(from snapshot: WakeSurfaceSnapshot) -> [WakeRowEntry] {
-        snapshot.visibleDays.map {
-            WakeRowActionResolver.makeEntry(
-                activeDay: $0,
-                overrideDateKeys: snapshot.overrideDateKeys
-            )
-        }
-    }
-
-    private var visibleAlarmEntries: [WakeRowEntry] {
-        let now = Date()
-        return wakeEntries(from: scheduleManager.wakeSurfaceSnapshot).filter {
-            shouldShowOnAlarmScreen($0, now: now)
-        }
-    }
-
-    private func shouldShowOnAlarmScreen(_ entry: WakeRowEntry, now: Date) -> Bool {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = currentTimeZone
-
-        let entryDay = calendar.startOfDay(for: entry.schedule.date)
-        let today = calendar.startOfDay(for: now)
-
-        if entryDay > today {
-            return true
-        }
-
-        guard entryDay == today else {
-            return false
-        }
-
-        let lastMorningAlarm = entry.activeDay.scheduledEvents
-            .filter(\.isUserVisible)
-            .filter { event in
-                switch event.type {
-                case .wakeReminder, .wakeAlarm, .wakeFollowUp, .fajrBoundaryNotice:
-                    return true
-                case .iftarReminder:
-                    return false
-                }
-            }
-            .map(\.fireDate)
-            .max()
-
-        guard let lastMorningAlarm else {
-            return true
-        }
-
-        return lastMorningAlarm >= now
-    }
-
     private func dayEnabledBinding(for entry: WakeRowEntry) -> Binding<Bool> {
         Binding(
             get: {
-                wakeEntries(from: scheduleManager.wakeSurfaceSnapshot)
-                    .first(where: { $0.id == entry.id })?
-                    .isEnabled ?? entry.isEnabled
+                if let activeDay = scheduleManager.activeDay(for: entry.schedule.date, timeZone: currentTimeZone) {
+                    return !activeDay.effectiveConfig.skipDay && activeDay.effectiveConfig.hasAnyEnabled
+                }
+                return entry.isEnabled
             },
             set: { newValue in
                 alarmConfigStore.setDayEnabled(

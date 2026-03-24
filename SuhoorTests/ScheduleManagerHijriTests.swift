@@ -342,6 +342,7 @@ struct ScheduleManagerHijriTests {
         let legacyDefaults = DefaultAlarmConfig(
             suhoorEnabledDefault: false,
             reminderEnabledDefault: false,
+            fastingReminderEnabledDefault: false,
             fajrEnabledDefault: false,
             iftarEnabledDefault: true,
             defaultWakeState: .preFajr,
@@ -1631,9 +1632,10 @@ struct ScheduleManagerHijriTests {
         #expect(wakeSnapshot.overrideDateKeys.contains(tomorrowKey))
         #expect(wakeSnapshot.visibleDays.contains(where: { $0.dateKey == tomorrowKey }))
         #expect(homeSnapshot.heroLabel?.isEmpty == false)
-        #expect(homeSnapshot.heroSubline?.contains("Fajr at") == true)
+        #expect(homeSnapshot.heroSubline?.contains("Fajr at") == false)
+        #expect(homeSnapshot.heroSubline?.contains("Fajr") == true)
         #expect(plansSnapshot.configuredPlansSnapshot.upcomingSpecialMornings.isEmpty == false)
-        #expect(plansSnapshot.defaultMorningPlanSummary.wakeLead.isEmpty == false)
+        #expect(plansSnapshot.defaultMorningPlanSummary.wakeTiming.isEmpty == false)
         #expect(progressSnapshot.fajrTodaySummary == "Fajr completed")
         #expect(progressSnapshot.fastTodaySummary == "Qada completed")
         #expect(progressSnapshot.fastSectionTitle.isEmpty == false)
@@ -1937,7 +1939,7 @@ struct ScheduleManagerHijriTests {
 
     @Test
     @MainActor
-    func wakeRowPresentationUsesMeaningFirstDetailWithoutChips() async {
+    func wakeRowPresentationUsesResolvedStateAndAdjustmentCopy() async {
         let suiteName = "ScheduleManagerHijriTests.WakeRowPresentation"
         let defaults = UserDefaults(suiteName: suiteName)!
         defaults.removePersistentDomain(forName: suiteName)
@@ -1994,7 +1996,8 @@ struct ScheduleManagerHijriTests {
 
         let presentation = ProductSurfacePresentation.scheduleRowPresentation(for: activeDay, hasDayOverride: true)
         #expect(presentation.meaningText.isEmpty == false)
-        #expect(presentation.detailText.contains("Adjusted"))
+        #expect(presentation.stateLabel.isEmpty == false)
+        #expect(presentation.secondaryExplanation == "Adjusted for this date")
         #expect(presentation.detailText.contains("Fajr at"))
         #expect(presentation.chipTitles.contains("Adjusted"))
     }

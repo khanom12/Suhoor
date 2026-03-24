@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct DefaultAlarmsSettingsView: View {
+    @EnvironmentObject private var appNavigator: AppNavigator
     @EnvironmentObject private var alarmConfigStore: AlarmConfigStore
     @EnvironmentObject private var scheduleManager: ScheduleManager
     @EnvironmentObject private var settingsStore: SuhoorSettingsStore
@@ -9,37 +10,43 @@ struct DefaultAlarmsSettingsView: View {
         SettingsScrollPage {
             SettingsGroup(
                 title: "Default Morning Plan",
-                supportingText: "Set your normal Fajr-centered wake rhythm. Post-Fajr and fixed wakes stay as date-specific exceptions."
+                supportingText: "Choose how mornings normally relate to Fajr."
             ) {
                 SettingsRow {
-                    SettingsValueRow(title: "Wake timing", value: wakeSummaryText)
+                    SettingsValueRow(title: "Wake timing", value: planSummary.wakeTiming)
                 }
                 AppGroupDivider()
                 SettingsRow {
-                    SettingsValueRow(title: "Routine cap", value: latestWakeCapSummaryText)
+                    SettingsValueRow(title: "Anchor", value: planSummary.anchor)
                 }
                 AppGroupDivider()
                 SettingsRow {
-                    SettingsValueRow(title: "Support cues", value: supportCueSummaryText)
+                    SettingsValueRow(title: "Wake offset", value: planSummary.wakeOffset)
                 }
-
-                if usesLegacyFixedTimeCompatibility {
-                    AppGroupDivider()
-                    SettingsRow {
-                        Text("A legacy fixed-time default is still preserved for compatibility. Updating this plan converts it back to the Fajr-centered rule set.")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
+                AppGroupDivider()
+                SettingsRow {
+                    SettingsValueRow(title: "Reserve before Fajr ends", value: planSummary.reserveBeforeEnd)
+                }
+                AppGroupDivider()
+                SettingsRow {
+                    SettingsValueRow(title: "Latest wake", value: planSummary.latestWake)
+                }
+                AppGroupDivider()
+                SettingsRow {
+                    SettingsValueRow(title: "Fasting mornings", value: planSummary.fastingCues)
+                }
+                AppGroupDivider()
+                SettingsRow {
+                    SettingsValueRow(title: "Sounds", value: planSummary.sounds)
                 }
             }
 
             SettingsGroup(
-                title: "Wake Rule",
-                supportingText: "Defaults may be Pre-Fajr or In-Fajr only."
+                title: "Morning Rules",
+                supportingText: "Defaults can be before Fajr or during Fajr."
             ) {
                 SettingsRow {
-                    Picker("Default wake state", selection: defaultWakeStateBinding) {
+                    Picker("Wake timing", selection: defaultWakeStateBinding) {
                         ForEach(DefaultWakeState.allCases) { state in
                             Text(defaultWakeStateTitle(state)).tag(state)
                         }
@@ -51,7 +58,7 @@ struct DefaultAlarmsSettingsView: View {
                     SettingsRow {
                         Picker("Anchor", selection: defaultWakeAnchorBinding) {
                             Text("From Fajr start").tag(WakeAnchorType.fajrStart)
-                            Text("Before Fajr end").tag(WakeAnchorType.fajrEnd)
+                            Text("From Fajr end").tag(WakeAnchorType.fajrEnd)
                         }
                     }
                 }
@@ -68,9 +75,31 @@ struct DefaultAlarmsSettingsView: View {
                     }
                 }
 
+                if showsReserveEditor {
+                    AppGroupDivider()
+                    SettingsRow {
+                        Stepper(value: reserveBeforeEndBinding, in: 1...60, step: 1) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Reserve before Fajr ends")
+                                Text("\(settingsStore.settings.clampedReserveBeforeEndMinutes) min")
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+
+                    AppGroupDivider()
+                    SettingsRow {
+                        Text("Keeps enough time before Fajr ends.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+
                 AppGroupDivider()
                 SettingsRow {
-                    Toggle("Latest wake cap", isOn: latestWakeCapEnabledBinding)
+                    Toggle("Latest wake", isOn: latestWakeCapEnabledBinding)
                 }
 
                 if alarmConfigStore.defaults.defaultLatestWakeCapMinutesFromMidnight != nil {
@@ -85,7 +114,7 @@ struct DefaultAlarmsSettingsView: View {
 
                     AppGroupDivider()
                     SettingsRow {
-                        Text("The cap only pulls earlier. It can move an in-Fajr default earlier, including into Pre-Fajr, when you want routine stability.")
+                        Text("Keeps your wake from drifting later through the year.")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -94,18 +123,18 @@ struct DefaultAlarmsSettingsView: View {
             }
 
             SettingsGroup(
-                title: "Support Around Wake",
-                supportingText: "Keep the wake plan in Plans, and leave sound behavior in Settings."
+                title: "Cues",
+                supportingText: "These cues support the same morning plan instead of becoming separate alarm definitions."
             ) {
                 SettingsRow {
-                    Toggle(Strings.Settings.wakeAlarmLabel, isOn: suhoorDefaultBinding)
+                    Toggle("Play cue at Fajr start when waking before Fajr", isOn: fajrDefaultBinding)
                 }
                 AppGroupDivider()
                 SettingsRow {
-                    Toggle(Strings.Settings.reminderLabel, isOn: reminderDefaultBinding)
+                    Toggle("Use fasting reminder on fasting mornings", isOn: fastingReminderDefaultBinding)
                 }
 
-                if alarmConfigStore.defaults.reminderEnabledDefault {
+                if alarmConfigStore.defaults.fastingReminderEnabledDefault {
                     AppGroupDivider()
                     SettingsRow {
                         Stepper(value: reminderDefaultOffsetBinding, in: 1...180, step: 1) {
@@ -119,14 +148,6 @@ struct DefaultAlarmsSettingsView: View {
                     }
                 }
 
-                AppGroupDivider()
-                SettingsRow {
-                    Toggle("At Fajr start cue", isOn: fajrDefaultBinding)
-                }
-                AppGroupDivider()
-                SettingsRow {
-                    Toggle("Iftar / Maghrib", isOn: iftarDefaultBinding)
-                }
                 AppGroupDivider()
                 SettingsRow {
                     Toggle("Wake follow-up", isOn: wakeFollowUpEnabledBinding)
@@ -145,6 +166,27 @@ struct DefaultAlarmsSettingsView: View {
             }
 
             SettingsGroup(
+                title: "Sounds",
+                supportingText: "Sound-role choices and reserve-before-end also live in Settings."
+            ) {
+                Button {
+                    appNavigator.openAlarmBehavior()
+                } label: {
+                    SettingsRow {
+                        SettingsSummaryRow(
+                            title: "Alarm Behavior",
+                            subtitle: "Edit Pre-Fajr, Fajr-start, during-Fajr, after-Fajr, and fixed-wake sounds.",
+                            systemImage: "speaker.wave.3",
+                            badgeText: planSummary.sounds,
+                            badgeTone: .neutral,
+                            showsDisclosureIndicator: true
+                        )
+                    }
+                }
+                .buttonStyle(.plain)
+            }
+
+            SettingsGroup(
                 title: "Validation",
                 supportingText: "Defaults validate against the next rolling 365 days for your current location and prayer calculation."
             ) {
@@ -157,29 +199,32 @@ struct DefaultAlarmsSettingsView: View {
                 title: Strings.Settings.previewSection,
                 supportingText: "Tomorrow reflects the same resolver used on Home and Wake."
             ) {
-                if let preview = scheduleManager.schedules.first {
-                    SettingsRow {
-                        previewRow(title: Strings.Settings.wakeAlarmLabel, value: TimeFormatters.timeFormatter.string(from: preview.wakeDate))
-                    }
-                    AppGroupDivider()
+                if let previewDay {
                     SettingsRow {
                         previewRow(
-                            title: Strings.Settings.reminderLabel,
-                            value: preview.reminderDate.map { TimeFormatters.timeFormatter.string(from: $0) } ?? Strings.AlarmList.offLabel
+                            title: "Final wake time",
+                            value: TimeFormatters.timeFormatter.string(from: previewDay.decisionLog.resolvedWakeTime)
                         )
                     }
                     AppGroupDivider()
                     SettingsRow {
                         previewRow(
-                            title: "At Fajr start",
-                            value: TimeFormatters.timeFormatter.string(from: preview.fajrDate)
+                            title: "Resolved wake type",
+                            value: ProductSurfacePresentation.wakeStateLabel(for: previewDay)
                         )
                     }
                     AppGroupDivider()
                     SettingsRow {
                         previewRow(
-                            title: "Iftar / Maghrib",
-                            value: TimeFormatters.timeFormatter.string(from: preview.iftarDate ?? preview.maghribDate)
+                            title: "Fajr start time",
+                            value: TimeFormatters.timeFormatter.string(from: previewDay.schedule.fajrDate)
+                        )
+                    }
+                    AppGroupDivider()
+                    SettingsRow {
+                        previewRow(
+                            title: "Latest wake effect",
+                            value: previewCapSummary(for: previewDay)
                         )
                     }
                 } else {
@@ -199,54 +244,38 @@ struct DefaultAlarmsSettingsView: View {
         scheduleManager.defaultWakeValidation()
     }
 
-    private var usesLegacyFixedTimeCompatibility: Bool {
-        alarmConfigStore.defaults.defaultSuhoorTimeMode == .fixedTime
+    private var planSummary: DefaultMorningPlanSurfaceSummary {
+        ProductSurfaceSnapshots.defaultMorningPlanSummary(
+            defaults: alarmConfigStore.defaults,
+            settings: settingsStore.settings
+        )
     }
 
-    private var wakeSummaryText: String {
-        guard alarmConfigStore.defaults.suhoorEnabledDefault else {
-            return Strings.AlarmsTab.alarmOffLabel
-        }
-        return deltaSummaryText
+    private var previewDay: ActiveAlarmDay? {
+        scheduleManager.nextWakeEventSummary?.day
+            ?? scheduleManager.activeWindowSnapshot.visibleDays.first(where: {
+                !$0.effectiveConfig.skipDay && $0.effectiveConfig.hasAnyEnabled
+            })
     }
 
-    private var latestWakeCapSummaryText: String {
-        guard let latestWakeCap = alarmConfigStore.defaults.defaultLatestWakeCapMinutesFromMidnight else {
-            return "Off"
-        }
-        return SettingsSummaryFormatter.timeText(minutesFromMidnight: latestWakeCap)
-    }
-
-    private var supportCueSummaryText: String {
-        var parts: [String] = []
-        parts.append(alarmConfigStore.defaults.reminderEnabledDefault ? "Reminder on" : "Reminder off")
-        parts.append(alarmConfigStore.defaults.fajrEnabledDefault ? "Fajr cue on" : "Fajr cue off")
-        parts.append(settingsStore.settings.snoozeEnabled ? "Follow-up \(settingsStore.settings.snoozeMinutes) min" : "Follow-up off")
-        return parts.joined(separator: " · ")
+    private var showsReserveEditor: Bool {
+        alarmConfigStore.defaults.defaultWakeState == .inFajr
+            && alarmConfigStore.defaults.normalizedDefaultWakeAnchorType == .fajrStart
     }
 
     private var deltaRowTitle: String {
         switch alarmConfigStore.defaults.defaultWakeState {
         case .preFajr:
-            return "Minutes before Fajr starts"
+            return "Minutes before Fajr"
         case .inFajr:
             return alarmConfigStore.defaults.normalizedDefaultWakeAnchorType == .fajrEnd
                 ? "Minutes before Fajr ends"
-                : "Minutes after Fajr starts"
+                : "Minutes after Fajr begins"
         }
     }
 
     private var deltaSummaryText: String {
-        let delta = alarmConfigStore.defaults.defaultWakeDeltaMinutes
-        switch alarmConfigStore.defaults.defaultWakeState {
-        case .preFajr:
-            return "\(delta) min before Fajr"
-        case .inFajr:
-            if alarmConfigStore.defaults.normalizedDefaultWakeAnchorType == .fajrEnd {
-                return "\(delta) min before Fajr ends"
-            }
-            return "\(delta) min after Fajr starts"
-        }
+        ProductSurfacePresentation.defaultWakeOffsetText(for: alarmConfigStore.defaults)
     }
 
     @ViewBuilder
@@ -365,6 +394,17 @@ struct DefaultAlarmsSettingsView: View {
             alarmConfigStore.defaults.reminderEnabledDefault
         }, set: { newValue in
             alarmConfigStore.defaults.reminderEnabledDefault = newValue
+            alarmConfigStore.defaults.fastingReminderEnabledDefault = newValue
+            rescheduleFromDefaults()
+        })
+    }
+
+    private var fastingReminderDefaultBinding: Binding<Bool> {
+        Binding(get: {
+            alarmConfigStore.defaults.fastingReminderEnabledDefault
+        }, set: { newValue in
+            alarmConfigStore.defaults.fastingReminderEnabledDefault = newValue
+            alarmConfigStore.defaults.reminderEnabledDefault = newValue
             rescheduleFromDefaults()
         })
     }
@@ -418,12 +458,23 @@ struct DefaultAlarmsSettingsView: View {
         })
     }
 
+    private var reserveBeforeEndBinding: Binding<Int> {
+        Binding(get: {
+            settingsStore.settings.clampedReserveBeforeEndMinutes
+        }, set: { newValue in
+            settingsStore.update { draft in
+                draft.reserveBeforeEndMinutes = max(1, newValue)
+            }
+            rescheduleFromDefaults()
+        })
+    }
+
     private func defaultWakeStateTitle(_ state: DefaultWakeState) -> String {
         switch state {
         case .preFajr:
-            return "Pre-Fajr"
+            return "Before Fajr"
         case .inFajr:
-            return "In-Fajr"
+            return "During Fajr"
         }
     }
 
@@ -446,5 +497,12 @@ struct DefaultAlarmsSettingsView: View {
         calendar.timeZone = .current
         let start = calendar.startOfDay(for: day)
         return calendar.date(byAdding: .minute, value: minutes, to: start) ?? start
+    }
+
+    private func previewCapSummary(for day: ActiveAlarmDay) -> String {
+        if day.decisionLog.latestWakeCapApplied {
+            return "Moved earlier by your latest wake"
+        }
+        return "No cap applied"
     }
 }

@@ -147,16 +147,22 @@ private struct DefaultMorningPlanCard: View {
                 }
 
                 AppInsetGroup {
-                    SummaryRow(label: "Wake lead", value: summary.wakeLead)
+                    SummaryRow(label: "Wake timing", value: summary.wakeTiming)
                     AppGroupDivider(inset: 0)
-                    SummaryRow(label: "Extra wake buffer", value: summary.extraWakeBuffer)
+                    SummaryRow(label: "Anchor", value: summary.anchor)
                     AppGroupDivider(inset: 0)
-                    SummaryRow(label: "Reminders", value: summary.reminders)
+                    SummaryRow(label: "Wake offset", value: summary.wakeOffset)
+                    AppGroupDivider(inset: 0)
+                    SummaryRow(label: "Reserve before end", value: summary.reserveBeforeEnd)
+                    AppGroupDivider(inset: 0)
+                    SummaryRow(label: "Latest wake", value: summary.latestWake)
+                    AppGroupDivider(inset: 0)
+                    SummaryRow(label: "Fasting cues", value: summary.fastingCues)
                     AppGroupDivider(inset: 0)
                     SummaryRow(label: "Prayer times", value: summary.prayerTimes)
                     if let tahajjudBehavior = summary.tahajjudBehavior {
                         AppGroupDivider(inset: 0)
-                        SummaryRow(label: "Tahajjud", value: tahajjudBehavior)
+                        SummaryRow(label: "Tahajjud behavior", value: tahajjudBehavior)
                     }
                 }
             }
@@ -174,7 +180,7 @@ private struct ConfiguredPlansCard: View {
                     VStack(alignment: .leading, spacing: DesignTokens.textSpacingCompact) {
                         Text("Upcoming special plans")
                             .font(AppTypography.cardTitle)
-                        Text(Strings.PlansSurface.upcomingSubtitle)
+                        Text("After-Fajr exceptions, fixed wakes, and other adjusted mornings.")
                             .font(AppTypography.cardBody)
                             .foregroundStyle(.secondary)
                     }
@@ -234,7 +240,7 @@ private struct DatePlanningCard: View {
                 VStack(alignment: .leading, spacing: DesignTokens.textSpacingCompact) {
                     Text("Plan by date")
                         .font(AppTypography.cardTitle)
-                    Text("Choose a future date and shape one morning.")
+                    Text("Choose a date and set a special wake or day meaning for that morning.")
                         .font(AppTypography.cardBody)
                         .foregroundStyle(.secondary)
                 }

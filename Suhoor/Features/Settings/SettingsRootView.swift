@@ -133,9 +133,9 @@ struct SettingsRootView: View {
             return SettingsSummaryFormatter.hijriCorrectionsSummary(scheduleManager: scheduleManager)
         case .alarmBehavior:
             return [
+                "Sounds \(ProductSurfacePresentation.soundSummaryText(settings: settingsStore.settings))",
                 "Reserve \(settingsStore.settings.clampedReserveBeforeEndMinutes) min",
-                "Pre-Fajr \(settingsStore.settings.preFajrWakeSoundSelectionGlobal.displayName)",
-                "Fajr start \(settingsStore.settings.fajrStartSoundSelectionGlobal.displayName)"
+                "At Fajr start \(settingsStore.settings.fajrStartSoundSelectionGlobal.displayName)"
             ].joined(separator: " · ")
         case .permissionsReliability:
             return SettingsSummaryFormatter.permissionsSummary(
@@ -282,7 +282,7 @@ struct SettingsRootView: View {
     }
 }
 
-private struct AlarmBehaviorSettingsView: View {
+struct AlarmBehaviorSettingsView: View {
     @EnvironmentObject private var settingsStore: SuhoorSettingsStore
     @EnvironmentObject private var scheduleManager: ScheduleManager
 

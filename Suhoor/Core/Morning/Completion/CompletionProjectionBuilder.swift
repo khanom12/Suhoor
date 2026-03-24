@@ -94,16 +94,6 @@ enum CompletionProjectionBuilder {
                     )
                 }
             case .fajrMorning:
-                if let fajrPrompt, !prayerPromptsSuppressed {
-                    return HomeCompletionProjection(
-                        dailyCompletion: dailyCompletion,
-                        supportDecision: HomeSupportDecision(
-                            presentation: .fajrCompletionPrompt(fajrPrompt),
-                            reason: "Fajr completion is the most immediate unresolved act.",
-                            isDismissible: false
-                        )
-                    )
-                }
                 if let forbiddenWarning, !fastingPromptsSuppressed {
                     return HomeCompletionProjection(
                         dailyCompletion: dailyCompletion,
@@ -119,7 +109,17 @@ enum CompletionProjectionBuilder {
                         dailyCompletion: dailyCompletion,
                         supportDecision: HomeSupportDecision(
                             presentation: .fasting(fastingPresentation),
-                            reason: "Fasting status is still relevant after wake.",
+                            reason: "Fasting status is still more relevant than a prayer prompt during the same morning.",
+                            isDismissible: false
+                        )
+                    )
+                }
+                if let fajrPrompt, !prayerPromptsSuppressed {
+                    return HomeCompletionProjection(
+                        dailyCompletion: dailyCompletion,
+                        supportDecision: HomeSupportDecision(
+                            presentation: .fajrCompletionPrompt(fajrPrompt),
+                            reason: "Fajr completion remains relevant once fasting day-state support is satisfied.",
                             isDismissible: false
                         )
                     )
@@ -156,6 +156,16 @@ enum CompletionProjectionBuilder {
                     )
                 }
             case .afterMaghrib:
+                if let forbiddenWarning, !fastingPromptsSuppressed {
+                    return HomeCompletionProjection(
+                        dailyCompletion: dailyCompletion,
+                        supportDecision: HomeSupportDecision(
+                            presentation: .forbiddenFastNotice(forbiddenWarning),
+                            reason: "Forbidden-fast guidance still comes before reflective completion prompts.",
+                            isDismissible: true
+                        )
+                    )
+                }
                 if let fastingPresentation, !fastingPromptsSuppressed {
                     return HomeCompletionProjection(
                         dailyCompletion: dailyCompletion,

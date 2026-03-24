@@ -6,6 +6,7 @@ enum AppNavigationIntent: Equatable, Sendable {
     case switchToPlans
     case openSettings
     case openHijriCorrections
+    case openAlarmBehavior
     case openDefaultMorningPlan
     case openQadaPlanner
     case openShawwalPlanner
@@ -45,6 +46,10 @@ final class AppNavigator: ObservableObject {
 
     func openHijriCorrections() {
         send(.openHijriCorrections)
+    }
+
+    func openAlarmBehavior() {
+        send(.openAlarmBehavior)
     }
 
     func openDefaultMorningPlan() {
@@ -106,6 +111,8 @@ enum AppNavigationBridge {
             notificationCenter.post(name: .switchToSettingsTab, object: nil)
         case .openHijriCorrections:
             notificationCenter.post(name: .switchToHijriCorrections, object: nil)
+        case .openAlarmBehavior:
+            notificationCenter.post(name: .switchToSettingsTab, object: nil)
         case .openDefaultMorningPlan:
             notificationCenter.post(name: .openPlanDefaultMorningPlan, object: nil)
         case .openQadaPlanner:

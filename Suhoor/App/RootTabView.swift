@@ -10,6 +10,7 @@ enum RootTab: Hashable {
 
 enum SettingsRoute: Hashable {
     case hijriCorrections
+    case alarmBehavior
 }
 
 struct RootTabView: View {
@@ -97,6 +98,8 @@ struct RootTabView: View {
                         switch destination {
                         case .hijriCorrections:
                             HijriCalendarSettingsView()
+                        case .alarmBehavior:
+                            AlarmBehaviorSettingsView()
                         }
                     }
             }
@@ -126,6 +129,8 @@ struct RootTabView: View {
             presentSettings()
         case .openHijriCorrections:
             presentSettings(route: .hijriCorrections)
+        case .openAlarmBehavior:
+            presentSettings(route: .alarmBehavior)
         case .openDefaultMorningPlan:
             selectedTab = .plans
             planPath.removeLast(planPath.count)

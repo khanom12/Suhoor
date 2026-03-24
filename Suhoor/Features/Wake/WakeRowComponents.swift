@@ -29,6 +29,27 @@ struct WakeRowView: View {
                     )
                     .padding(.top, DesignTokens.space4)
 
+                    if entry.rowPresentation.meaningText != ProductSurfacePresentation.ordinaryDaySummaryText {
+                        Text(entry.rowPresentation.meaningText)
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(supportingTextColor)
+                            .padding(.top, DesignTokens.space6)
+                    }
+
+                    Text(entry.rowPresentation.stateLabel)
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(isDisabled ? Color(UIColor.tertiaryLabel) : Color.primary.opacity(0.8))
+                        .padding(.top, DesignTokens.space4)
+
+                    if let secondaryExplanation = entry.rowPresentation.secondaryExplanation {
+                        Text(secondaryExplanation)
+                            .font(.caption)
+                            .foregroundStyle(supportingTextColor)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                            .padding(.top, DesignTokens.space2)
+                    }
+
                     Text(entry.rowPresentation.detailText)
                         .font(.caption)
                         .foregroundStyle(supportingTextColor)
@@ -36,6 +57,15 @@ struct WakeRowView: View {
                         .lineLimit(1)
                         .truncationMode(.tail)
                         .padding(.top, DesignTokens.space4)
+
+                    if !entry.rowPresentation.chipTitles.isEmpty {
+                        FlowLayout(spacing: DesignTokens.textSpacingCompact) {
+                            ForEach(entry.rowPresentation.chipTitles, id: \.self) { title in
+                                WakeContextChip(title: title, isDisabled: isDisabled)
+                            }
+                        }
+                        .padding(.top, DesignTokens.space6)
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .layoutPriority(1)
@@ -62,6 +92,10 @@ struct WakeRowView: View {
         if entry.rowPresentation.meaningText != ProductSurfacePresentation.ordinaryDaySummaryText {
             parts.append(entry.rowPresentation.meaningText)
         }
+        parts.append(entry.rowPresentation.stateLabel)
+        if let secondaryExplanation = entry.rowPresentation.secondaryExplanation {
+            parts.append(secondaryExplanation)
+        }
         parts.append(contentsOf: entry.rowPresentation.detailText.components(separatedBy: " · "))
         parts.append(isDisabled ? "Off" : "On")
         return parts.joined(separator: ". ") + "."
@@ -83,6 +117,79 @@ struct WakeRowView: View {
 
     private var toggleAccessibilityLabel: String {
         "\(isEnabled.wrappedValue ? "Turn off" : "Turn on") alarm for \(WakeRowPresentation.accessibilityDateLabel(for: entry.schedule.date))"
+    }
+}
+
+struct WakeFeaturedEntryCard: View {
+    let entry: WakeRowEntry
+    let isEnabled: Binding<Bool>
+    let onSelect: () -> Void
+
+    var body: some View {
+        AppGlassSurface(variant: .hero, prominence: .high) {
+            VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
+                HStack(alignment: .top, spacing: DesignTokens.spacingM) {
+                    VStack(alignment: .leading, spacing: DesignTokens.textSpacingCompact) {
+                        Text(WakeRowPresentation.dateLabel(for: entry.schedule.date))
+                            .font(AppTypography.badge)
+                            .foregroundStyle(.secondary)
+
+                        Text(entry.rowPresentation.meaningText)
+                            .font(AppTypography.cardTitle)
+                    }
+
+                    Spacer()
+
+                    Toggle("", isOn: isEnabled)
+                        .labelsHidden()
+                }
+
+                WakeAlarmTimeLockup(
+                    date: entry.schedule.wakeDate,
+                    isDisabled: !isEnabled.wrappedValue
+                )
+
+                VStack(alignment: .leading, spacing: DesignTokens.textSpacingTight) {
+                    Text(entry.rowPresentation.stateLabel)
+                        .font(AppTypography.rowTitle)
+
+                    if let secondaryExplanation = entry.rowPresentation.secondaryExplanation {
+                        Text(secondaryExplanation)
+                            .font(AppTypography.rowBody)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Text(entry.rowPresentation.detailText)
+                        .font(AppTypography.rowBody)
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
+
+                if !entry.rowPresentation.chipTitles.isEmpty {
+                    FlowLayout(spacing: DesignTokens.textSpacingCompact) {
+                        ForEach(entry.rowPresentation.chipTitles, id: \.self) { title in
+                            WakeContextChip(title: title, isDisabled: !isEnabled.wrappedValue)
+                        }
+                    }
+                }
+            }
+            .contentShape(Rectangle())
+            .onTapGesture(perform: onSelect)
+        }
+    }
+}
+
+struct WakeMonthSectionHeader: View {
+    let title: String
+    let count: Int
+
+    var body: some View {
+        HStack(alignment: .center, spacing: DesignTokens.spacingS) {
+            Text(title)
+                .font(AppTypography.cardTitle)
+            MonthWakeCountBadge(count: count)
+            Spacer()
+        }
     }
 }
 

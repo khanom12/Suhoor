@@ -116,7 +116,7 @@ struct ProductSurfacePresentationTests {
     }
 
     @Test
-    func homeSupportDecisionShowsFajrCheckInBeforeFastingCheckInDuringMorningWindow() {
+    func homeSupportDecisionShowsFastingStatusBeforeFajrCheckInDuringMorningWindow() {
         let currentDay = makeActiveDay(
             day: 5,
             context: .fasting,
@@ -149,10 +149,10 @@ struct ProductSurfacePresentationTests {
         ).supportDecision?.presentation
 
         switch result {
-        case .fajrCompletionPrompt:
-            #expect(Bool(true))
+        case .fasting(let presentation):
+            #expect(presentation.phase == .fastingStatusPrompt)
         default:
-            Issue.record("Expected Fajr completion prompt during morning window.")
+            Issue.record("Expected fasting status prompt during the morning window.")
         }
     }
 
@@ -724,17 +724,20 @@ struct ProductSurfacePresentationTests {
             fastLogEntries: fastEntries
         )
 
-        #expect(snapshot.defaultMorningPlanSummary.wakeLead == "45 min before Fajr")
-        #expect(snapshot.defaultMorningPlanSummary.extraWakeBuffer == "Off")
-        #expect(snapshot.defaultMorningPlanSummary.reminders == "Reminder 10 min before Fajr")
-        #expect(snapshot.defaultMorningPlanSummary.prayerTimes == "Fajr adhan on")
+        #expect(snapshot.defaultMorningPlanSummary.wakeTiming == "Before Fajr")
+        #expect(snapshot.defaultMorningPlanSummary.anchor == "From Fajr start")
+        #expect(snapshot.defaultMorningPlanSummary.wakeOffset == "45 min before Fajr")
+        #expect(snapshot.defaultMorningPlanSummary.reserveBeforeEnd == "Not needed")
+        #expect(snapshot.defaultMorningPlanSummary.latestWake == "Off")
+        #expect(snapshot.defaultMorningPlanSummary.fastingCues == "Reminder + Fajr cue")
+        #expect(snapshot.defaultMorningPlanSummary.prayerTimes == "Fajr cue on")
         #expect(snapshot.configuredPlansSnapshot.upcomingSpecialMornings.count == 2)
         #expect(snapshot.qadaProgress.completed == 1)
         #expect(snapshot.qadaProgress.remaining == 2)
     }
 
     @Test
-    func homeHeroSublineUsesFajrBeginsCopy() {
+    func homeHeroSublineReflectsResolvedWakeLanguage() {
         let day = makeActiveDay(
             day: 12,
             context: .standard,
@@ -744,8 +747,8 @@ struct ProductSurfacePresentationTests {
 
         let subline = ProductSurfacePresentation.homeHeroSubline(for: day)
 
-        #expect(subline.contains("Fajr at"))
-        #expect(subline.contains("Fajr begins at") == false)
+        #expect(subline.contains("Before Fajr"))
+        #expect(subline.contains("Fajr at") == false)
     }
 
     @Test
@@ -761,8 +764,9 @@ struct ProductSurfacePresentationTests {
         let adjustedPresentation = ProductSurfacePresentation.scheduleRowPresentation(for: day, hasDayOverride: true)
 
         #expect(defaultPresentation.detailText.contains("Fajr at"))
-        #expect(defaultPresentation.detailText.contains("Adjusted") == false)
-        #expect(adjustedPresentation.detailText.contains("Adjusted"))
+        #expect(defaultPresentation.stateLabel == "Before Fajr")
+        #expect(defaultPresentation.secondaryExplanation == nil)
+        #expect(adjustedPresentation.secondaryExplanation == "Adjusted for this date")
         #expect(adjustedPresentation.chipTitles.contains("Adjusted"))
     }
 

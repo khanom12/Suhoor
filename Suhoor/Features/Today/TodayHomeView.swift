@@ -75,12 +75,7 @@ struct TodayHomeView: View {
     }
 
     private func shouldRenderSupportCardOnHome(_ presentation: HomeSupportCardPresentation) -> Bool {
-        switch presentation {
-        case .blockingIssue:
-            return true
-        case .fajrCompletionPrompt, .forbiddenFastNotice, .fasting:
-            return false
-        }
+        true
     }
 
     private func dismissedWarnings(on now: Date) -> Set<FastWarning> {

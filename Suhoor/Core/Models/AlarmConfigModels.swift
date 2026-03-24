@@ -118,6 +118,7 @@ struct IftarDeliverySelection: Codable, Equatable, Sendable {
 struct DefaultAlarmConfig: Codable, Equatable, Sendable {
     var suhoorEnabledDefault: Bool
     var reminderEnabledDefault: Bool
+    var fastingReminderEnabledDefault: Bool
     var fajrEnabledDefault: Bool
     var iftarEnabledDefault: Bool
     var defaultWakeState: DefaultWakeState
@@ -141,6 +142,7 @@ struct DefaultAlarmConfig: Codable, Equatable, Sendable {
     init(
         suhoorEnabledDefault: Bool,
         reminderEnabledDefault: Bool,
+        fastingReminderEnabledDefault: Bool,
         fajrEnabledDefault: Bool,
         iftarEnabledDefault: Bool,
         defaultWakeState: DefaultWakeState,
@@ -163,6 +165,7 @@ struct DefaultAlarmConfig: Codable, Equatable, Sendable {
     ) {
         self.suhoorEnabledDefault = suhoorEnabledDefault
         self.reminderEnabledDefault = reminderEnabledDefault
+        self.fastingReminderEnabledDefault = fastingReminderEnabledDefault
         self.fajrEnabledDefault = fajrEnabledDefault
         self.iftarEnabledDefault = iftarEnabledDefault
         self.defaultWakeState = defaultWakeState
@@ -187,6 +190,7 @@ struct DefaultAlarmConfig: Codable, Equatable, Sendable {
     static let `default` = DefaultAlarmConfig(
         suhoorEnabledDefault: true,
         reminderEnabledDefault: true,
+        fastingReminderEnabledDefault: true,
         fajrEnabledDefault: true,
         iftarEnabledDefault: true,
         defaultWakeState: .preFajr,
@@ -211,6 +215,7 @@ struct DefaultAlarmConfig: Codable, Equatable, Sendable {
     enum CodingKeys: String, CodingKey {
         case suhoorEnabledDefault
         case reminderEnabledDefault
+        case fastingReminderEnabledDefault
         case fajrEnabledDefault
         case iftarEnabledDefault
         case defaultWakeState
@@ -239,6 +244,10 @@ struct DefaultAlarmConfig: Codable, Equatable, Sendable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         suhoorEnabledDefault = try container.decode(Bool.self, forKey: .suhoorEnabledDefault)
         reminderEnabledDefault = try container.decode(Bool.self, forKey: .reminderEnabledDefault)
+        fastingReminderEnabledDefault = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .fastingReminderEnabledDefault
+        ) ?? reminderEnabledDefault
         fajrEnabledDefault = try container.decode(Bool.self, forKey: .fajrEnabledDefault)
         iftarEnabledDefault = try container.decodeIfPresent(Bool.self, forKey: .iftarEnabledDefault) ?? true
         defaultSuhoorTimeMode = try container.decodeIfPresent(SuhoorTimeMode.self, forKey: .defaultSuhoorTimeMode)
@@ -291,6 +300,7 @@ struct DefaultAlarmConfig: Codable, Equatable, Sendable {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(suhoorEnabledDefault, forKey: .suhoorEnabledDefault)
         try container.encode(reminderEnabledDefault, forKey: .reminderEnabledDefault)
+        try container.encode(fastingReminderEnabledDefault, forKey: .fastingReminderEnabledDefault)
         try container.encode(fajrEnabledDefault, forKey: .fajrEnabledDefault)
         try container.encode(iftarEnabledDefault, forKey: .iftarEnabledDefault)
         try container.encode(defaultWakeState, forKey: .defaultWakeState)

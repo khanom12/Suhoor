@@ -4,45 +4,14 @@ struct SettingsSummaryFormatter {
     private static let expectedPermissionCount = AppPermissionKind.allCases.count
 
     static func defaultAlarmsSummary(config: DefaultAlarmConfig) -> String {
-        let wakeSummary: String
-        if !config.suhoorEnabledDefault {
-            wakeSummary = Strings.SettingsSummary.wakeOff
-        } else {
-            switch config.defaultWakeState {
-            case .preFajr:
-                wakeSummary = Strings.SettingsSummary.wakeBeforeFajr(config.defaultWakeDeltaMinutes)
-            case .inFajr:
-                if config.normalizedDefaultWakeAnchorType == .fajrEnd {
-                    wakeSummary = "Wake \(config.defaultWakeDeltaMinutes) min before Fajr ends"
-                } else {
-                    wakeSummary = "Wake \(config.defaultWakeDeltaMinutes) min after Fajr"
-                }
-            }
-        }
+        let wakeSummary = ProductSurfacePresentation.defaultWakeOffsetText(for: config)
+        let cueSummary = config.fastingReminderEnabledDefault
+            ? "Fasting reminder on"
+            : "Fasting reminder off"
 
-        let reminderSummary: String
-        if !config.reminderEnabledDefault {
-            reminderSummary = Strings.SettingsSummary.reminderOff
-        } else {
-            switch config.defaultReminderTimeMode {
-            case .beforeFajr:
-                reminderSummary = Strings.SettingsSummary.reminderBeforeFajr(config.defaultReminderMinutesBeforeFajr)
-            case .fixedTime:
-                reminderSummary = Strings.SettingsSummary.reminderFixed(timeText(minutesFromMidnight: config.defaultReminderFixedTimeMinutes))
-            }
-        }
-
-        let fajrSummary = config.fajrEnabledDefault
-            ? Strings.SettingsSummary.fajrOn
-            : Strings.SettingsSummary.fajrOff
-
-        let iftarSummary = config.iftarEnabledDefault
-            ? "Iftar \(config.defaultIftarDelivery.summaryText)"
-            : "Iftar Off"
-
-        var parts = [wakeSummary, reminderSummary, fajrSummary, iftarSummary]
+        var parts = [wakeSummary, cueSummary]
         if let latestCap = config.defaultLatestWakeCapMinutesFromMidnight {
-            parts.append("Cap \(timeText(minutesFromMidnight: latestCap))")
+            parts.append("Latest wake \(timeText(minutesFromMidnight: latestCap))")
         }
         return parts.joined(separator: " · ")
     }

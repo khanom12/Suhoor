@@ -771,6 +771,7 @@ final class AlarmConfigStore: ObservableObject {
                     defaults = DefaultAlarmConfig(
                         suhoorEnabledDefault: legacySettings.isEnabled,
                         reminderEnabledDefault: legacySettings.reminderEnabledGlobal,
+                        fastingReminderEnabledDefault: legacySettings.reminderEnabledGlobal,
                         fajrEnabledDefault: legacySettings.atFajrEnabledGlobal,
                         iftarEnabledDefault: true,
                         defaultWakeState: .preFajr,
