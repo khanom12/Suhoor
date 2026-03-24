@@ -44,72 +44,72 @@ struct AppGlassStyle {
         switch (variant, prominence) {
         case (.hero, _), (_, .high):
             return AppGlassStyle(
-                cornerRadius: 30,
-                padding: 20,
-                fallbackMaterial: .regularMaterial,
-                baseOverlayOpacity: 0.14,
-                warmOverlayOpacity: 0.0,
-                tintOpacity: 0.05,
-                strokeOpacityLight: 0.16,
-                strokeOpacityDark: 0.10,
-                ambientShadow: ShadowStyle(y: 10, blur: 24, opacity: 0.08),
-                contactShadow: ShadowStyle(y: 3, blur: 8, opacity: 0.06),
-                nativeGlassKind: .regular
-            )
-        case (.standard, _):
-            return AppGlassStyle(
-                cornerRadius: 26,
-                padding: 16,
-                fallbackMaterial: .thinMaterial,
-                baseOverlayOpacity: 0.11,
-                warmOverlayOpacity: 0.0,
-                tintOpacity: 0.04,
-                strokeOpacityLight: 0.12,
-                strokeOpacityDark: 0.08,
-                ambientShadow: ShadowStyle(y: 7, blur: 18, opacity: 0.05),
-                contactShadow: ShadowStyle(y: 2, blur: 6, opacity: 0.04),
-                nativeGlassKind: .regular
-            )
-        case (.quiet, _):
-            return AppGlassStyle(
-                cornerRadius: 22,
-                padding: 14,
-                fallbackMaterial: .thinMaterial,
-                baseOverlayOpacity: 0.08,
-                warmOverlayOpacity: 0.0,
-                tintOpacity: 0.02,
-                strokeOpacityLight: 0.09,
-                strokeOpacityDark: 0.06,
-                ambientShadow: ShadowStyle(y: 4, blur: 12, opacity: 0.03),
-                contactShadow: ShadowStyle(y: 1, blur: 4, opacity: 0.02),
-                nativeGlassKind: .clear
-            )
-        case (.tinted, _):
-            return AppGlassStyle(
-                cornerRadius: 26,
+                cornerRadius: 28,
                 padding: 18,
                 fallbackMaterial: .regularMaterial,
                 baseOverlayOpacity: 0.12,
                 warmOverlayOpacity: 0.0,
-                tintOpacity: 0.07,
-                strokeOpacityLight: 0.12,
-                strokeOpacityDark: 0.08,
-                ambientShadow: ShadowStyle(y: 8, blur: 20, opacity: 0.05),
+                tintOpacity: 0.04,
+                strokeOpacityLight: 0.14,
+                strokeOpacityDark: 0.09,
+                ambientShadow: ShadowStyle(y: 8, blur: 18, opacity: 0.05),
                 contactShadow: ShadowStyle(y: 2, blur: 6, opacity: 0.04),
+                nativeGlassKind: .regular
+            )
+        case (.standard, _):
+            return AppGlassStyle(
+                cornerRadius: 24,
+                padding: 14,
+                fallbackMaterial: .thinMaterial,
+                baseOverlayOpacity: 0.10,
+                warmOverlayOpacity: 0.0,
+                tintOpacity: 0.03,
+                strokeOpacityLight: 0.10,
+                strokeOpacityDark: 0.07,
+                ambientShadow: ShadowStyle(y: 5, blur: 12, opacity: 0.035),
+                contactShadow: ShadowStyle(y: 1, blur: 4, opacity: 0.025),
+                nativeGlassKind: .regular
+            )
+        case (.quiet, _):
+            return AppGlassStyle(
+                cornerRadius: 20,
+                padding: 12,
+                fallbackMaterial: .thinMaterial,
+                baseOverlayOpacity: 0.07,
+                warmOverlayOpacity: 0.0,
+                tintOpacity: 0.02,
+                strokeOpacityLight: 0.08,
+                strokeOpacityDark: 0.06,
+                ambientShadow: ShadowStyle(y: 3, blur: 8, opacity: 0.02),
+                contactShadow: ShadowStyle(y: 1, blur: 3, opacity: 0.015),
+                nativeGlassKind: .clear
+            )
+        case (.tinted, _):
+            return AppGlassStyle(
+                cornerRadius: 24,
+                padding: 16,
+                fallbackMaterial: .regularMaterial,
+                baseOverlayOpacity: 0.10,
+                warmOverlayOpacity: 0.0,
+                tintOpacity: 0.06,
+                strokeOpacityLight: 0.10,
+                strokeOpacityDark: 0.08,
+                ambientShadow: ShadowStyle(y: 6, blur: 14, opacity: 0.035),
+                contactShadow: ShadowStyle(y: 1, blur: 4, opacity: 0.025),
                 nativeGlassKind: .regular
             )
         case (.grouped, _):
             return AppGlassStyle(
-                cornerRadius: 28,
+                cornerRadius: 24,
                 padding: 0,
                 fallbackMaterial: .thinMaterial,
-                baseOverlayOpacity: 0.13,
+                baseOverlayOpacity: 0.11,
                 warmOverlayOpacity: 0.0,
                 tintOpacity: 0.03,
-                strokeOpacityLight: 0.12,
+                strokeOpacityLight: 0.10,
                 strokeOpacityDark: 0.08,
-                ambientShadow: ShadowStyle(y: 8, blur: 18, opacity: 0.04),
-                contactShadow: ShadowStyle(y: 2, blur: 6, opacity: 0.03),
+                ambientShadow: ShadowStyle(y: 5, blur: 12, opacity: 0.03),
+                contactShadow: ShadowStyle(y: 1, blur: 4, opacity: 0.02),
                 nativeGlassKind: .clear
             )
         }
@@ -499,20 +499,20 @@ extension View {
     func appToolbarButtonChrome() -> some View {
         if #available(iOS 26.0, *) {
             self
-                .padding(10)
-                .glassEffect(.regular, in: Circle())
+                .padding(8)
+                .glassEffect(.clear, in: Circle())
                 .overlay {
                     Circle()
-                        .stroke(Color.white.opacity(0.10), lineWidth: 1)
+                        .stroke(Color.white.opacity(0.08), lineWidth: 1)
                 }
         } else {
             self
-                .padding(10)
+                .padding(8)
                 .background(
                     Circle()
-                        .fill(.thinMaterial)
+                        .fill(.ultraThinMaterial)
                         .overlay {
-                            Circle().stroke(Color.white.opacity(0.08), lineWidth: 1)
+                            Circle().stroke(Color.white.opacity(0.06), lineWidth: 1)
                         }
                 )
         }

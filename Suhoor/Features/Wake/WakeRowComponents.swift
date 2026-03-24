@@ -2,85 +2,64 @@ import SwiftUI
 
 struct WakeRowView: View {
     let entry: WakeRowEntry
-    let isEnabled: Binding<Bool>
     let onSelect: () -> Void
 
     init(
         entry: WakeRowEntry,
-        isEnabled: Binding<Bool>,
         onSelect: @escaping () -> Void
     ) {
         self.entry = entry
-        self.isEnabled = isEnabled
         self.onSelect = onSelect
     }
 
     var body: some View {
-        HStack(alignment: .center, spacing: DesignTokens.space12) {
-            Button(action: onSelect) {
-                VStack(alignment: .leading, spacing: DesignTokens.textSpacingTight) {
-                    HStack(alignment: .firstTextBaseline, spacing: DesignTokens.spacingS) {
-                        Text(dateLabel)
-                            .font(.subheadline.weight(.medium))
-                            .foregroundStyle(dateLabelColor)
+        Button(action: onSelect) {
+            VStack(alignment: .leading, spacing: DesignTokens.textSpacingCompact) {
+                HStack(alignment: .firstTextBaseline, spacing: DesignTokens.spacingS) {
+                    Text(dateLabel)
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(dateLabelColor)
 
-                        if entry.rowPresentation.meaningText != ProductSurfacePresentation.ordinaryDaySummaryText {
-                            Text(entry.rowPresentation.meaningText)
-                                .font(.footnote.weight(.medium))
-                                .foregroundStyle(supportingTextColor)
-                                .lineLimit(1)
-                        }
+                    if entry.rowPresentation.meaningText != ProductSurfacePresentation.ordinaryDaySummaryText {
+                        Text(entry.rowPresentation.meaningText)
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(supportingTextColor)
+                            .lineLimit(1)
                     }
 
-                    HStack(alignment: .firstTextBaseline, spacing: DesignTokens.spacingM) {
-                        WakeAlarmTimeLockup(
-                            date: entry.schedule.wakeDate,
-                            isDisabled: isDisabled
-                        )
+                    Spacer(minLength: DesignTokens.spacingS)
 
-                        VStack(alignment: .leading, spacing: DesignTokens.textSpacingMicro) {
-                            Text(entry.rowPresentation.stateLabel)
-                                .font(.footnote.weight(.semibold))
-                                .foregroundStyle(isDisabled ? Color(UIColor.tertiaryLabel) : Color.primary.opacity(0.8))
-
-                            Text(entry.rowPresentation.detailText)
-                                .font(.caption)
-                                .foregroundStyle(supportingTextColor)
-                                .lineLimit(1)
-                                .truncationMode(.tail)
-                        }
+                    if let visibleChipTitle {
+                        WakeContextChip(title: visibleChipTitle, isDisabled: isSkipped)
                     }
+                }
 
-                    if let secondaryExplanation = entry.rowPresentation.secondaryExplanation {
-                        Text(secondaryExplanation)
+                HStack(alignment: .firstTextBaseline, spacing: DesignTokens.spacingM) {
+                    WakeAlarmTimeLockup(
+                        date: entry.schedule.wakeDate,
+                        isDisabled: isSkipped
+                    )
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(entry.rowPresentation.stateLabel)
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(isSkipped ? Color(UIColor.tertiaryLabel) : Color.primary.opacity(0.82))
+
+                        Text(entry.rowPresentation.detailText)
                             .font(.caption)
                             .foregroundStyle(supportingTextColor)
                             .lineLimit(1)
                             .truncationMode(.tail)
                     }
-
-                    let visibleChips = Array(entry.rowPresentation.chipTitles.prefix(2))
-                    if !visibleChips.isEmpty {
-                        FlowLayout(spacing: DesignTokens.textSpacingCompact) {
-                            ForEach(visibleChips, id: \.self) { title in
-                                WakeContextChip(title: title, isDisabled: isDisabled)
-                            }
-                        }
-                    }
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .layoutPriority(1)
-                .contentShape(Rectangle())
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel(accessibilitySummary)
             }
-            .buttonStyle(.plain)
-
-            Toggle("", isOn: isEnabled)
-                .labelsHidden()
-                .accessibilityLabel(toggleAccessibilityLabel)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(accessibilitySummary)
         }
-        .padding(.vertical, DesignTokens.space4)
+        .buttonStyle(.plain)
+        .padding(.vertical, DesignTokens.space2)
     }
 
     private var dateLabel: String {
@@ -94,42 +73,45 @@ struct WakeRowView: View {
             parts.append(entry.rowPresentation.meaningText)
         }
         parts.append(entry.rowPresentation.stateLabel)
-        if let secondaryExplanation = entry.rowPresentation.secondaryExplanation {
-            parts.append(secondaryExplanation)
-        }
         parts.append(contentsOf: entry.rowPresentation.detailText.components(separatedBy: " · "))
-        parts.append(isDisabled ? "Off" : "On")
         return parts.joined(separator: ". ") + "."
     }
 
-    private var isDisabled: Bool { !isEnabled.wrappedValue }
+    private var isSkipped: Bool {
+        entry.rowPresentation.availability.state == .skipped
+    }
 
     private var dateLabelColor: Color {
-        isDisabled ? Color(UIColor.tertiaryLabel) : Color.primary.opacity(0.84)
+        isSkipped ? Color(UIColor.tertiaryLabel) : Color.primary.opacity(0.84)
     }
 
     private var supportingTextColor: Color {
-        isDisabled ? Color(UIColor.tertiaryLabel) : .secondary
+        isSkipped ? Color(UIColor.tertiaryLabel) : .secondary
     }
 
     private var primaryTimeText: String {
         TimeFormatters.timeFormatter.string(from: entry.schedule.wakeDate)
     }
 
-    private var toggleAccessibilityLabel: String {
-        "\(isEnabled.wrappedValue ? "Turn off" : "Turn on") wake for \(WakeRowPresentation.accessibilityDateLabel(for: entry.schedule.date))"
+    private var visibleChipTitle: String? {
+        entry.rowPresentation.chipTitles.first { title in
+            title != entry.rowPresentation.stateLabel
+                && title != entry.rowPresentation.meaningText
+                && title != "Skipped"
+                && title != "Fixed wake"
+                && title != "After Fajr"
+        }
     }
 }
 
 struct WakeFeaturedEntryCard: View {
     let entry: WakeRowEntry
-    let isEnabled: Binding<Bool>
     let onSelect: () -> Void
 
     var body: some View {
-        AppGlassSurface(variant: .standard, prominence: .high) {
-            VStack(alignment: .leading, spacing: DesignTokens.spacingS) {
-                HStack(alignment: .top, spacing: DesignTokens.spacingM) {
+        AppGlassSurface(variant: .standard, contentPadding: 16) {
+            VStack(alignment: .leading, spacing: DesignTokens.spacingXS) {
+                HStack(alignment: .firstTextBaseline, spacing: DesignTokens.spacingS) {
                     VStack(alignment: .leading, spacing: DesignTokens.textSpacingCompact) {
                         Text(WakeRowPresentation.dateLabel(for: entry.schedule.date))
                             .font(AppTypography.badge)
@@ -137,48 +119,59 @@ struct WakeFeaturedEntryCard: View {
 
                         if entry.rowPresentation.meaningText != ProductSurfacePresentation.ordinaryDaySummaryText {
                             Text(entry.rowPresentation.meaningText)
-                                .font(AppTypography.cardTitle)
+                                .font(AppTypography.rowTitle)
                         }
                     }
 
                     Spacer()
 
-                    Toggle("", isOn: isEnabled)
-                        .labelsHidden()
+                    if let visibleChipTitle {
+                        WakeContextChip(title: visibleChipTitle, isDisabled: isSkipped)
+                    }
                 }
 
                 WakeAlarmTimeLockup(
                     date: entry.schedule.wakeDate,
-                    isDisabled: !isEnabled.wrappedValue
+                    isDisabled: isSkipped
                 )
 
-                VStack(alignment: .leading, spacing: DesignTokens.textSpacingTight) {
+                VStack(alignment: .leading, spacing: DesignTokens.textSpacingMicro) {
                     Text(entry.rowPresentation.stateLabel)
                         .font(AppTypography.rowTitle)
 
                     Text(entry.rowPresentation.detailText)
-                        .font(AppTypography.rowBody)
+                        .font(.footnote)
                         .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
 
-                    if let secondaryExplanation = entry.rowPresentation.secondaryExplanation {
+                    if let secondaryExplanation = entry.rowPresentation.secondaryExplanation,
+                       visibleChipTitle == nil,
+                       secondaryExplanation != entry.rowPresentation.availability.availabilityLabel {
                         Text(secondaryExplanation)
-                            .font(AppTypography.metricLabel)
+                            .font(.caption)
                             .foregroundStyle(.secondary)
-                    }
-                }
-
-                let visibleChips = Array(entry.rowPresentation.chipTitles.prefix(2))
-                if !visibleChips.isEmpty {
-                    FlowLayout(spacing: DesignTokens.textSpacingCompact) {
-                        ForEach(visibleChips, id: \.self) { title in
-                            WakeContextChip(title: title, isDisabled: !isEnabled.wrappedValue)
-                        }
+                            .lineLimit(1)
+                            .truncationMode(.tail)
                     }
                 }
             }
             .contentShape(Rectangle())
             .onTapGesture(perform: onSelect)
+        }
+    }
+
+    private var isSkipped: Bool {
+        entry.rowPresentation.availability.state == .skipped
+    }
+
+    private var visibleChipTitle: String? {
+        entry.rowPresentation.chipTitles.first { title in
+            title != entry.rowPresentation.stateLabel
+                && title != entry.rowPresentation.meaningText
+                && title != "Skipped"
+                && title != "Fixed wake"
+                && title != "After Fajr"
         }
     }
 }
@@ -191,7 +184,9 @@ struct WakeMonthSectionHeader: View {
         HStack(alignment: .center, spacing: DesignTokens.spacingS) {
             Text(title)
                 .font(AppTypography.cardTitle)
-            MonthWakeCountBadge(count: count)
+            Text(count == 1 ? "1 wake" : "\(count) wakes")
+                .font(.caption)
+                .foregroundStyle(.secondary)
             Spacer()
         }
     }
@@ -222,7 +217,7 @@ private struct WakeAlarmTimeLockup: View {
     let date: Date
     let isDisabled: Bool
 
-    @ScaledMetric(relativeTo: .title2) private var timePointSize: CGFloat = 40
+    @ScaledMetric(relativeTo: .title3) private var timePointSize: CGFloat = 34
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 3) {
@@ -255,27 +250,6 @@ private struct WakeAlarmTimeLockup: View {
         formatter.locale = .current
         return formatter
     }()
-}
-
-struct MonthWakeCountBadge: View {
-    let count: Int
-
-    var body: some View {
-        Text("\(count)")
-            .font(AppTypography.badge)
-            .foregroundStyle(.secondary)
-            .padding(.vertical, DesignTokens.badgeVerticalPadding)
-            .padding(.horizontal, DesignTokens.chipHorizontalPaddingCompact)
-            .background(
-                Capsule()
-                    .fill(Color.secondary.opacity(0.10))
-                    .overlay {
-                        Capsule()
-                            .stroke(Color.white.opacity(0.08), lineWidth: 1)
-                    }
-            )
-            .accessibilityLabel(Strings.AlarmsTab.alarmCountAccessibility(count))
-    }
 }
 
 enum WakeRowPresentation {

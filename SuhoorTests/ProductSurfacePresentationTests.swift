@@ -52,7 +52,7 @@ struct ProductSurfacePresentationTests {
         )
 
         #expect(snapshot.upcomingSpecialMornings.count == 3)
-        #expect(snapshot.upcomingSpecialMornings.contains(where: { $0.title == "Adjusted" }))
+        #expect(snapshot.upcomingSpecialMornings.contains(where: { $0.title == "Changed" }))
         #expect(snapshot.upcomingSpecialMornings.contains(where: { $0.title == "Qada fast" }))
         #expect(snapshot.upcomingSpecialMornings.contains(where: { $0.title == "Fasting day" }))
         #expect(snapshot.qadaSummary == "2 completed · 4 remaining")
@@ -766,8 +766,69 @@ struct ProductSurfacePresentationTests {
         #expect(defaultPresentation.detailText.contains("before Fajr"))
         #expect(defaultPresentation.stateLabel == "Before Fajr")
         #expect(defaultPresentation.secondaryExplanation == nil)
-        #expect(adjustedPresentation.secondaryExplanation == "Adjusted for this date")
-        #expect(adjustedPresentation.chipTitles.contains("Adjusted"))
+        #expect(adjustedPresentation.secondaryExplanation == "Changed for this date")
+        #expect(adjustedPresentation.chipTitles.contains("Changed"))
+    }
+
+    @Test
+    func wakeAvailabilityPresentationTracksDefaultChangedAndSkippedStates() {
+        let defaultDay = makeActiveDay(
+            day: 14,
+            context: .standard,
+            supportingTags: [.dailyPlan],
+            provenances: [defaultDailyProvenance]
+        )
+        let changedDay = makeActiveDay(
+            day: 15,
+            context: .standard,
+            supportingTags: [.dailyPlan],
+            provenances: [manualProvenance(label: "Manual day")]
+        )
+        let skippedDay = makeActiveDay(
+            day: 16,
+            context: .standard,
+            supportingTags: [.dailyPlan],
+            provenances: [defaultDailyProvenance],
+            skipDay: true
+        )
+
+        let defaultAvailability = ProductSurfacePresentation.wakeAvailabilityPresentation(
+            for: defaultDay,
+            hasCustomChange: false
+        )
+        let changedAvailability = ProductSurfacePresentation.wakeAvailabilityPresentation(
+            for: changedDay,
+            hasCustomChange: true
+        )
+        let skippedAvailability = ProductSurfacePresentation.wakeAvailabilityPresentation(
+            for: skippedDay,
+            hasCustomChange: false
+        )
+
+        #expect(defaultAvailability.state == .activeDefault)
+        #expect(defaultAvailability.statusSummary == "Uses your default morning plan")
+        #expect(changedAvailability.state == .activeOverride)
+        #expect(changedAvailability.availabilityLabel == "Changed for this date")
+        #expect(skippedAvailability.state == .skipped)
+        #expect(skippedAvailability.statusSummary == "Morning off for this date")
+    }
+
+    @Test
+    func skippedScheduleRowPresentationShowsSkippedState() {
+        let day = makeActiveDay(
+            day: 17,
+            context: .standard,
+            supportingTags: [.dailyPlan],
+            provenances: [defaultDailyProvenance],
+            skipDay: true
+        )
+
+        let presentation = ProductSurfacePresentation.scheduleRowPresentation(for: day, hasDayOverride: true)
+
+        #expect(presentation.stateLabel == "Skipped")
+        #expect(presentation.detailText == "No wake for this date")
+        #expect(presentation.availability.statusSummary == "Morning off for this date")
+        #expect(presentation.chipTitles.contains("Skipped"))
     }
 
     @Test
@@ -872,6 +933,7 @@ struct ProductSurfacePresentationTests {
         context: MorningContextType,
         supportingTags: [DayTag],
         provenances: [ResolvedScheduledDateProvenance],
+        skipDay: Bool = false,
         dailyCompletion: DailyCompletionSnapshot? = nil,
         scheduledEvents: [ScheduledEvent] = []
     ) -> ActiveAlarmDay {
@@ -895,7 +957,7 @@ struct ProductSurfacePresentationTests {
         let effectiveConfig = EffectiveDailyConfig(
             date: date,
             defaultsActive: true,
-            skipDay: false,
+            skipDay: skipDay,
             suhoorEnabled: true,
             reminderEnabled: true,
             fajrEnabled: true,
@@ -914,7 +976,7 @@ struct ProductSurfacePresentationTests {
             fajrSoundChoice: .adhanSoft,
             iftarDelivery: .off,
             iftarSoundChoice: .systemDefault,
-            hasOverrides: false
+            hasOverrides: skipDay
         )
 
         let resolvedContext = ResolvedDayContext(

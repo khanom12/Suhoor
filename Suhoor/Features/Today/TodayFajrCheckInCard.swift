@@ -7,7 +7,7 @@ struct TodayFajrCheckInCard: View {
 
     var body: some View {
         AppGlassSurface(variant: .quiet) {
-            VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
+            VStack(alignment: .leading, spacing: DesignTokens.spacingS) {
                 VStack(alignment: .leading, spacing: DesignTokens.textSpacingTight) {
                     Text(presentation.title)
                         .font(AppTypography.cardTitle)
@@ -17,20 +17,20 @@ struct TodayFajrCheckInCard: View {
                         .foregroundStyle(.secondary)
                 }
 
-                HStack(spacing: DesignTokens.spacingS) {
-                    Button {
-                        withAnimation(.easeInOut(duration: 0.22)) {
-                            scheduleManager.performCompletionEdit(
-                                .setPrayerStatus(dateKey: presentation.dateKey, status: .completed),
-                                source: .homeCard
-                            )
-                        }
-                    } label: {
-                        Text(Strings.HomeSurface.fajrPromptPrimary)
-                            .frame(maxWidth: .infinity)
+                Button {
+                    withAnimation(.easeInOut(duration: 0.22)) {
+                        scheduleManager.performCompletionEdit(
+                            .setPrayerStatus(dateKey: presentation.dateKey, status: .completed),
+                            source: .homeCard
+                        )
                     }
-                    .appControlStyle(.primary, tint: .green)
+                } label: {
+                    Text(Strings.HomeSurface.fajrPromptPrimary)
+                        .frame(maxWidth: .infinity)
+                }
+                .appControlStyle(.primary, tint: .green)
 
+                HStack(spacing: DesignTokens.spacingS) {
                     Button {
                         withAnimation(.easeInOut(duration: 0.22)) {
                             scheduleManager.performCompletionEdit(
@@ -40,15 +40,16 @@ struct TodayFajrCheckInCard: View {
                         }
                     } label: {
                         Text(Strings.HomeSurface.fajrPromptSecondary)
-                            .frame(maxWidth: .infinity)
                     }
                     .appControlStyle(.secondary, tint: .secondary)
-                }
 
-                if let onLater {
-                    Button(Strings.HomeSurface.fajrPromptLater, action: onLater)
-                        .font(AppTypography.metricLabel)
-                        .appControlStyle(.quiet)
+                    if let onLater {
+                        Button(Strings.HomeSurface.fajrPromptLater, action: onLater)
+                            .font(AppTypography.metricLabel)
+                            .appControlStyle(.quiet)
+                    }
+
+                    Spacer(minLength: 0)
                 }
             }
         }

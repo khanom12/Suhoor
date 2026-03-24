@@ -17,7 +17,7 @@ struct TodayHomeView: View {
             )
 
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: DesignTokens.spacingXL) {
+                LazyVStack(alignment: .leading, spacing: DesignTokens.spacingL) {
                     TodayDateContextBlock(snapshot: snapshot)
 
                     TodayNextWakeHeroCard(
@@ -36,6 +36,10 @@ struct TodayHomeView: View {
                 .padding(.horizontal, DesignTokens.spacingXL)
                 .padding(.top, DesignTokens.spacingXS)
                 .padding(.bottom, DesignTokens.spacingXL)
+            }
+            .safeAreaInset(edge: .bottom) {
+                Color.clear
+                    .frame(height: DesignTokens.spacingL)
             }
             .appScrollableChrome()
             .navigationTitle("Home")
@@ -171,16 +175,15 @@ private struct TodayNextWakeHeroCard: View {
     var body: some View {
         AppGlassSurface(
             variant: .hero,
-            prominence: .high,
             tint: DawnColor.lightGold100,
-            contentPadding: 20
+            contentPadding: 18
         ) {
-            VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
+            VStack(alignment: .leading, spacing: DesignTokens.spacingS) {
                 Text(presentation?.label ?? Strings.HomeSurface.heroTitle)
                     .appTextRole(.eyebrow)
 
                 if let summary {
-                    VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
+                    VStack(alignment: .leading, spacing: DesignTokens.spacingS) {
                         HeroWakeTimeLockup(date: summary.day.schedule.wakeDate)
 
                         VStack(alignment: .leading, spacing: DesignTokens.textSpacingCompact) {
@@ -234,7 +237,7 @@ private struct TodayNextWakeHeroCard: View {
 private struct HeroWakeTimeLockup: View {
     let date: Date
 
-    @ScaledMetric(relativeTo: .largeTitle) private var timePointSize: CGFloat = 46
+    @ScaledMetric(relativeTo: .largeTitle) private var timePointSize: CGFloat = 42
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 4) {

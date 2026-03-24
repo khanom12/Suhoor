@@ -198,7 +198,7 @@ struct FajrWindowSurfaceProvider {
         let primaryMeaning = ProductSurfacePresentation.dayMeaningText(for: day, style: .wakeRow)
         let tags = Array(
             NSOrderedSet(
-                array: ([primaryMeaning] + secondaryTitles + (overrideDateKeys.contains(day.dateKey) ? ["Adjusted"] : []))
+                array: ([primaryMeaning] + secondaryTitles + (overrideDateKeys.contains(day.dateKey) ? ["Changed"] : []))
                     .filter { !$0.isEmpty }
             )
         ).compactMap { $0 as? String }
@@ -408,7 +408,7 @@ struct FajrWindowSurfaceProvider {
         let comparisonItem = comparisonItem(for: point, overlay: overlay)
         let statusText: String?
         if point.isOverride {
-            statusText = "Adjusted for this date"
+            statusText = "Changed for this date"
         } else if point.isSpecialDay {
             statusText = point.contextTags.first
         } else {
@@ -565,7 +565,7 @@ struct FajrWindowSurfaceProvider {
                     ? "The supported end moves through the year, which is why a wake that feels roomy in one season can feel much tighter in another."
                     : "This keeps the month grounded in real timing, so the pattern stays readable without turning your mornings into a dashboard.",
                 metrics: [
-                    FajrWindowMetric(id: "adjusted-count", label: "Adjusted mornings", value: "\(adjustedCount)"),
+                    FajrWindowMetric(id: "adjusted-count", label: "Changed mornings", value: "\(adjustedCount)"),
                     FajrWindowMetric(id: "special-count", label: "Special contexts", value: "\(specialCount)"),
                     FajrWindowMetric(
                         id: "earliest-boundary",
@@ -621,7 +621,7 @@ struct FajrWindowSurfaceProvider {
             insights.append(
                 FajrWindowInsightItem(
                     id: "adjusted-day",
-                    title: "Adjusted morning",
+                    title: "Changed morning",
                     detail: "\(adjusted.mediumLabel) is using a date-specific change instead of the usual morning plan."
                 )
             )

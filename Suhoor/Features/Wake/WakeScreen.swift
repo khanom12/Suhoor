@@ -22,7 +22,6 @@ private enum WakeDestination: Identifiable, Hashable {
 
 struct WakeScreen: View {
     @EnvironmentObject private var scheduleManager: ScheduleManager
-    @EnvironmentObject private var alarmConfigStore: AlarmConfigStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
 
@@ -32,17 +31,16 @@ struct WakeScreen: View {
 
     var body: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: DesignTokens.spacingM) {
+            LazyVStack(alignment: .leading, spacing: DesignTokens.spacingL) {
                 if featuredEntry == nil && monthSections.isEmpty {
                     emptyStateView
                 } else {
                     if let featuredEntry {
-                        VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
+                        VStack(alignment: .leading, spacing: DesignTokens.spacingS) {
                             AppSectionHeader("Next wake")
 
                             WakeFeaturedEntryCard(
-                                entry: featuredEntry,
-                                isEnabled: dayEnabledBinding(for: featuredEntry)
+                                entry: featuredEntry
                             ) {
                                 destination = .day(featuredEntry.schedule)
                             }
@@ -50,7 +48,7 @@ struct WakeScreen: View {
                     }
 
                     ForEach(monthSections) { section in
-                        VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
+                        VStack(alignment: .leading, spacing: DesignTokens.spacingS) {
                             WakeMonthSectionHeader(
                                 title: section.key.title,
                                 count: section.visibleAlarmCount
@@ -66,13 +64,12 @@ struct WakeScreen: View {
                                 AppInsetGroup {
                                     ForEach(Array(section.entries.enumerated()), id: \.element.id) { index, entry in
                                         WakeRowView(
-                                            entry: entry,
-                                            isEnabled: dayEnabledBinding(for: entry)
+                                            entry: entry
                                         ) {
                                             destination = .day(entry.schedule)
                                         }
                                         .padding(.horizontal, DesignTokens.spacingM)
-                                        .padding(.vertical, DesignTokens.space8)
+                                        .padding(.vertical, DesignTokens.space4)
 
                                         if index < section.entries.count - 1 {
                                             AppGroupDivider(inset: DesignTokens.spacingM)
@@ -85,13 +82,13 @@ struct WakeScreen: View {
                     }
                 }
             }
-            .padding(.horizontal, DesignTokens.spacingL)
+            .padding(.horizontal, DesignTokens.spacingM)
             .padding(.top, DesignTokens.spacingS)
-            .padding(.bottom, DesignTokens.spacingL)
+            .padding(.bottom, DesignTokens.spacingXL)
         }
         .safeAreaInset(edge: .bottom) {
             Color.clear
-                .frame(height: DesignTokens.spacingXL)
+                .frame(height: DesignTokens.spacingL)
         }
         .appScrollableChrome()
         .navigationTitle(Strings.AlarmsTab.title)
@@ -107,9 +104,6 @@ struct WakeScreen: View {
         }
         .onChange(of: scheduleManager.currentRevision) { _, _ in
             refreshWakeSurfaceIfNeeded()
-        }
-        .onChange(of: alarmConfigStore.currentRevision) { _, _ in
-            refreshWakeSurfaceIfNeeded(force: true)
         }
         .onChange(of: scenePhase) { _, newPhase in
             guard newPhase == .active else { return }
@@ -228,24 +222,5 @@ struct WakeScreen: View {
                 refreshListSnapshot(animated: false)
             }
         }
-    }
-
-    private func dayEnabledBinding(for entry: WakeRowEntry) -> Binding<Bool> {
-        Binding(
-            get: {
-                if let activeDay = scheduleManager.activeDay(for: entry.schedule.date, timeZone: currentTimeZone) {
-                    return !activeDay.effectiveConfig.skipDay && activeDay.effectiveConfig.hasAnyEnabled
-                }
-                return entry.isEnabled
-            },
-            set: { newValue in
-                alarmConfigStore.setDayEnabled(
-                    newValue,
-                    for: entry.schedule.date,
-                    timeZone: currentTimeZone
-                )
-                scheduleManager.requestRescheduleDay(entry.schedule.date)
-            }
-        )
     }
 }

@@ -1998,9 +1998,9 @@ struct ScheduleManagerHijriTests {
         let presentation = ProductSurfacePresentation.scheduleRowPresentation(for: activeDay, hasDayOverride: true)
         #expect(presentation.meaningText.isEmpty == false)
         #expect(presentation.stateLabel.isEmpty == false)
-        #expect(presentation.secondaryExplanation == "Adjusted for this date")
+        #expect(presentation.secondaryExplanation == "Changed for this date")
         #expect(presentation.detailText.contains("before Fajr"))
-        #expect(presentation.chipTitles.contains("Adjusted"))
+        #expect(presentation.chipTitles.contains("Changed"))
     }
 
     private static func makeDate(

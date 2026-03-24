@@ -153,7 +153,7 @@ struct FajrWindowSurfaceProviderTests {
         #expect(selectedDay.boundaryTruth == .sunriseProxy)
         #expect(selectedDay.primaryItems.contains(where: { $0.label == "Supported end (sunrise proxy)" }))
         #expect(selectedDay.comparisonItem?.label == "Fasting wake")
-        #expect(selectedDay.statusText == "Adjusted for this date")
+        #expect(selectedDay.statusText == "Changed for this date")
     }
 
     @Test

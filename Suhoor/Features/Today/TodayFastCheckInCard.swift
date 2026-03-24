@@ -42,7 +42,7 @@ struct TodayFastCheckInCard: View {
 
     @ViewBuilder
     private var promptContent: some View {
-        VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
+        VStack(alignment: .leading, spacing: DesignTokens.spacingS) {
             HStack(alignment: .top, spacing: DesignTokens.spacingM) {
                 VStack(alignment: .leading, spacing: DesignTokens.textSpacingTight) {
                     Text(presentation.title)
@@ -77,7 +77,9 @@ struct TodayFastCheckInCard: View {
                     }
                     .appControlStyle(.primary, tint: .green)
                 }
+            }
 
+            HStack(spacing: DesignTokens.spacingS) {
                 if let secondaryActionTitle = presentation.secondaryActionTitle {
                     Button {
                         withAnimation(.easeInOut(duration: 0.22)) {
@@ -92,19 +94,20 @@ struct TodayFastCheckInCard: View {
                         }
                     } label: {
                         Text(secondaryActionTitle)
-                            .frame(maxWidth: .infinity)
                     }
                     .appControlStyle(
                         .secondary,
                         tint: presentation.phase == .fastCompletionPrompt ? .red : .secondary
                     )
                 }
-            }
 
-            if let onLater {
-                Button(Strings.HomeSurface.fajrPromptLater, action: onLater)
-                    .font(AppTypography.metricLabel)
-                    .appControlStyle(.quiet)
+                if let onLater {
+                    Button(Strings.HomeSurface.fajrPromptLater, action: onLater)
+                        .font(AppTypography.metricLabel)
+                        .appControlStyle(.quiet)
+                }
+
+                Spacer(minLength: 0)
             }
         }
     }
