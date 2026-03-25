@@ -17,7 +17,7 @@ struct TodayHomeView: View {
             )
 
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: DesignTokens.spacingL) {
+                LazyVStack(alignment: .leading, spacing: DesignTokens.spacingM) {
                     TodayDateContextBlock(snapshot: snapshot)
 
                     TodayNextWakeHeroCard(
@@ -33,13 +33,13 @@ struct TodayHomeView: View {
                         )
                     }
                 }
-                .padding(.horizontal, DesignTokens.spacingXL)
-                .padding(.top, DesignTokens.spacingXS)
-                .padding(.bottom, DesignTokens.spacingXL)
+                .padding(.horizontal, DesignTokens.spacingL)
+                .padding(.top, DesignTokens.space2)
+                .padding(.bottom, DesignTokens.spacingL)
             }
             .safeAreaInset(edge: .bottom) {
                 Color.clear
-                    .frame(height: DesignTokens.spacingL)
+                    .frame(height: DesignTokens.spacingXL)
             }
             .appScrollableChrome()
             .navigationTitle("Home")
@@ -51,7 +51,6 @@ struct TodayHomeView: View {
                         Image(systemName: "gearshape")
                             .font(AppTypography.navAccessory)
                             .foregroundStyle(.secondary)
-                            .appToolbarButtonChrome()
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Open Settings")
@@ -138,7 +137,7 @@ private struct TodayDateContextBlock: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.top, DesignTokens.space2)
-        .padding(.bottom, DesignTokens.space4)
+        .padding(.bottom, DesignTokens.space2)
     }
 }
 
@@ -176,17 +175,17 @@ private struct TodayNextWakeHeroCard: View {
         AppGlassSurface(
             variant: .hero,
             tint: DawnColor.lightGold100,
-            contentPadding: 18
+            contentPadding: 16
         ) {
-            VStack(alignment: .leading, spacing: DesignTokens.spacingS) {
+            VStack(alignment: .leading, spacing: DesignTokens.spacingXS) {
                 Text(presentation?.label ?? Strings.HomeSurface.heroTitle)
                     .appTextRole(.eyebrow)
 
                 if let summary {
-                    VStack(alignment: .leading, spacing: DesignTokens.spacingS) {
+                    VStack(alignment: .leading, spacing: DesignTokens.spacingXS) {
                         HeroWakeTimeLockup(date: summary.day.schedule.wakeDate)
 
-                        VStack(alignment: .leading, spacing: DesignTokens.textSpacingCompact) {
+                        VStack(alignment: .leading, spacing: DesignTokens.textSpacingMicro) {
                             if let meaning = presentation?.meaningText {
                                 Text(meaning)
                                     .font(AppTypography.cardTitle)
@@ -215,7 +214,7 @@ private struct TodayNextWakeHeroCard: View {
                         .appControlStyle(.primary, tint: DawnColor.accent)
                     }
                 } else {
-                    VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
+                    VStack(alignment: .leading, spacing: DesignTokens.spacingS) {
                         Text(Strings.HomeSurface.heroEmptyTitle)
                             .font(AppTypography.heroTitle)
 
@@ -237,7 +236,7 @@ private struct TodayNextWakeHeroCard: View {
 private struct HeroWakeTimeLockup: View {
     let date: Date
 
-    @ScaledMetric(relativeTo: .largeTitle) private var timePointSize: CGFloat = 42
+    @ScaledMetric(relativeTo: .title) private var timePointSize: CGFloat = 38
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 4) {

@@ -10,7 +10,7 @@ struct TodayFastCheckInCard: View {
 
     var body: some View {
         AppGlassSurface(variant: .quiet) {
-            VStack(alignment: .leading, spacing: DesignTokens.dashboardCardInternalSpacing) {
+            VStack(alignment: .leading, spacing: DesignTokens.spacingXS) {
                 switch presentation.phase {
                 case .fastingStatusPrompt, .fastCompletionPrompt:
                     promptContent
@@ -42,20 +42,14 @@ struct TodayFastCheckInCard: View {
 
     @ViewBuilder
     private var promptContent: some View {
-        VStack(alignment: .leading, spacing: DesignTokens.spacingS) {
-            HStack(alignment: .top, spacing: DesignTokens.spacingM) {
-                VStack(alignment: .leading, spacing: DesignTokens.textSpacingTight) {
-                    Text(presentation.title)
-                        .font(AppTypography.cardTitle)
+        VStack(alignment: .leading, spacing: DesignTokens.spacingXS) {
+            VStack(alignment: .leading, spacing: DesignTokens.textSpacingTight) {
+                Text(presentation.title)
+                    .font(AppTypography.cardTitle)
 
-                    Text(presentation.detail)
-                        .font(AppTypography.cardBody)
-                        .foregroundStyle(.secondary)
-                }
-
-                Spacer()
-
-                historyButton
+                Text(presentation.detail)
+                    .font(AppTypography.cardBody)
+                    .foregroundStyle(.secondary)
             }
 
             HStack(spacing: DesignTokens.spacingS) {
@@ -101,13 +95,13 @@ struct TodayFastCheckInCard: View {
                     )
                 }
 
+                Spacer(minLength: DesignTokens.spacingS)
+
                 if let onLater {
                     Button(Strings.HomeSurface.fajrPromptLater, action: onLater)
                         .font(AppTypography.metricLabel)
                         .appControlStyle(.quiet)
                 }
-
-                Spacer(minLength: 0)
             }
         }
     }

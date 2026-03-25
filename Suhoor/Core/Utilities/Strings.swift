@@ -84,8 +84,8 @@ enum Strings {
         static let reminderAlarmLabel = "Reminder"
         static let dayDisabledHelper = "If skipped, this date won't wake or play supporting morning cues."
         static let dayEnableToConfigureHelper = "Restore this date to edit its wake."
-        static let resetDayTitle = "Reset this morning to default?"
-        static let resetDayMessage = "This removes date-specific wake changes and restores your default morning plan."
+        static let resetDayTitle = "Remove this wake change?"
+        static let resetDayMessage = "This date will go back to your usual morning plan."
         static let suhoorTime = "Alarm time"
         static func suhoorComputed(_ time: String) -> String { "Computed: \(time)" }
         static func reminderOffsetLabel(_ minutes: Int) -> String { "Minutes before Fajr: \(minutes)m" }
@@ -97,8 +97,8 @@ enum Strings {
         static func willPlayAt(_ time: String) -> String { "Will play at \(time)" }
         static func computedAt(_ time: String) -> String { "Computed: \(time)" }
         static let fajrHelper = "Matches your calculated Fajr time."
-        static let resetDay = "Reset this morning"
-        static let resetDayHelper = "Restores the default wake for this morning and removes the changes made just for this date."
+        static let resetDay = "Remove wake change"
+        static let resetDayHelper = "Restores your usual morning plan for this date."
         static let sourceGeneratedHelper = "This morning is included because of a recurring plan or saved date range."
         static let sourceManualHelper = "This morning was added directly."
         static let sourceDayExclusion = "Exclude this date from the plan"

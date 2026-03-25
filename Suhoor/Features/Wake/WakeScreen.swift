@@ -28,15 +28,16 @@ struct WakeScreen: View {
     @State private var viewState = WakeListState()
     @State private var destination: WakeDestination?
     @State private var lastRefreshContext: FajrWindowRefreshContext?
+    @State private var isVisible = false
 
     var body: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: DesignTokens.spacingL) {
+            LazyVStack(alignment: .leading, spacing: DesignTokens.spacingM) {
                 if featuredEntry == nil && monthSections.isEmpty {
                     emptyStateView
                 } else {
                     if let featuredEntry {
-                        VStack(alignment: .leading, spacing: DesignTokens.spacingS) {
+                        VStack(alignment: .leading, spacing: DesignTokens.spacingXS) {
                             AppSectionHeader("Next wake")
 
                             WakeFeaturedEntryCard(
@@ -48,7 +49,7 @@ struct WakeScreen: View {
                     }
 
                     ForEach(monthSections) { section in
-                        VStack(alignment: .leading, spacing: DesignTokens.spacingS) {
+                        VStack(alignment: .leading, spacing: DesignTokens.spacingXS) {
                             WakeMonthSectionHeader(
                                 title: section.key.title,
                                 count: section.visibleAlarmCount
@@ -56,7 +57,7 @@ struct WakeScreen: View {
 
                             if section.entries.isEmpty {
                                 AppGlassSurface(variant: .quiet) {
-                                    Text("More mornings load here when you need them.")
+                                    Text("More mornings load here as you browse.")
                                         .font(AppTypography.rowBody)
                                         .foregroundStyle(.secondary)
                                 }
@@ -68,27 +69,30 @@ struct WakeScreen: View {
                                         ) {
                                             destination = .day(entry.schedule)
                                         }
-                                        .padding(.horizontal, DesignTokens.spacingM)
-                                        .padding(.vertical, DesignTokens.space4)
+                                        .padding(.horizontal, DesignTokens.spacingS)
+                                        .padding(.vertical, DesignTokens.space2)
 
                                         if index < section.entries.count - 1 {
-                                            AppGroupDivider(inset: DesignTokens.spacingM)
+                                            AppGroupDivider(inset: DesignTokens.spacingS)
                                         }
                                     }
                                 }
                                 .frame(maxWidth: .infinity, alignment: .leading)
                             }
                         }
+                        .onAppear {
+                            ensureMonthEntriesLoaded(for: section)
+                        }
                     }
                 }
             }
             .padding(.horizontal, DesignTokens.spacingM)
-            .padding(.top, DesignTokens.spacingS)
-            .padding(.bottom, DesignTokens.spacingXL)
+            .padding(.top, DesignTokens.space2)
+            .padding(.bottom, DesignTokens.spacingL)
         }
         .safeAreaInset(edge: .bottom) {
             Color.clear
-                .frame(height: DesignTokens.spacingL)
+                .frame(height: DesignTokens.spacingXL)
         }
         .appScrollableChrome()
         .navigationTitle(Strings.AlarmsTab.title)
@@ -99,23 +103,31 @@ struct WakeScreen: View {
                 AlarmDayDetailView(schedule: schedule)
             }
         }
-        .task {
+        .onAppear {
+            isVisible = true
             refreshWakeSurfaceIfNeeded(force: true)
         }
+        .onDisappear {
+            isVisible = false
+        }
         .onChange(of: scheduleManager.currentRevision) { _, _ in
+            guard isVisible else { return }
             refreshWakeSurfaceIfNeeded()
         }
         .onChange(of: scenePhase) { _, newPhase in
-            guard newPhase == .active else { return }
+            guard isVisible, newPhase == .active else { return }
             refreshWakeSurfaceIfNeeded()
         }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.significantTimeChangeNotification)) { _ in
+            guard isVisible else { return }
             refreshWakeSurfaceIfNeeded()
         }
         .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in
+            guard isVisible else { return }
             refreshWakeSurfaceIfNeeded()
         }
         .onReceive(NotificationCenter.default.publisher(for: .NSSystemTimeZoneDidChange)) { _ in
+            guard isVisible else { return }
             refreshWakeSurfaceIfNeeded()
         }
     }
@@ -188,7 +200,6 @@ struct WakeScreen: View {
             let sectionIdentifiers = Set(result.snapshot.sections.map(\.id))
             viewState.loadingSectionIDs = viewState.loadingSectionIDs.filter { sectionIdentifiers.contains($0) }
             viewState.listSnapshot = result.snapshot
-            ensureVisibleSectionsLoaded()
         }
 
         if animated {
@@ -201,12 +212,6 @@ struct WakeScreen: View {
             withTransaction(transaction) {
                 update()
             }
-        }
-    }
-
-    private func ensureVisibleSectionsLoaded() {
-        for section in viewState.listSnapshot.sections {
-            ensureMonthEntriesLoaded(for: section)
         }
     }
 

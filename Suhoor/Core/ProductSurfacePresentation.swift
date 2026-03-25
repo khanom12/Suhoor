@@ -166,7 +166,7 @@ enum ProductSurfacePresentation {
         }
     }
 
-    static let ordinaryDaySummaryText = "Ordinary Fajr day"
+    static let ordinaryDaySummaryText = "Regular Fajr morning"
 
     static func meaningfulSecondaryContextTitles(
         from resolvedDayContext: ResolvedDayContext,
@@ -201,10 +201,6 @@ enum ProductSurfacePresentation {
     static func homeHeroMeaningText(for day: ActiveAlarmDay) -> String? {
         let resolved = day.resolvedDayContext
         let tags = Set(resolved.supportingTags)
-
-        if resolved.primaryContext == .standard && meaningfulSecondaryContextTitles(from: resolved).isEmpty {
-            return nil
-        }
 
         if resolved.primaryContext == .qadaFast || tags.contains(.qada) {
             return "Qada planned"
@@ -359,10 +355,7 @@ enum ProductSurfacePresentation {
             return "No wake for this date"
         }
         if day.decisionLog.plannedWakeState == .fixedWake {
-            return "Ignores latest wake"
-        }
-        if day.decisionLog.plannedWakeState == .postFajr {
-            return "One-day exception"
+            return "Set for this date"
         }
         return wakeOffsetText(for: day)
     }
@@ -376,7 +369,7 @@ enum ProductSurfacePresentation {
                 state: .skipped,
                 availabilityLabel: "Skipped",
                 statusSummary: "Morning off for this date",
-                statusDetail: "This date won't wake or play supporting morning cues."
+                statusDetail: "No wake or extra morning cues are set for this date."
             )
         }
 
@@ -384,16 +377,16 @@ enum ProductSurfacePresentation {
             return WakeAvailabilityPresentation(
                 state: .activeOverride,
                 availabilityLabel: "Changed for this date",
-                statusSummary: "Uses a one-day wake change",
-                statusDetail: "This date has its own wake change."
+                statusSummary: "Changed for this date",
+                statusDetail: "This morning has its own wake."
             )
         }
 
         return WakeAvailabilityPresentation(
             state: .activeDefault,
-            availabilityLabel: "Default morning",
-            statusSummary: "Uses your default morning plan",
-            statusDetail: "This date uses your usual morning plan."
+            availabilityLabel: "Usual plan",
+            statusSummary: "Follows your usual plan",
+            statusDetail: "Your usual morning plan is still in effect."
         )
     }
 
@@ -575,10 +568,10 @@ enum ProductSurfacePresentation {
             return "Moved earlier by your latest wake"
         }
         if day.decisionLog.plannedWakeState == .fixedWake {
-            return "Fixed wake for this date"
+            return "For this date only"
         }
         if day.decisionLog.plannedWakeState == .postFajr {
-            return "After-Fajr exception for this date"
+            return "For this date only"
         }
         if availability.state == .activeOverride {
             return availability.availabilityLabel
@@ -604,16 +597,16 @@ enum ProductSurfacePresentation {
     ) -> String? {
         let availability = wakeAvailabilityPresentation(for: day, hasCustomChange: hasDayOverride)
         if day.decisionLog.latestWakeCapApplied {
-            return "Limited by your latest wake"
+            return "Moved earlier by latest wake"
         }
         if availability.state == .skipped {
             return nil
         }
         if day.decisionLog.plannedWakeState == .fixedWake && hasDayOverride {
-            return "Fixed wake for this date"
+            return "For this date only"
         }
         if day.decisionLog.plannedWakeState == .postFajr && hasDayOverride {
-            return "After-Fajr exception"
+            return "Available for this date only"
         }
         if availability.state == .activeOverride {
             return availability.availabilityLabel
@@ -635,17 +628,17 @@ enum ProductSurfacePresentation {
 
         if decision.latestWakeCapApplied,
            let cap = decision.latestWakeCapMinutesFromMidnight {
-            return "\(stateText) · latest wake \(SettingsSummaryFormatter.timeText(minutesFromMidnight: cap))"
+            return "\(stateText) · no later than \(SettingsSummaryFormatter.timeText(minutesFromMidnight: cap))"
         }
 
         if hasDayOverride && decision.plannedWakeState == .fixedWake {
-            return "Fixed wake override"
+            return "Fixed wake for this date"
         }
         if hasDayOverride && decision.plannedWakeState == .postFajr {
-            return "Post-Fajr override"
+            return "\(stateText) · available for this date only"
         }
         if hasDayOverride {
-            return "\(stateText) · \(availability.availabilityLabel)"
+            return "\(stateText) · changed for this date"
         }
 
         return stateText
@@ -655,23 +648,12 @@ enum ProductSurfacePresentation {
         for day: ActiveAlarmDay,
         hasDayOverride: Bool
     ) -> [WakeReasonRow] {
-        let availability = wakeAvailabilityPresentation(for: day, hasCustomChange: hasDayOverride)
         var rows: [WakeReasonRow] = []
-
-        if availability.state != .activeDefault {
-            rows.append(
-                WakeReasonRow(
-                    id: "availability",
-                    title: "This morning",
-                    detail: availability.statusSummary
-                )
-            )
-        }
 
         rows.append(
             WakeReasonRow(
-                id: "default-plan",
-                title: "Default plan",
+                id: "usual-plan",
+                title: "Usual plan",
                 detail: "\(defaultPlanTitle(for: day)), \(defaultPlanWakeText(for: day))"
             )
         )
@@ -681,7 +663,7 @@ enum ProductSurfacePresentation {
                 WakeReasonRow(
                     id: "latest-wake",
                     title: "Latest wake limit",
-                    detail: "Never after \(SettingsSummaryFormatter.timeText(minutesFromMidnight: latestWakeCap))"
+                    detail: "No later than \(SettingsSummaryFormatter.timeText(minutesFromMidnight: latestWakeCap))"
                 )
             )
         }
@@ -690,8 +672,8 @@ enum ProductSurfacePresentation {
             rows.append(
                 WakeReasonRow(
                     id: "cap-applied",
-                    title: "Cap applied",
-                    detail: "Today's Fajr-based wake would have landed later, so it moved earlier."
+                    title: "Moved earlier",
+                    detail: "Today's wake would have landed later, so your latest wake pulled it earlier."
                 )
             )
         }
@@ -704,19 +686,19 @@ enum ProductSurfacePresentation {
             || resolved.primaryContext == .fasting
             || resolved.primaryContext == .suhoor
             || resolved.primaryContext == .sunnahFast {
-            rows.append(WakeReasonRow(id: "fasting", title: "Fasting", detail: "This date is planned as a fast."))
+            rows.append(WakeReasonRow(id: "fasting", title: "Fasting", detail: "This morning is planned as a fast."))
         }
 
         if resolved.primaryContext == .tahajjud || day.effectiveConfig.tahajjudRefinement {
-            rows.append(WakeReasonRow(id: "tahajjud", title: "Tahajjud", detail: "This date includes Tahajjud refinement."))
+            rows.append(WakeReasonRow(id: "tahajjud", title: "Tahajjud", detail: "Added for this date."))
         }
 
         if hasDayOverride && day.decisionLog.plannedWakeState == .postFajr {
             rows.append(
                 WakeReasonRow(
-                    id: "after-fajr",
+                    id: "wake-change",
                     title: "Wake change",
-                    detail: "This date was changed to after Fajr."
+                    detail: "Moved to after Fajr for this date."
                 )
             )
         }
@@ -724,9 +706,9 @@ enum ProductSurfacePresentation {
         if hasDayOverride && day.decisionLog.plannedWakeState == .fixedWake {
             rows.append(
                 WakeReasonRow(
-                    id: "fixed",
-                    title: "Fixed wake",
-                    detail: "This date uses \(TimeFormatters.timeFormatter.string(from: day.decisionLog.resolvedWakeTime))."
+                    id: "wake-change",
+                    title: "Wake change",
+                    detail: "Set to \(TimeFormatters.timeFormatter.string(from: day.decisionLog.resolvedWakeTime)) for this date."
                 )
             )
         }
@@ -738,17 +720,7 @@ enum ProductSurfacePresentation {
         if day.sourceSummaryText.isEmpty == false {
             return day.sourceSummaryText
         }
-        return "This date comes from your default morning plan."
-    }
-
-    static func wakeSourceHelperText(for day: ActiveAlarmDay, hasDayOverride: Bool) -> String {
-        if hasDayOverride {
-            return "Use Plans to change your usual morning plan."
-        }
-        if day.provenances.contains(where: { $0.sourceOrigin != .defaultDailyPlan }) {
-            return "Use Plans if you want to change every matching date."
-        }
-        return "Use Plans to change your usual morning plan."
+        return "Usual morning plan"
     }
 
     static func wakeProgressSnapshot(from events: [DebugEvent]) -> WakeProgressSnapshot {

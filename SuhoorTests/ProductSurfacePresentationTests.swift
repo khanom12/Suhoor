@@ -806,7 +806,7 @@ struct ProductSurfacePresentationTests {
         )
 
         #expect(defaultAvailability.state == .activeDefault)
-        #expect(defaultAvailability.statusSummary == "Uses your default morning plan")
+        #expect(defaultAvailability.statusSummary == "Follows your usual plan")
         #expect(changedAvailability.state == .activeOverride)
         #expect(changedAvailability.availabilityLabel == "Changed for this date")
         #expect(skippedAvailability.state == .skipped)

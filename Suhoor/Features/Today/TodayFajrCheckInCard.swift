@@ -7,7 +7,7 @@ struct TodayFajrCheckInCard: View {
 
     var body: some View {
         AppGlassSurface(variant: .quiet) {
-            VStack(alignment: .leading, spacing: DesignTokens.spacingS) {
+            VStack(alignment: .leading, spacing: DesignTokens.spacingXS) {
                 VStack(alignment: .leading, spacing: DesignTokens.textSpacingTight) {
                     Text(presentation.title)
                         .font(AppTypography.cardTitle)
@@ -43,13 +43,13 @@ struct TodayFajrCheckInCard: View {
                     }
                     .appControlStyle(.secondary, tint: .secondary)
 
+                    Spacer(minLength: DesignTokens.spacingS)
+
                     if let onLater {
                         Button(Strings.HomeSurface.fajrPromptLater, action: onLater)
                             .font(AppTypography.metricLabel)
                             .appControlStyle(.quiet)
                     }
-
-                    Spacer(minLength: 0)
                 }
             }
         }
