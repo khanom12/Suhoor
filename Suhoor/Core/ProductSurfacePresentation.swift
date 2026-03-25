@@ -231,24 +231,25 @@ enum ProductSurfacePresentation {
     static func homeHeroPresentation(for day: ActiveAlarmDay) -> HomeHeroPresentation {
         HomeHeroPresentation(
             label: homeHeroLabel(for: day),
-            meaningText: homeHeroMeaningText(for: day),
-            stateText: wakeStateLabel(for: day),
-            timingText: homeHeroTimingText(for: day),
-            secondaryText: homeHeroSecondaryText(for: day)
+            descriptorText: homeHeroDescriptorText(for: day),
+            explanationText: homeHeroTimingText(for: day),
+            statusText: homeHeroStatusText(for: day)
         )
     }
 
     static func homeHeroSubline(for day: ActiveAlarmDay) -> String {
-        var parts: [String] = []
-        if let meaning = homeHeroMeaningText(for: day) {
-            parts.append(meaning)
-        }
-        parts.append(wakeStateLabel(for: day))
-        parts.append(homeHeroTimingText(for: day))
-        if let secondary = homeHeroSecondaryText(for: day) {
-            parts.append(secondary)
-        }
-        return parts.joined(separator: " • ")
+        let presentation = homeHeroPresentation(for: day)
+        return [
+            presentation.descriptorText,
+            presentation.explanationText,
+            presentation.statusText
+        ]
+        .compactMap { $0 }
+        .joined(separator: " • ")
+    }
+
+    static func homeHeroDescriptorText(for day: ActiveAlarmDay) -> String {
+        homeHeroMeaningText(for: day) ?? wakeStateLabel(for: day)
     }
 
     static func scheduleChipTitles(
@@ -554,27 +555,17 @@ enum ProductSurfacePresentation {
 
     static func homeHeroTimingText(for day: ActiveAlarmDay) -> String {
         if day.decisionLog.plannedWakeState == .fixedWake {
-            return "Set for \(TimeFormatters.timeFormatter.string(from: day.decisionLog.resolvedWakeTime))"
+            return "Uses a fixed wake for this morning"
         }
         return wakeOffsetText(for: day)
     }
 
-    static func homeHeroSecondaryText(for day: ActiveAlarmDay) -> String? {
-        let availability = wakeAvailabilityPresentation(
-            for: day,
-            hasCustomChange: day.effectiveConfig.hasOverrides
-        )
+    static func homeHeroStatusText(for day: ActiveAlarmDay) -> String? {
         if day.decisionLog.latestWakeCapApplied {
             return "Moved earlier by your latest wake"
         }
-        if day.decisionLog.plannedWakeState == .fixedWake {
-            return "For this date only"
-        }
-        if day.decisionLog.plannedWakeState == .postFajr {
-            return "For this date only"
-        }
-        if availability.state == .activeOverride {
-            return availability.availabilityLabel
+        if day.effectiveConfig.hasOverrides {
+            return "Adjusted for this date"
         }
         return nil
     }

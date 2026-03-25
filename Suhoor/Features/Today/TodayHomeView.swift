@@ -17,7 +17,7 @@ struct TodayHomeView: View {
             )
 
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: DesignTokens.spacingM) {
+                LazyVStack(alignment: .leading, spacing: DesignTokens.spacingL) {
                     TodayDateContextBlock(snapshot: snapshot)
 
                     TodayNextWakeHeroCard(
@@ -34,8 +34,8 @@ struct TodayHomeView: View {
                     }
                 }
                 .padding(.horizontal, DesignTokens.spacingL)
-                .padding(.top, DesignTokens.space2)
-                .padding(.bottom, DesignTokens.spacingL)
+                .padding(.top, DesignTokens.spacingS)
+                .padding(.bottom, DesignTokens.spacingXL)
             }
             .safeAreaInset(edge: .bottom) {
                 Color.clear
@@ -126,7 +126,7 @@ private struct TodayDateContextBlock: View {
     let snapshot: HomeSurfaceSnapshot
 
     var body: some View {
-        VStack(alignment: .leading, spacing: DesignTokens.textSpacingMicro) {
+        VStack(alignment: .leading, spacing: DesignTokens.textSpacingTight) {
             Text(snapshot.gregorianText)
                 .font(.subheadline.weight(.medium))
                 .foregroundStyle(.secondary)
@@ -136,8 +136,7 @@ private struct TodayDateContextBlock: View {
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.top, DesignTokens.space2)
-        .padding(.bottom, DesignTokens.space2)
+        .padding(.vertical, DesignTokens.spacingXS)
     }
 }
 
@@ -175,46 +174,16 @@ private struct TodayNextWakeHeroCard: View {
         AppGlassSurface(
             variant: .hero,
             tint: DawnColor.lightGold100,
-            contentPadding: 16
+            contentPadding: DesignTokens.spacingL
         ) {
-            VStack(alignment: .leading, spacing: DesignTokens.spacingXS) {
+            VStack(alignment: .leading, spacing: DesignTokens.textSpacingMedium) {
                 Text(presentation?.label ?? Strings.HomeSurface.heroTitle)
                     .appTextRole(.eyebrow)
 
                 if let summary {
-                    VStack(alignment: .leading, spacing: DesignTokens.spacingXS) {
-                        HeroWakeTimeLockup(date: summary.day.schedule.wakeDate)
-
-                        VStack(alignment: .leading, spacing: DesignTokens.textSpacingMicro) {
-                            if let meaning = presentation?.meaningText {
-                                Text(meaning)
-                                    .font(AppTypography.cardTitle)
-                            }
-
-                            Text(presentation?.stateText ?? ProductSurfacePresentation.wakeStateLabel(for: summary.day))
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(.primary.opacity(0.82))
-
-                            Text(presentation?.timingText ?? ProductSurfacePresentation.homeHeroTimingText(for: summary.day))
-                                .font(AppTypography.cardBody)
-                                .foregroundStyle(.secondary)
-                                .fixedSize(horizontal: false, vertical: true)
-
-                            if let secondary = presentation?.secondaryText {
-                                Text(secondary)
-                                    .font(AppTypography.metricLabel)
-                                    .foregroundStyle(.secondary)
-                                    .fixedSize(horizontal: false, vertical: true)
-                            }
-                        }
-
-                        Button(Strings.HomeSurface.heroAction) {
-                            appNavigator.switchToWake()
-                        }
-                        .appControlStyle(.primary, tint: DawnColor.accent)
-                    }
+                    heroContent(for: summary)
                 } else {
-                    VStack(alignment: .leading, spacing: DesignTokens.spacingS) {
+                    VStack(alignment: .leading, spacing: DesignTokens.textSpacingMedium) {
                         Text(Strings.HomeSurface.heroEmptyTitle)
                             .font(AppTypography.heroTitle)
 
@@ -231,27 +200,64 @@ private struct TodayNextWakeHeroCard: View {
             }
         }
     }
+
+    @ViewBuilder
+    private func heroContent(for summary: NextWakeEventSummary) -> some View {
+        let resolvedPresentation = presentation ?? ProductSurfacePresentation.homeHeroPresentation(for: summary.day)
+
+        VStack(alignment: .leading, spacing: DesignTokens.textSpacingMedium) {
+            HeroWakeTimeLockup(date: summary.day.schedule.wakeDate)
+
+            VStack(alignment: .leading, spacing: DesignTokens.textSpacingCompact) {
+                Text(resolvedPresentation.descriptorText)
+                    .font(AppTypography.cardTitle)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Text(resolvedPresentation.explanationText)
+                    .font(AppTypography.cardBody)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if let statusText = resolvedPresentation.statusText {
+                    Text(statusText)
+                        .appTextRole(.metricLabel, tone: .tertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            Button {
+                appNavigator.switchToWake()
+            } label: {
+                Text(Strings.HomeSurface.heroAction)
+                    .frame(minHeight: 44)
+            }
+            .appControlStyle(.secondary, tint: DawnColor.accent)
+        }
+    }
 }
 
 private struct HeroWakeTimeLockup: View {
     let date: Date
 
-    @ScaledMetric(relativeTo: .title) private var timePointSize: CGFloat = 38
+    @ScaledMetric(relativeTo: .largeTitle) private var timePointSize: CGFloat = 42
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 4) {
+        HStack(alignment: .firstTextBaseline, spacing: DesignTokens.inlineSpacingSmall) {
             Text(Self.timeMainFormatter.string(from: date))
                 .font(AppTypography.timeDisplayFont(size: timePointSize, weight: .light))
                 .foregroundStyle(.primary)
                 .monospacedDigit()
                 .minimumScaleFactor(DesignTokens.heroMetricMinScaleFactor)
+                .lineLimit(1)
 
             Text(Self.timeSuffixFormatter.string(from: date))
                 .font(AppTypography.timeDisplayFont(size: timePointSize * 0.48, weight: .regular))
                 .foregroundStyle(.secondary)
                 .monospacedDigit()
                 .baselineOffset(2)
+                .lineLimit(1)
         }
+        .accessibilityElement(children: .combine)
     }
 
     private static let timeMainFormatter: DateFormatter = {

@@ -14,10 +14,9 @@ struct HomeSurfaceSnapshot: Equatable, Sendable {
     var heroSubline: String? {
         guard let heroPresentation else { return nil }
         return [
-            heroPresentation.meaningText,
-            heroPresentation.stateText,
-            heroPresentation.timingText,
-            heroPresentation.secondaryText
+            heroPresentation.descriptorText,
+            heroPresentation.explanationText,
+            heroPresentation.statusText
         ]
         .compactMap { $0 }
         .joined(separator: " • ")
@@ -30,10 +29,9 @@ struct HomeSurfaceSnapshot: Equatable, Sendable {
 
 struct HomeHeroPresentation: Equatable, Sendable {
     let label: String
-    let meaningText: String?
-    let stateText: String
-    let timingText: String
-    let secondaryText: String?
+    let descriptorText: String
+    let explanationText: String
+    let statusText: String?
 }
 
 struct WakeSurfaceSnapshot: Equatable, Sendable {

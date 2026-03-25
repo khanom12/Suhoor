@@ -490,9 +490,9 @@ enum CompletionProjectionBuilder {
                     dateKey: dateKey,
                     intentSnapshot: intent,
                     title: Strings.HomeSurface.fastCompletionTitle,
-                    detail: isQada ? "Mark your fast so your Qada progress stays accurate." : Strings.HomeSurface.fastCompletionBody,
-                    primaryActionTitle: "Fast completed",
-                    secondaryActionTitle: "Didn't complete it",
+                    detail: isQada ? "Record it to keep your Qada progress accurate." : Strings.HomeSurface.fastCompletionBody,
+                    primaryActionTitle: "Yes, completed",
+                    secondaryActionTitle: "Not completed",
                     statusTitle: nil,
                     showsUndo: false
                 )

@@ -32,62 +32,62 @@ struct WakeScreen: View {
 
     var body: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: DesignTokens.spacingM) {
+            LazyVStack(alignment: .leading, spacing: DesignTokens.spacingL) {
                 if featuredEntry == nil && monthSections.isEmpty {
                     emptyStateView
                 } else {
                     if let featuredEntry {
-                        VStack(alignment: .leading, spacing: DesignTokens.spacingXS) {
-                            AppSectionHeader("Next wake")
-
-                            WakeFeaturedEntryCard(
-                                entry: featuredEntry
-                            ) {
-                                destination = .day(featuredEntry.schedule)
-                            }
+                        WakeFeaturedEntryCard(
+                            entry: featuredEntry
+                        ) {
+                            destination = .day(featuredEntry.schedule)
                         }
                     }
 
-                    ForEach(monthSections) { section in
-                        VStack(alignment: .leading, spacing: DesignTokens.spacingXS) {
-                            WakeMonthSectionHeader(
-                                title: section.key.title,
-                                count: section.visibleAlarmCount
-                            )
+                    if !monthSections.isEmpty {
+                        VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
+                            AppSectionHeader("Upcoming wakes")
 
-                            if section.entries.isEmpty {
-                                AppGlassSurface(variant: .quiet) {
-                                    Text("More mornings load here as you browse.")
-                                        .font(AppTypography.rowBody)
-                                        .foregroundStyle(.secondary)
-                                }
-                            } else {
-                                AppInsetGroup {
-                                    ForEach(Array(section.entries.enumerated()), id: \.element.id) { index, entry in
-                                        WakeRowView(
-                                            entry: entry
-                                        ) {
-                                            destination = .day(entry.schedule)
-                                        }
-                                        .padding(.horizontal, DesignTokens.spacingS)
-                                        .padding(.vertical, DesignTokens.space2)
+                            ForEach(monthSections) { section in
+                                VStack(alignment: .leading, spacing: DesignTokens.spacingS) {
+                                    WakeMonthSectionHeader(
+                                        title: section.key.title
+                                    )
 
-                                        if index < section.entries.count - 1 {
-                                            AppGroupDivider(inset: DesignTokens.spacingS)
+                                    if section.entries.isEmpty {
+                                        AppGlassSurface(variant: .quiet) {
+                                            Text("More mornings load here as you browse.")
+                                                .font(AppTypography.rowBody)
+                                                .foregroundStyle(.secondary)
                                         }
+                                    } else {
+                                        AppInsetGroup {
+                                            ForEach(Array(section.entries.enumerated()), id: \.element.id) { index, entry in
+                                                WakeRowView(
+                                                    entry: entry
+                                                ) {
+                                                    destination = .day(entry.schedule)
+                                                }
+                                                .padding(.horizontal, DesignTokens.spacingM)
+
+                                                if index < section.entries.count - 1 {
+                                                    AppGroupDivider(inset: DesignTokens.spacingM)
+                                                }
+                                            }
+                                        }
+                                        .frame(maxWidth: .infinity, alignment: .leading)
                                     }
                                 }
-                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .onAppear {
+                                    ensureMonthEntriesLoaded(for: section)
+                                }
                             }
-                        }
-                        .onAppear {
-                            ensureMonthEntriesLoaded(for: section)
                         }
                     }
                 }
             }
             .padding(.horizontal, DesignTokens.spacingM)
-            .padding(.top, DesignTokens.space2)
+            .padding(.top, DesignTokens.spacingS)
             .padding(.bottom, DesignTokens.spacingL)
         }
         .safeAreaInset(edge: .bottom) {

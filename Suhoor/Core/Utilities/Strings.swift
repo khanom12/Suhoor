@@ -84,7 +84,7 @@ enum Strings {
         static let reminderAlarmLabel = "Reminder"
         static let dayDisabledHelper = "If skipped, this date won't wake or play supporting morning cues."
         static let dayEnableToConfigureHelper = "Restore this date to edit its wake."
-        static let resetDayTitle = "Remove this wake change?"
+        static let resetDayTitle = "Reset this date to default?"
         static let resetDayMessage = "This date will go back to your usual morning plan."
         static let suhoorTime = "Alarm time"
         static func suhoorComputed(_ time: String) -> String { "Computed: \(time)" }
@@ -97,7 +97,7 @@ enum Strings {
         static func willPlayAt(_ time: String) -> String { "Will play at \(time)" }
         static func computedAt(_ time: String) -> String { "Computed: \(time)" }
         static let fajrHelper = "Matches your calculated Fajr time."
-        static let resetDay = "Remove wake change"
+        static let resetDay = "Reset to default"
         static let resetDayHelper = "Restores your usual morning plan for this date."
         static let sourceGeneratedHelper = "This morning is included because of a recurring plan or saved date range."
         static let sourceManualHelper = "This morning was added directly."
@@ -130,7 +130,7 @@ enum Strings {
         }
         static func hijriMonthStarts(_ date: String) -> String { "Starts \(date)" }
         static func hijriMonthStarted(_ date: String) -> String { "Started \(date)" }
-        static let dayToggleTitle = "Skip this date"
+        static let dayToggleTitle = "Skip wake on this date"
         static let dayToggleSectionTitle = "This morning"
         static let dayToggleOverrideFooter = "This date uses a one-day wake change."
         static let dayToggleDefaultFooter = "This date uses your default morning plan."
@@ -523,18 +523,18 @@ enum Strings {
     }
 
     enum HomeSurface {
-        static let heroTitle = "Next wake"
+        static let heroTitle = "Tomorrow's wake"
         static let heroEmptyTitle = "Set up your mornings"
         static let heroEmptyBody = "Start with your default morning plan."
         static let heroEmptyAction = "Open Plans"
-        static let heroAction = "View wake"
+        static let heroAction = "See details"
         static let fajrPromptTitle = "Did you pray Fajr?"
         static let fajrPromptBody = "Record today before you move on."
         static let fajrPromptPrimary = "Yes, I did"
         static let fajrPromptSecondary = "Not today"
         static let fajrPromptLater = "Later"
-        static let fastCompletionTitle = "How did today go?"
-        static let fastCompletionBody = "Mark your fast so your progress stays accurate."
+        static let fastCompletionTitle = "Did you complete today's fast?"
+        static let fastCompletionBody = "Record it to keep your progress accurate."
     }
 
     enum PlansSurface {

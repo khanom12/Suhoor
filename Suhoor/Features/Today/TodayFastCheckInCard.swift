@@ -9,8 +9,8 @@ struct TodayFastCheckInCard: View {
     var onLater: (() -> Void)? = nil
 
     var body: some View {
-        AppGlassSurface(variant: .quiet) {
-            VStack(alignment: .leading, spacing: DesignTokens.spacingXS) {
+        AppGlassSurface(variant: .quiet, contentPadding: DesignTokens.spacingM) {
+            VStack(alignment: .leading, spacing: DesignTokens.textSpacingMedium) {
                 switch presentation.phase {
                 case .fastingStatusPrompt, .fastCompletionPrompt:
                     promptContent
@@ -42,38 +42,38 @@ struct TodayFastCheckInCard: View {
 
     @ViewBuilder
     private var promptContent: some View {
-        VStack(alignment: .leading, spacing: DesignTokens.spacingXS) {
-            VStack(alignment: .leading, spacing: DesignTokens.textSpacingTight) {
+        VStack(alignment: .leading, spacing: DesignTokens.textSpacingMedium) {
+            VStack(alignment: .leading, spacing: DesignTokens.textSpacingCompact) {
                 Text(presentation.title)
                     .font(AppTypography.cardTitle)
+                    .fixedSize(horizontal: false, vertical: true)
 
                 Text(presentation.detail)
                     .font(AppTypography.cardBody)
                     .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
-            HStack(spacing: DesignTokens.spacingS) {
-                if let primaryActionTitle = presentation.primaryActionTitle {
-                    Button {
-                        withAnimation(.easeInOut(duration: 0.22)) {
-                            scheduleManager.performCompletionEdit(
-                                .setFastStatus(
-                                    dateKey: presentation.dateKey,
-                                    status: primaryActionCompletionStatus,
-                                    intentSnapshot: presentation.intentSnapshot
-                                ),
-                                source: .homeCard
-                            )
-                        }
-                    } label: {
-                        Text(primaryActionTitle)
-                            .frame(maxWidth: .infinity)
+            if let primaryActionTitle = presentation.primaryActionTitle {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.22)) {
+                        scheduleManager.performCompletionEdit(
+                            .setFastStatus(
+                                dateKey: presentation.dateKey,
+                                status: primaryActionCompletionStatus,
+                                intentSnapshot: presentation.intentSnapshot
+                            ),
+                            source: .homeCard
+                        )
                     }
-                    .appControlStyle(.primary, tint: .green)
+                } label: {
+                    Text(primaryActionTitle)
+                        .frame(maxWidth: .infinity, minHeight: 44)
                 }
+                .appControlStyle(.primary, tint: .green)
             }
 
-            HStack(spacing: DesignTokens.spacingS) {
+            HStack(alignment: .center, spacing: DesignTokens.spacingS) {
                 if let secondaryActionTitle = presentation.secondaryActionTitle {
                     Button {
                         withAnimation(.easeInOut(duration: 0.22)) {
@@ -88,19 +88,18 @@ struct TodayFastCheckInCard: View {
                         }
                     } label: {
                         Text(secondaryActionTitle)
+                            .frame(maxWidth: .infinity, minHeight: 44)
                     }
-                    .appControlStyle(
-                        .secondary,
-                        tint: presentation.phase == .fastCompletionPrompt ? .red : .secondary
-                    )
+                    .appControlStyle(.secondary)
                 }
 
-                Spacer(minLength: DesignTokens.spacingS)
-
                 if let onLater {
-                    Button(Strings.HomeSurface.fajrPromptLater, action: onLater)
-                        .font(AppTypography.metricLabel)
-                        .appControlStyle(.quiet)
+                    Button(action: onLater) {
+                        Text(Strings.HomeSurface.fajrPromptLater)
+                            .font(AppTypography.metricLabel)
+                            .frame(minHeight: 44)
+                    }
+                    .appControlStyle(.quiet)
                 }
             }
         }
@@ -109,7 +108,7 @@ struct TodayFastCheckInCard: View {
     @ViewBuilder
     private var loggedContent: some View {
         ZStack(alignment: .top) {
-            VStack(spacing: DesignTokens.spacingXS) {
+            VStack(spacing: DesignTokens.textSpacingCompact) {
                 Text(presentation.statusTitle ?? statusTitle)
                     .font(AppTypography.cardSymbol)
                     .foregroundStyle(statusColor)
@@ -121,6 +120,7 @@ struct TodayFastCheckInCard: View {
                     .font(AppTypography.cardBody)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             .frame(maxWidth: .infinity, minHeight: 88, alignment: .center)
             .onAppear {
