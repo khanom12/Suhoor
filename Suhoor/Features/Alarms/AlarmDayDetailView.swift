@@ -28,10 +28,10 @@ struct AlarmDayDetailView: View {
             .navigationTitle(GregorianDateFormatter.shared.cardString(for: schedule.date))
             .navigationBarTitleDisplayMode(.inline)
             .alert(
-                Strings.AlarmsTab.resetDayTitle,
+                "Reset this date to default?",
                 isPresented: $showsResetConfirmation
             ) {
-                Button(Strings.AlarmsTab.resetDay, role: .destructive) {
+                Button("Reset to default", role: .destructive) {
                     resetDateToDefault()
                 }
                 Button(Strings.Settings.cancel, role: .cancel) {}
@@ -45,6 +45,7 @@ struct AlarmDayDetailView: View {
                         initialSelection: storedIntentSelection,
                         seeds: scheduleManager.activeWindowSnapshot.visibleDays.map(\.tagSeed),
                         selections: fastTagStore.selections,
+                        presentation: .dayDetail,
                         onSave: { selection in
                             fastTagStore.setSelection(selection, for: schedule.date, timeZone: timeZone)
                             scheduleManager.requestRescheduleDay(schedule.date)
@@ -116,19 +117,8 @@ struct AlarmDayDetailView: View {
         alarmConfigStore.override(for: schedule.date, timeZone: timeZone)
     }
 
-    private var hasOneDayChanges: Bool {
-        dayOverride != nil
-    }
-
     private var hasWakeRuleOverride: Bool {
         currentWakeSelection != .defaultPlan
-    }
-
-    private var detailAvailabilityPresentation: WakeAvailabilityPresentation {
-        ProductSurfacePresentation.wakeAvailabilityPresentation(
-            for: presentationDay,
-            hasCustomChange: hasWakeRuleOverride
-        )
     }
 
     private var shouldShowWakeControls: Bool {
@@ -169,10 +159,15 @@ struct AlarmDayDetailView: View {
         editorContext.presentationDay
     }
 
-    private var wakeReasonRows: [WakeReasonRow] {
-        ProductSurfacePresentation.wakeReasonRows(
-            for: presentationDay,
-            hasDayOverride: hasOneDayChanges
+    private var detailPresentation: AlarmDayDetailPresentation {
+        AlarmDayDetailPresentation(
+            day: presentationDay,
+            computedIntentSelection: computedIntentSelection,
+            warnings: intentWarnings,
+            draftSelection: wakeSelectionDraft,
+            draftAnchor: wakeAnchorDraft,
+            draftDeltaMinutes: wakeDeltaDraft,
+            draftFixedWakeMinutes: fixedWakeMinutesDraft
         )
     }
 
@@ -267,18 +262,14 @@ struct AlarmDayDetailView: View {
                 SummaryHeader(
                     gregorianText: fullGregorianDate,
                     hijriText: HijriDateFormatter.shared.string(from: schedule.date),
-                    meaningSummaryText: dayMeaningSummaryText,
+                    purposeText: detailPresentation.heroPurposeText,
                     primaryText: primaryDisplayText,
                     primaryTime: primaryDisplayTime,
                     fajrText: Strings.AlarmsTab.fajrTime(TimeFormatters.timeFormatter.string(from: currentSchedule.fajrDate)),
                     isOff: isSkippingDay,
-                    summaryText: heroSummaryText,
-                    summaryDetailText: heroSummaryDetailText,
-                    intentSelection: computedIntentSelection,
-                    warnings: intentWarnings,
-                    onWarningInfo: { warning in
-                        selectedAbout = warning.about
-                    }
+                    summaryText: detailPresentation.heroSummaryText,
+                    summaryDetailText: detailPresentation.heroSummaryDetailText,
+                    accessibilitySummary: detailPresentation.accessibilitySummary
                 )
                 .padding(.vertical, DesignTokens.spacingS)
                 .padding(.horizontal, 12)
@@ -289,7 +280,7 @@ struct AlarmDayDetailView: View {
             if isSkippingDay {
                 Section {
                     HStack(alignment: .center) {
-                        Button("Restore this date") {
+                        Button("Restore wake on this date") {
                             restoreSkippedDate()
                         }
                         .font(AppTypography.metricLabel)
@@ -301,39 +292,62 @@ struct AlarmDayDetailView: View {
             }
 
             Section {
-                Button {
-                    showsTagPicker = true
-                } label: {
-                    HStack(alignment: .center, spacing: DesignTokens.spacingS) {
-                        VStack(alignment: .leading, spacing: DesignTokens.textSpacingMicro) {
-                            Text(dayMeaningSummaryText)
-                                .font(AppTypography.rowTitle)
-                                .foregroundStyle(.primary)
+                VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
+                    Button {
+                        showsTagPicker = true
+                    } label: {
+                        HStack(alignment: .center, spacing: DesignTokens.spacingS) {
+                            VStack(alignment: .leading, spacing: DesignTokens.textSpacingMicro) {
+                                Text(detailPresentation.dayPurposeTitle)
+                                    .font(AppTypography.rowTitle)
+                                    .foregroundStyle(.primary)
 
-                            Text("Edit day meaning")
-                                .font(AppTypography.metricLabel)
-                                .foregroundStyle(.secondary)
+                                if let dayPurposeDetails = detailPresentation.dayPurposeDetails {
+                                    Text(dayPurposeDetails)
+                                        .font(AppTypography.rowBody)
+                                        .foregroundStyle(.secondary)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+
+                                Text("Choose day purpose")
+                                    .font(AppTypography.metricLabel)
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            Spacer(minLength: DesignTokens.spacingS)
+
+                            Image(systemName: "chevron.right")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.tertiary)
                         }
+                    }
+                    .buttonStyle(.plain)
 
-                        Spacer(minLength: DesignTokens.spacingS)
+                    if !intentWarnings.isEmpty {
+                        Divider()
 
-                        Image(systemName: "chevron.right")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.tertiary)
+                        FlowLayout(spacing: DesignTokens.textSpacingCompact) {
+                            ForEach(intentWarnings, id: \.self) { warning in
+                                WarningChipWithInfo(
+                                    warning: warning,
+                                    onInfo: { selectedAbout = warning.about }
+                                )
+                            }
+                        }
                     }
                 }
-                .buttonStyle(.plain)
             } header: {
-                Text("Day meaning")
+                Text("Day purpose")
                     .textCase(nil)
             }
 
             if shouldShowWakeControls {
                 Section {
-                    VStack(alignment: .leading, spacing: DesignTokens.spacingS) {
-                        Text(wakeEditorStatusText)
+                    VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
+                        Text(detailPresentation.adjustStatusText)
                             .font(AppTypography.metricLabel)
                             .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
 
                         WakeModeSelector(selection: wakeRuleSelectionBinding)
 
@@ -354,8 +368,10 @@ struct AlarmDayDetailView: View {
                                         .foregroundStyle(.secondary)
                                 }
                             }
+                            .accessibilityLabel("Minutes before Fajr")
+                            .accessibilityValue(wakeDraftSummaryText)
                         case .inFajr:
-                            VStack(alignment: .leading, spacing: DesignTokens.spacingS) {
+                            VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
                                 WakeAnchorSelector(selection: wakeAnchorBinding)
 
                                 Stepper(value: suhoorOffsetBinding, in: 0...240, step: 1) {
@@ -366,6 +382,8 @@ struct AlarmDayDetailView: View {
                                             .foregroundStyle(.secondary)
                                     }
                                 }
+                                .accessibilityLabel(wakeDeltaEditorLabel)
+                                .accessibilityValue(wakeDraftSummaryText)
 
                                 if let wakeEditorNoteText {
                                     Text(wakeEditorNoteText)
@@ -382,6 +400,8 @@ struct AlarmDayDetailView: View {
                                         .foregroundStyle(.secondary)
                                 }
                             }
+                            .accessibilityLabel("Minutes after Fajr ends")
+                            .accessibilityValue(wakeDraftSummaryText)
 
                             if let wakeEditorNoteText {
                                 Text(wakeEditorNoteText)
@@ -394,6 +414,7 @@ struct AlarmDayDetailView: View {
                                 selection: suhoorTimeBinding,
                                 displayedComponents: [.hourAndMinute]
                             )
+                            .accessibilityLabel("Fixed wake time")
 
                             if let wakeEditorNoteText {
                                 Text(wakeEditorNoteText)
@@ -403,24 +424,38 @@ struct AlarmDayDetailView: View {
                         }
                     }
                 } header: {
-                    Text("Wake for this date")
+                    Text("Adjust this date")
                         .textCase(nil)
                 }
             }
 
             Section {
-                ForEach(wakeReasonRows) { row in
-                    dayDetailInfoRow(title: row.title, detail: row.detail)
+                VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
+                    Text(detailPresentation.why.statusTitle)
+                        .font(AppTypography.cardTitle)
+                        .foregroundStyle(.primary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    ForEach(detailPresentation.why.rows) { row in
+                        dayDetailInfoRow(title: row.title, detail: row.detail)
+                    }
                 }
             } header: {
-                Text("Why this morning")
+                Text("Why this wake")
                     .textCase(nil)
             }
 
             Section {
                 DisclosureGroup("Advanced", isExpanded: $showsAdvancedDetails) {
-                    VStack(alignment: .leading, spacing: DesignTokens.spacingS) {
+                    VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
+                        dayDetailInfoRow(
+                            title: "Source",
+                            detail: detailPresentation.advancedSourceText
+                        )
+
                         if shouldShowCueDisclosure {
+                            Divider()
+
                             DisclosureGroup("Extra cues", isExpanded: $showsCueDetails) {
                                 VStack(alignment: .leading, spacing: DesignTokens.spacingS) {
                                     ForEach(derivedCueRows) { row in
@@ -431,20 +466,21 @@ struct AlarmDayDetailView: View {
                             }
                         }
 
-                        dayDetailInfoRow(
-                            title: "Source",
-                            detail: changePlannedSourceText
-                        )
+                        if shouldShowResetSection || !isSkippingDay {
+                            Divider()
 
-                        if shouldShowResetSection {
-                            Button("Remove wake change", role: .destructive) {
-                                showsResetConfirmation = true
-                            }
-                        }
+                            VStack(alignment: .leading, spacing: DesignTokens.spacingS) {
+                                if shouldShowResetSection {
+                                    Button("Reset to default", role: .destructive) {
+                                        showsResetConfirmation = true
+                                    }
+                                }
 
-                        if !isSkippingDay {
-                            Button("Skip this date", role: .destructive) {
-                                skipDate()
+                                if !isSkippingDay {
+                                    Button("Skip wake on this date", role: .destructive) {
+                                        skipDate()
+                                    }
+                                }
                             }
                         }
                     }
@@ -455,50 +491,18 @@ struct AlarmDayDetailView: View {
         .listStyle(.insetGrouped)
     }
 
-    private var dayMeaningSummaryText: String {
-        let primary = computedIntentSelection.primaryIntent
-        let secondary = computedIntentSelection.secondaryTags.sorted { $0.title < $1.title }
-
-        var parts: [String] = []
-        if primary != .other {
-            parts.append(primary.about.title)
-        } else {
-            parts.append(ProductSurfacePresentation.ordinaryDaySummaryText)
-        }
-        if !secondary.isEmpty {
-            parts.append(secondary.map(\.title).joined(separator: " • "))
-        }
-        if effectiveConfig.tahajjudRefinement {
-            parts.append("Tahajjud")
-        }
-        return parts.joined(separator: " • ")
-    }
-
-    private var wakeEditorStatusText: String {
-        switch wakeRuleSelectionBinding.wrappedValue {
-        case .defaultPlan:
-            return "Follows your usual plan"
-        case .postFajr:
-            return "After Fajr for this date"
-        case .fixedWake:
-            return "Fixed wake for this date"
-        case .preFajr, .inFajr:
-            return hasWakeRuleOverride ? "Changed for this date" : "Follows your usual plan"
-        }
-    }
-
     private var wakeEditorNoteText: String? {
         switch wakeRuleSelectionBinding.wrappedValue {
         case .defaultPlan:
             guard presentationDay.decisionLog.latestWakeCapApplied else { return nil }
-            return "Moved earlier by your latest wake."
+            return "Your latest wake moved this earlier."
         case .inFajr:
             guard wakeAnchorBinding.wrappedValue == .fajrStart else { return nil }
             return "Leaves time before Fajr ends."
         case .postFajr:
-            return "Available for this date only."
+            return "Set just for this date."
         case .fixedWake:
-            return "This fixed time ignores your latest wake."
+            return "This fixed wake ignores your latest wake."
         case .preFajr:
             return nil
         }
@@ -572,10 +576,6 @@ struct AlarmDayDetailView: View {
         }
 
         return rows
-    }
-
-    private var changePlannedSourceText: String {
-        ProductSurfacePresentation.wakeSourceSummaryText(for: presentationDay)
     }
 
     @ViewBuilder
@@ -874,9 +874,9 @@ struct AlarmDayDetailView: View {
 
     private var primaryDisplayText: String {
         if isSkippingDay {
-            return heroSummaryText
+            return detailPresentation.heroSummaryText
         }
-        guard let primaryDisplayKind else { return heroSummaryText }
+        guard let primaryDisplayKind else { return detailPresentation.heroSummaryText }
         switch primaryDisplayKind {
         case .suhoor:
             return TimeFormatters.timeFormatter.string(from: suhoorTime)
@@ -890,28 +890,6 @@ struct AlarmDayDetailView: View {
         case .iftar:
             return TimeFormatters.timeFormatter.string(from: currentSchedule.iftarDate ?? currentSchedule.maghribDate)
         }
-    }
-
-    private var heroSummaryText: String {
-        if isSkippingDay {
-            return detailAvailabilityPresentation.statusSummary
-        }
-
-        switch presentationDay.decisionLog.plannedWakeState {
-        case .fixedWake:
-            return hasWakeRuleOverride ? "Fixed wake for this date" : "Fixed wake"
-        case .postFajr:
-            return hasWakeRuleOverride ? "After Fajr for this date" : "After Fajr"
-        case .preFajr, .inFajr:
-            return ProductSurfacePresentation.wakeStateLabel(for: presentationDay)
-        }
-    }
-
-    private var heroSummaryDetailText: String? {
-        if isSkippingDay {
-            return detailAvailabilityPresentation.statusDetail
-        }
-        return nil
     }
 
     private var primaryDisplayTime: Date? {
@@ -951,7 +929,7 @@ struct AlarmDayDetailView: View {
 
 }
 
-private enum DayWakeRuleSelection: String, CaseIterable, Identifiable {
+enum DayWakeRuleSelection: String, CaseIterable, Identifiable, Equatable {
     case defaultPlan
     case preFajr
     case inFajr
@@ -975,6 +953,21 @@ private enum DayWakeRuleSelection: String, CaseIterable, Identifiable {
         }
     }
 
+    var subtitle: String? {
+        switch self {
+        case .defaultPlan:
+            return "Keep your usual morning plan."
+        case .preFajr:
+            return "Wake before Fajr begins."
+        case .inFajr:
+            return "Wake during the Fajr window."
+        case .postFajr:
+            return "Wake after the Fajr window."
+        case .fixedWake:
+            return "Set a specific wake time."
+        }
+    }
+
     init(_ state: MorningWakeRuleState) {
         switch state {
         case .preFajr:
@@ -993,10 +986,11 @@ private struct WakeModeSelector: View {
     @Binding var selection: DayWakeRuleSelection
 
     var body: some View {
-        FlowLayout(spacing: DesignTokens.textSpacingCompact) {
+        VStack(spacing: DesignTokens.spacingS) {
             ForEach(DayWakeRuleSelection.allCases) { option in
-                WakeChoiceChip(
+                WakeSelectionRow(
                     title: option.title,
+                    subtitle: option.subtitle,
                     isSelected: selection == option
                 ) {
                     selection = option
@@ -1012,52 +1006,94 @@ private struct WakeAnchorSelector: View {
     @Binding var selection: WakeAnchorType
 
     var body: some View {
-        VStack(alignment: .leading, spacing: DesignTokens.textSpacingCompact) {
-            Text("Anchor")
+        VStack(alignment: .leading, spacing: DesignTokens.spacingS) {
+            Text("Count from")
                 .font(AppTypography.metricLabel)
                 .foregroundStyle(.secondary)
 
-            HStack(spacing: DesignTokens.spacingS) {
-                WakeChoiceChip(
-                    title: "From Fajr start",
-                    isSelected: selection == .fajrStart
-                ) {
-                    selection = .fajrStart
-                }
+            WakeSelectionRow(
+                title: "Count from Fajr start",
+                subtitle: "Use the beginning of Fajr as the anchor.",
+                isSelected: selection == .fajrStart
+            ) {
+                selection = .fajrStart
+            }
 
-                WakeChoiceChip(
-                    title: "From Fajr end",
-                    isSelected: selection == .fajrEnd
-                ) {
-                    selection = .fajrEnd
-                }
+            WakeSelectionRow(
+                title: "Count from Fajr end",
+                subtitle: "Use the end of Fajr as the anchor.",
+                isSelected: selection == .fajrEnd
+            ) {
+                selection = .fajrEnd
             }
         }
     }
 }
 
-private struct WakeChoiceChip: View {
+private struct WakeSelectionRow: View {
     let title: String
+    let subtitle: String?
     let isSelected: Bool
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            Text(title)
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(isSelected ? DawnColor.accent : Color.primary.opacity(0.82))
-                .padding(.horizontal, DesignTokens.space10)
-                .padding(.vertical, DesignTokens.space8)
-                .background(
-                    Capsule()
-                        .fill(isSelected ? DawnColor.accent.opacity(0.14) : Color.secondary.opacity(0.06))
-                        .overlay {
-                            Capsule()
-                                .stroke(isSelected ? DawnColor.accent.opacity(0.3) : Color.white.opacity(0.08), lineWidth: 1)
-                        }
-                )
+            HStack(alignment: .top, spacing: DesignTokens.spacingS) {
+                VStack(alignment: .leading, spacing: DesignTokens.textSpacingMicro) {
+                    Text(title)
+                        .font(AppTypography.rowTitle)
+                        .foregroundStyle(.primary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    if let subtitle {
+                        Text(subtitle)
+                            .font(AppTypography.rowBody)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+
+                Spacer(minLength: DesignTokens.spacingS)
+
+                Image(systemName: iconName)
+                    .font(AppTypography.controlIcon)
+                    .foregroundStyle(iconColor)
+                    .padding(.top, DesignTokens.space2)
+            }
+            .padding(.horizontal, DesignTokens.spacingM)
+            .padding(.vertical, DesignTokens.spacingS)
+            .background(backgroundShape)
         }
         .buttonStyle(.plain)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(title)
+        .accessibilityValue(isSelected ? "Selected" : "Not selected")
+        .accessibilityHint("Double tap to choose this option.")
+    }
+
+    private var iconName: String {
+        isSelected ? "checkmark.circle.fill" : "circle"
+    }
+
+    private var iconColor: Color {
+        isSelected ? DawnColor.accent : Color(.tertiaryLabel)
+    }
+
+    private var backgroundFill: Color {
+        isSelected ? DawnColor.accent.opacity(0.10) : Color(.secondarySystemBackground)
+    }
+
+    private var borderColor: Color {
+        isSelected ? DawnColor.accent.opacity(0.35) : Color(.separator).opacity(0.2)
+    }
+
+    private var backgroundShape: some View {
+        RoundedRectangle(cornerRadius: DesignTokens.innerCardRadius, style: .continuous)
+            .fill(backgroundFill)
+            .overlay(
+                RoundedRectangle(cornerRadius: DesignTokens.innerCardRadius, style: .continuous)
+                    .stroke(borderColor, lineWidth: 1)
+            )
     }
 }
 
@@ -1072,16 +1108,14 @@ private struct DayAlarmEditorContext {
 private struct SummaryHeader: View {
     let gregorianText: String
     let hijriText: String
-    let meaningSummaryText: String
+    let purposeText: String
     let primaryText: String
     let primaryTime: Date?
     let fajrText: String
     let isOff: Bool
     let summaryText: String
     let summaryDetailText: String?
-    let intentSelection: FastIntentSelection
-    let warnings: [FastWarning]
-    let onWarningInfo: (FastWarning) -> Void
+    let accessibilitySummary: String
 
     private static let timeMainFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -1109,7 +1143,7 @@ private struct SummaryHeader: View {
     }()
 
     var body: some View {
-        VStack(alignment: .leading, spacing: DesignTokens.spacingS) {
+        VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
             VStack(alignment: .leading, spacing: DesignTokens.textSpacingMicro) {
                 Text(gregorianText)
                     .font(.callout)
@@ -1120,7 +1154,7 @@ private struct SummaryHeader: View {
                     .foregroundStyle(.secondary)
             }
 
-            Text(meaningSummaryText)
+            Text(purposeText)
                 .font(.footnote.weight(.medium))
                 .foregroundStyle(.secondary)
 
@@ -1136,54 +1170,37 @@ private struct SummaryHeader: View {
                         suffixColor: isOff ? .secondary : nil
                     )
 
-                    Text(summaryText)
-                        .font(AppTypography.cardTitle)
-                        .foregroundStyle(.primary)
-
-                    if let summaryDetailText {
-                        Text(summaryDetailText)
-                            .font(AppTypography.rowBody)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
+                    summaryCopy
                 }
             } else {
-                VStack(alignment: .leading, spacing: DesignTokens.textSpacingCompact) {
-                    Text(summaryText)
-                        .font(AppTypography.cardTitle)
-                        .foregroundStyle(.primary)
-
-                    if let summaryDetailText {
-                        Text(summaryDetailText)
-                            .font(AppTypography.rowBody)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
+                summaryCopy
             }
 
             Text(fajrText)
                 .font(AppTypography.rowBody)
                 .foregroundStyle(.secondary)
                 .monospacedDigit()
-
-            if !secondaryTagElements.isEmpty || !warningElements.isEmpty {
-                FlowLayout(spacing: DesignTokens.textSpacingCompact) {
-                    ForEach(intentSelection.secondaryTags.sorted { $0.title < $1.title }, id: \.self) { tag in
-                        FastSecondaryTagCapsule(tag: tag)
-                    }
-                    ForEach(warnings, id: \.self) { warning in
-                        WarningChipWithInfo(
-                            warning: warning,
-                            onInfo: { onWarningInfo(warning) }
-                        )
-                    }
-                }
-            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilitySummary)
+    }
+
+    @ViewBuilder
+    private var summaryCopy: some View {
+        VStack(alignment: .leading, spacing: DesignTokens.textSpacingCompact) {
+            Text(summaryText)
+                .font(AppTypography.cardTitle)
+                .foregroundStyle(.primary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if let summaryDetailText {
+                Text(summaryDetailText)
+                    .font(AppTypography.rowBody)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
     }
 
     private var primaryTimeMain: String {
@@ -1196,47 +1213,6 @@ private struct SummaryHeader: View {
     private var primaryTimeSuffix: String? {
         guard let primaryTime else { return nil }
         return SummaryHeader.timeSuffixFormatter.string(from: primaryTime)
-    }
-
-    private var accessibilitySummary: String {
-        var parts = ["Wake. \(primaryText).", "Day meaning: \(meaningSummaryText).", "\(fajrText)."]
-        if !tagElements.isEmpty {
-            parts.append("Tags: \(tagElements.joined(separator: ", ")).")
-        }
-        return parts.joined(separator: " ")
-    }
-
-    private var secondaryTagElements: [String] {
-        intentSelection.secondaryTags.sorted { $0.title < $1.title }.map(\.title)
-    }
-
-    private var warningElements: [String] {
-        warnings.map(\.title)
-    }
-
-    private var tagElements: [String] {
-        var tags: [String] = []
-        tags.append(meaningSummaryText)
-        tags.append(contentsOf: secondaryTagElements)
-        tags.append(contentsOf: warningElements)
-        return tags
-    }
-}
-private struct FastSecondaryTagCapsule: View {
-    let tag: FastSecondaryVirtueTag
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-
-    var body: some View {
-        let style = tag.style
-        let isAccessibility = dynamicTypeSize.isAccessibilitySize
-        CapsuleLabelView(
-            title: style.title,
-            shortTitle: style.shortTitle,
-            systemImage: style.systemImage,
-            color: style.color,
-            prominence: .subtle,
-            useIconOnly: isAccessibility
-        )
     }
 }
 

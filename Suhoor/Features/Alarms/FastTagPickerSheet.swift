@@ -1,10 +1,43 @@
 import SwiftUI
 
+enum FastTagPickerPresentation: Equatable {
+    case standard
+    case dayDetail
+
+    var navigationTitle: String {
+        switch self {
+        case .standard:
+            return "Tags"
+        case .dayDetail:
+            return "Day purpose"
+        }
+    }
+
+    var observanceSectionTitle: String {
+        switch self {
+        case .standard:
+            return "Also matches Sunnah observances"
+        case .dayDetail:
+            return "Sunnah observances for this date"
+        }
+    }
+
+    var normalizationNoteText: String {
+        switch self {
+        case .standard:
+            return "Tag rules updated for this date."
+        case .dayDetail:
+            return "Day purpose updated for this date."
+        }
+    }
+}
+
 struct FastTagPickerSheet: View {
     let date: Date
     let initialSelection: FastIntentSelection
     let seeds: [ActiveTagComputationSeed]
     let selections: [String: FastIntentSelection]
+    let presentation: FastTagPickerPresentation
     let onSave: (FastIntentSelection) -> Void
 
     @Environment(\.dismiss) private var dismiss
@@ -18,12 +51,14 @@ struct FastTagPickerSheet: View {
         initialSelection: FastIntentSelection,
         seeds: [ActiveTagComputationSeed],
         selections: [String: FastIntentSelection],
+        presentation: FastTagPickerPresentation = .standard,
         onSave: @escaping (FastIntentSelection) -> Void
     ) {
         self.date = date
         self.initialSelection = initialSelection
         self.seeds = seeds
         self.selections = selections
+        self.presentation = presentation
         self.onSave = onSave
         _selection = State(initialValue: initialSelection)
     }
@@ -38,6 +73,12 @@ struct FastTagPickerSheet: View {
             effectivePrimary: computedResult.computedPrimaryIntent,
             timeZone: timeZone
         )
+        let displayedObservanceTags = observanceTags(
+            for: computedResult,
+            timeZone: timeZone
+        )
+        let showsObservanceList = presentation == .standard
+            || computedResult.computedPrimaryIntent == .voluntary
 
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
@@ -89,7 +130,7 @@ struct FastTagPickerSheet: View {
                     }
                 }
 
-                Text("Also matches Sunnah observences")
+                Text(presentation.observanceSectionTitle)
                     .font(AppTypography.badge)
                     .foregroundStyle(.secondary)
                 if let secondaryHelper = policy.secondaryHelperText {
@@ -98,22 +139,30 @@ struct FastTagPickerSheet: View {
                         .foregroundStyle(.secondary)
                 }
 
-                VStack(spacing: 0) {
-                    ForEach(FastSecondaryVirtueTag.allCases) { tag in
-                        let isApplicable = FastIntentEngine.isCalendarApplicable(tag: tag, on: date, timeZone: timeZone)
-                        let isSuppressed = computedResult.suppressedSecondaryTags.contains(tag)
-                        let isEligibleButNotCounted = tag == .shawwalSix && isApplicable && !isSuppressed && !computedResult.computedSecondaryTags.contains(tag)
-                        ObservanceStatusRow(
-                            title: tag.about.title,
-                            subtitle: tag.about.subtitle,
-                            systemImage: tag.style.systemImage,
-                            color: tag.style.color,
-                            isSelected: computedResult.computedSecondaryTags.contains(tag),
-                            statusText: statusText(for: tag, computedResult: computedResult, timeZone: timeZone),
-                            isSuppressed: isSuppressed,
-                            isDimmed: !computedResult.computedSecondaryTags.contains(tag) && !isEligibleButNotCounted,
-                            onInfo: { selectedAbout = tag.about }
-                        )
+                if showsObservanceList {
+                    if displayedObservanceTags.isEmpty, presentation == .dayDetail {
+                        Text("No Sunnah observances match this date.")
+                            .font(AppTypography.cardBody)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    VStack(spacing: 0) {
+                        ForEach(displayedObservanceTags) { tag in
+                            let isApplicable = FastIntentEngine.isCalendarApplicable(tag: tag, on: date, timeZone: timeZone)
+                            let isSuppressed = computedResult.suppressedSecondaryTags.contains(tag)
+                            let isEligibleButNotCounted = tag == .shawwalSix && isApplicable && !isSuppressed && !computedResult.computedSecondaryTags.contains(tag)
+                            ObservanceStatusRow(
+                                title: tag.about.title,
+                                subtitle: tag.about.subtitle,
+                                systemImage: tag.style.systemImage,
+                                color: tag.style.color,
+                                isSelected: computedResult.computedSecondaryTags.contains(tag),
+                                statusText: statusText(for: tag, computedResult: computedResult, timeZone: timeZone),
+                                isSuppressed: isSuppressed,
+                                isDimmed: !computedResult.computedSecondaryTags.contains(tag) && !isEligibleButNotCounted,
+                                onInfo: { selectedAbout = tag.about }
+                            )
+                        }
                     }
                 }
 
@@ -136,7 +185,7 @@ struct FastTagPickerSheet: View {
             .padding(.top, 24)
             .padding(.bottom, 24)
         }
-        .navigationTitle("Tags")
+        .navigationTitle(presentation.navigationTitle)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
@@ -189,7 +238,25 @@ struct FastTagPickerSheet: View {
         )
         if normalized != selection {
             selection = normalized
-            showNote("Tag rules updated for this date.")
+            showNote(presentation.normalizationNoteText)
+        }
+    }
+
+    private func observanceTags(
+        for computedResult: TagComputationResult,
+        timeZone: TimeZone
+    ) -> [FastSecondaryVirtueTag] {
+        if presentation == .standard {
+            return FastSecondaryVirtueTag.allCases
+        }
+
+        return FastSecondaryVirtueTag.allCases.filter { tag in
+            let isApplicable = FastIntentEngine.isCalendarApplicable(tag: tag, on: date, timeZone: timeZone)
+            let isSelected = computedResult.computedSecondaryTags.contains(tag)
+            let isSuppressed = computedResult.suppressedSecondaryTags.contains(tag)
+            let isEligibleButNotCounted = tag == .shawwalSix && isApplicable && !isSuppressed && !isSelected
+
+            return isApplicable || isSelected || isSuppressed || isEligibleButNotCounted
         }
     }
 
@@ -442,16 +509,16 @@ private struct TagEditPolicy {
 
         if isForbidden {
             self.purposeHelperText = "Locked: fasting is forbidden on this date."
-            self.secondaryHelperText = "Sunnah observence tags are hidden on forbidden dates."
+            self.secondaryHelperText = "Sunnah observances are hidden on forbidden dates."
         } else if isRamadan {
             self.purposeHelperText = "Locked for Ramadan: this fast is obligatory."
-            self.secondaryHelperText = "Sunnah observence tags are hidden during Ramadan."
+            self.secondaryHelperText = "Sunnah observances are hidden during Ramadan."
         } else if isObligatoryPrimary {
             self.purposeHelperText = nil
-            self.secondaryHelperText = "Sunnah observence tags are suppressed when the purpose is obligatory."
+            self.secondaryHelperText = "Sunnah observances are suppressed when the purpose is obligatory."
         } else if effectivePrimary == .other {
             self.purposeHelperText = nil
-            self.secondaryHelperText = "Choose Voluntary to see date-derived Sunnah observences."
+            self.secondaryHelperText = "Choose Voluntary to see Sunnah observances for this date."
         } else {
             self.purposeHelperText = nil
             self.secondaryHelperText = nil
