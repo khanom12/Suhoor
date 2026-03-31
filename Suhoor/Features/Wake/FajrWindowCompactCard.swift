@@ -8,16 +8,14 @@ struct WeeklyFajrcastCard: View {
 
     var body: some View {
         Button(action: onOpen) {
-            ZStack(alignment: .topLeading) {
-                cardShell
-
+            VStack(spacing: 0) {
                 header
                     .padding(.horizontal, horizontalInset)
-                    .padding(.top, headerTopPadding)
+                    .padding(.top, headerVerticalPadding)
+                    .padding(.bottom, headerVerticalPadding)
 
                 dividerLine
                     .padding(.horizontal, horizontalInset)
-                    .offset(y: headerDividerTop)
 
                 FajrWindowChartView(
                     chart: snapshot.chart,
@@ -26,17 +24,18 @@ struct WeeklyFajrcastCard: View {
                 )
                 .frame(height: chartHeight)
                 .padding(.horizontal, horizontalInset)
-                .offset(y: chartTopOffset)
+                .padding(.vertical, chartVerticalPadding)
 
                 dividerLine
                     .padding(.horizontal, horizontalInset)
-                    .offset(y: footerDividerTop)
 
                 footer
                     .padding(.horizontal, horizontalInset)
-                    .offset(y: footerTextTop)
+                    .padding(.top, footerVerticalPadding)
+                    .padding(.bottom, footerVerticalPadding)
             }
             .frame(maxWidth: .infinity, minHeight: minimumHeight, alignment: .topLeading)
+            .background(cardShell)
         }
         .buttonStyle(.plain)
         .contentShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
@@ -49,8 +48,7 @@ struct WeeklyFajrcastCard: View {
     private var header: some View {
         HStack(alignment: .top, spacing: 12) {
             Text("WEEKLY FAJRCAST")
-                .font(.system(size: titlePointSize, weight: .light))
-                .tracking(0.6)
+                .font(.system(size: titlePointSize, weight: .regular))
                 .foregroundStyle(titleColor)
                 .padding(.top, headerTitleTopInset)
 
@@ -74,9 +72,10 @@ struct WeeklyFajrcastCard: View {
         Text(snapshot.summary.primaryText)
             .font(.system(size: footerPointSize, weight: .regular))
             .foregroundStyle(footerColor)
-            .lineLimit(1)
-            .minimumScaleFactor(0.84)
-            .frame(maxWidth: footerWidth, alignment: .leading)
+            .lineLimit(2)
+            .multilineTextAlignment(.leading)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var dividerLine: some View {
@@ -87,7 +86,7 @@ struct WeeklyFajrcastCard: View {
 
     private var cardShell: some View {
         RoundedRectangle(cornerRadius: 20, style: .continuous)
-            .fill(Color.black.opacity(0.30))
+            .fill(cardShellFill)
             .overlay(
                 RoundedRectangle(cornerRadius: 20, style: .continuous)
                     .strokeBorder(shellStrokeColor, lineWidth: 1)
@@ -122,7 +121,7 @@ struct WeeklyFajrcastCard: View {
         }
 
         if dynamicTypeSize >= .xxxLarge {
-            return 236
+            return 229
         }
 
         return 224
@@ -132,28 +131,28 @@ struct WeeklyFajrcastCard: View {
         dynamicTypeSize.isAccessibilitySize ? 18 : 21
     }
 
-    private var headerTopPadding: CGFloat {
+    private var headerVerticalPadding: CGFloat {
         dynamicTypeSize.isAccessibilitySize ? 8 : 6
     }
 
-    private var headerDividerTop: CGFloat {
-        dynamicTypeSize.isAccessibilitySize ? 40 : 36
-    }
-
-    private var chartTopOffset: CGFloat {
-        dynamicTypeSize.isAccessibilitySize ? 48 : 43
+    private var chartVerticalPadding: CGFloat {
+        dynamicTypeSize.isAccessibilitySize ? 8 : 7
     }
 
     private var chartHeight: CGFloat {
-        dynamicTypeSize.isAccessibilitySize ? 156 : 143
+        if dynamicTypeSize.isAccessibilitySize {
+            return 156
+        }
+
+        if dynamicTypeSize >= .xxxLarge {
+            return 148
+        }
+
+        return 143
     }
 
-    private var footerDividerTop: CGFloat {
-        dynamicTypeSize.isAccessibilitySize ? 214 : 194
-    }
-
-    private var footerTextTop: CGFloat {
-        dynamicTypeSize.isAccessibilitySize ? 220 : 200
+    private var footerVerticalPadding: CGFloat {
+        dynamicTypeSize.isAccessibilitySize ? 8 : 6
     }
 
     private var headerTitleTopInset: CGFloat {
@@ -180,10 +179,6 @@ struct WeeklyFajrcastCard: View {
         dynamicTypeSize.isAccessibilitySize ? 13 : 12
     }
 
-    private var footerWidth: CGFloat {
-        dynamicTypeSize.isAccessibilitySize ? 290 : 252
-    }
-
     private var titleColor: Color {
         Color.white.opacity(0.5)
     }
@@ -194,6 +189,15 @@ struct WeeklyFajrcastCard: View {
 
     private var footerColor: Color {
         Color.white.opacity(0.5)
+    }
+
+    private var cardShellFill: Color {
+        Color(
+            red: 0.0,
+            green: 49.0 / 255.0,
+            blue: 123.0 / 255.0
+        )
+        .opacity(0.50)
     }
 
     private var shellStrokeColor: Color {

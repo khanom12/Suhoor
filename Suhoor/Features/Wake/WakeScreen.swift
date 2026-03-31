@@ -78,6 +78,7 @@ struct WakeScreen: View {
                                                 ) {
                                                     destination = .day(entry.schedule)
                                                 }
+
                                                 .padding(.horizontal, DesignTokens.spacingM)
 
                                                 if index < section.entries.count - 1 {

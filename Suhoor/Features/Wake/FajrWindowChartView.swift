@@ -245,7 +245,7 @@ struct FajrWindowChartView: View {
 
     private var gridColor: Color {
         layoutStyle == .compact
-            ? Color.white.opacity(0.15)
+            ? Color.white.opacity(0.10)
             : (colorScheme == .dark ? Color.white.opacity(0.12) : Color.black.opacity(0.10))
     }
 
@@ -491,11 +491,11 @@ struct FajrWindowChartView: View {
                 .font(.system(size: compactYAxisValuePointSize, weight: .medium))
                 .foregroundStyle(compactSecondaryTextColor)
                 .monospacedDigit()
-                .frame(width: metrics.yAxisLabelWidth, alignment: .leading)
-            .position(
-                x: metrics.yAxisLabelMinX + (metrics.yAxisLabelWidth / 2),
-                y: yPosition(for: tick.minutes, in: metrics.plotFrame)
-            )
+                .frame(width: metrics.yAxisLabelWidth, height: compactYAxisLabelHeight, alignment: .topLeading)
+                .offset(
+                    x: metrics.yAxisLabelMinX,
+                    y: yPosition(for: tick.minutes, in: metrics.plotFrame) + compactYAxisLabelTopInset
+                )
         }
     }
 
@@ -634,6 +634,14 @@ struct FajrWindowChartView: View {
         dynamicTypeSize.isAccessibilitySize ? 14 : 12
     }
 
+    private var compactYAxisLabelHeight: CGFloat {
+        dynamicTypeSize.isAccessibilitySize ? 16 : 14
+    }
+
+    private var compactYAxisLabelTopInset: CGFloat {
+        1
+    }
+
     private var compactAxisPointSize: CGFloat {
         dynamicTypeSize.isAccessibilitySize ? 13 : 12
     }
@@ -648,6 +656,14 @@ struct FajrWindowChartView: View {
 
     private var compactCalloutSuffixPointSize: CGFloat {
         dynamicTypeSize.isAccessibilitySize ? 11 : 10
+    }
+
+    private var compactSelectedGuideHalfHeight: CGFloat {
+        dynamicTypeSize.isAccessibilitySize ? 7.5 : 6.5
+    }
+
+    private var compactSelectedCalloutYOffset: CGFloat {
+        dynamicTypeSize.isAccessibilitySize ? -1 : -2
     }
 
     private func compactLayoutMetrics(in size: CGSize) -> CompactLayoutMetrics {
@@ -698,13 +714,13 @@ struct FajrWindowChartView: View {
     private func compactSelectedDayGuide(in metrics: CompactLayoutMetrics) -> some View {
         if let selectedPoint = chart.points.first(where: { $0.dateKey == chart.selectedDateKey }) {
             let x = xPosition(for: selectedPoint, in: metrics.dayColumnFrame)
-            let markerRadius = compactMarkerPointSize / 2
             let markerY = yPosition(for: selectedPoint.primaryWakeMinutes, in: metrics.plotFrame)
+            let markerHalfHeight = compactSelectedGuideHalfHeight
 
             Path { path in
-                path.move(to: CGPoint(x: x, y: metrics.plotFrame.minY + 1))
-                path.addLine(to: CGPoint(x: x, y: markerY - markerRadius))
-                path.move(to: CGPoint(x: x, y: markerY + markerRadius))
+                path.move(to: CGPoint(x: x, y: metrics.plotFrame.minY))
+                path.addLine(to: CGPoint(x: x, y: markerY - markerHalfHeight))
+                path.move(to: CGPoint(x: x, y: markerY + markerHalfHeight))
                 path.addLine(to: CGPoint(x: x, y: metrics.plotFrame.maxY))
             }
             .stroke(compactSelectedGuideColor, style: StrokeStyle(lineWidth: 1.8, dash: [5, 4]))
@@ -788,16 +804,12 @@ struct FajrWindowChartView: View {
                 metrics.calloutFrame.maxX - calloutWidth / 2
             )
 
-            VStack(spacing: dynamicTypeSize.isAccessibilitySize ? 3 : 1) {
+            VStack(spacing: dynamicTypeSize.isAccessibilitySize ? 1 : 0) {
                 Text(compactSelectedDay.relativeLabel)
                     .font(.system(size: compactCalloutLabelPointSize, weight: .medium))
                     .foregroundStyle(compactCalloutPrimaryColor)
 
-                HStack(alignment: .firstTextBaseline, spacing: 3) {
-                    Image(systemName: compactSelectedDay.iconName)
-                        .font(.system(size: compactMarkerPointSize, weight: .semibold))
-                        .foregroundStyle(compactCalloutPrimaryColor)
-
+                HStack(alignment: .firstTextBaseline, spacing: 2) {
                     Text(compactSelectedDay.timeMain)
                         .font(.system(size: compactCalloutTimePointSize, weight: .bold))
                         .foregroundStyle(compactCalloutPrimaryColor)
@@ -812,7 +824,7 @@ struct FajrWindowChartView: View {
                 }
             }
             .frame(width: calloutWidth)
-            .position(x: calloutCenterX, y: metrics.calloutFrame.midY + 2)
+            .position(x: calloutCenterX, y: metrics.calloutFrame.midY + compactSelectedCalloutYOffset)
         }
     }
 
@@ -822,7 +834,7 @@ struct FajrWindowChartView: View {
             let x = xPosition(for: point, in: metrics.dayColumnFrame)
 
             Text(weekdayInitial(for: point.date))
-                .font(.system(size: compactAxisPointSize, weight: .semibold))
+                .font(.system(size: compactAxisPointSize, weight: .medium))
                 .foregroundStyle(
                     point.dateKey == chart.selectedDateKey
                         ? compactPrimaryTextColor

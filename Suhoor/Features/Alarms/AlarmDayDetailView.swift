@@ -24,7 +24,7 @@ struct AlarmDayDetailView: View {
 
     var body: some View {
         configurationList
-            .background(Color(.systemGroupedBackground))
+            .appPageBackground()
             .navigationTitle(GregorianDateFormatter.shared.cardString(for: schedule.date))
             .navigationBarTitleDisplayMode(.inline)
             .alert(

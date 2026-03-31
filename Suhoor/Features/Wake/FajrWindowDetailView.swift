@@ -36,7 +36,7 @@ struct FajrWindowDetailView: View {
                     .padding()
             }
         }
-        .background(Color(.systemGroupedBackground).ignoresSafeArea())
+        .appPageBackground()
         .navigationTitle("Fajrcast")
         .navigationBarTitleDisplayMode(.inline)
         .navigationDestination(item: $selectedMorningDate) { date in

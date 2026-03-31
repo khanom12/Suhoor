@@ -255,61 +255,14 @@ struct AppGlassSurface<Content: View>: View {
 }
 
 struct AppPageBackground: View {
-    @Environment(\.colorScheme) private var colorScheme
-
     var body: some View {
-        ZStack {
-            baseColor
-
-            LinearGradient(
-                colors: gradientColors,
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-
-            Circle()
-                .fill(Color.white.opacity(colorScheme == .dark ? 0.05 : 0.32))
-                .frame(width: 320, height: 320)
-                .blur(radius: 66)
-                .offset(x: -150, y: -230)
-
-            Circle()
-                .fill(
-                    colorScheme == .dark
-                    ? Color.white.opacity(0.02)
-                    : Color.black.opacity(0.03)
-                )
-                .frame(width: 360, height: 360)
-                .blur(radius: 70)
-                .offset(x: 170, y: 300)
-
-            Rectangle()
-                .fill(Color.white.opacity(colorScheme == .dark ? 0.02 : 0.08))
-                .blendMode(.softLight)
+        GeometryReader { geometry in
+            Image("WakeScreenBackground")
+                .resizable()
+                .scaledToFill()
+                .frame(width: geometry.size.width, height: geometry.size.height)
+                .clipped()
         }
-    }
-
-    private var baseColor: Color {
-        if colorScheme == .dark {
-            return Color(red: 0.07, green: 0.08, blue: 0.10)
-        }
-        return Color(red: 0.97, green: 0.973, blue: 0.98)
-    }
-
-    private var gradientColors: [Color] {
-        if colorScheme == .dark {
-            return [
-                Color(red: 0.11, green: 0.12, blue: 0.14),
-                Color(red: 0.08, green: 0.09, blue: 0.11),
-                Color(red: 0.05, green: 0.06, blue: 0.08)
-            ]
-        }
-
-        return [
-            Color.white,
-            Color(red: 0.965, green: 0.969, blue: 0.976),
-            Color(red: 0.952, green: 0.956, blue: 0.965)
-        ]
     }
 }
 
