@@ -158,6 +158,22 @@ struct FajrWindowInsightItem: Identifiable, Equatable, Sendable {
     let detail: String
 }
 
+struct FajrWindowCompactSummarySnapshot: Equatable, Sendable {
+    let primaryText: String
+    let secondaryText: String?
+}
+
+struct FajrWindowCompactSelectedDaySnapshot: Equatable, Sendable {
+    let dateKey: String
+    let relativeLabel: String
+    let weekdayTitle: String
+    let iconName: String
+    let isAlarmActive: Bool
+    let timeMain: String
+    let timeSuffix: String?
+    let accessibilityValue: String
+}
+
 enum FajrWindowActionIntent: Equatable, Sendable {
     case openSelectedMorning(dateKey: String)
     case openDefaultMorningPlan
@@ -214,6 +230,7 @@ struct FajrWindowDatasetRow: Identifiable, Equatable, Sendable {
     let primaryWakeMinutes: Int
     let saferWakeMinutes: Int
     let bufferBeforeBoundaryMinutes: Int
+    let isSkipped: Bool
     let isOverride: Bool
     let isSpecialDay: Bool
     let isFastingContext: Bool
@@ -245,6 +262,7 @@ struct FajrWindowPoint: Identifiable, Equatable, Sendable {
     let fastingWakeMinutes: Int?
     let tahajjudWakeMinutes: Int?
     let bufferBeforeBoundaryMinutes: Int
+    let isSkipped: Bool
     let isOverride: Bool
     let isSpecialDay: Bool
     let isFastingContext: Bool
@@ -292,6 +310,8 @@ struct FajrWindowChartSnapshot: Equatable, Sendable {
     let chartDomain: ClosedRange<Int>
     let xAxisLabels: [FajrWindowAxisLabel]
     let yTicks: [FajrWindowChartTick]
+    let compactChartDomain: ClosedRange<Int>
+    let compactYTicks: [FajrWindowChartTick]
 }
 
 struct FajrWindowDataset: Equatable, Sendable {
@@ -309,6 +329,8 @@ struct FajrWindowCompactSnapshot: Equatable, Sendable {
     let period: FajrWindowPeriod
     let chart: FajrWindowChartSnapshot
     let compactInsight: String
+    let summary: FajrWindowCompactSummarySnapshot
+    let selectedDay: FajrWindowCompactSelectedDaySnapshot
 
     var points: [FajrWindowPoint] { chart.points }
     var renderPoints: [FajrWindowPoint] { chart.renderPoints }
@@ -316,6 +338,8 @@ struct FajrWindowCompactSnapshot: Equatable, Sendable {
     var chartDomain: ClosedRange<Int> { chart.chartDomain }
     var xAxisLabels: [FajrWindowAxisLabel] { chart.xAxisLabels }
     var yTicks: [FajrWindowChartTick] { chart.yTicks }
+    var compactChartDomain: ClosedRange<Int> { chart.compactChartDomain }
+    var compactYTicks: [FajrWindowChartTick] { chart.compactYTicks }
 }
 
 struct FajrWindowSurfaceSnapshot: Equatable, Sendable {

@@ -33,8 +33,12 @@ final class FajrWindowDetailStore: ObservableObject {
     private var overlayLoadTask: Task<Void, Never>?
     private var lastRefreshContext: FajrWindowRefreshContext?
 
-    init(initialPeriod: FajrWindowPeriod = .sevenDays) {
+    init(
+        initialPeriod: FajrWindowPeriod = .sevenDays,
+        initialSelectedDateKey: String? = nil
+    ) {
         self.period = initialPeriod
+        self.selectedDateKey = initialSelectedDateKey
     }
 
     deinit {

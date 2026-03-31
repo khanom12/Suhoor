@@ -5,10 +5,10 @@ struct FajrWindowChartView: View {
         case compact
         case detail
 
-        var height: CGFloat {
+        var plotHeight: CGFloat {
             switch self {
             case .compact:
-                return 108
+                return 90
             case .detail:
                 return 292
             }
@@ -17,19 +17,44 @@ struct FajrWindowChartView: View {
         var plotInsets: EdgeInsets {
             switch self {
             case .compact:
-                return EdgeInsets(top: 10, leading: 10, bottom: 8, trailing: 10)
+                return EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0)
             case .detail:
                 return EdgeInsets(top: 16, leading: 16, bottom: 16, trailing: 16)
             }
         }
 
-        var showsYAxis: Bool {
+        var plotCornerRadius: CGFloat {
+            switch self {
+            case .compact:
+                return 0
+            case .detail:
+                return DesignTokens.innerCardRadius
+            }
+        }
+
+        var showsDetailYAxis: Bool {
             self == .detail
         }
     }
 
+    private struct CompactLayoutMetrics {
+        let calloutFrame: CGRect
+        let chartFrame: CGRect
+        let plotFrame: CGRect
+        let dayColumnFrame: CGRect
+        let weekdayRowY: CGFloat
+        let yAxisLabelWidth: CGFloat
+        let yAxisLabelMinX: CGFloat
+        let rightRailMinX: CGFloat
+        let rightRailMaxX: CGFloat
+    }
+
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     let chart: FajrWindowChartSnapshot
     let layoutStyle: LayoutStyle
+    var compactSelectedDay: FajrWindowCompactSelectedDaySnapshot? = nil
     var onSelectDateKey: ((String) -> Void)? = nil
     var onMoveSelection: ((Int) -> Void)? = nil
     var accessibilityLabel: String? = nil
@@ -43,7 +68,7 @@ struct FajrWindowChartView: View {
     private var placeholder: some View {
         RoundedRectangle(cornerRadius: DesignTokens.innerCardRadius, style: .continuous)
             .fill(Color(.secondarySystemGroupedBackground))
-            .frame(height: layoutStyle.height)
+            .frame(height: layoutStyle == .compact ? compactTotalHeight : layoutStyle.plotHeight)
             .overlay(
                 Text("Upcoming mornings will appear here.")
                     .font(AppTypography.cardBody)
@@ -55,23 +80,62 @@ struct FajrWindowChartView: View {
         Group {
             if chart.points.isEmpty {
                 placeholder
+            } else if layoutStyle == .compact {
+                compactChart
             } else {
-                VStack(alignment: .leading, spacing: layoutStyle == .compact ? 8 : 12) {
-                    HStack(alignment: .top, spacing: layoutStyle.showsYAxis ? 12 : 0) {
-                        if layoutStyle.showsYAxis {
-                            yAxis
-                                .frame(width: 52, height: layoutStyle.height)
-                        }
-
-                        plotArea
-                            .frame(maxWidth: .infinity)
-                    }
-
-                    xAxis
-                        .frame(height: 18)
-                }
+                detailChart
             }
         }
+    }
+
+    private var detailChart: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 12) {
+                yAxis
+                    .frame(width: 60, height: layoutStyle.plotHeight)
+
+                plotArea
+                    .frame(maxWidth: .infinity)
+            }
+
+            xAxis
+                .frame(height: 18)
+        }
+    }
+
+    private var compactChart: some View {
+        GeometryReader { geometry in
+            let metrics = compactLayoutMetrics(in: geometry.size)
+
+            ZStack(alignment: .topLeading) {
+                compactSelectedRangeBackdrop(in: metrics)
+                compactSelectedDayOverlay(in: metrics)
+                compactFrameChrome(in: metrics)
+                horizontalGrid(in: metrics.plotFrame)
+                verticalGrid(in: metrics.dayColumnFrame)
+                compactSelectedDayGuide(in: metrics)
+                boundaryBand(in: metrics.plotFrame)
+                boundaryLine(
+                    for: \.fajrStartMinutes,
+                    color: compactBoundaryColor,
+                    lineWidth: 1.1,
+                    dash: [],
+                    in: metrics.plotFrame
+                )
+                boundaryLine(
+                    for: \.fajrEndOrBoundaryMinutes,
+                    color: compactBoundaryColor,
+                    lineWidth: 1.1,
+                    dash: [],
+                    in: metrics.plotFrame
+                )
+                markerLayer(in: metrics.plotFrame)
+                compactYAxis(in: metrics)
+                compactSelectedDayCallout(in: metrics)
+                compactXAxis(in: metrics)
+            }
+        }
+        .frame(height: compactTotalHeight)
     }
 
     @ViewBuilder
@@ -83,7 +147,7 @@ struct FajrWindowChartView: View {
                 .accessibilityValue(accessibilityValue)
                 .accessibilityHint(
                     accessibilityHint
-                    ?? "The shaded band shows the supported Fajr window and the solid line shows your wake."
+                    ?? "The shaded band shows this week's Fajr interval and the markers show your alarms."
                 )
                 .accessibilityAdjustableAction { direction in
                     switch direction {
@@ -103,65 +167,158 @@ struct FajrWindowChartView: View {
     private var plotArea: some View {
         GeometryReader { geometry in
             let frame = plotFrame(in: geometry.size)
+
             ZStack {
-                RoundedRectangle(cornerRadius: DesignTokens.innerCardRadius, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                Color.black.opacity(0.84),
-                                DawnColor.lightGold900.opacity(0.30),
-                                DawnColor.lightApricot900.opacity(0.18)
-                            ],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                    )
+                RoundedRectangle(cornerRadius: layoutStyle.plotCornerRadius, style: .continuous)
+                    .fill(plotBackgroundFill)
                     .overlay(
-                        RoundedRectangle(cornerRadius: DesignTokens.innerCardRadius, style: .continuous)
-                            .fill(
-                                LinearGradient(
-                                    colors: [
-                                        DawnColor.lightGold200.opacity(0.10),
-                                        DawnColor.accent.opacity(0.04),
-                                        Color.clear
-                                    ],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                )
-                            )
+                        RoundedRectangle(cornerRadius: layoutStyle.plotCornerRadius, style: .continuous)
+                            .stroke(plotBorderColor, lineWidth: 1)
                     )
 
-                grid(in: frame)
+                horizontalGrid(in: frame)
+                verticalGrid(in: frame)
+                selectedDayAxis(in: frame)
                 boundaryBand(in: frame)
-                boundaryLine(for: \.fajrStartMinutes, color: Color.white.opacity(0.34), lineWidth: 1.2, dash: [5, 4], in: frame)
-                boundaryLine(for: \.fajrEndOrBoundaryMinutes, color: DawnColor.lightGold200.opacity(0.88), lineWidth: 2, dash: [], in: frame)
+                boundaryLine(for: \.fajrStartMinutes, color: boundaryStartColor, lineWidth: 1.1, dash: [], in: frame)
+                boundaryLine(for: \.fajrEndOrBoundaryMinutes, color: boundaryEndColor, lineWidth: 1.4, dash: [], in: frame)
                 primaryWakeLine(in: frame)
 
                 if chart.activeOverlay != .myWake {
                     overlayLine(for: chart.activeOverlay, in: frame)
                 }
 
-                selectedMarker(in: frame)
+                markerLayer(in: frame)
                 touchOverlay(in: frame)
             }
         }
-        .frame(height: layoutStyle.height)
+        .frame(height: layoutStyle.plotHeight)
+    }
+
+    private var plotBackgroundFill: LinearGradient {
+        if colorScheme == .dark {
+            return LinearGradient(
+                colors: [
+                    Color.white.opacity(0.08),
+                    Color.black.opacity(0.18),
+                    DawnColor.lightGold900.opacity(0.18)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        }
+
+        return LinearGradient(
+            colors: [
+                Color.white.opacity(0.78),
+                DawnColor.lightGold100.opacity(0.78),
+                DawnColor.lightApricot100.opacity(0.52)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+
+    private var plotBorderColor: Color {
+        colorScheme == .dark ? Color.white.opacity(0.10) : Color.black.opacity(0.08)
+    }
+
+    private var boundaryStartColor: Color {
+        colorScheme == .dark ? Color.white.opacity(0.54) : Color.black.opacity(0.42)
+    }
+
+    private var boundaryEndColor: Color {
+        colorScheme == .dark ? DawnColor.lightGold100.opacity(0.92) : Color.black.opacity(0.74)
+    }
+
+    private var compactBoundaryColor: Color {
+        Color.white.opacity(0.5)
+    }
+
+    private var selectedAxisColor: Color {
+        colorScheme == .dark ? Color.white.opacity(0.22) : Color.black.opacity(0.16)
+    }
+
+    private var compactSelectedGuideColor: Color {
+        .white
+    }
+
+    private var gridColor: Color {
+        layoutStyle == .compact
+            ? Color.white.opacity(0.15)
+            : (colorScheme == .dark ? Color.white.opacity(0.12) : Color.black.opacity(0.10))
+    }
+
+    private var compactPrimaryTextColor: Color {
+        .white
+    }
+
+    private var compactSecondaryTextColor: Color {
+        Color.white.opacity(0.5)
+    }
+
+    private var compactTertiaryTextColor: Color {
+        Color.white.opacity(0.42)
+    }
+
+    private var compactBandFill: Color {
+        Color.black.opacity(0.48)
+    }
+
+    private var compactPlotMarkerColor: Color {
+        .white
+    }
+
+    private var compactCalloutPrimaryColor: Color {
+        .white
+    }
+
+    private var compactCalloutSecondaryColor: Color {
+        Color.white.opacity(0.5)
     }
 
     @ViewBuilder
-    private func grid(in frame: CGRect) -> some View {
-        Canvas { context, _ in
-            for tick in chart.yTicks {
+    private func horizontalGrid(in frame: CGRect) -> some View {
+        ForEach(displayTicks) { tick in
+            Path { path in
                 let y = yPosition(for: tick.minutes, in: frame)
-                var path = Path()
                 path.move(to: CGPoint(x: frame.minX, y: y))
                 path.addLine(to: CGPoint(x: frame.maxX, y: y))
-                context.stroke(
-                    path,
-                    with: .color(Color.white.opacity(layoutStyle == .compact ? 0.06 : 0.10)),
-                    style: StrokeStyle(lineWidth: 1, dash: layoutStyle == .compact ? [3, 4] : [4, 5])
-                )
             }
+            .stroke(
+                gridColor,
+                style: StrokeStyle(lineWidth: layoutStyle == .compact ? 1 : 1, dash: layoutStyle == .compact ? [] : [4, 5])
+            )
+        }
+    }
+
+    @ViewBuilder
+    private func verticalGrid(in frame: CGRect) -> some View {
+        ForEach(chart.points) { point in
+            let isSelected = point.dateKey == chart.selectedDateKey
+
+            Path { path in
+                let x = xPosition(for: point, in: frame)
+                path.move(to: CGPoint(x: x, y: frame.minY))
+                path.addLine(to: CGPoint(x: x, y: frame.maxY))
+            }
+            .stroke(
+                layoutStyle == .compact ? gridColor : (isSelected ? selectedAxisColor : gridColor.opacity(0.9)),
+                lineWidth: layoutStyle == .compact ? 1 : (isSelected ? 1.2 : 1)
+            )
+        }
+    }
+
+    @ViewBuilder
+    private func selectedDayAxis(in frame: CGRect) -> some View {
+        if layoutStyle == .detail,
+           let selectedPoint = chart.points.first(where: { $0.dateKey == chart.selectedDateKey }) {
+            let x = xPosition(for: selectedPoint, in: frame)
+            Path { path in
+                path.move(to: CGPoint(x: x, y: frame.minY))
+                path.addLine(to: CGPoint(x: x, y: frame.maxY))
+            }
+            .stroke(selectedAxisColor, style: StrokeStyle(lineWidth: 1.4, dash: [4, 5]))
         }
     }
 
@@ -169,20 +326,38 @@ struct FajrWindowChartView: View {
     private func boundaryBand(in frame: CGRect) -> some View {
         if let path = bandPath(in: frame) {
             path
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            DawnColor.lightGold200.opacity(layoutStyle == .compact ? 0.24 : 0.28),
-                            DawnColor.accent.opacity(layoutStyle == .compact ? 0.10 : 0.16)
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
+                .fill(layoutStyle == .compact ? AnyShapeStyle(compactBandFill) : AnyShapeStyle(detailBandFill))
+                .overlay(
+                    path.stroke(
+                        layoutStyle == .compact
+                        ? compactBoundaryColor.opacity(0.12)
+                        : (colorScheme == .dark ? Color.white.opacity(0.10) : Color.black.opacity(0.08)),
+                        lineWidth: 1
                     )
                 )
-                .overlay(
-                    path.stroke(Color.white.opacity(0.06), lineWidth: 1)
-                )
         }
+    }
+
+    private var detailBandFill: LinearGradient {
+        if colorScheme == .dark {
+            return LinearGradient(
+                colors: [
+                    Color.black.opacity(0.48),
+                    DawnColor.lightGold900.opacity(0.44)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        }
+
+        return LinearGradient(
+            colors: [
+                Color.black.opacity(0.26),
+                DawnColor.lightGold900.opacity(0.22)
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
     }
 
     @ViewBuilder
@@ -201,24 +376,10 @@ struct FajrWindowChartView: View {
     @ViewBuilder
     private func primaryWakeLine(in frame: CGRect) -> some View {
         if let path = linePath(for: \.primaryWakeMinutes, in: frame) {
-            path.stroke(Color.white, style: StrokeStyle(lineWidth: layoutStyle == .compact ? 2.3 : 2.8, lineCap: .round, lineJoin: .round))
-        }
-
-        ForEach(markerPoints) { point in
-            let isSelected = point.dateKey == chart.selectedDateKey
-            let x = xPosition(for: point, in: frame)
-            let y = yPosition(for: point.primaryWakeMinutes, in: frame)
-            Circle()
-                .fill(Color.white)
-                .frame(
-                    width: isSelected ? 10 : (layoutStyle == .compact ? 5 : 7),
-                    height: isSelected ? 10 : (layoutStyle == .compact ? 5 : 7)
-                )
-                .overlay(
-                    Circle()
-                        .stroke(isSelected ? DawnColor.accent.opacity(0.9) : Color.clear, lineWidth: 2)
-                )
-                .position(x: x, y: y)
+            path.stroke(
+                colorScheme == .dark ? Color.white.opacity(0.92) : Color.black.opacity(0.80),
+                style: StrokeStyle(lineWidth: 2.4, lineCap: .round, lineJoin: .round)
+            )
         }
     }
 
@@ -231,11 +392,11 @@ struct FajrWindowChartView: View {
         case .myWake:
             EmptyView()
         case .compareSafe:
-            dashedOverlayLine(for: \.saferWakeMinutes, color: Color.green.opacity(0.85), in: frame)
+            dashedOverlayLine(for: \.saferWakeMinutes, color: Color.green.opacity(0.82), in: frame)
         case .compareFasting:
-            dashedOverlayLine(for: \.fastingWakeMinutes, color: Color.pink.opacity(0.80), in: frame)
+            dashedOverlayLine(for: \.fastingWakeMinutes, color: Color.pink.opacity(0.78), in: frame)
         case .compareTahajjud:
-            dashedOverlayLine(for: \.tahajjudWakeMinutes, color: Color.blue.opacity(0.82), in: frame)
+            dashedOverlayLine(for: \.tahajjudWakeMinutes, color: Color.blue.opacity(0.80), in: frame)
         }
     }
 
@@ -254,21 +415,121 @@ struct FajrWindowChartView: View {
     }
 
     @ViewBuilder
-    private func selectedMarker(in frame: CGRect) -> some View {
-        if layoutStyle == .detail,
-           let selectedPoint = chart.points.first(where: { $0.dateKey == chart.selectedDateKey }) {
-            let x = xPosition(for: selectedPoint, in: frame)
-            Path { path in
-                path.move(to: CGPoint(x: x, y: frame.minY))
-                path.addLine(to: CGPoint(x: x, y: frame.maxY))
+    private func markerLayer(in frame: CGRect) -> some View {
+        ForEach(markerPoints) { point in
+            let isSelected = point.dateKey == chart.selectedDateKey
+            let x = xPosition(for: point, in: frame)
+            let y = yPosition(for: point.primaryWakeMinutes, in: frame)
+
+            if isSelected {
+                selectedMarker(point: point)
+                    .position(x: x, y: y)
+            } else if point.isSkipped {
+                skippedMarker
+                    .position(x: x, y: y)
+            } else {
+                Circle()
+                    .fill(layoutStyle == .compact ? compactSecondaryTextColor.opacity(0.74) : regularMarkerColor)
+                    .frame(
+                        width: layoutStyle == .compact ? 9 : 7,
+                        height: layoutStyle == .compact ? 9 : 7
+                    )
+                    .position(x: x, y: y)
             }
-            .stroke(Color.white.opacity(0.16), style: StrokeStyle(lineWidth: 1, dash: [4, 5]))
+        }
+    }
+
+    private var regularMarkerColor: Color {
+        colorScheme == .dark ? Color.white.opacity(0.34) : Color.black.opacity(0.28)
+    }
+
+    @ViewBuilder
+    private func selectedMarker(point: FajrWindowPoint) -> some View {
+        if layoutStyle == .compact {
+            Image(systemName: point.isSkipped ? "bell.slash.fill" : "alarm.fill")
+                .font(.system(size: compactMarkerPointSize, weight: .semibold))
+                .foregroundStyle(compactPlotMarkerColor)
+        } else {
+            Image(systemName: point.isSkipped ? "bell.slash.fill" : "alarm.fill")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(colorScheme == .dark ? Color.white : Color.black)
+                .padding(6)
+                .background(
+                    Circle()
+                        .fill(colorScheme == .dark ? DawnColor.lightGold200.opacity(0.28) : Color.white.opacity(0.92))
+                )
+                .overlay(
+                    Circle()
+                        .stroke(colorScheme == .dark ? Color.white.opacity(0.24) : Color.black.opacity(0.12), lineWidth: 1)
+                )
+        }
+    }
+
+    private var skippedMarker: some View {
+        Group {
+            if layoutStyle == .compact {
+                Image(systemName: "bell.slash")
+                    .font(.system(size: compactSkippedMarkerPointSize, weight: .medium))
+                    .foregroundStyle(compactSecondaryTextColor)
+            } else {
+                Image(systemName: "bell.slash")
+                    .font(.system(size: 9, weight: .medium))
+                    .foregroundStyle(colorScheme == .dark ? Color.white.opacity(0.42) : Color.black.opacity(0.36))
+                    .padding(4)
+                    .background(
+                        Circle()
+                            .fill(colorScheme == .dark ? Color.white.opacity(0.08) : Color.black.opacity(0.06))
+                    )
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func compactYAxis(in metrics: CompactLayoutMetrics) -> some View {
+        ForEach(displayTicks) { tick in
+            Text(splitTickLabel(tick.label).main)
+                .font(.system(size: compactYAxisValuePointSize, weight: .medium))
+                .foregroundStyle(compactSecondaryTextColor)
+                .monospacedDigit()
+                .frame(width: metrics.yAxisLabelWidth, alignment: .leading)
+            .position(
+                x: metrics.yAxisLabelMinX + (metrics.yAxisLabelWidth / 2),
+                y: yPosition(for: tick.minutes, in: metrics.plotFrame)
+            )
+        }
+    }
+
+    @ViewBuilder
+    private func inlineIntervalLabels(in frame: CGRect) -> some View {
+        if layoutStyle == .compact,
+           dynamicTypeSize < .accessibility1,
+           chart.renderPoints.count >= 3 {
+            let anchor = chart.renderPoints[min(chart.renderPoints.count / 2, chart.renderPoints.count - 1)]
+            let labelX = frame.midX
+
+            Text("FAJR BEGINS")
+                .font(.system(size: 6, weight: .light))
+                .foregroundStyle(compactTertiaryTextColor)
+                .rotationEffect(.degrees(-4.5))
+                .position(
+                    x: labelX,
+                    y: yPosition(for: anchor.fajrStartMinutes, in: frame) - 7
+                )
+
+            Text("FAJR ENDS")
+                .font(.system(size: 6, weight: .light))
+                .foregroundStyle(compactTertiaryTextColor)
+                .rotationEffect(.degrees(-4.5))
+                .position(
+                    x: labelX + 1,
+                    y: yPosition(for: anchor.fajrEndOrBoundaryMinutes, in: frame) + 8
+                )
         }
     }
 
     @ViewBuilder
     private func touchOverlay(in frame: CGRect) -> some View {
-        if let onSelectDateKey {
+        if let onSelectDateKey, layoutStyle == .detail {
             Color.clear
                 .contentShape(Rectangle())
                 .gesture(
@@ -284,9 +545,9 @@ struct FajrWindowChartView: View {
     private var xAxis: some View {
         GeometryReader { geometry in
             ZStack(alignment: .leading) {
-                ForEach(chart.xAxisLabels) { label in
+                ForEach(displayXAxisLabels) { label in
                     Text(label.title)
-                        .font(.caption2.weight(label.dateKey == chart.selectedDateKey ? .semibold : .regular))
+                        .font(.caption.weight(label.dateKey == chart.selectedDateKey ? .semibold : .regular))
                         .foregroundStyle(label.dateKey == chart.selectedDateKey ? .primary : .secondary)
                         .position(
                             x: xPosition(forOrdinal: label.dayOrdinal, width: geometry.size.width),
@@ -299,7 +560,7 @@ struct FajrWindowChartView: View {
 
     private var yAxis: some View {
         VStack(alignment: .trailing, spacing: 0) {
-            ForEach(chart.yTicks) { tick in
+            ForEach(displayTicks) { tick in
                 Text(tick.label)
                     .font(.caption2)
                     .foregroundStyle(.secondary)
@@ -308,11 +569,267 @@ struct FajrWindowChartView: View {
         }
     }
 
+    private var displayDomain: ClosedRange<Int> {
+        if layoutStyle == .compact {
+            guard let firstTick = chart.compactYTicks.first?.minutes,
+                  let lastTick = chart.compactYTicks.last?.minutes else {
+                return chart.compactChartDomain
+            }
+
+            let step = chart.compactYTicks.count > 1
+                ? max(1, chart.compactYTicks[1].minutes - firstTick)
+                : 30
+            return firstTick...min((24 * 60), lastTick + step)
+        }
+
+        return chart.chartDomain
+    }
+
+    private var displayTicks: [FajrWindowChartTick] {
+        layoutStyle == .compact ? chart.compactYTicks : chart.yTicks
+    }
+
+    private var displayXAxisLabels: [FajrWindowAxisLabel] {
+        if layoutStyle == .compact {
+            return chart.points.map { point in
+                FajrWindowAxisLabel(
+                    dateKey: point.dateKey,
+                    title: weekdayInitial(for: point.date),
+                    dayOrdinal: point.dayOrdinal
+                )
+            }
+        }
+
+        return chart.xAxisLabels
+    }
+
     private var markerPoints: [FajrWindowPoint] {
         if chart.period == .oneYear, let selected = chart.points.first(where: { $0.dateKey == chart.selectedDateKey }) {
             return [selected]
         }
         return chart.points
+    }
+
+    private var compactTotalHeight: CGFloat {
+        if dynamicTypeSize.isAccessibilitySize {
+            return 156
+        }
+
+        if dynamicTypeSize >= .xxxLarge {
+            return 148
+        }
+
+        return 143
+    }
+
+    private var compactMarkerPointSize: CGFloat {
+        dynamicTypeSize.isAccessibilitySize ? 13 : 12
+    }
+
+    private var compactSkippedMarkerPointSize: CGFloat {
+        dynamicTypeSize.isAccessibilitySize ? 11 : 10
+    }
+
+    private var compactYAxisValuePointSize: CGFloat {
+        dynamicTypeSize.isAccessibilitySize ? 14 : 12
+    }
+
+    private var compactAxisPointSize: CGFloat {
+        dynamicTypeSize.isAccessibilitySize ? 13 : 12
+    }
+
+    private var compactCalloutLabelPointSize: CGFloat {
+        dynamicTypeSize.isAccessibilitySize ? 13 : 12
+    }
+
+    private var compactCalloutTimePointSize: CGFloat {
+        dynamicTypeSize.isAccessibilitySize ? 18 : 16
+    }
+
+    private var compactCalloutSuffixPointSize: CGFloat {
+        dynamicTypeSize.isAccessibilitySize ? 11 : 10
+    }
+
+    private func compactLayoutMetrics(in size: CGSize) -> CompactLayoutMetrics {
+        let plotTop = dynamicTypeSize.isAccessibilitySize ? 34.0 : 31.0
+        let plotHeight = dynamicTypeSize.isAccessibilitySize ? 94.0 : 89.0
+        let rightRailWidth = dynamicTypeSize.isAccessibilitySize ? 40.0 : 35.0
+        let plotMinX = 1.0
+        let dayColumnWidth = max(1, size.width - rightRailWidth - plotMinX)
+        let plotWidth = max(1, dayColumnWidth - 1)
+        let weekdayRowY = plotTop + plotHeight + (dynamicTypeSize.isAccessibilitySize ? 14 : 12.5)
+        let yAxisLabelWidth = dynamicTypeSize.isAccessibilitySize ? 32.0 : 28.0
+        let yAxisLabelMinX = size.width - (dynamicTypeSize.isAccessibilitySize ? 35.0 : 31.0)
+        let rightRailMinX = size.width - rightRailWidth
+
+        let chartFrame = CGRect(
+            x: 0,
+            y: 0,
+            width: size.width,
+            height: size.height
+        )
+        let plotFrame = CGRect(
+            x: plotMinX,
+            y: plotTop,
+            width: plotWidth,
+            height: plotHeight
+        )
+        let dayColumnFrame = CGRect(
+            x: plotFrame.minX,
+            y: plotFrame.minY,
+            width: dayColumnWidth,
+            height: plotHeight
+        )
+
+        return CompactLayoutMetrics(
+            calloutFrame: CGRect(x: 0, y: 0, width: size.width, height: plotTop),
+            chartFrame: chartFrame,
+            plotFrame: plotFrame,
+            dayColumnFrame: dayColumnFrame,
+            weekdayRowY: weekdayRowY,
+            yAxisLabelWidth: yAxisLabelWidth,
+            yAxisLabelMinX: yAxisLabelMinX,
+            rightRailMinX: rightRailMinX,
+            rightRailMaxX: size.width
+        )
+    }
+
+    @ViewBuilder
+    private func compactSelectedDayGuide(in metrics: CompactLayoutMetrics) -> some View {
+        if let selectedPoint = chart.points.first(where: { $0.dateKey == chart.selectedDateKey }) {
+            let x = xPosition(for: selectedPoint, in: metrics.dayColumnFrame)
+            let markerRadius = compactMarkerPointSize / 2
+            let markerY = yPosition(for: selectedPoint.primaryWakeMinutes, in: metrics.plotFrame)
+
+            Path { path in
+                path.move(to: CGPoint(x: x, y: metrics.plotFrame.minY + 1))
+                path.addLine(to: CGPoint(x: x, y: markerY - markerRadius))
+                path.move(to: CGPoint(x: x, y: markerY + markerRadius))
+                path.addLine(to: CGPoint(x: x, y: metrics.plotFrame.maxY))
+            }
+            .stroke(compactSelectedGuideColor, style: StrokeStyle(lineWidth: 1.8, dash: [5, 4]))
+        }
+    }
+
+    @ViewBuilder
+    private func compactSelectedRangeBackdrop(in metrics: CompactLayoutMetrics) -> some View {
+        if let selectedPoint = chart.points.first(where: { $0.dateKey == chart.selectedDateKey }) {
+            let selectedX = xPosition(for: selectedPoint, in: metrics.dayColumnFrame)
+
+            Rectangle()
+                .fill(Color.black.opacity(0.30))
+                .overlay(
+                    Rectangle()
+                        .stroke(Color.white.opacity(0.05), lineWidth: 1)
+                )
+                .frame(
+                    width: max(0, selectedX),
+                    height: metrics.plotFrame.height
+                )
+                .position(
+                    x: max(0, selectedX) / 2,
+                    y: metrics.plotFrame.midY
+                )
+        }
+    }
+
+    @ViewBuilder
+    private func compactSelectedDayOverlay(in metrics: CompactLayoutMetrics) -> some View {
+        if let selectedPoint = chart.points.first(where: { $0.dateKey == chart.selectedDateKey }) {
+            let selectedX = xPosition(for: selectedPoint, in: metrics.dayColumnFrame)
+
+            Rectangle()
+                .fill(Color.white.opacity(0.04))
+                .frame(
+                    width: dynamicTypeSize.isAccessibilitySize ? 82 : 74,
+                    height: metrics.plotFrame.maxY
+                )
+                .shadow(color: Color.black.opacity(0.25), radius: 4, x: 0, y: 2)
+                .position(
+                    x: selectedX,
+                    y: metrics.plotFrame.maxY / 2
+                )
+        }
+    }
+
+    @ViewBuilder
+    private func compactFrameChrome(in metrics: CompactLayoutMetrics) -> some View {
+        Path { path in
+            path.move(to: CGPoint(x: metrics.plotFrame.minX, y: metrics.plotFrame.minY))
+            path.addLine(to: CGPoint(x: metrics.rightRailMinX, y: metrics.plotFrame.minY))
+            path.move(to: CGPoint(x: metrics.plotFrame.minX, y: metrics.plotFrame.minY))
+            path.addLine(to: CGPoint(x: metrics.plotFrame.minX, y: metrics.plotFrame.maxY))
+            path.move(to: CGPoint(x: metrics.rightRailMinX, y: metrics.plotFrame.minY))
+            path.addLine(to: CGPoint(x: metrics.rightRailMinX, y: metrics.plotFrame.maxY))
+            path.move(to: CGPoint(x: metrics.plotFrame.minX, y: metrics.plotFrame.maxY))
+            path.addLine(to: CGPoint(x: metrics.rightRailMinX, y: metrics.plotFrame.maxY))
+        }
+        .stroke(gridColor, lineWidth: 1)
+
+        ForEach(displayTicks) { tick in
+            let y = yPosition(for: tick.minutes, in: metrics.plotFrame)
+
+            Path { path in
+                path.move(to: CGPoint(x: metrics.rightRailMinX, y: y))
+                path.addLine(to: CGPoint(x: metrics.rightRailMaxX, y: y))
+            }
+            .stroke(gridColor, style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
+        }
+    }
+
+    @ViewBuilder
+    private func compactSelectedDayCallout(in metrics: CompactLayoutMetrics) -> some View {
+        if let compactSelectedDay,
+           let selectedPoint = chart.points.first(where: { $0.dateKey == compactSelectedDay.dateKey }) {
+            let rawCenterX = xPosition(for: selectedPoint, in: metrics.dayColumnFrame)
+            let calloutWidth: CGFloat = dynamicTypeSize.isAccessibilitySize ? 82 : 74
+            let calloutCenterX = min(
+                max(rawCenterX, metrics.calloutFrame.minX + calloutWidth / 2),
+                metrics.calloutFrame.maxX - calloutWidth / 2
+            )
+
+            VStack(spacing: dynamicTypeSize.isAccessibilitySize ? 3 : 1) {
+                Text(compactSelectedDay.relativeLabel)
+                    .font(.system(size: compactCalloutLabelPointSize, weight: .medium))
+                    .foregroundStyle(compactCalloutPrimaryColor)
+
+                HStack(alignment: .firstTextBaseline, spacing: 3) {
+                    Image(systemName: compactSelectedDay.iconName)
+                        .font(.system(size: compactMarkerPointSize, weight: .semibold))
+                        .foregroundStyle(compactCalloutPrimaryColor)
+
+                    Text(compactSelectedDay.timeMain)
+                        .font(.system(size: compactCalloutTimePointSize, weight: .bold))
+                        .foregroundStyle(compactCalloutPrimaryColor)
+                        .monospacedDigit()
+
+                    if let suffix = compactSelectedDay.timeSuffix {
+                        Text(suffix)
+                            .font(.system(size: compactCalloutSuffixPointSize, weight: .regular))
+                            .foregroundStyle(compactCalloutPrimaryColor)
+                            .monospacedDigit()
+                    }
+                }
+            }
+            .frame(width: calloutWidth)
+            .position(x: calloutCenterX, y: metrics.calloutFrame.midY + 2)
+        }
+    }
+
+    @ViewBuilder
+    private func compactXAxis(in metrics: CompactLayoutMetrics) -> some View {
+        ForEach(chart.points) { point in
+            let x = xPosition(for: point, in: metrics.dayColumnFrame)
+
+            Text(weekdayInitial(for: point.date))
+                .font(.system(size: compactAxisPointSize, weight: .semibold))
+                .foregroundStyle(
+                    point.dateKey == chart.selectedDateKey
+                        ? compactPrimaryTextColor
+                        : compactSecondaryTextColor
+                )
+                .position(x: x, y: metrics.weekdayRowY)
+        }
     }
 
     private func plotFrame(in size: CGSize) -> CGRect {
@@ -336,7 +853,7 @@ struct FajrWindowChartView: View {
     }
 
     private func yPosition(for minute: Int, in frame: CGRect) -> CGFloat {
-        let domain = chart.chartDomain
+        let domain = displayDomain
         let clamped = min(max(minute, domain.lowerBound), domain.upperBound)
         let ratio = CGFloat(clamped - domain.lowerBound) / CGFloat(max(1, domain.upperBound - domain.lowerBound))
         return frame.minY + (ratio * frame.height)
@@ -418,4 +935,33 @@ struct FajrWindowChartView: View {
         let index = Int(round(ratio * CGFloat(chart.points.count - 1)))
         return chart.points[min(max(index, 0), chart.points.count - 1)]
     }
+
+    private func weekdayInitial(for date: Date) -> String {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .current
+
+        switch calendar.component(.weekday, from: date) {
+        case 2:
+            return "M"
+        case 3:
+            return "T"
+        case 4:
+            return "W"
+        case 5:
+            return "T"
+        case 6:
+            return "F"
+        case 7:
+            return "S"
+        default:
+            return "S"
+        }
+    }
+
+    private func splitTickLabel(_ label: String) -> (main: String, suffix: String?) {
+        let tokens = label.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }
+        guard tokens.count >= 2 else { return (label, nil) }
+        return (tokens.dropLast().joined(separator: " "), tokens.last)
+    }
+
 }

@@ -51,6 +51,35 @@ enum HijriMonth: Int, CaseIterable, Codable, Hashable, Identifiable {
         }
     }
 
+    var compactUppercaseAbbreviation: String {
+        switch self {
+        case .muharram:
+            return "MUH"
+        case .safar:
+            return "SAF"
+        case .rabiAlAwwal:
+            return "RAB I"
+        case .rabiAlThani:
+            return "RAB II"
+        case .jumadaAlAwwal:
+            return "JUM I"
+        case .jumadaAlThani:
+            return "JUM II"
+        case .rajab:
+            return "RAJ"
+        case .shaban:
+            return "SHAB"
+        case .ramadan:
+            return "RAM"
+        case .shawwal:
+            return "SHAW"
+        case .dhulQadah:
+            return "DHU Q"
+        case .dhulHijjah:
+            return "DHU H"
+        }
+    }
+
     var persistenceValue: String {
         String(format: "%02d", rawValue)
     }

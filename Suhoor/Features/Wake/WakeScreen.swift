@@ -3,11 +3,14 @@ import UIKit
 
 private enum WakeDestination: Identifiable, Hashable {
     case day(DaySchedule)
+    case fajrcast(selectedDateKey: String?)
 
     var id: String {
         switch self {
         case .day(let schedule):
             return "day-\(schedule.id)"
+        case .fajrcast(let selectedDateKey):
+            return "fajrcast-\(selectedDateKey ?? "default")"
         }
     }
 
@@ -27,6 +30,7 @@ struct WakeScreen: View {
 
     @State private var viewState = WakeListState()
     @State private var destination: WakeDestination?
+    @State private var weeklyFajrcastSnapshot: FajrWindowCompactSnapshot?
     @State private var lastRefreshContext: FajrWindowRefreshContext?
     @State private var isVisible = false
 
@@ -36,6 +40,12 @@ struct WakeScreen: View {
                 if featuredEntry == nil && monthSections.isEmpty {
                     emptyStateView
                 } else {
+                    if let weeklyFajrcastSnapshot {
+                        WeeklyFajrcastCard(snapshot: weeklyFajrcastSnapshot) {
+                            destination = .fajrcast(selectedDateKey: weeklyFajrcastSnapshot.selectedDay.dateKey)
+                        }
+                    }
+
                     if let featuredEntry {
                         WakeFeaturedEntryCard(
                             entry: featuredEntry
@@ -101,6 +111,11 @@ struct WakeScreen: View {
             switch destination {
             case .day(let schedule):
                 AlarmDayDetailView(schedule: schedule)
+            case .fajrcast(let selectedDateKey):
+                FajrWindowDetailView(
+                    initialPeriod: .sevenDays,
+                    initialSelectedDateKey: selectedDateKey
+                )
             }
         }
         .onAppear {
@@ -197,6 +212,7 @@ struct WakeScreen: View {
                 pinnedEntryIDs: [],
                 timeZone: currentTimeZone
             )
+            weeklyFajrcastSnapshot = scheduleManager.fajrWindowCompactSnapshot(timeZone: currentTimeZone)
             let sectionIdentifiers = Set(result.snapshot.sections.map(\.id))
             viewState.loadingSectionIDs = viewState.loadingSectionIDs.filter { sectionIdentifiers.contains($0) }
             viewState.listSnapshot = result.snapshot

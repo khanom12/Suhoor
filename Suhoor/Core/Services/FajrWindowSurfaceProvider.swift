@@ -150,24 +150,49 @@ struct FajrWindowSurfaceProvider {
         timeZone: TimeZone = .current
     ) -> FajrWindowCompactSnapshot {
         let points = projectedPoints(rows: dataset.rows, overlayLookup: [:])
-        let selectedPoint = selectedPoint(
+        let selectedPoint = compactSelectedPoint(
             from: points,
             selectedDateKey: selectedDateKey,
             now: now,
             timeZone: timeZone
         )
+        let chart = chartSnapshot(
+            period: dataset.period,
+            activeOverlay: .myWake,
+            points: points,
+            renderDateKeys: dataset.renderDateKeys,
+            selectedDateKey: selectedPoint?.dateKey,
+            xAxisLabels: dataset.xAxisLabels
+        )
+        let summary = buildCompactSummary(
+            rows: dataset.rows,
+            selectedPoint: selectedPoint,
+            now: now,
+            timeZone: timeZone
+        )
+        let selectedDay = selectedPoint.map {
+            buildCompactSelectedDaySnapshot(
+                point: $0,
+                now: now,
+                timeZone: timeZone
+            )
+        } ?? FajrWindowCompactSelectedDaySnapshot(
+            dateKey: "",
+            relativeLabel: "TODAY",
+            weekdayTitle: "",
+            iconName: "alarm.fill",
+            isAlarmActive: false,
+            timeMain: "--",
+            timeSuffix: nil,
+            accessibilityValue: "No upcoming morning"
+        )
 
         return FajrWindowCompactSnapshot(
             period: dataset.period,
-            chart: chartSnapshot(
-                period: dataset.period,
-                activeOverlay: .myWake,
-                points: points,
-                renderDateKeys: dataset.renderDateKeys,
-                selectedDateKey: selectedPoint?.dateKey,
-                xAxisLabels: dataset.xAxisLabels
-            ),
-            compactInsight: dataset.compactInsight
+            chart: chart,
+            compactInsight: summary.primaryText,
+            summary: summary,
+            selectedDay: selectedDay
         )
     }
 
@@ -231,6 +256,7 @@ struct FajrWindowSurfaceProvider {
             primaryWakeMinutes: minutesFromMidnight(for: day.schedule.wakeDate, timeZone: timeZone),
             saferWakeMinutes: minutesFromMidnight(for: saferWake, timeZone: timeZone),
             bufferBeforeBoundaryMinutes: Int(round(lowerBoundaryDate.timeIntervalSince(day.schedule.wakeDate) / 60)),
+            isSkipped: day.effectiveConfig.skipDay,
             isOverride: overrideDateKeys.contains(day.dateKey),
             isSpecialDay: day.resolvedDayContext.primaryContext != .standard || !secondaryTitles.isEmpty,
             isFastingContext: isFastingContext,
@@ -272,6 +298,7 @@ struct FajrWindowSurfaceProvider {
                 fastingWakeMinutes: fastingValue?.wakeMinutes,
                 tahajjudWakeMinutes: tahajjudValue?.wakeMinutes,
                 bufferBeforeBoundaryMinutes: row.bufferBeforeBoundaryMinutes,
+                isSkipped: row.isSkipped,
                 isOverride: row.isOverride,
                 isSpecialDay: row.isSpecialDay,
                 isFastingContext: row.isFastingContext,
@@ -293,6 +320,7 @@ struct FajrWindowSurfaceProvider {
         let renderDateKeySet = Set(renderDateKeys)
         let renderPoints = points.filter { renderDateKeySet.contains($0.dateKey) }
         let domain = chartDomain(for: points)
+        let compactScale = compactChartScale(for: points)
 
         return FajrWindowChartSnapshot(
             period: period,
@@ -302,7 +330,9 @@ struct FajrWindowSurfaceProvider {
             selectedDateKey: selectedDateKey,
             chartDomain: domain,
             xAxisLabels: xAxisLabels,
-            yTicks: chartTicks(for: domain)
+            yTicks: chartTicks(for: domain),
+            compactChartDomain: compactScale.domain,
+            compactYTicks: compactScale.ticks
         )
     }
 
@@ -349,6 +379,30 @@ struct FajrWindowSurfaceProvider {
         return points.first
     }
 
+    private func compactSelectedPoint(
+        from points: [FajrWindowPoint],
+        selectedDateKey: String?,
+        now: Date,
+        timeZone: TimeZone
+    ) -> FajrWindowPoint? {
+        if let selectedDateKey,
+           let selected = points.first(where: { $0.dateKey == selectedDateKey }) {
+            return selected
+        }
+
+        let todayKey = DateHelpers.dayIdentifier(for: now, timeZone: timeZone)
+        if let todayIndex = points.firstIndex(where: { $0.dateKey == todayKey }) {
+            let today = points[todayIndex]
+            if now <= today.primaryWake {
+                return today
+            }
+            let tomorrowIndex = min(todayIndex + 1, points.count - 1)
+            return points[tomorrowIndex]
+        }
+
+        return points.first(where: { $0.date >= now }) ?? points.first
+    }
+
     private func buildSelectedDaySnapshot(
         point: FajrWindowPoint,
         overlay: FajrWindowOverlay
@@ -368,20 +422,24 @@ struct FajrWindowSurfaceProvider {
             ),
             FajrWindowValueItem(
                 id: "my-wake",
-                label: "Your wake",
-                value: TimeFormatters.timeFormatter.string(from: point.primaryWake),
+                label: point.isSkipped ? "Alarm" : "Your wake",
+                value: point.isSkipped ? "Off for this date" : TimeFormatters.timeFormatter.string(from: point.primaryWake),
                 emphasis: .primary
             ),
         ]
 
-        var secondaryItems = [
-            FajrWindowValueItem(
-                id: "buffer",
-                label: "Space before end",
-                value: bufferText(minutes: point.bufferBeforeBoundaryMinutes),
-                emphasis: .secondary
+        var secondaryItems: [FajrWindowValueItem] = []
+
+        if !point.isSkipped {
+            secondaryItems.append(
+                FajrWindowValueItem(
+                    id: "buffer",
+                    label: "Space before end",
+                    value: bufferText(minutes: point.bufferBeforeBoundaryMinutes),
+                    emphasis: .secondary
+                )
             )
-        ]
+        }
 
         if let fastingWake = point.fastingWake {
             secondaryItems.append(
@@ -407,7 +465,9 @@ struct FajrWindowSurfaceProvider {
 
         let comparisonItem = comparisonItem(for: point, overlay: overlay)
         let statusText: String?
-        if point.isOverride {
+        if point.isSkipped {
+            statusText = "Off for this date"
+        } else if point.isOverride {
             statusText = "Changed for this date"
         } else if point.isSpecialDay {
             statusText = point.contextTags.first
@@ -424,9 +484,11 @@ struct FajrWindowSurfaceProvider {
             secondaryItems: secondaryItems,
             comparisonItem: comparisonItem,
             contextTags: point.contextTags,
-            explanationText: [point.relationText, point.boundaryTruth.explanationText]
-                .filter { !$0.isEmpty }
-                .joined(separator: " ")
+            explanationText: point.isSkipped
+                ? "This morning is off for this date. \(point.boundaryTruth.explanationText)"
+                : [point.relationText, point.boundaryTruth.explanationText]
+                    .filter { !$0.isEmpty }
+                    .joined(separator: " ")
         )
     }
 
@@ -458,6 +520,133 @@ struct FajrWindowSurfaceProvider {
             value: TimeFormatters.timeFormatter.string(from: value),
             emphasis: .comparison
         )
+    }
+
+    private func buildCompactSummary(
+        rows: [FajrWindowDatasetRow],
+        selectedPoint: FajrWindowPoint?,
+        now: Date,
+        timeZone: TimeZone
+    ) -> FajrWindowCompactSummarySnapshot {
+        guard let selectedPoint else {
+            return FajrWindowCompactSummarySnapshot(
+                primaryText: "This week's mornings will appear once Suhoor has upcoming resolved mornings.",
+                secondaryText: nil
+            )
+        }
+
+        let subject = compactSubject(for: selectedPoint, now: now, timeZone: timeZone)
+        let primaryText = "\(possessive(subject)) alarm is \(compactRelationClause(for: selectedPoint))."
+
+        return FajrWindowCompactSummarySnapshot(
+            primaryText: primaryText,
+            secondaryText: compactSecondarySummaryLine(rows: rows, timeZone: timeZone)
+        )
+    }
+
+    private func buildCompactSelectedDaySnapshot(
+        point: FajrWindowPoint,
+        now: Date,
+        timeZone: TimeZone
+    ) -> FajrWindowCompactSelectedDaySnapshot {
+        let weekdayFormatter = DateFormatter()
+        weekdayFormatter.dateFormat = "EEEE"
+        weekdayFormatter.timeZone = timeZone
+        weekdayFormatter.locale = .current
+
+        let timeParts = point.isSkipped ? ("Off", nil) : splitTimeDisplay(for: point.primaryWake)
+
+        return FajrWindowCompactSelectedDaySnapshot(
+            dateKey: point.dateKey,
+            relativeLabel: compactSubject(for: point, now: now, timeZone: timeZone).uppercased(),
+            weekdayTitle: weekdayFormatter.string(from: point.date),
+            iconName: point.isSkipped ? "bell.slash.fill" : "alarm.fill",
+            isAlarmActive: !point.isSkipped,
+            timeMain: timeParts.0,
+            timeSuffix: timeParts.1,
+            accessibilityValue: point.isSkipped
+                ? "\(compactSubject(for: point, now: now, timeZone: timeZone)), off for this date."
+                : "\(compactSubject(for: point, now: now, timeZone: timeZone)), \(TimeFormatters.timeFormatter.string(from: point.primaryWake))."
+        )
+    }
+
+    private func compactSubject(
+        for point: FajrWindowPoint,
+        now: Date,
+        timeZone: TimeZone
+    ) -> String {
+        let todayKey = DateHelpers.dayIdentifier(for: now, timeZone: timeZone)
+
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let tomorrow = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: now))
+        let tomorrowKey = tomorrow.map { DateHelpers.dayIdentifier(for: $0, timeZone: timeZone) }
+
+        if point.dateKey == todayKey {
+            return "Today"
+        }
+        if point.dateKey == tomorrowKey {
+            return "Tomorrow"
+        }
+
+        return point.longLabel.components(separatedBy: ",").first ?? point.longLabel
+    }
+
+    private func compactRelationClause(for point: FajrWindowPoint) -> String {
+        if point.isSkipped {
+            return "off for this date"
+        }
+
+        if point.relationText == "Fixed wake" {
+            return "set for \(TimeFormatters.timeFormatter.string(from: point.primaryWake))"
+        }
+
+        if point.relationText == "At Fajr" {
+            return "at Fajr begins"
+        }
+
+        if point.relationText.hasSuffix(" before Fajr") {
+            return point.relationText.replacingOccurrences(of: " before Fajr", with: " before Fajr begins").lowercasedFirstCharacter()
+        }
+
+        if point.relationText.hasSuffix(" after Fajr") {
+            return point.relationText.replacingOccurrences(of: " after Fajr", with: " after Fajr begins").lowercasedFirstCharacter()
+        }
+
+        return point.relationText.lowercasedFirstCharacter()
+    }
+
+    private func compactSecondarySummaryLine(
+        rows: [FajrWindowDatasetRow],
+        timeZone: TimeZone
+    ) -> String? {
+        guard !rows.isEmpty else { return nil }
+
+        if daylightSavingShiftOccurs(in: rows, timeZone: timeZone) {
+            return "Daylight saving time shifts this week's schedule."
+        }
+
+        let adjustedCount = rows.filter(\.isOverride).count
+        if adjustedCount > 0 {
+            return adjustedCount == 1
+                ? "1 morning is adjusted this week."
+                : "\(adjustedCount) mornings are adjusted this week."
+        }
+
+        let fastingCount = rows.filter(\.isFastingContext).count
+        if fastingCount >= 2 {
+            return "\(fastingCount) fasting mornings are in this week."
+        }
+
+        return nil
+    }
+
+    private func daylightSavingShiftOccurs(
+        in rows: [FajrWindowDatasetRow],
+        timeZone: TimeZone
+    ) -> Bool {
+        let offsets = Set(rows.map { timeZone.secondsFromGMT(for: $0.date) })
+        return offsets.count > 1
     }
 
     private func compactInsight(for rows: [FajrWindowDatasetRow], period: FajrWindowPeriod) -> String {
@@ -705,6 +894,74 @@ struct FajrWindowSurfaceProvider {
         return lower...max(lower + 15, upper)
     }
 
+    private func compactChartScale(for points: [FajrWindowPoint]) -> CompactChartScale {
+        let values = points.flatMap { point in
+            [
+                point.fajrStartMinutes,
+                point.fajrEndOrBoundaryMinutes,
+                point.primaryWakeMinutes,
+                point.saferWakeMinutes,
+                point.fastingWakeMinutes,
+                point.tahajjudWakeMinutes
+            ].compactMap { $0 }
+        }
+
+        guard let minimum = values.min(), let maximum = values.max() else {
+            let ticks = stride(from: 270, through: 360, by: 30).map {
+                FajrWindowChartTick(minutes: $0, label: compactTimeLabel(for: $0))
+            }
+            return CompactChartScale(domain: 270...360, ticks: ticks)
+        }
+
+        let span = maximum - minimum
+        if span <= 45, let fifteenScale = compactChartScale(minimum: minimum, maximum: maximum, step: 15) {
+            return fifteenScale
+        }
+
+        for step in [30, 45, 60, 75, 90, 105, 120] {
+            if let scale = compactChartScale(minimum: minimum, maximum: maximum, step: step) {
+                return scale
+            }
+        }
+
+        return compactChartScale(minimum: minimum, maximum: maximum, step: 120)
+            ?? CompactChartScale(
+                domain: max(0, minimum - 30)...min(24 * 60, maximum + 30),
+                ticks: stride(from: max(0, minimum - 30), through: min(24 * 60, maximum + 60), by: 30)
+                    .prefix(4)
+                    .map { FajrWindowChartTick(minutes: $0, label: compactTimeLabel(for: $0)) }
+            )
+    }
+
+    private func compactChartScale(
+        minimum: Int,
+        maximum: Int,
+        step: Int
+    ) -> CompactChartScale? {
+        let dayLimit = 24 * 60
+        var start = max(0, (minimum / step) * step)
+        var end = min(dayLimit, ((maximum + step - 1) / step) * step)
+
+        while ((end - start) / step) + 1 < 4 {
+            if start - step >= 0 {
+                start -= step
+            } else if end + step <= dayLimit {
+                end += step
+            } else {
+                break
+            }
+        }
+
+        let tickCount = ((end - start) / step) + 1
+        guard tickCount == 4 else { return nil }
+
+        let ticks = stride(from: start, through: end, by: step).map {
+            FajrWindowChartTick(minutes: $0, label: compactTimeLabel(for: $0))
+        }
+
+        return CompactChartScale(domain: start...end, ticks: ticks)
+    }
+
     private func chartTicks(for domain: ClosedRange<Int>) -> [FajrWindowChartTick] {
         let start = (domain.lowerBound / 60) * 60
         let end = ((domain.upperBound + 59) / 60) * 60
@@ -791,6 +1048,42 @@ struct FajrWindowSurfaceProvider {
         let suffix = hour >= 12 ? "PM" : "AM"
         let normalizedHour = hour == 0 ? 12 : (hour > 12 ? hour - 12 : hour)
         return "\(normalizedHour) \(suffix)"
+    }
+
+    private func compactTimeLabel(for minutes: Int) -> String {
+        SettingsSummaryFormatter.timeText(minutesFromMidnight: minutes)
+    }
+
+    private func splitTimeDisplay(for date: Date) -> (String, String?) {
+        let formatted = TimeFormatters.timeFormatter.string(from: date)
+        guard localeUsesMeridiem else { return (formatted, nil) }
+
+        let tokens = formatted.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }
+        guard tokens.count >= 2 else { return (formatted, nil) }
+
+        let suffix = tokens.last
+        let main = tokens.dropLast().joined(separator: " ")
+        return (main.isEmpty ? formatted : main, suffix)
+    }
+
+    private var localeUsesMeridiem: Bool {
+        DateFormatter.dateFormat(fromTemplate: "j", options: 0, locale: .current)?.contains("a") == true
+    }
+
+    private func possessive(_ subject: String) -> String {
+        "\(subject)'s"
+    }
+}
+
+private struct CompactChartScale {
+    let domain: ClosedRange<Int>
+    let ticks: [FajrWindowChartTick]
+}
+
+private extension String {
+    func lowercasedFirstCharacter() -> String {
+        guard let first else { return self }
+        return String(first).lowercased() + dropFirst()
     }
 }
 

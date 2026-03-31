@@ -280,6 +280,54 @@ struct FajrWindowSurfaceProviderTests {
         #expect(compact.points.count == 7)
         #expect(compact.chart.activeOverlay == .myWake)
         #expect(compact.compactInsight.isEmpty == false)
+        #expect(compact.summary.primaryText.isEmpty == false)
+        #expect(compact.selectedDay.relativeLabel.isEmpty == false)
+        #expect(compact.compactYTicks.count == 4)
+    }
+
+    @Test
+    func compactSnapshotSelectsTomorrowAfterTodayWakeHasPassed() {
+        let days = makeDays(count: 7)
+        let dataset = provider.buildDataset(
+            period: .sevenDays,
+            activeDays: days,
+            overrideDateKeys: [],
+            timeZone: .current
+        )
+
+        let now = makeDate(dayOffset: 0, hour: 6, minute: 30)
+        let compact = provider.compactSnapshot(
+            dataset: dataset,
+            now: now,
+            timeZone: .current
+        )
+
+        #expect(compact.selectedDateKey == days[1].dateKey)
+        #expect(compact.selectedDay.relativeLabel == "TOMORROW")
+    }
+
+    @Test
+    func compactSnapshotReportsSkippedTomorrowAlarm() {
+        let first = makeDay(dayOffset: 0)
+        let skippedTomorrow = makeDay(dayOffset: 1, skipDay: true)
+        let remaining = (2..<7).map { makeDay(dayOffset: $0) }
+        let dataset = provider.buildDataset(
+            period: .sevenDays,
+            activeDays: [first, skippedTomorrow] + remaining,
+            overrideDateKeys: [],
+            timeZone: .current
+        )
+
+        let compact = provider.compactSnapshot(
+            dataset: dataset,
+            now: makeDate(dayOffset: 0, hour: 6, minute: 30),
+            timeZone: .current
+        )
+
+        #expect(compact.selectedDay.dateKey == skippedTomorrow.dateKey)
+        #expect(compact.summary.primaryText == "Tomorrow's alarm is off for this date.")
+        #expect(compact.selectedDay.timeMain == "Off")
+        #expect(compact.selectedDay.iconName == "bell.slash.fill")
     }
 
     private func makeDays(count: Int) -> [ActiveAlarmDay] {
@@ -296,7 +344,8 @@ struct FajrWindowSurfaceProviderTests {
         fajrStartMinute: Int = 30,
         boundaryHour: Int = 6,
         boundaryMinute: Int = 45,
-        truth: FajrWindowBoundaryTruth = .sunriseProxy
+        truth: FajrWindowBoundaryTruth = .sunriseProxy,
+        skipDay: Bool = false
     ) -> ActiveAlarmDay {
         let date = makeDate(dayOffset: dayOffset, hour: 0, minute: 0)
         let wakeDate = makeDate(dayOffset: dayOffset, hour: wakeHour, minute: wakeMinute)
@@ -367,7 +416,7 @@ struct FajrWindowSurfaceProviderTests {
         let effectiveConfig = EffectiveDailyConfig(
             date: date,
             defaultsActive: true,
-            skipDay: false,
+            skipDay: skipDay,
             suhoorEnabled: true,
             reminderEnabled: true,
             fajrEnabled: true,

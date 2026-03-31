@@ -374,7 +374,12 @@ final class ScheduleManager: ObservableObject {
     }
 
     func fajrWindowCompactSnapshot(timeZone: TimeZone = .current) -> FajrWindowCompactSnapshot {
-        let dataset = fajrWindowDataset(period: .sevenDays, timeZone: timeZone)
+        let dataset = fajrWindowSurfaceProvider.buildDataset(
+            period: .sevenDays,
+            activeDays: activeDaysForWeeklyFajrcast(timeZone: timeZone),
+            overrideDateKeys: Set(alarmConfigStore.overridesByDay.keys),
+            timeZone: timeZone
+        )
         return fajrWindowSurfaceProvider.compactSnapshot(
             dataset: dataset,
             now: Date(),
@@ -894,6 +899,36 @@ final class ScheduleManager: ObservableObject {
             timeZone: timeZone,
             visibleHorizonDays: count,
             scheduledHorizonDays: count
+        ).visibleDays
+    }
+
+    private func activeDaysForWeeklyFajrcast(
+        timeZone: TimeZone
+    ) -> [ActiveAlarmDay] {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+
+        let today = DateHelpers.startOfToday(in: timeZone)
+        let weekday = calendar.component(.weekday, from: today)
+        let mondayOffset = (weekday + 5) % 7
+        let startOfWeek = calendar.date(byAdding: .day, value: -mondayOffset, to: today) ?? today
+
+        guard let coordinate = currentCoordinate() else {
+            return activeDaysForFajrWindow(period: .sevenDays, timeZone: timeZone)
+        }
+
+        let resolvedEntries = activeDayResolver.resolvedEntriesForActiveWindow(
+            from: startOfWeek,
+            limit: 7,
+            timeZone: timeZone
+        )
+
+        return buildActiveWindowSnapshot(
+            resolvedEntries: resolvedEntries,
+            coordinate: coordinate,
+            timeZone: timeZone,
+            visibleHorizonDays: 7,
+            scheduledHorizonDays: 7
         ).visibleDays
     }
 

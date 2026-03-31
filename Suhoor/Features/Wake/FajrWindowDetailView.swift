@@ -7,13 +7,23 @@ struct FajrWindowDetailView: View {
     @Environment(\.scenePhase) private var scenePhase
 
     let initialPeriod: FajrWindowPeriod
+    let initialSelectedDateKey: String?
 
     @StateObject private var store: FajrWindowDetailStore
     @State private var selectedMorningDate: Date?
 
-    init(initialPeriod: FajrWindowPeriod = .sevenDays) {
+    init(
+        initialPeriod: FajrWindowPeriod = .sevenDays,
+        initialSelectedDateKey: String? = nil
+    ) {
         self.initialPeriod = initialPeriod
-        _store = StateObject(wrappedValue: FajrWindowDetailStore(initialPeriod: initialPeriod))
+        self.initialSelectedDateKey = initialSelectedDateKey
+        _store = StateObject(
+            wrappedValue: FajrWindowDetailStore(
+                initialPeriod: initialPeriod,
+                initialSelectedDateKey: initialSelectedDateKey
+            )
+        )
     }
 
     var body: some View {
@@ -27,7 +37,7 @@ struct FajrWindowDetailView: View {
             }
         }
         .background(Color(.systemGroupedBackground).ignoresSafeArea())
-        .navigationTitle("Fajr Window")
+        .navigationTitle("Fajrcast")
         .navigationBarTitleDisplayMode(.inline)
         .navigationDestination(item: $selectedMorningDate) { date in
             if let schedule = scheduleManager.activeDay(for: date)?.schedule {
@@ -96,7 +106,7 @@ struct FajrWindowDetailView: View {
                             layoutStyle: .detail,
                             onSelectDateKey: { store.selectDateKey($0, using: scheduleManager, timeZone: currentTimeZone) },
                             onMoveSelection: { store.moveSelection(by: $0, using: scheduleManager, timeZone: currentTimeZone) },
-                            accessibilityLabel: "Fajr Window chart",
+                            accessibilityLabel: "Fajrcast chart",
                             accessibilityValue: snapshot.selectedDay?.accessibilitySummary,
                             accessibilityHint: "The shaded band shows the supported Fajr window and the solid line shows your wake. Swipe up or down to move days, or use Previous day and Next day."
                         )
@@ -161,7 +171,7 @@ struct FajrWindowDetailView: View {
 
     private func header(snapshot: FajrWindowSurfaceSnapshot) -> some View {
         VStack(alignment: .leading, spacing: DesignTokens.textSpacingCompact) {
-            Text("Fajr Window")
+            Text(store.period == .sevenDays ? "Weekly Fajrcast" : "Fajrcast")
                 .font(DesignTokens.screenTitleFont)
             Text(snapshot.period.subtitle)
                 .font(AppTypography.metricLabel)
