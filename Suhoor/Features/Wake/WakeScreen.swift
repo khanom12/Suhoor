@@ -65,13 +65,16 @@ struct WakeScreen: View {
                                     )
 
                                     if section.entries.isEmpty {
-                                        AppGlassSurface(variant: .quiet) {
+                                        WakeGlassCard(padding: 10) {
                                             Text("More mornings load here as you browse.")
                                                 .font(AppTypography.rowBody)
-                                                .foregroundStyle(.secondary)
+                                                .foregroundStyle(WakeGlassTheme.secondaryText)
                                         }
                                     } else {
-                                        AppInsetGroup {
+                                        AppInsetGroup(
+                                            tint: WakeGlassTheme.tintColor,
+                                            tintOpacityMultiplier: WakeGlassTheme.tintOpacityMultiplier
+                                        ) {
                                             ForEach(Array(section.entries.enumerated()), id: \.element.id) { index, entry in
                                                 WakeRowView(
                                                     entry: entry

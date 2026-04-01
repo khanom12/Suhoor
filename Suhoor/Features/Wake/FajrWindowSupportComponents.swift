@@ -62,16 +62,16 @@ private struct FajrWindowPickerButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(AppTypography.badge)
-            .foregroundStyle(isSelected ? Color.black : Color.primary)
+            .foregroundStyle(isSelected ? Color.black : WakeGlassTheme.primaryText)
             .padding(.horizontal, DesignTokens.space12)
             .padding(.vertical, DesignTokens.space10)
             .background(
                 Capsule()
-                    .fill(isSelected ? DawnColor.lightGold200 : Color(.secondarySystemGroupedBackground))
+                    .fill(isSelected ? DawnColor.lightGold200 : WakeGlassTheme.chipFill)
             )
             .overlay(
                 Capsule()
-                    .stroke(Color.white.opacity(isSelected ? 0.0 : 0.2), lineWidth: 1)
+                    .stroke(Color.white.opacity(isSelected ? 0.0 : 0.12), lineWidth: 1)
             )
             .opacity(configuration.isPressed ? 0.9 : 1)
             .scaleEffect(configuration.isPressed ? 0.98 : 1)
@@ -80,18 +80,17 @@ private struct FajrWindowPickerButtonStyle: ButtonStyle {
 
 struct FajrWindowSummaryBlock: View {
     let summary: FajrWindowSummarySnapshot
-    var tintColor: Color = DawnColor.lightGold200
-    var tintOpacity: Double = 0.12
 
     var body: some View {
-        GlassCard(tintColor: tintColor, tintOpacity: tintOpacity) {
+        WakeGlassCard {
             VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
                 VStack(alignment: .leading, spacing: DesignTokens.textSpacingCompact) {
                     Text(summary.title)
                         .font(AppTypography.cardTitle)
+                        .foregroundStyle(WakeGlassTheme.primaryText)
                     Text(summary.body)
                         .font(AppTypography.cardBody)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(WakeGlassTheme.secondaryText)
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
@@ -101,10 +100,11 @@ struct FajrWindowSummaryBlock: View {
                             HStack(alignment: .firstTextBaseline, spacing: DesignTokens.spacingM) {
                                 Text(metric.label)
                                     .font(AppTypography.metricLabel)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(WakeGlassTheme.secondaryText)
                                 Spacer(minLength: DesignTokens.spacingS)
                                 Text(metric.value)
                                     .font(AppTypography.metricValue)
+                                    .foregroundStyle(WakeGlassTheme.primaryText)
                                     .monospacedDigit()
                             }
                         }
@@ -119,18 +119,20 @@ struct FajrWindowInsightList: View {
     let items: [FajrWindowInsightItem]
 
     var body: some View {
-        GlassCard(tintColor: DawnColor.accent, tintOpacity: 0.08) {
+        WakeGlassCard {
             VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
                 Text("What stands out")
                     .font(AppTypography.cardTitle)
+                    .foregroundStyle(WakeGlassTheme.primaryText)
 
                 ForEach(items) { item in
                     VStack(alignment: .leading, spacing: DesignTokens.textSpacingTight) {
                         Text(item.title)
                             .font(AppTypography.rowTitle)
+                            .foregroundStyle(WakeGlassTheme.primaryText)
                         Text(item.detail)
                             .font(AppTypography.rowBody)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(WakeGlassTheme.secondaryText)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
@@ -149,29 +151,30 @@ struct FajrWindowActionRows: View {
                 Button {
                     onSelect(item.intent)
                 } label: {
-                    HStack(alignment: .center, spacing: DesignTokens.spacingM) {
-                        VStack(alignment: .leading, spacing: DesignTokens.textSpacingTight) {
-                            Text(item.title)
-                                .font(AppTypography.rowTitle)
-                                .foregroundStyle(.primary)
-                            if let subtitle = item.subtitle {
-                                Text(subtitle)
-                                    .font(AppTypography.rowBody)
-                                    .foregroundStyle(.secondary)
-                                    .fixedSize(horizontal: false, vertical: true)
+                    AppGlassSurface(
+                        variant: .grouped,
+                        tint: WakeGlassTheme.tintColor,
+                        tintOpacityMultiplier: WakeGlassTheme.tintOpacityMultiplier,
+                        contentPadding: DesignTokens.spacingM
+                    ) {
+                        HStack(alignment: .center, spacing: DesignTokens.spacingM) {
+                            VStack(alignment: .leading, spacing: DesignTokens.textSpacingTight) {
+                                Text(item.title)
+                                    .font(AppTypography.rowTitle)
+                                    .foregroundStyle(WakeGlassTheme.primaryText)
+                                if let subtitle = item.subtitle {
+                                    Text(subtitle)
+                                        .font(AppTypography.rowBody)
+                                        .foregroundStyle(WakeGlassTheme.secondaryText)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
                             }
+                            Spacer(minLength: DesignTokens.spacingM)
+                            Image(systemName: "chevron.right")
+                                .font(AppTypography.navAccessory)
+                                .foregroundStyle(WakeGlassTheme.secondaryText)
                         }
-                        Spacer(minLength: DesignTokens.spacingM)
-                        Image(systemName: "chevron.right")
-                            .font(AppTypography.navAccessory)
-                            .foregroundStyle(.tertiary)
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(DesignTokens.spacingM)
-                    .background(
-                        RoundedRectangle(cornerRadius: DesignTokens.innerCardRadius, style: .continuous)
-                            .fill(Color(.secondarySystemGroupedBackground))
-                    )
                 }
                 .buttonStyle(.plain)
                 .accessibilityElement(children: .combine)
@@ -207,13 +210,13 @@ struct FajrWindowDayStepper: View {
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.bordered)
-            .tint(.secondary)
+            .tint(.white)
             .disabled(!canMoveBackward)
             .accessibilityHint("Moves to the earlier day in this view.")
 
             Text(selectedTitle)
                 .font(AppTypography.metricLabel)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(WakeGlassTheme.secondaryText)
                 .frame(maxWidth: .infinity)
                 .multilineTextAlignment(.center)
                 .accessibilityHidden(true)
@@ -224,7 +227,7 @@ struct FajrWindowDayStepper: View {
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.bordered)
-            .tint(.secondary)
+            .tint(.white)
             .disabled(!canMoveForward)
             .accessibilityHint("Moves to the later day in this view.")
         }

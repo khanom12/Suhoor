@@ -73,12 +73,12 @@ struct FajrWindowChartView: View {
 
     private var placeholder: some View {
         RoundedRectangle(cornerRadius: DesignTokens.innerCardRadius, style: .continuous)
-            .fill(Color(.secondarySystemGroupedBackground))
+            .fill(layoutStyle == .compact ? WakeGlassTheme.chipFill : Color.white.opacity(0.06))
             .frame(height: layoutStyle == .compact ? compactTotalHeight : layoutStyle.plotHeight)
             .overlay(
                 Text("Upcoming mornings will appear here.")
                     .font(AppTypography.cardBody)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(layoutStyle == .compact ? WakeGlassTheme.secondaryText : WakeGlassTheme.secondaryText)
             )
     }
 
@@ -201,6 +201,18 @@ struct FajrWindowChartView: View {
     }
 
     private var plotBackgroundFill: LinearGradient {
+        if layoutStyle == .detail {
+            return LinearGradient(
+                colors: [
+                    Color.white.opacity(0.06),
+                    Color.black.opacity(0.18),
+                    DawnColor.lightGold900.opacity(0.18)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        }
+
         if colorScheme == .dark {
             return LinearGradient(
                 colors: [
@@ -225,15 +237,24 @@ struct FajrWindowChartView: View {
     }
 
     private var plotBorderColor: Color {
-        colorScheme == .dark ? Color.white.opacity(0.10) : Color.black.opacity(0.08)
+        if layoutStyle == .detail {
+            return Color.white.opacity(0.10)
+        }
+        return colorScheme == .dark ? Color.white.opacity(0.10) : Color.black.opacity(0.08)
     }
 
     private var boundaryStartColor: Color {
-        colorScheme == .dark ? Color.white.opacity(0.54) : Color.black.opacity(0.42)
+        if layoutStyle == .detail {
+            return Color.white.opacity(0.54)
+        }
+        return colorScheme == .dark ? Color.white.opacity(0.54) : Color.black.opacity(0.42)
     }
 
     private var boundaryEndColor: Color {
-        colorScheme == .dark ? DawnColor.lightGold100.opacity(0.92) : Color.black.opacity(0.74)
+        if layoutStyle == .detail {
+            return DawnColor.lightGold100.opacity(0.92)
+        }
+        return colorScheme == .dark ? DawnColor.lightGold100.opacity(0.92) : Color.black.opacity(0.74)
     }
 
     private var compactBoundaryColor: Color {
@@ -241,7 +262,10 @@ struct FajrWindowChartView: View {
     }
 
     private var selectedAxisColor: Color {
-        colorScheme == .dark ? Color.white.opacity(0.22) : Color.black.opacity(0.16)
+        if layoutStyle == .detail {
+            return Color.white.opacity(0.22)
+        }
+        return colorScheme == .dark ? Color.white.opacity(0.22) : Color.black.opacity(0.16)
     }
 
     private var compactSelectedGuideColor: Color {
@@ -251,7 +275,7 @@ struct FajrWindowChartView: View {
     private var gridColor: Color {
         layoutStyle == .compact
             ? Color.white.opacity(0.05)
-            : (colorScheme == .dark ? Color.white.opacity(0.12) : Color.black.opacity(0.10))
+            : (layoutStyle == .detail ? Color.white.opacity(0.12) : (colorScheme == .dark ? Color.white.opacity(0.12) : Color.black.opacity(0.10)))
     }
 
     private var compactPrimaryTextColor: Color {
@@ -348,7 +372,7 @@ struct FajrWindowChartView: View {
                     path.stroke(
                         layoutStyle == .compact
                         ? compactBoundaryColor.opacity(0.12)
-                        : (colorScheme == .dark ? Color.white.opacity(0.10) : Color.black.opacity(0.08)),
+                        : (layoutStyle == .detail ? Color.white.opacity(0.10) : (colorScheme == .dark ? Color.white.opacity(0.10) : Color.black.opacity(0.08))),
                         lineWidth: 1
                     )
                 )
@@ -394,7 +418,7 @@ struct FajrWindowChartView: View {
     private func primaryWakeLine(in frame: CGRect) -> some View {
         if let path = linePath(for: \.primaryWakeMinutes, in: frame) {
             path.stroke(
-                colorScheme == .dark ? Color.white.opacity(0.92) : Color.black.opacity(0.80),
+                layoutStyle == .detail ? Color.white.opacity(0.92) : (colorScheme == .dark ? Color.white.opacity(0.92) : Color.black.opacity(0.80)),
                 style: StrokeStyle(lineWidth: 2.4, lineCap: .round, lineJoin: .round)
             )
         }
@@ -462,7 +486,10 @@ struct FajrWindowChartView: View {
     }
 
     private var regularMarkerColor: Color {
-        colorScheme == .dark ? Color.white.opacity(0.34) : Color.black.opacity(0.28)
+        if layoutStyle == .detail {
+            return Color.white.opacity(0.34)
+        }
+        return colorScheme == .dark ? Color.white.opacity(0.34) : Color.black.opacity(0.28)
     }
 
     @ViewBuilder
@@ -474,15 +501,15 @@ struct FajrWindowChartView: View {
         } else {
             Image(systemName: point.isSkipped ? "bell.slash.fill" : "alarm.fill")
                 .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(colorScheme == .dark ? Color.white : Color.black)
+                .foregroundStyle(Color.white)
                 .padding(6)
                 .background(
                     Circle()
-                        .fill(colorScheme == .dark ? DawnColor.lightGold200.opacity(0.28) : Color.white.opacity(0.92))
+                        .fill(DawnColor.lightGold200.opacity(0.28))
                 )
                 .overlay(
                     Circle()
-                        .stroke(colorScheme == .dark ? Color.white.opacity(0.24) : Color.black.opacity(0.12), lineWidth: 1)
+                        .stroke(Color.white.opacity(0.24), lineWidth: 1)
                 )
         }
     }
@@ -496,11 +523,11 @@ struct FajrWindowChartView: View {
             } else {
                 Image(systemName: "bell.slash")
                     .font(.system(size: 9, weight: .medium))
-                    .foregroundStyle(colorScheme == .dark ? Color.white.opacity(0.42) : Color.black.opacity(0.36))
+                    .foregroundStyle(Color.white.opacity(0.42))
                     .padding(4)
                     .background(
                         Circle()
-                            .fill(colorScheme == .dark ? Color.white.opacity(0.08) : Color.black.opacity(0.06))
+                            .fill(Color.white.opacity(0.08))
                     )
             }
         }
@@ -570,7 +597,7 @@ struct FajrWindowChartView: View {
                 ForEach(displayXAxisLabels) { label in
                     Text(label.title)
                         .font(.caption.weight(label.dateKey == chart.selectedDateKey ? .semibold : .regular))
-                        .foregroundStyle(label.dateKey == chart.selectedDateKey ? .primary : .secondary)
+                        .foregroundStyle(label.dateKey == chart.selectedDateKey ? WakeGlassTheme.primaryText : WakeGlassTheme.secondaryText)
                         .position(
                             x: xPosition(forOrdinal: label.dayOrdinal, width: geometry.size.width),
                             y: geometry.size.height / 2
@@ -585,7 +612,7 @@ struct FajrWindowChartView: View {
             ForEach(displayTicks) { tick in
                 Text(tick.label)
                     .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(WakeGlassTheme.secondaryText)
                     .frame(maxHeight: .infinity, alignment: .topTrailing)
             }
         }

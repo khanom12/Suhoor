@@ -349,18 +349,26 @@ struct AppHeroMetric: View {
 
 struct AppInsetGroup<Content: View>: View {
     let tint: Color?
+    let tintOpacityMultiplier: Double
     @ViewBuilder let content: () -> Content
 
     init(
         tint: Color? = nil,
+        tintOpacityMultiplier: Double = 1,
         @ViewBuilder content: @escaping () -> Content
     ) {
         self.tint = tint
+        self.tintOpacityMultiplier = tintOpacityMultiplier
         self.content = content
     }
 
     var body: some View {
-        AppGlassSurface(variant: .grouped, tint: tint, contentPadding: 0) {
+        AppGlassSurface(
+            variant: .grouped,
+            tint: tint,
+            tintOpacityMultiplier: tintOpacityMultiplier,
+            contentPadding: 0
+        ) {
             VStack(spacing: 0) {
                 content()
             }

@@ -10,6 +10,7 @@ struct GlassCard<Content: View>: View {
     let padding: CGFloat
     let tintColor: Color?
     let tintOpacity: Double
+    let tintOpacityMultiplier: Double
     @ViewBuilder let content: () -> Content
 
     init(
@@ -17,12 +18,14 @@ struct GlassCard<Content: View>: View {
         padding: CGFloat = DesignTokens.dashboardCardPadding,
         tintColor: Color? = nil,
         tintOpacity: Double = 0.18,
+        tintOpacityMultiplier: Double = 1,
         @ViewBuilder content: @escaping () -> Content
     ) {
         self.style = style
         self.padding = padding
         self.tintColor = tintColor
         self.tintOpacity = tintOpacity
+        self.tintOpacityMultiplier = tintOpacityMultiplier
         self.content = content
     }
 
@@ -31,6 +34,7 @@ struct GlassCard<Content: View>: View {
             variant: variant,
             prominence: prominence,
             tint: tintColor,
+            tintOpacityMultiplier: tintOpacityMultiplier,
             contentPadding: padding
         ) {
             content()

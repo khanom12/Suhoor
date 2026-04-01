@@ -1,5 +1,41 @@
 import SwiftUI
 
+enum WakeGlassTheme {
+    static let tintColor: Color = .black
+    static let tintOpacityMultiplier: Double = 10
+    static let surfaceVariant: AppGlassSurfaceVariant = .grouped
+    static let primaryText = Color.white
+    static let secondaryText = Color.white.opacity(0.70)
+    static let tertiaryText = Color.white.opacity(0.50)
+    static let divider = Color.white.opacity(0.05)
+    static let chipFill = Color.white.opacity(0.08)
+    static let chipStroke = Color.white.opacity(0.08)
+}
+
+struct WakeGlassCard<Content: View>: View {
+    let padding: CGFloat
+    @ViewBuilder let content: () -> Content
+
+    init(
+        padding: CGFloat = DesignTokens.dashboardCardPadding,
+        @ViewBuilder content: @escaping () -> Content
+    ) {
+        self.padding = padding
+        self.content = content
+    }
+
+    var body: some View {
+        AppGlassSurface(
+            variant: WakeGlassTheme.surfaceVariant,
+            tint: WakeGlassTheme.tintColor,
+            tintOpacityMultiplier: WakeGlassTheme.tintOpacityMultiplier,
+            contentPadding: padding
+        ) {
+            content()
+        }
+    }
+}
+
 struct WakeRowView: View {
     let entry: WakeRowEntry
     let onSelect: () -> Void
@@ -57,18 +93,18 @@ struct WakeRowView: View {
         } else if let trailingStatusText = display.trailingStatusText {
             Text(trailingStatusText)
                 .font(.footnote.weight(.semibold))
-                .foregroundStyle(Color.secondary)
+                .foregroundStyle(WakeGlassTheme.secondaryText)
                 .multilineTextAlignment(.trailing)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }
 
     private var titleColor: Color {
-        display.isInactive ? Color.primary.opacity(0.62) : Color.primary.opacity(0.9)
+        display.isInactive ? WakeGlassTheme.primaryText.opacity(0.62) : WakeGlassTheme.primaryText.opacity(0.92)
     }
 
     private var subtitleColor: Color {
-        display.isInactive ? Color.secondary.opacity(0.82) : .secondary
+        display.isInactive ? WakeGlassTheme.secondaryText.opacity(0.82) : WakeGlassTheme.secondaryText
     }
 }
 
@@ -81,11 +117,12 @@ struct WakeFeaturedEntryCard: View {
     }
 
     var body: some View {
-        AppGlassSurface(variant: .standard, contentPadding: 16) {
+        WakeGlassCard(padding: 16) {
             VStack(alignment: .leading, spacing: DesignTokens.spacingS) {
                 HStack(alignment: .center, spacing: DesignTokens.spacingS) {
                     Text(display.overline)
                         .appTextRole(.eyebrow)
+                        .foregroundStyle(WakeGlassTheme.tertiaryText)
                     Spacer()
                     if let badgeTitle = display.badgeTitle {
                         WakeContextChip(title: badgeTitle, isDisabled: false, compact: true)
@@ -94,7 +131,7 @@ struct WakeFeaturedEntryCard: View {
 
                 Text(display.dateLabel)
                     .font(AppTypography.badge)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(WakeGlassTheme.secondaryText)
 
                 WakeAlarmTimeLockup(
                     date: entry.schedule.wakeDate,
@@ -105,10 +142,11 @@ struct WakeFeaturedEntryCard: View {
                 VStack(alignment: .leading, spacing: DesignTokens.textSpacingCompact) {
                     Text(display.title)
                         .font(AppTypography.rowTitle)
+                        .foregroundStyle(WakeGlassTheme.primaryText)
 
                     Text(display.subtitle)
                         .font(AppTypography.cardBody)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(WakeGlassTheme.secondaryText)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -127,7 +165,7 @@ struct WakeMonthSectionHeader: View {
         HStack(alignment: .center, spacing: DesignTokens.spacingS) {
             Text(title)
                 .font(.footnote.weight(.semibold))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(WakeGlassTheme.secondaryText)
             Spacer()
         }
     }
@@ -141,14 +179,14 @@ struct WakeContextChip: View {
     var body: some View {
         Text(title)
             .font(AppTypography.badge)
-            .foregroundStyle(Color.secondary)
+            .foregroundStyle(WakeGlassTheme.secondaryText)
             .padding(.horizontal, compact ? DesignTokens.compactChipHorizontalPadding : DesignTokens.badgeHorizontalPadding)
             .padding(.vertical, compact ? DesignTokens.compactChipVerticalPadding : DesignTokens.badgeVerticalPadding)
             .background(
                 Capsule()
-                    .fill(Color.secondary.opacity(0.08))
+                    .fill(WakeGlassTheme.chipFill)
                     .overlay {
-                        Capsule().stroke(Color.white.opacity(0.08), lineWidth: 1)
+                        Capsule().stroke(WakeGlassTheme.chipStroke, lineWidth: 1)
                     }
             )
             .opacity(isDisabled ? 0.55 : 1.0)
@@ -172,13 +210,13 @@ private struct WakeAlarmTimeLockup: View {
         HStack(alignment: .firstTextBaseline, spacing: 3) {
             Text(Self.timeMainFormatter.string(from: date))
                 .font(AppTypography.timeDisplayFont(size: timePointSize, weight: displayStyle == .row ? .regular : .light))
-                .foregroundStyle(isDisabled ? Color.secondary : Color.primary)
+                .foregroundStyle(isDisabled ? WakeGlassTheme.secondaryText : WakeGlassTheme.primaryText)
                 .monospacedDigit()
                 .minimumScaleFactor(DesignTokens.timeDisplayMinScaleFactor)
 
             Text(Self.timeSuffixFormatter.string(from: date))
                 .font(AppTypography.timeDisplayFont(size: timePointSize * suffixScale, weight: .regular))
-                .foregroundStyle(isDisabled ? Color(UIColor.tertiaryLabel) : Color.secondary)
+                .foregroundStyle(isDisabled ? WakeGlassTheme.tertiaryText : WakeGlassTheme.secondaryText)
                 .monospacedDigit()
                 .baselineOffset(2)
         }

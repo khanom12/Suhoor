@@ -4,14 +4,16 @@ struct FajrWindowSelectedDayCard: View {
     let snapshot: FajrWindowSelectedDaySnapshot
 
     var body: some View {
-        GlassCard(tintColor: DawnColor.lightGold200, tintOpacity: 0.14) {
+        WakeGlassCard {
             VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
                 HStack(alignment: .top, spacing: DesignTokens.spacingM) {
                     VStack(alignment: .leading, spacing: DesignTokens.textSpacingTight) {
                         Text("Selected day")
                             .appTextRole(.eyebrow)
+                            .foregroundStyle(WakeGlassTheme.tertiaryText)
                         Text(snapshot.title)
                             .font(AppTypography.cardTitle)
+                            .foregroundStyle(WakeGlassTheme.primaryText)
                     }
 
                     Spacer(minLength: DesignTokens.spacingS)
@@ -36,7 +38,7 @@ struct FajrWindowSelectedDayCard: View {
                 }
 
                 if !snapshot.secondaryItems.isEmpty {
-                    Divider()
+                    cardDivider
 
                     VStack(alignment: .leading, spacing: DesignTokens.spacingS) {
                         ForEach(snapshot.secondaryItems) { item in
@@ -46,7 +48,7 @@ struct FajrWindowSelectedDayCard: View {
                 }
 
                 if let comparisonItem = snapshot.comparisonItem {
-                    Divider()
+                    cardDivider
 
                     itemRow(comparisonItem)
                 }
@@ -56,12 +58,12 @@ struct FajrWindowSelectedDayCard: View {
                         ForEach(snapshot.contextTags, id: \.self) { tag in
                             Text(tag)
                                 .font(AppTypography.badge)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(WakeGlassTheme.secondaryText)
                                 .padding(.horizontal, DesignTokens.chipHorizontalPaddingCompact)
                                 .padding(.vertical, DesignTokens.compactChipVerticalPadding)
                                 .background(
                                     Capsule()
-                                        .fill(Color(.secondarySystemGroupedBackground))
+                                        .fill(WakeGlassTheme.chipFill)
                                 )
                         }
                     }
@@ -69,7 +71,7 @@ struct FajrWindowSelectedDayCard: View {
 
                 Text(snapshot.explanationText)
                     .font(AppTypography.cardBody)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(WakeGlassTheme.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -94,12 +96,18 @@ struct FajrWindowSelectedDayCard: View {
         }
     }
 
+    private var cardDivider: some View {
+        Rectangle()
+            .fill(WakeGlassTheme.divider)
+            .frame(height: 1)
+    }
+
     private func labelColor(for emphasis: FajrWindowValueItem.Emphasis) -> Color {
         switch emphasis {
         case .primary:
-            return .primary
+            return WakeGlassTheme.primaryText
         case .secondary:
-            return .secondary
+            return WakeGlassTheme.secondaryText
         case .comparison:
             return DawnColor.accent
         }
@@ -108,9 +116,9 @@ struct FajrWindowSelectedDayCard: View {
     private func valueColor(for emphasis: FajrWindowValueItem.Emphasis) -> Color {
         switch emphasis {
         case .primary:
-            return .primary
+            return WakeGlassTheme.primaryText
         case .secondary:
-            return .primary
+            return WakeGlassTheme.primaryText
         case .comparison:
             return DawnColor.accent
         }

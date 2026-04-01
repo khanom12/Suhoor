@@ -99,7 +99,7 @@ struct FajrWindowDetailView: View {
                     store.setPeriod(newPeriod, using: scheduleManager, timeZone: currentTimeZone)
                 }
 
-                GlassCard(style: .header, tintColor: DawnColor.lightGold200, tintOpacity: 0.10) {
+                WakeGlassCard(padding: 16) {
                     VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
                         FajrWindowChartView(
                             chart: snapshot.chart,
@@ -136,7 +136,7 @@ struct FajrWindowDetailView: View {
                         if let loadingOverlay = store.loadingOverlay {
                             Text("Loading \(loadingOverlay.title.lowercased())...")
                                 .font(AppTypography.cardBody)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(WakeGlassTheme.secondaryText)
                                 .accessibilityLabel("Loading \(loadingOverlay.title.lowercased())")
                         }
                     }
@@ -147,11 +147,11 @@ struct FajrWindowDetailView: View {
                 }
 
                 if let primarySummary = snapshot.primarySummary {
-                    FajrWindowSummaryBlock(summary: primarySummary, tintColor: DawnColor.lightGold200, tintOpacity: 0.10)
+                    FajrWindowSummaryBlock(summary: primarySummary)
                 }
 
                 ForEach(snapshot.supportSummaries) { summary in
-                    FajrWindowSummaryBlock(summary: summary, tintColor: DawnColor.accent, tintOpacity: 0.08)
+                    FajrWindowSummaryBlock(summary: summary)
                 }
 
                 if !snapshot.insightItems.isEmpty {

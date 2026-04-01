@@ -11,8 +11,8 @@ struct WeeklyFajrcastCard: View {
         Button(action: onOpen) {
             AppGlassSurface(
                 variant: .grouped,
-                tint: .black,
-                tintOpacityMultiplier: 4.5,
+                tint: WakeGlassTheme.tintColor,
+                tintOpacityMultiplier: WakeGlassTheme.tintOpacityMultiplier,
                 contentPadding: 0
             ) {
                 VStack(spacing: 0) {
@@ -68,7 +68,7 @@ struct WeeklyFajrcastCard: View {
                 .frame(width: monthTagWidth, height: monthTagHeight)
                 .background(
                     Capsule(style: .continuous)
-                        .fill(Color.white.opacity(0.05))
+                        .fill(WakeGlassTheme.divider)
                 )
         }
         .frame(height: monthTagHeight, alignment: .top)
@@ -86,7 +86,7 @@ struct WeeklyFajrcastCard: View {
 
     private var dividerLine: some View {
         Rectangle()
-            .fill(Color.white.opacity(0.05))
+            .fill(WakeGlassTheme.divider)
             .frame(height: 1)
     }
 
@@ -176,15 +176,15 @@ struct WeeklyFajrcastCard: View {
     }
 
     private var titleColor: Color {
-        Color.white.opacity(0.5)
+        WakeGlassTheme.tertiaryText
     }
 
     private var monthTagColor: Color {
-        .white
+        WakeGlassTheme.primaryText
     }
 
     private var footerColor: Color {
-        .white
+        WakeGlassTheme.primaryText
     }
 
     private var monthTagText: String {
