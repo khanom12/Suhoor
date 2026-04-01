@@ -237,7 +237,7 @@ struct FajrWindowChartView: View {
     }
 
     private var compactBoundaryColor: Color {
-        Color.black.opacity(0.10)
+        Color.white.opacity(0.10)
     }
 
     private var selectedAxisColor: Color {
@@ -245,45 +245,45 @@ struct FajrWindowChartView: View {
     }
 
     private var compactSelectedGuideColor: Color {
-        .black
+        .white
     }
 
     private var gridColor: Color {
         layoutStyle == .compact
-            ? Color.black.opacity(0.05)
+            ? Color.white.opacity(0.05)
             : (colorScheme == .dark ? Color.white.opacity(0.12) : Color.black.opacity(0.10))
     }
 
     private var compactPrimaryTextColor: Color {
-        .black
+        .white
     }
 
     private var compactSecondaryTextColor: Color {
-        Color.black.opacity(0.5)
+        Color.white.opacity(0.70)
     }
 
     private var compactTertiaryTextColor: Color {
-        Color.black.opacity(0.42)
+        Color.white.opacity(0.70)
     }
 
     private var compactBandFill: Color {
-        Color.black.opacity(0.05)
+        Color.white.opacity(0.05)
     }
 
     private var compactPlotMarkerColor: Color {
-        .black
+        .white
     }
 
     private var compactCalloutPrimaryColor: Color {
-        .black
+        .white
     }
 
     private var compactCalloutSecondaryColor: Color {
-        .black
+        .white
     }
 
     private var compactInactiveMarkerColor: Color {
-        Color.black.opacity(0.20)
+        Color.white.opacity(0.50)
     }
 
     private var compactInactiveMarkerSize: CGFloat {
@@ -773,10 +773,10 @@ struct FajrWindowChartView: View {
 
             if placement != .leading {
                 Rectangle()
-                    .fill(Color.black.opacity(0.10))
+                    .fill(Color.white.opacity(0.10))
                     .overlay(
                         Rectangle()
-                            .stroke(Color.black.opacity(0.05), lineWidth: 1)
+                            .stroke(Color.white.opacity(0.05), lineWidth: 1)
                     )
                     .frame(
                         width: max(0, selectedX),

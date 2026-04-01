@@ -120,6 +120,7 @@ struct AppGlassSurface<Content: View>: View {
     let variant: AppGlassSurfaceVariant
     let prominence: AppGlassProminence
     let tint: Color?
+    let tintOpacityMultiplier: Double
     let contentPadding: CGFloat?
     let maxWidth: CGFloat?
     let alignment: Alignment
@@ -131,6 +132,7 @@ struct AppGlassSurface<Content: View>: View {
         variant: AppGlassSurfaceVariant = .standard,
         prominence: AppGlassProminence = .regular,
         tint: Color? = nil,
+        tintOpacityMultiplier: Double = 1,
         contentPadding: CGFloat? = nil,
         maxWidth: CGFloat? = nil,
         alignment: Alignment = .leading,
@@ -139,6 +141,7 @@ struct AppGlassSurface<Content: View>: View {
         self.variant = variant
         self.prominence = prominence
         self.tint = tint
+        self.tintOpacityMultiplier = tintOpacityMultiplier
         self.contentPadding = contentPadding
         self.maxWidth = maxWidth
         self.alignment = alignment
@@ -201,7 +204,7 @@ struct AppGlassSurface<Content: View>: View {
             }
             .overlay {
                 if let tint {
-                    shape.fill(tint.opacity(style.tintOpacity))
+                    shape.fill(tint.opacity(resolvedTintOpacity(for: style)))
                 }
             }
     }
@@ -220,7 +223,7 @@ struct AppGlassSurface<Content: View>: View {
             }
             .overlay {
                 if let tint {
-                    shape.fill(tint.opacity(style.tintOpacity))
+                    shape.fill(tint.opacity(resolvedTintOpacity(for: style)))
                 }
             }
     }
@@ -248,9 +251,13 @@ struct AppGlassSurface<Content: View>: View {
 
         var glass = baseGlass.interactive(false)
         if let tint {
-            glass = glass.tint(tint.opacity(style.tintOpacity))
+            glass = glass.tint(tint.opacity(resolvedTintOpacity(for: style)))
         }
         return glass
+    }
+
+    private func resolvedTintOpacity(for style: AppGlassStyle) -> Double {
+        min(1, max(0, style.tintOpacity * tintOpacityMultiplier))
     }
 }
 

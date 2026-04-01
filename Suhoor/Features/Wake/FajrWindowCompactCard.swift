@@ -9,7 +9,12 @@ struct WeeklyFajrcastCard: View {
 
     var body: some View {
         Button(action: onOpen) {
-            AppGlassSurface(variant: .grouped, tint: .black, contentPadding: 0) {
+            AppGlassSurface(
+                variant: .grouped,
+                tint: .black,
+                tintOpacityMultiplier: 4.5,
+                contentPadding: 0
+            ) {
                 VStack(spacing: 0) {
                     header
                         .padding(.horizontal, horizontalInset)
@@ -63,7 +68,7 @@ struct WeeklyFajrcastCard: View {
                 .frame(width: monthTagWidth, height: monthTagHeight)
                 .background(
                     Capsule(style: .continuous)
-                        .fill(Color.black.opacity(0.05))
+                        .fill(Color.white.opacity(0.05))
                 )
         }
         .frame(height: monthTagHeight, alignment: .top)
@@ -81,7 +86,7 @@ struct WeeklyFajrcastCard: View {
 
     private var dividerLine: some View {
         Rectangle()
-            .fill(Color.black.opacity(0.05))
+            .fill(Color.white.opacity(0.05))
             .frame(height: 1)
     }
 
@@ -171,7 +176,7 @@ struct WeeklyFajrcastCard: View {
     }
 
     private var titleColor: Color {
-        .white
+        Color.white.opacity(0.5)
     }
 
     private var monthTagColor: Color {
@@ -179,7 +184,7 @@ struct WeeklyFajrcastCard: View {
     }
 
     private var footerColor: Color {
-        .black
+        .white
     }
 
     private var monthTagText: String {
