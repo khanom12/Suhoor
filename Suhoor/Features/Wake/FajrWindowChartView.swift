@@ -115,7 +115,6 @@ struct FajrWindowChartView: View {
 
             ZStack(alignment: .topLeading) {
                 compactSelectedRangeBackdrop(in: metrics)
-                compactSelectedDayOverlay(in: metrics)
                 compactFrameChrome(in: metrics)
                 horizontalGrid(in: metrics.plotFrame)
                 verticalGrid(in: metrics.dayColumnFrame)
@@ -246,7 +245,7 @@ struct FajrWindowChartView: View {
     }
 
     private var compactSelectedGuideColor: Color {
-        Color.black.opacity(0.70)
+        .black
     }
 
     private var gridColor: Color {
@@ -256,7 +255,7 @@ struct FajrWindowChartView: View {
     }
 
     private var compactPrimaryTextColor: Color {
-        Color.black.opacity(0.70)
+        .black
     }
 
     private var compactSecondaryTextColor: Color {
@@ -272,15 +271,15 @@ struct FajrWindowChartView: View {
     }
 
     private var compactPlotMarkerColor: Color {
-        Color.black.opacity(0.70)
+        .black
     }
 
     private var compactCalloutPrimaryColor: Color {
-        Color.black.opacity(0.70)
+        .black
     }
 
     private var compactCalloutSecondaryColor: Color {
-        Color.black.opacity(0.5)
+        .black
     }
 
     private var compactInactiveMarkerColor: Color {
@@ -697,10 +696,6 @@ struct FajrWindowChartView: View {
         dynamicTypeSize.isAccessibilitySize ? 82 : 74
     }
 
-    private var compactEdgeOverlayWidth: CGFloat {
-        dynamicTypeSize.isAccessibilitySize ? 88 : 80
-    }
-
     private var compactXAxisLabelFrameWidth: CGFloat {
         dynamicTypeSize.isAccessibilitySize ? 16 : 14
     }
@@ -781,7 +776,7 @@ struct FajrWindowChartView: View {
                     .fill(Color.black.opacity(0.10))
                     .overlay(
                         Rectangle()
-                            .stroke(Color.white.opacity(0.05), lineWidth: 1)
+                            .stroke(Color.black.opacity(0.05), lineWidth: 1)
                     )
                     .frame(
                         width: max(0, selectedX),
@@ -792,38 +787,6 @@ struct FajrWindowChartView: View {
                         y: metrics.plotFrame.midY
                     )
             }
-        }
-    }
-
-    @ViewBuilder
-    private func compactSelectedDayOverlay(in metrics: CompactLayoutMetrics) -> some View {
-        if let selectedPoint = chart.points.first(where: { $0.dateKey == chart.selectedDateKey }) {
-            let placement = compactSelectedDayPlacement(for: selectedPoint)
-            let selectedX = xPosition(for: selectedPoint, in: metrics.dayColumnFrame)
-            let overlayLayout: (width: CGFloat, centerX: CGFloat) = {
-                switch placement {
-                case .leading:
-                    let width = compactEdgeOverlayWidth
-                    return (width, metrics.plotFrame.minX - 6 + (width / 2))
-                case .trailing:
-                    let width = compactEdgeOverlayWidth
-                    return (width, metrics.dayColumnFrame.maxX + 6 - (width / 2))
-                case .center:
-                    return (compactSelectedCalloutWidth, selectedX)
-                }
-            }()
-
-            Rectangle()
-                .fill(Color.white.opacity(0.04))
-                .frame(
-                    width: overlayLayout.width,
-                    height: metrics.plotFrame.maxY
-                )
-                .shadow(color: Color.black.opacity(0.25), radius: 4, x: 0, y: 2)
-                .position(
-                    x: overlayLayout.centerX,
-                    y: metrics.plotFrame.maxY / 2
-                )
         }
     }
 

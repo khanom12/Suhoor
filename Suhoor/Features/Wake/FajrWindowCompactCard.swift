@@ -9,7 +9,7 @@ struct WeeklyFajrcastCard: View {
 
     var body: some View {
         Button(action: onOpen) {
-            AppGlassSurface(variant: .standard, contentPadding: 0) {
+            AppGlassSurface(variant: .grouped, tint: .black, contentPadding: 0) {
                 VStack(spacing: 0) {
                     header
                         .padding(.horizontal, horizontalInset)
@@ -171,15 +171,15 @@ struct WeeklyFajrcastCard: View {
     }
 
     private var titleColor: Color {
-        Color.black.opacity(0.3)
+        .white
     }
 
     private var monthTagColor: Color {
-        Color.black.opacity(0.3)
+        .white
     }
 
     private var footerColor: Color {
-        Color.black.opacity(0.7)
+        .black
     }
 
     private var monthTagText: String {
