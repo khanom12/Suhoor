@@ -445,6 +445,9 @@ final class ActiveDayResolver {
                 let target = calendar.startOfDay(for: date)
                 return target >= calendar.startOfDay(for: start) && target <= calendar.startOfDay(for: end)
             }()
+        let defaultWakeRule = defaultConfig.defaultWakeRule
+        let overrideWakeRule = override?.resolvedWakeRule(defaults: defaultConfig)
+        let resolvedWakeRule = overrideWakeRule ?? defaultWakeRule
 
         let baseSuhoorEnabled = defaultsActive && !defaultConfig.deletedDates.contains(key) ? defaultConfig.suhoorEnabledDefault : false
         let baseReminderEnabled = defaultsActive && !defaultConfig.deletedDates.contains(key) ? defaultConfig.reminderEnabledDefault : false
@@ -476,6 +479,19 @@ final class ActiveDayResolver {
             reminderTimeMode = defaultConfig.defaultReminderTimeMode
         }
 
+        let suhoorTimeMode: SuhoorTimeMode
+        let suhoorOffsetMinutes: Int
+        let suhoorTimeOverrideMinutesFromMidnight: Int?
+        if let fixedMinutes = resolvedWakeRule.fixedWakeTimeMinutesFromMidnight {
+            suhoorTimeMode = .fixedTime
+            suhoorOffsetMinutes = fixedMinutes
+            suhoorTimeOverrideMinutesFromMidnight = fixedMinutes
+        } else {
+            suhoorTimeMode = .relativeToFajrMinusMinutes
+            suhoorOffsetMinutes = resolvedWakeRule.deltaMinutes
+            suhoorTimeOverrideMinutesFromMidnight = override?.suhoorTimeOverrideMinutesFromMidnight
+        }
+
         return EffectiveDailyConfig(
             date: date,
             defaultsActive: defaultsActive,
@@ -484,14 +500,18 @@ final class ActiveDayResolver {
             reminderEnabled: reminderEnabled,
             fajrEnabled: fajrEnabled,
             iftarEnabled: iftarEnabled,
-            suhoorTimeMode: defaultConfig.defaultSuhoorTimeMode,
-            suhoorOffsetMinutes: ruleSummary.finalOffsetMinutes,
+            defaultWakeRule: defaultWakeRule,
+            resolvedWakeRule: resolvedWakeRule,
+            wakeRuleWasOverridden: overrideWakeRule != nil,
+            tahajjudRefinement: override?.tahajjudRefinement ?? false,
+            suhoorTimeMode: suhoorTimeMode,
+            suhoorOffsetMinutes: suhoorOffsetMinutes,
             reminderTimeMode: reminderTimeMode,
             reminderMinutesBeforeFajr: override?.reminderOffsetOverrideMinutes ?? defaultConfig.defaultReminderMinutesBeforeFajr,
             reminderFixedTimeMinutes: defaultConfig.defaultReminderFixedTimeMinutes,
-            suhoorTimeOverrideMinutesFromMidnight: override?.suhoorTimeOverrideMinutesFromMidnight,
+            suhoorTimeOverrideMinutesFromMidnight: suhoorTimeOverrideMinutesFromMidnight,
             reminderTimeOverrideMinutesFromMidnight: override?.reminderTimeOverrideMinutesFromMidnight,
-            fajrSoundChoice: override?.fajrSoundOverride ?? settings.atFajrSoundSelectionGlobal,
+            fajrSoundChoice: override?.fajrSoundOverride ?? settings.fajrStartSoundSelectionGlobal,
             iftarDelivery: (override?.iftarDeliveryOverride ?? defaultConfig.defaultIftarDelivery).normalized(),
             iftarSoundChoice: override?.iftarSoundOverride ?? defaultConfig.defaultIftarSoundChoice,
             hasOverrides: override?.hasOverrides ?? false

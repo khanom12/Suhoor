@@ -12,7 +12,7 @@ struct PlanCalendarView: View {
             VStack(alignment: .leading, spacing: DesignTokens.spacingXL) {
                 VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
                     Text("Choose a date")
-                        .font(.headline.weight(.semibold))
+                        .font(AppTypography.cardTitle)
 
                     DatePicker(
                         "Date",
@@ -30,28 +30,28 @@ struct PlanCalendarView: View {
 
                 GlassCard(tintColor: DawnColor.lightGold200, tintOpacity: 0.14) {
                     VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
-                        VStack(alignment: .leading, spacing: 4) {
+                        VStack(alignment: .leading, spacing: DesignTokens.textSpacingTight) {
                             Text(detail.gregorianText)
-                                .font(.headline.weight(.semibold))
+                                .font(AppTypography.cardTitle)
                             Text(detail.hijriText)
-                                .font(.footnote)
+                                .font(AppTypography.cardBody)
                                 .foregroundStyle(.secondary)
                         }
 
-                        VStack(alignment: .leading, spacing: 4) {
+                        VStack(alignment: .leading, spacing: DesignTokens.textSpacingTight) {
                             Text(existingSchedule == nil ? "No special plan yet" : "Morning already shaped")
-                                .font(.subheadline.weight(.semibold))
+                                .font(AppTypography.rowTitle)
                             Text(detail.tagSummary)
-                                .font(.footnote)
+                                .font(AppTypography.rowBody)
                                 .foregroundStyle(.secondary)
                             if let activeSourceSummary = detail.activeSourceSummary {
                                 Text(activeSourceSummary)
-                                    .font(.footnote)
+                                    .font(AppTypography.rowBody)
                                     .foregroundStyle(.secondary)
                             }
                             if let warning = detail.warnings.first {
                                 Text(warning.title)
-                                    .font(.footnote.weight(.semibold))
+                                    .font(AppTypography.metricLabel)
                                     .foregroundStyle(.red)
                             }
                         }
@@ -71,7 +71,7 @@ struct PlanCalendarView: View {
                     .disabled(primaryActionDisabled)
 
                     Text(primaryActionSubtitle)
-                        .font(.footnote)
+                        .font(AppTypography.cardBody)
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }

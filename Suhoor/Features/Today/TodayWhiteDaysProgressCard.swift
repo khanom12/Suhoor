@@ -20,11 +20,11 @@ struct TodayWhiteDaysProgressCard: View {
                 GlassCard(style: .header) {
                     VStack(alignment: .leading, spacing: DesignTokens.dashboardCardInternalSpacing) {
                         HStack(alignment: .center, spacing: DesignTokens.spacingS) {
-                            VStack(alignment: .leading, spacing: 2) {
+                            VStack(alignment: .leading, spacing: DesignTokens.textSpacingMicro) {
                                 Text("\(model.month.displayName) \(String(model.hijriYear))")
-                                    .font(DesignTokens.cardTitleFont)
+                                    .font(AppTypography.cardTitle)
                                 Text("White Days 13, 14, and 15")
-                                    .font(DesignTokens.cardSubtitleFont)
+                                    .font(AppTypography.cardBody)
                                     .foregroundStyle(.secondary)
                             }
 
@@ -47,7 +47,7 @@ struct TodayWhiteDaysProgressCard: View {
                         .animation(Motion.spring(reduceMotion: reduceMotion), value: model.displayFilledCount)
 
                         Text("Track the 13th, 14th, and 15th of the current Hijri month.")
-                            .font(DesignTokens.cardSubtitleFont)
+                            .font(AppTypography.cardBody)
                             .foregroundStyle(.secondary)
                     }
                 }

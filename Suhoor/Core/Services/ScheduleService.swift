@@ -25,6 +25,7 @@ final class ScheduleManager: ObservableObject {
     @Published private(set) var activeWindowSnapshot: ActiveAlarmWindowSnapshot = .empty {
         didSet {
             currentRevision += 1
+            clearFajrWindowCaches()
         }
     }
     @Published private(set) var bootstrapState: AppBootstrapState = .welcome
@@ -40,8 +41,11 @@ final class ScheduleManager: ObservableObject {
     private let qadaBacklogStore: QadaBacklogStore
     private let qadaBatchStore: QadaBatchStore
     private let cacheStore: ScheduleCacheStore
+    private let completionRepository: any CompletionRepository
+    let completionSurfaceStore: CompletionSurfaceStore
     private let completionSurfaceProvider = CompletionSurfaceProvider()
     private let wakeSurfaceProvider = WakeSurfaceProvider()
+    private let fajrWindowSurfaceProvider = FajrWindowSurfaceProvider()
     private let plansSurfaceProvider = PlansSurfaceProvider()
     private let homeSurfaceProvider = HomeSurfaceProvider()
     private let nextWakeEventResolver = NextWakeEventResolver()
@@ -74,7 +78,11 @@ final class ScheduleManager: ObservableObject {
     private let monthTagResultLookup = MonthTagResultLookup()
     private var activeTagSelectionRevision: Int = -1
     private var pendingDayRescheduleTasks: [String: Task<Void, Never>] = [:]
+    private var fajrWindowDatasetCache: [FajrWindowDatasetKey: FajrWindowDataset] = [:]
+    private var fajrWindowOverlaySeriesCache: [FajrWindowOverlayCacheKey: FajrWindowOverlaySeries] = [:]
     private var cancellables: Set<AnyCancellable> = []
+    private(set) var fajrWindowDatasetBuildCount: Int = 0
+    private(set) var fajrWindowOverlayBuildCounts: [FajrWindowOverlay: Int] = [:]
     private lazy var activeDayResolver = ActiveDayResolver(
         alarmConfigStore: alarmConfigStore,
         morningPlanStore: morningPlanStore,
@@ -167,7 +175,8 @@ final class ScheduleManager: ObservableObject {
         qadaBatchStore: QadaBatchStore = QadaBatchStore(),
         hijriAdjustmentStore: HijriMonthAdjustmentStore = HijriMonthAdjustmentStore(),
         hijriAdjustmentChangeStore: HijriAdjustmentChangeStore = HijriAdjustmentChangeStore(),
-        cacheStore: ScheduleCacheStore = ScheduleCacheStore()
+        cacheStore: ScheduleCacheStore = ScheduleCacheStore(),
+        completionSurfaceStore: CompletionSurfaceStore? = nil
     ) {
         self.settingsStore = settingsStore
         self.alarmConfigStore = alarmConfigStore
@@ -185,13 +194,18 @@ final class ScheduleManager: ObservableObject {
         self.hijriAdjustmentStore = hijriAdjustmentStore
         self.hijriAdjustmentChangeStore = hijriAdjustmentChangeStore
         self.cacheStore = cacheStore
-        self.completionCommandGateway = CompletionCommandGateway(
+        self.completionRepository = LegacyCompletionRepository(
             fajrLogStore: fajrLogStore,
-            fastLogStore: fastLogStore
+            fastLogStore: fastLogStore,
+            qadaBacklogStore: qadaBacklogStore
         )
+        self.completionCommandGateway = CompletionCommandGateway(repository: completionRepository)
         let hijriCalendarService = HijriCalendarService(adjustmentStore: hijriAdjustmentStore)
         let adjustedHijriCalendar = AdjustedHijriCalendar(calendarService: hijriCalendarService)
         self.adjustedHijriCalendar = adjustedHijriCalendar
+        self.completionSurfaceStore = completionSurfaceStore ?? CompletionSurfaceStore(
+            adjustedHijriCalendar: adjustedHijriCalendar
+        )
         var resolvedAlarmKit: AlarmKitScheduler?
         #if !targetEnvironment(simulator)
         if #available(iOS 26.0, *) {
@@ -267,27 +281,28 @@ final class ScheduleManager: ObservableObject {
         fastLogStore.$currentRevision
             .dropFirst()
             .sink { [weak self] _ in
-                self?.objectWillChange.send()
+                self?.refreshCachedCompletionSurfaces(reason: "fast-log-revision")
             }
             .store(in: &cancellables)
 
         fajrLogStore.$currentRevision
             .dropFirst()
             .sink { [weak self] _ in
-                self?.objectWillChange.send()
+                self?.refreshCachedCompletionSurfaces(reason: "fajr-log-revision")
             }
             .store(in: &cancellables)
 
         qadaBacklogStore.$state
             .dropFirst()
             .sink { [weak self] _ in
-                self?.objectWillChange.send()
+                self?.refreshCachedCompletionSurfaces(reason: "qada-backlog")
             }
             .store(in: &cancellables)
 
         settingsStore.$settings
             .sink { [weak self] _ in
                 self?.updateBootstrapState()
+                self?.refreshCachedCompletionSurfaces(reason: "settings")
             }
             .store(in: &cancellables)
 
@@ -304,6 +319,7 @@ final class ScheduleManager: ObservableObject {
             .store(in: &cancellables)
 
         updateBootstrapState()
+        refreshCachedCompletionSurfaces(reason: "init")
         monthTagResultLookup.handler = { [weak self] date, dateKey, fallback, timeZone in
             guard let self else { return fallback }
             return self.monthTagResultProvider.resolvedTagResult(
@@ -336,6 +352,121 @@ final class ScheduleManager: ObservableObject {
         )
     }
 
+    func fajrWindowSurfaceSnapshot(
+        period: FajrWindowPeriod,
+        overlay: FajrWindowOverlay = .myWake,
+        selectedDateKey: String? = nil,
+        timeZone: TimeZone = .current
+    ) -> FajrWindowSurfaceSnapshot {
+        let dataset = fajrWindowDataset(period: period, timeZone: timeZone)
+        let overlaySeries = loadedFajrWindowOverlaySeries(
+            for: period,
+            requestedOverlay: overlay,
+            timeZone: timeZone
+        )
+        return projectedFajrWindowSurfaceSnapshot(
+            dataset: dataset,
+            overlay: overlay,
+            selectedDateKey: selectedDateKey,
+            overlaySeries: overlaySeries,
+            timeZone: timeZone
+        )
+    }
+
+    func fajrWindowCompactSnapshot(timeZone: TimeZone = .current) -> FajrWindowCompactSnapshot {
+        let dataset = fajrWindowSurfaceProvider.buildDataset(
+            period: .sevenDays,
+            activeDays: activeDaysForWeeklyFajrcast(timeZone: timeZone),
+            overrideDateKeys: Set(alarmConfigStore.overridesByDay.keys),
+            timeZone: timeZone
+        )
+        return fajrWindowSurfaceProvider.compactSnapshot(
+            dataset: dataset,
+            now: Date(),
+            timeZone: timeZone
+        )
+    }
+
+    func fajrWindowDataset(
+        period: FajrWindowPeriod,
+        timeZone: TimeZone = .current
+    ) -> FajrWindowDataset {
+        let key = fajrWindowDatasetKey(period: period, timeZone: timeZone)
+        if let cached = fajrWindowDatasetCache[key] {
+            return cached
+        }
+
+        let days = activeDaysForFajrWindow(period: period, timeZone: timeZone)
+        let dataset = fajrWindowSurfaceProvider.buildDataset(
+            period: period,
+            activeDays: days,
+            overrideDateKeys: Set(alarmConfigStore.overridesByDay.keys),
+            timeZone: timeZone
+        )
+        fajrWindowDatasetCache[key] = dataset
+        fajrWindowDatasetBuildCount += 1
+        return dataset
+    }
+
+    func fajrWindowOverlaySeries(
+        period: FajrWindowPeriod,
+        overlay: FajrWindowOverlay,
+        timeZone: TimeZone = .current
+    ) -> FajrWindowOverlaySeries? {
+        guard overlay == .compareFasting || overlay == .compareTahajjud else {
+            return nil
+        }
+
+        let cacheKey = FajrWindowOverlayCacheKey(
+            datasetKey: fajrWindowDatasetKey(period: period, timeZone: timeZone),
+            overlay: overlay
+        )
+        if let cached = fajrWindowOverlaySeriesCache[cacheKey] {
+            return cached.isAvailable ? cached : nil
+        }
+
+        let days = activeDaysForFajrWindow(period: period, timeZone: timeZone)
+        let series = fajrWindowSurfaceProvider.buildOverlaySeries(
+            period: period,
+            overlay: overlay,
+            activeDays: days,
+            comparisonDay: { [unowned self] day, requestedOverlay in
+                comparisonPreviewDay(for: day, overlay: requestedOverlay, timeZone: timeZone)
+            },
+            timeZone: timeZone
+        ) ?? FajrWindowOverlaySeries(overlay: overlay, valuesByDateKey: [:])
+
+        fajrWindowOverlaySeriesCache[cacheKey] = series
+        fajrWindowOverlayBuildCounts[overlay, default: 0] += 1
+        return series.isAvailable ? series : nil
+    }
+
+    func projectedFajrWindowSurfaceSnapshot(
+        dataset: FajrWindowDataset,
+        overlay: FajrWindowOverlay = .myWake,
+        selectedDateKey: String? = nil,
+        overlaySeries: [FajrWindowOverlaySeries] = [],
+        timeZone: TimeZone = .current,
+        now: Date = Date()
+    ) -> FajrWindowSurfaceSnapshot {
+        let resolvedOverlaySeries = overlaySeries.isEmpty
+            ? loadedFajrWindowOverlaySeries(
+                for: dataset.period,
+                requestedOverlay: overlay,
+                timeZone: timeZone
+            )
+            : overlaySeries
+
+        return fajrWindowSurfaceProvider.surfaceSnapshot(
+            dataset: dataset,
+            requestedOverlay: overlay,
+            selectedDateKey: selectedDateKey,
+            overlaySeries: resolvedOverlaySeries,
+            now: now,
+            timeZone: timeZone
+        )
+    }
+
     func wakeListSnapshot(
         tagFilter: WakeTagFilter,
         pinnedEntryIDs: [String],
@@ -365,32 +496,19 @@ final class ScheduleManager: ObservableObject {
         now: Date,
         dismissedWarnings: Set<FastWarning>
     ) -> HomeSurfaceSnapshot {
-        let input = homeSurfaceAssembler.makeInput(
+        completionSurfaceStore.homeSurfaceSnapshot(
             now: now,
-            dismissedWarnings: dismissedWarnings,
-            activeWindowSnapshot: activeWindowSnapshot,
-            nextWakeEventSummary: nextWakeEventSummary,
-            settings: settingsStore.settings,
-            permissionSnapshot: permissionSnapshot,
-            adjustedHijriCalendar: adjustedHijriCalendar,
-            scheduleLookup: { [unowned self] date in
-                schedule(for: date)
-            }
-        )
-
-        return homeSurfaceProvider.homeSurfaceSnapshot(
-            input: input,
-            settings: settingsStore.settings,
-            permissionSnapshot: permissionSnapshot
+            dismissedWarnings: dismissedWarnings
         )
     }
 
     func progressSurfaceSnapshot(
         wakeProgressSource: WakeProgressSource = DebugEventLogWakeProgressSource()
     ) -> ProgressSurfaceSnapshot {
-        return completionSurfaceProvider.progressSurfaceSnapshot(
+        completionSurfaceProvider.progressSurfaceSnapshot(
             activeWindowSnapshot: activeWindowSnapshot,
-            completionState: currentCompletionStateSnapshot(),
+            now: Date(),
+            completionState: completionSurfaceStore.state.completionStateSnapshot,
             settings: settingsStore.settings,
             wakeProgress: wakeProgressSource.snapshot(limit: 20)
         )
@@ -420,9 +538,25 @@ final class ScheduleManager: ObservableObject {
 
     func performCompletionEdit(
         _ intent: CompletionEditIntent,
+        source: CompletionMutationSource = .historyEdit,
         now: Date = Date()
     ) {
-        completionCommandGateway.perform(intent, now: now)
+        PerformanceTrace.measure(
+            "completion.command",
+            metadata: "source=\(source.rawValue)"
+        ) {
+            completionCommandGateway.perform(intent, source: source, now: now)
+            refreshCachedCompletionSurfaces(reason: "completion-\(source.rawValue)", now: now)
+        }
+    }
+
+    func normalizeCompletionStateForLaunch(
+        todayKey: String? = nil,
+        now: Date = Date()
+    ) {
+        let resolvedTodayKey = todayKey ?? DateHelpers.dayIdentifier(for: now, timeZone: .current)
+        completionRepository.normalizeStaleInProgress(todayKey: resolvedTodayKey, now: now)
+        refreshCachedCompletionSurfaces(reason: "launch-normalization", now: now)
     }
 
     var currentHijriAdjustmentYear: Int {
@@ -695,6 +829,157 @@ final class ScheduleManager: ObservableObject {
         )
     }
 
+    private func fajrWindowDatasetKey(
+        period: FajrWindowPeriod,
+        timeZone: TimeZone
+    ) -> FajrWindowDatasetKey {
+        FajrWindowDatasetKey(
+            revision: currentRevision,
+            period: period,
+            timeZoneIdentifier: timeZone.identifier
+        )
+    }
+
+    private func loadedFajrWindowOverlaySeries(
+        for period: FajrWindowPeriod,
+        requestedOverlay: FajrWindowOverlay,
+        timeZone: TimeZone
+    ) -> [FajrWindowOverlaySeries] {
+        var overlays: [FajrWindowOverlaySeries] = []
+
+        if let cachedFasting = fajrWindowOverlaySeriesCache[
+            FajrWindowOverlayCacheKey(
+                datasetKey: fajrWindowDatasetKey(period: period, timeZone: timeZone),
+                overlay: .compareFasting
+            )
+        ], cachedFasting.isAvailable {
+            overlays.append(cachedFasting)
+        } else if requestedOverlay == .compareFasting,
+                  let fasting = fajrWindowOverlaySeries(period: period, overlay: .compareFasting, timeZone: timeZone) {
+            overlays.append(fasting)
+        }
+
+        if let cachedTahajjud = fajrWindowOverlaySeriesCache[
+            FajrWindowOverlayCacheKey(
+                datasetKey: fajrWindowDatasetKey(period: period, timeZone: timeZone),
+                overlay: .compareTahajjud
+            )
+        ], cachedTahajjud.isAvailable {
+            overlays.append(cachedTahajjud)
+        } else if requestedOverlay == .compareTahajjud,
+                  let tahajjud = fajrWindowOverlaySeries(period: period, overlay: .compareTahajjud, timeZone: timeZone) {
+            overlays.append(tahajjud)
+        }
+
+        return overlays
+    }
+
+    private func activeDaysForFajrWindow(
+        period: FajrWindowPeriod,
+        timeZone: TimeZone
+    ) -> [ActiveAlarmDay] {
+        let count = period.dayCount
+        if activeWindowSnapshot.visibleDays.count >= count {
+            return Array(activeWindowSnapshot.visibleDays.prefix(count))
+        }
+
+        guard let coordinate = currentCoordinate() else {
+            return Array(activeWindowSnapshot.visibleDays.prefix(count))
+        }
+
+        let resolvedEntries = activeDayResolver.resolvedEntriesForActiveWindow(
+            from: DateHelpers.startOfToday(in: timeZone),
+            limit: count,
+            timeZone: timeZone
+        )
+
+        return buildActiveWindowSnapshot(
+            resolvedEntries: resolvedEntries,
+            coordinate: coordinate,
+            timeZone: timeZone,
+            visibleHorizonDays: count,
+            scheduledHorizonDays: count
+        ).visibleDays
+    }
+
+    private func activeDaysForWeeklyFajrcast(
+        timeZone: TimeZone
+    ) -> [ActiveAlarmDay] {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+
+        let today = DateHelpers.startOfToday(in: timeZone)
+        let weekday = calendar.component(.weekday, from: today)
+        let mondayOffset = (weekday + 5) % 7
+        let startOfWeek = calendar.date(byAdding: .day, value: -mondayOffset, to: today) ?? today
+
+        guard let coordinate = currentCoordinate() else {
+            return activeDaysForFajrWindow(period: .sevenDays, timeZone: timeZone)
+        }
+
+        let resolvedEntries = activeDayResolver.resolvedEntriesForActiveWindow(
+            from: startOfWeek,
+            limit: 7,
+            timeZone: timeZone
+        )
+
+        return buildActiveWindowSnapshot(
+            resolvedEntries: resolvedEntries,
+            coordinate: coordinate,
+            timeZone: timeZone,
+            visibleHorizonDays: 7,
+            scheduledHorizonDays: 7
+        ).visibleDays
+    }
+
+    private func comparisonPreviewDay(
+        for day: ActiveAlarmDay,
+        overlay: FajrWindowOverlay,
+        timeZone: TimeZone
+    ) -> ActiveAlarmDay? {
+        switch overlay {
+        case .myWake, .compareSafe:
+            return nil
+        case .compareFasting:
+            return previewComparisonDay(
+                for: day,
+                overrideSelection: FastIntentSelection(primaryIntent: .voluntary, secondaryTags: []),
+                timeZone: timeZone
+            )
+        case .compareTahajjud:
+            return nil
+        }
+    }
+
+    private func previewComparisonDay(
+        for day: ActiveAlarmDay,
+        overrideSelection: FastIntentSelection,
+        timeZone: TimeZone
+    ) -> ActiveAlarmDay? {
+        guard let coordinate = currentCoordinate() else { return nil }
+
+        let tagResult = tagPreviewResult(
+            for: day.date,
+            overrideSelection: overrideSelection,
+            defaultPrimaryIntent: day.provenances.defaultFastPrimaryIntent(),
+            timeZone: timeZone
+        )
+
+        return activeDayResolver.resolveActiveDay(
+            for: day.date,
+            provenances: day.provenances,
+            tagResult: tagResult,
+            coordinate: coordinate,
+            settings: settingsStore.settings,
+            timeZone: timeZone
+        )
+    }
+
+    private func clearFajrWindowCaches() {
+        fajrWindowDatasetCache.removeAll(keepingCapacity: true)
+        fajrWindowOverlaySeriesCache.removeAll(keepingCapacity: true)
+    }
+
     func recommendedAshuraQuickAddPattern(
         startDate: Date = Date(),
         timeZone: TimeZone = .current
@@ -947,15 +1232,66 @@ final class ScheduleManager: ObservableObject {
     }
 
     private func currentCompletionStateSnapshot() -> CompletionStateSnapshot {
-        let legacySnapshot = LegacyCompletionAdapter.records(
-            fajrEntries: fajrLogStore.entriesByDateKey,
-            fastEntries: fastLogStore.entriesByDateKey,
-            qadaBacklogState: qadaBacklogStore.state
-        )
-        return CompletionStateAssembler.assemble(
-            completionRecords: legacySnapshot.records,
-            qadaLedgerSnapshot: legacySnapshot.qadaLedgerSnapshot
-        )
+        completionSurfaceStore.state.completionStateSnapshot
+    }
+
+    private func refreshCachedCompletionSurfaces(
+        reason: String,
+        now: Date = Date()
+    ) {
+        PerformanceTrace.measure(
+            "completion.surface-refresh",
+            metadata: reason
+        ) {
+            let repositorySnapshot = completionRepository.snapshot()
+            let completionState = CompletionStateAssembler.assemble(
+                completionRecords: repositorySnapshot.records,
+                qadaLedgerSnapshot: repositorySnapshot.qadaLedgerSnapshot
+            )
+            let progressSnapshot = completionSurfaceProvider.progressSurfaceSnapshot(
+                activeWindowSnapshot: activeWindowSnapshot,
+                now: now,
+                completionState: completionState,
+                settings: settingsStore.settings,
+                wakeProgress: DebugEventLogWakeProgressSource().snapshot(limit: 20)
+            )
+            let fajrHistorySnapshot = completionSurfaceProvider.fajrHistorySurfaceSnapshot(
+                days: 30,
+                now: now,
+                resolver: completionHistoryResolver
+            )
+            let fastHistorySnapshot = completionSurfaceProvider.fastHistorySurfaceSnapshot(
+                days: 30,
+                now: now,
+                resolver: completionHistoryResolver
+            )
+            let homeContext = CompletionSurfaceStore.HomeContext(
+                activeWindowSnapshot: activeWindowSnapshot,
+                todaySchedule: schedule(for: now),
+                nextWakeEventSummary: nextWakeEventSummary,
+                settings: settingsStore.settings,
+                permissionSnapshot: permissionSnapshot
+            )
+            let nextRevision = completionSurfaceStore.state.revision + 1
+            completionSurfaceStore.update(
+                state: CompletionSurfaceState(
+                    completionStateSnapshot: completionState,
+                    progressSnapshot: progressSnapshot,
+                    fajrHistorySnapshot: fajrHistorySnapshot,
+                    fastHistorySnapshot: fastHistorySnapshot,
+                    revision: nextRevision
+                ),
+                homeContext: homeContext
+            )
+            #if DEBUG
+            let recordCount = completionState.recordsByDateKey.values.reduce(0) { partialResult, records in
+                partialResult + records.count
+            }
+            Logging.diagnostics.debug(
+                "[perf] completion.surface-state revision=\(nextRevision, privacy: .public) records=\(recordCount, privacy: .public)"
+            )
+            #endif
+        }
     }
 
     private func calendarPlanningDependencies() -> CalendarPlanningProvider.Dependencies {
@@ -1045,6 +1381,7 @@ final class ScheduleManager: ObservableObject {
                         tagSelectionRevision: activeTagSelectionRevision
                     )
                 )
+                refreshCachedCompletionSurfaces(reason: "month-tag-adjustment")
             }
             await refreshPermissionSummary()
             return
@@ -1198,6 +1535,7 @@ final class ScheduleManager: ObservableObject {
         activeWindowSnapshot = adjustedSnapshot
         schedules = adjustedSnapshot.visibleDays.map(\.schedule)
         lastUpdated = Date()
+        refreshCachedCompletionSurfaces(reason: "schedule-refresh")
         Logging.diagnostics.debug("[perf] active-window.visible-count \(result.visibleDays.count, privacy: .public)")
         Logging.diagnostics.debug("[perf] active-window.scheduled-count \(result.scheduledDays.count, privacy: .public)")
 
@@ -1260,6 +1598,7 @@ final class ScheduleManager: ObservableObject {
                 )
             )
             updateBootstrapState()
+            refreshCachedCompletionSurfaces(reason: "reschedule-day-removed")
             return
         }
 
@@ -1283,14 +1622,13 @@ final class ScheduleManager: ObservableObject {
                 "[toggle] scheduleDay \(key, privacy: .public) suhoor=\(updatedDay.effectiveConfig.suhoorEnabled, privacy: .public) reminder=\(updatedDay.effectiveConfig.reminderEnabled, privacy: .public) fajr=\(updatedDay.effectiveConfig.fajrEnabled, privacy: .public)"
             )
             _ = await alarmScheduler.scheduleDay(
-                schedule: updatedDay.schedule,
-                config: updatedDay.effectiveConfig,
+                day: updatedDay,
                 settings: settings,
                 canUseAlarmKit: canUseAlarmKit
             )
         } else {
             Logging.diagnostics.debug("[toggle] cancelDay \(key, privacy: .public) via schedule window")
-            await alarmScheduler.cancelDay(schedule: updatedDay.schedule)
+            await alarmScheduler.cancelDay(day: updatedDay)
         }
 
         lastUpdated = Date()
@@ -1306,10 +1644,23 @@ final class ScheduleManager: ObservableObject {
             )
         )
         updateBootstrapState()
+        refreshCachedCompletionSurfaces(reason: "reschedule-day")
     }
 
     func schedule(for date: Date) -> DaySchedule? {
         activeDayResolver.scheduleAndConfig(for: date, builder: dayScheduleBuilder)?.schedule
+    }
+
+    func defaultWakeValidation(timeZone: TimeZone = .current) -> DefaultWakeRuleValidationResult? {
+        guard let coordinate = currentCoordinate() else { return nil }
+        return DefaultWakeRuleValidator.validate(
+            startDate: Date(),
+            timeZone: timeZone,
+            coordinate: coordinate,
+            settings: settingsStore.settings,
+            defaultConfig: alarmConfigStore.defaults,
+            calculator: calculator
+        )
     }
 
     func scheduleTomorrowActivation() async -> ActivationScheduleResult {
@@ -1346,8 +1697,26 @@ final class ScheduleManager: ObservableObject {
         }
 
         let scheduled = await alarmScheduler.scheduleDay(
-            schedule: result.schedule,
-            config: result.config,
+            day: activeWindowSnapshot.byDateKey[result.schedule.id]
+                ?? ActiveAlarmDay(
+                    date: result.schedule.date,
+                    dateKey: result.schedule.id,
+                    schedule: result.schedule,
+                    effectiveConfig: result.config,
+                    provenances: [],
+                    isImplicitRamadan: false,
+                    isExplicitOneOff: false,
+                    tagResult: .empty,
+                    primaryDisplay: result.config.primaryDisplay(schedule: result.schedule),
+                    sourceSummaryText: "",
+                    resolvedDayContext: .standard,
+                    scheduledEvents: RuleDecisionLog.compatibilityFallback(
+                        dateKey: result.schedule.id,
+                        schedule: result.schedule,
+                        resolvedDayContext: .standard,
+                        primaryDisplay: result.config.primaryDisplay(schedule: result.schedule)
+                    ).materializedEvents
+                ),
             settings: settingsStore.settings,
             canUseAlarmKit: canUseAlarmKit
         )
@@ -1360,10 +1729,10 @@ final class ScheduleManager: ObservableObject {
     }
 
     func cancelDay(_ date: Date) async {
-        guard let schedule = scheduleForCancellation(on: date) else { return }
-        let key = DateHelpers.dayIdentifier(for: schedule.date, timeZone: .current)
+        guard let day = dayForCancellation(on: date) else { return }
+        let key = DateHelpers.dayIdentifier(for: day.date, timeZone: .current)
         Logging.diagnostics.debug("[toggle] cancelDay \(key, privacy: .public) via cancelDay()")
-        await alarmScheduler.cancelDay(schedule: schedule)
+        await alarmScheduler.cancelDay(day: day)
     }
 
     func requestAlarmAuthorization() async -> Bool {
@@ -1550,6 +1919,7 @@ final class ScheduleManager: ObservableObject {
         alarmAuthorizationText = snapshot.alarmAuthorizationText
         notificationAuthorizationText = snapshot.notificationAuthorizationText
         updateBootstrapState()
+        refreshCachedCompletionSurfaces(reason: "permission-summary")
         EventTimelineLog.shared.record(category: "permissions", message: "Permission summary: \(snapshot.summaryText)")
     }
 
@@ -1580,6 +1950,7 @@ final class ScheduleManager: ObservableObject {
         permissionSnapshot = .empty
         activeWindowSnapshot = .empty
         updateBootstrapState()
+        refreshCachedCompletionSurfaces(reason: "reset-all")
         cacheStore.clear()
         alarmConfigStore.resetScheduledDateSources()
         settingsStore.reset()
@@ -2198,6 +2569,7 @@ final class ScheduleManager: ObservableObject {
                 tagSelectionRevision: activeTagSelectionRevision
             )
         )
+        refreshCachedCompletionSurfaces(reason: reason)
     }
 
     private func buildActiveDayIfNeeded(
@@ -2411,13 +2783,34 @@ final class ScheduleManager: ObservableObject {
         alarmStateStore.clear()
     }
 
-    private func scheduleForCancellation(on date: Date) -> DaySchedule? {
+    private func dayForCancellation(on date: Date) -> ActiveAlarmDay? {
         let timeZone = TimeZone.current
         let key = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
-        if let existing = activeWindowSnapshot.byDateKey[key]?.schedule {
+        if let existing = activeWindowSnapshot.byDateKey[key] {
             return existing
         }
-        return schedule(for: date)
+        guard let result = activeDayResolver.scheduleAndConfig(for: date, builder: dayScheduleBuilder, timeZone: timeZone) else {
+            return nil
+        }
+        return ActiveAlarmDay(
+            date: result.schedule.date,
+            dateKey: result.schedule.id,
+            schedule: result.schedule,
+            effectiveConfig: result.config,
+            provenances: [],
+            isImplicitRamadan: false,
+            isExplicitOneOff: false,
+            tagResult: .empty,
+            primaryDisplay: result.config.primaryDisplay(schedule: result.schedule),
+            sourceSummaryText: "",
+            resolvedDayContext: .standard,
+            scheduledEvents: RuleDecisionLog.compatibilityFallback(
+                dateKey: result.schedule.id,
+                schedule: result.schedule,
+                resolvedDayContext: .standard,
+                primaryDisplay: result.config.primaryDisplay(schedule: result.schedule)
+            ).materializedEvents
+        )
     }
 
 }
@@ -2462,13 +2855,18 @@ struct NextWakeEventSummary: Equatable, Sendable {
         let delta = day.decisionLog.resolvedDelta
         switch event.type {
         case .wakeAlarm:
-            return relationText(for: delta, anchor: day.decisionLog.resolvedAnchor.type)
+            return ProductSurfacePresentation.wakeExplanationText(
+                for: day,
+                hasDayOverride: day.effectiveConfig.wakeRuleWasOverridden
+            )
         case .wakeReminder:
             return "Reminder before the main wake."
         case .wakeFollowUp:
             return "Follow-up after the main wake."
         case .fajrBoundaryNotice:
-            return "At the Fajr boundary."
+            return event.fajrStartBehavior == .takeoverIfUnresolvedOtherwiseCue
+                ? "Fajr-start checkpoint with takeover if the wake is still active."
+                : "At the Fajr boundary."
         case .iftarReminder:
             return "At Maghrib."
         }
@@ -2483,6 +2881,8 @@ struct NextWakeEventSummary: Equatable, Sendable {
             anchorTitle = "Fajr ends"
         case .masjidFajr:
             anchorTitle = "masjid Fajr"
+        case .clockTime:
+            return "Fixed wake."
         }
 
         if delta.minutes == 0 {

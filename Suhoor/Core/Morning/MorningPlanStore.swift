@@ -3,7 +3,7 @@ import Foundation
 final class MorningPlanStore {
     private let defaults: UserDefaults
     private let storageKey = "Suhoor.MorningPlanState"
-    private let currentSchemaVersion = 1
+    private let currentSchemaVersion = 2
 
     private(set) var state: MorningPlanState
 
@@ -76,30 +76,33 @@ final class MorningPlanStore {
         defaultConfig: DefaultAlarmConfig,
         settings: AppSettings
     ) -> MorningPlan {
-        let wakeDelta: WakeDelta
+        let baseRule = defaultConfig.defaultWakeRule
+        let wakeRule: MorningWakeRule
         let fixedWakeTimeCompatibilityMinutesFromMidnight: Int?
 
-        switch defaultConfig.defaultSuhoorTimeMode {
-        case .relativeToFajrMinusMinutes:
-            wakeDelta = WakeDelta(
-                relation: .before,
-                minutes: max(0, defaultConfig.defaultSuhoorOffsetMinutes)
-            )
-            fixedWakeTimeCompatibilityMinutesFromMidnight = nil
-        case .fixedTime:
-            wakeDelta = WakeDelta(
-                relation: .before,
-                minutes: max(0, settings.baseWakeOffsetMinutes)
+        if defaultConfig.defaultSuhoorTimeMode == .fixedTime {
+            wakeRule = MorningWakeRule(
+                state: baseRule.state,
+                anchorType: baseRule.anchorType,
+                deltaMinutes: max(0, settings.baseWakeOffsetMinutes),
+                fixedWakeTimeMinutesFromMidnight: defaultConfig.defaultSuhoorOffsetMinutes,
+                latestWakeCapMinutesFromMidnight: baseRule.latestWakeCapMinutesFromMidnight,
+                bypassLatestWakeCap: baseRule.bypassLatestWakeCap,
+                isLegacyFixedWakeCompatibility: true
             )
             fixedWakeTimeCompatibilityMinutesFromMidnight = defaultConfig.defaultSuhoorOffsetMinutes
+        } else {
+            wakeRule = baseRule
+            fixedWakeTimeCompatibilityMinutesFromMidnight = nil
         }
 
         return MorningPlan(
             id: "default-daily",
             title: "Daily morning plan",
             kind: .defaultDaily,
-            wakeAnchorType: .fajrStart,
-            wakeDelta: wakeDelta,
+            wakeRule: wakeRule,
+            wakeAnchorType: wakeRule.compatibilityWakeAnchorType,
+            wakeDelta: wakeRule.compatibilityWakeDelta,
             fixedWakeTimeCompatibilityMinutesFromMidnight: fixedWakeTimeCompatibilityMinutesFromMidnight,
             reminderEnabled: defaultConfig.reminderEnabledDefault,
             wakeAlarmEnabled: defaultConfig.suhoorEnabledDefault,

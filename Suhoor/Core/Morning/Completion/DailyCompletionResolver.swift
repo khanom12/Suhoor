@@ -13,6 +13,7 @@ enum DailyCompletionResolver {
             resolvedDayContext: resolvedDayContext
         )
         let qadaEffect = resolveQadaEffect(
+            from: records,
             resolvedDayContext: resolvedDayContext,
             fastState: fastState,
             qadaLedgerSnapshot: completionState.qadaLedgerSnapshot
@@ -124,11 +125,11 @@ enum DailyCompletionResolver {
         resolvedDayContext: ResolvedDayContext
     ) -> FastCompletionState {
         let fallbackIntent = fastIntentSnapshot(for: resolvedDayContext)
-        guard isFastingRelevant(resolvedDayContext: resolvedDayContext) else {
-            return .notRequired
-        }
-
         guard let record = records.first(where: { $0.kind == .fast }) else {
+            guard isFastingRelevant(resolvedDayContext: resolvedDayContext) else {
+                return .notRequired
+            }
+
             return FastCompletionState(
                 status: .unknown,
                 intentSnapshot: fallbackIntent,
@@ -168,10 +169,15 @@ enum DailyCompletionResolver {
     }
 
     private static func resolveQadaEffect(
+        from records: [CompletionRecord],
         resolvedDayContext: ResolvedDayContext,
         fastState: FastCompletionState,
         qadaLedgerSnapshot: QadaLedgerSnapshot
     ) -> QadaEffect {
+        if let persisted = records.first(where: { $0.kind == .fast }).flatMap(recordQadaEffect(from:)) {
+            return persisted
+        }
+
         let isQada = fastState.intentSnapshot?.primaryIntent == .qadaMakeup
             || resolvedDayContext.primaryContext == .qadaFast
             || resolvedDayContext.supportingTags.contains(.qada)
@@ -185,6 +191,24 @@ enum DailyCompletionResolver {
             completedDelta: 1,
             remainingAfterEffect: qadaLedgerSnapshot.remaining,
             explanation: "Completed Qada fasts reduce what remains."
+        )
+    }
+
+    private nonisolated static func recordQadaEffect(
+        from record: CompletionRecord
+    ) -> QadaEffect? {
+        guard let countsTowardRaw = record.metadata["qadaCountsToward"],
+              let countsTowardQada = Bool(countsTowardRaw),
+              let completedDeltaRaw = record.metadata["qadaCompletedDelta"],
+              let completedDelta = Int(completedDeltaRaw) else {
+            return nil
+        }
+
+        return QadaEffect(
+            countsTowardQada: countsTowardQada,
+            completedDelta: completedDelta,
+            remainingAfterEffect: record.metadata["qadaRemainingAfterEffect"].flatMap(Int.init),
+            explanation: record.metadata["qadaExplanation"]
         )
     }
 

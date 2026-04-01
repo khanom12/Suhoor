@@ -11,12 +11,12 @@ struct TodayEditCardsSheet: View {
             List {
                 Section {
                     ForEach(layoutStore.layout.ordered) { card in
-                        HStack(spacing: 12) {
-                            VStack(alignment: .leading, spacing: 2) {
+                        HStack(spacing: DesignTokens.space12) {
+                            VStack(alignment: .leading, spacing: DesignTokens.textSpacingMicro) {
                                 Text(displayTitle(for: card, components: components))
-                                    .font(DesignTokens.cardTitleFont)
+                                    .font(AppTypography.rowTitle)
                                 Text(subtitle(for: card))
-                                    .font(DesignTokens.cardSubtitleFont)
+                                    .font(AppTypography.rowBody)
                                     .foregroundStyle(.secondary)
                             }
 

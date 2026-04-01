@@ -3,67 +3,52 @@ import SwiftUI
 struct AlarmDayDetailView: View {
     let schedule: DaySchedule
 
-    @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var settingsStore: SuhoorSettingsStore
     @EnvironmentObject private var alarmConfigStore: AlarmConfigStore
     @EnvironmentObject private var scheduleManager: ScheduleManager
     @EnvironmentObject private var fastTagStore: FastTagStore
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private let timeZone: TimeZone = .current
-    @State private var reminderTimeClamped = false
     @State private var showsResetConfirmation = false
-    @State private var showsExclusionDialog = false
-    @State private var expandedAlarm: ExpandedAlarm?
     @State private var showsTagPicker = false
+    @State private var showsAdvancedDetails = false
+    @State private var showsCueDetails = false
     @State private var selectedAbout: FastTagAbout?
     @State private var cachedEditorContext: DayAlarmEditorContext?
-    @State private var cachedTagPickerSeeds: [ActiveTagComputationSeed] = []
+    @State private var wakeSelectionDraft: DayWakeRuleSelection = .defaultPlan
+    @State private var wakeAnchorDraft: WakeAnchorType = .fajrStart
+    @State private var wakeDeltaDraft = 0
+    @State private var fixedWakeMinutesDraft = 0
+    @State private var hasPendingEditorCommit = false
+    @State private var editorCommitTask: Task<Void, Never>?
 
     var body: some View {
         configurationList
-            .background(Color(.systemGroupedBackground))
+            .appPageBackground()
             .navigationTitle(GregorianDateFormatter.shared.cardString(for: schedule.date))
             .navigationBarTitleDisplayMode(.inline)
             .alert(
-                Strings.AlarmsTab.resetDayTitle,
+                "Reset this date to default?",
                 isPresented: $showsResetConfirmation
             ) {
-                Button(Strings.AlarmsTab.resetDay, role: .destructive) {
-                    alarmConfigStore.removeOverride(for: schedule.date, timeZone: timeZone)
-                    scheduleManager.requestRescheduleDay(schedule.date)
+                Button("Reset to default", role: .destructive) {
+                    resetDateToDefault()
                 }
                 Button(Strings.Settings.cancel, role: .cancel) {}
             } message: {
                 Text(Strings.AlarmsTab.resetDayMessage)
             }
-            .confirmationDialog(
-                "Exclude this date from which schedule?",
-                isPresented: $showsExclusionDialog,
-                titleVisibility: .visible
-            ) {
-                ForEach(stoppableProvenances, id: \.id) { provenance in
-                    Button("Exclude from \(provenance.label)") {
-                        Task {
-                            await scheduleManager.skipScheduledDate(
-                                schedule.date,
-                                scope: suppressionScope(for: provenance)
-                            )
-                            dismiss()
-                        }
-                    }
-                }
-                Button(Strings.Settings.cancel, role: .cancel) {}
-            }
             .sheet(isPresented: $showsTagPicker) {
                 NavigationStack {
                     FastTagPickerSheet(
                         date: schedule.date,
-                        initialSelection: userIntentSelection,
-                        seeds: cachedTagPickerSeeds,
+                        initialSelection: storedIntentSelection,
+                        seeds: scheduleManager.activeWindowSnapshot.visibleDays.map(\.tagSeed),
                         selections: fastTagStore.selections,
+                        presentation: .dayDetail,
                         onSave: { selection in
                             fastTagStore.setSelection(selection, for: schedule.date, timeZone: timeZone)
+                            scheduleManager.requestRescheduleDay(schedule.date)
                         }
                     )
                 }
@@ -74,18 +59,28 @@ struct AlarmDayDetailView: View {
             }
             .task {
                 rebuildViewState()
+                loadEditorDraft()
             }
             .onChange(of: alarmConfigStore.currentRevision) { _, _ in
                 rebuildViewState()
+                guard !hasPendingEditorCommit else { return }
+                loadEditorDraft()
             }
             .onChange(of: settingsStore.currentRevision) { _, _ in
                 rebuildViewState()
+                guard !hasPendingEditorCommit else { return }
+                loadEditorDraft()
             }
             .onChange(of: scheduleManager.currentRevision) { _, _ in
                 rebuildViewState()
+                guard !hasPendingEditorCommit else { return }
+                loadEditorDraft()
             }
             .onChange(of: fastTagStore.currentRevision) { _, _ in
                 rebuildViewState()
+            }
+            .onDisappear {
+                applyEditorDraftIfNeeded()
             }
     }
 
@@ -94,7 +89,7 @@ struct AlarmDayDetailView: View {
     }
 
     private var currentSchedule: DaySchedule {
-        scheduleManager.activeDay(for: schedule.date, timeZone: timeZone)?.schedule ?? schedule
+        editorContext.presentationDay.schedule
     }
 
     private var ruleEngine: RuleEngine {
@@ -118,12 +113,34 @@ struct AlarmDayDetailView: View {
         effectiveConfig.skipDay
     }
 
-    private var hasOneDayChanges: Bool {
-        alarmConfigStore.override(for: schedule.date, timeZone: timeZone) != nil
+    private var dayOverride: DailyAlarmOverride? {
+        alarmConfigStore.override(for: schedule.date, timeZone: timeZone)
     }
 
-    private var userIntentSelection: FastIntentSelection {
-        editorContext.userIntentSelection
+    private var hasWakeRuleOverride: Bool {
+        currentWakeSelection != .defaultPlan
+    }
+
+    private var shouldShowWakeControls: Bool {
+        !isSkippingDay
+    }
+
+    private var shouldShowResetSection: Bool {
+        hasWakeRuleOverride
+    }
+
+    private var shouldShowCueDisclosure: Bool {
+        guard shouldShowWakeControls else { return false }
+        guard !derivedCueRows.isEmpty else { return false }
+
+        switch presentationDay.decisionLog.plannedWakeState {
+        case .preFajr:
+            return true
+        case .inFajr:
+            return effectiveConfig.reminderEnabled || effectiveConfig.iftarEnabled
+        case .postFajr, .fixedWake:
+            return effectiveConfig.iftarEnabled
+        }
     }
 
     private var intentWarnings: [FastWarning] {
@@ -134,213 +151,86 @@ struct AlarmDayDetailView: View {
         editorContext.computedIntentSelection
     }
 
-    private var sourceProvenances: [ResolvedScheduledDateProvenance] {
-        editorContext.sourceProvenances
+    private var storedIntentSelection: FastIntentSelection {
+        fastTagStore.selection(for: schedule.date, timeZone: timeZone) ?? .default
     }
 
-    private var explicitSourceProvenances: [ResolvedScheduledDateProvenance] {
-        sourceProvenances.filter(\.isExplicitOneOff)
+    private var presentationDay: ActiveAlarmDay {
+        editorContext.presentationDay
     }
 
-    private var stoppableProvenances: [ResolvedScheduledDateProvenance] {
-        var seen = Set<String>()
-        return sourceProvenances.filter { provenance in
-            guard provenance.canStopSeries else { return false }
-            let key = "\(provenance.groupID?.uuidString ?? provenance.sourceID.uuidString)-\(provenance.stopSeriesLabel ?? "")"
-            if seen.contains(key) {
-                return false
+    private var detailPresentation: AlarmDayDetailPresentation {
+        AlarmDayDetailPresentation(
+            day: presentationDay,
+            computedIntentSelection: computedIntentSelection,
+            warnings: intentWarnings,
+            draftSelection: wakeSelectionDraft,
+            draftAnchor: wakeAnchorDraft,
+            draftDeltaMinutes: wakeDeltaDraft,
+            draftFixedWakeMinutes: fixedWakeMinutesDraft
+        )
+    }
+
+    private var wakeRuleSelectionBinding: Binding<DayWakeRuleSelection> {
+        Binding(get: {
+            wakeSelectionDraft
+        }, set: { newValue in
+            let previousSelection = wakeSelectionDraft
+            wakeSelectionDraft = newValue
+            switch newValue {
+            case .defaultPlan:
+                break
+            case .preFajr:
+                wakeAnchorDraft = .fajrStart
+                if previousSelection != .preFajr {
+                    wakeDeltaDraft = currentWakeDelta
+                }
+            case .inFajr:
+                if wakeAnchorDraft == .clockTime {
+                    wakeAnchorDraft = effectiveConfig.defaultWakeRule.anchorType ?? .fajrStart
+                }
+                wakeAnchorDraft = wakeAnchorDraft == .fajrEnd ? .fajrEnd : .fajrStart
+                if previousSelection != .inFajr {
+                    wakeDeltaDraft = currentWakeDelta
+                }
+            case .postFajr:
+                wakeAnchorDraft = .fajrEnd
+            case .fixedWake:
+                if previousSelection != .fixedWake {
+                    fixedWakeMinutesDraft = currentFixedWakeMinutes
+                }
             }
-            seen.insert(key)
-            return true
-        }
-    }
-
-    private var intentSummaryText: String {
-        var parts: [String] = [computedIntentSelection.primaryIntent.shortTitle]
-        let secondary = computedIntentSelection.secondaryTags.sorted { $0.title < $1.title }
-        if !secondary.isEmpty {
-            parts.append(secondary.map { $0.shortTitle }.joined(separator: ", "))
-        }
-        return parts.joined(separator: " • ")
-    }
-
-    private var sourcePresentations: [ScheduleSourcePresentation] {
-        sourceProvenances.map(ScheduleSourcePresentation.init)
-    }
-
-    private var dayActiveBinding: Binding<Bool> {
-        Binding(get: {
-            isDayEnabled
-        }, set: { newValue in
-            setDayEnabled(newValue)
+            scheduleEditorCommit()
         })
     }
 
-    private var suhoorEnabledBinding: Binding<Bool> {
+    private var wakeAnchorBinding: Binding<WakeAnchorType> {
         Binding(get: {
-            effectiveConfig.suhoorEnabled
+            wakeAnchorDraft == .fajrEnd ? .fajrEnd : .fajrStart
         }, set: { newValue in
-            updateOverride { $0.suhoorEnabled = newValue }
-        })
-    }
-
-    private var reminderEnabledBinding: Binding<Bool> {
-        Binding(get: {
-            effectiveConfig.reminderEnabled
-        }, set: { newValue in
-            updateOverride { $0.reminderEnabled = newValue }
-        })
-    }
-
-    private var fajrEnabledBinding: Binding<Bool> {
-        Binding(get: {
-            effectiveConfig.fajrEnabled
-        }, set: { newValue in
-            updateOverride { $0.fajrEnabled = newValue }
-        })
-    }
-
-    private var iftarEnabledBinding: Binding<Bool> {
-        Binding(get: {
-            effectiveConfig.iftarEnabled
-        }, set: { newValue in
-            updateOverride { $0.iftarEnabled = newValue }
-        })
-    }
-
-    private var iftarNotificationBinding: Binding<Bool> {
-        Binding(get: {
-            effectiveConfig.iftarDelivery.notification
-        }, set: { newValue in
-            updateOverride { override in
-                let base = override.iftarDeliveryOverride ?? effectiveConfig.iftarDelivery
-                override.iftarDeliveryOverride = IftarDeliverySelection(
-                    notification: newValue,
-                    alarm: base.alarm,
-                    adhan: base.adhan
-                ).normalized()
-            }
-        })
-    }
-
-    private var iftarAlarmBinding: Binding<Bool> {
-        Binding(get: {
-            effectiveConfig.iftarDelivery.normalized().alarm
-        }, set: { newValue in
-            updateOverride { override in
-                let base = override.iftarDeliveryOverride ?? effectiveConfig.iftarDelivery
-                override.iftarDeliveryOverride = IftarDeliverySelection(
-                    notification: base.notification,
-                    alarm: newValue,
-                    adhan: base.adhan
-                ).normalized()
-            }
-        })
-    }
-
-    private var iftarAdhanBinding: Binding<Bool> {
-        Binding(get: {
-            effectiveConfig.iftarDelivery.normalized().adhan
-        }, set: { newValue in
-            updateOverride { override in
-                let base = override.iftarDeliveryOverride ?? effectiveConfig.iftarDelivery
-                override.iftarDeliveryOverride = IftarDeliverySelection(
-                    notification: base.notification,
-                    alarm: base.alarm,
-                    adhan: newValue
-                ).normalized()
-            }
+            wakeAnchorDraft = newValue == .fajrEnd ? .fajrEnd : .fajrStart
+            wakeSelectionDraft = .inFajr
+            scheduleEditorCommit()
         })
     }
 
     private var suhoorOffsetBinding: Binding<Int> {
         Binding(get: {
-            alarmConfigStore.override(for: schedule.date, timeZone: timeZone)?.suhoorOffsetOverrideMinutes
-                ?? ruleSummary.finalOffsetMinutes
+            wakeDeltaDraft
         }, set: { newValue in
-            updateOverride {
-                $0.suhoorOffsetOverrideMinutes = newValue
-                $0.suhoorEnabled = true
-            }
-            clampReminderOffsetIfNeeded()
+            wakeDeltaDraft = newValue
+            scheduleEditorCommit()
         })
-    }
-
-    private var suhoorFixedTimeBinding: Binding<Bool> {
-        Binding(get: {
-            alarmConfigStore.override(for: schedule.date, timeZone: timeZone)?.suhoorTimeOverrideMinutesFromMidnight != nil
-        }, set: { newValue in
-            updateOverride { override in
-                if newValue {
-                    override.suhoorTimeOverrideMinutesFromMidnight = minutesFromMidnight(for: currentSchedule.wakeDate)
-                    override.suhoorEnabled = true
-                } else {
-                    override.suhoorTimeOverrideMinutesFromMidnight = nil
-                }
-            }
-            clampReminderOffsetIfNeeded()
-        })
-    }
-
-    private var usesFixedSuhoorTime: Bool {
-        alarmConfigStore.override(for: schedule.date, timeZone: timeZone)?.suhoorTimeOverrideMinutesFromMidnight != nil
     }
 
     private var suhoorTimeBinding: Binding<Date> {
         Binding(get: {
-            if let overrideMinutes = alarmConfigStore.override(for: schedule.date, timeZone: timeZone)?.suhoorTimeOverrideMinutesFromMidnight {
-                return dateFromMidnight(for: schedule.date, minutes: overrideMinutes)
-            }
-            return suhoorTime
+            dateFromMidnight(for: schedule.date, minutes: fixedWakeMinutesDraft)
         }, set: { newValue in
-            updateOverride { override in
-                override.suhoorTimeOverrideMinutesFromMidnight = minutesFromMidnight(for: newValue)
-                override.suhoorEnabled = true
-            }
-            clampReminderOffsetIfNeeded()
+            fixedWakeMinutesDraft = minutesFromMidnight(for: newValue)
+            wakeSelectionDraft = .fixedWake
+            scheduleEditorCommit()
         })
-    }
-
-    private var reminderOffsetBinding: Binding<Int> {
-        Binding(get: {
-            alarmConfigStore.override(for: schedule.date, timeZone: timeZone)?.reminderOffsetOverrideMinutes
-                ?? effectiveConfig.reminderMinutesBeforeFajr
-        }, set: { newValue in
-            let clamped = min(newValue, maxReminderOffsetMinutes)
-            updateOverride { override in
-                override.reminderOffsetOverrideMinutes = clamped
-                override.reminderTimeOverrideMinutesFromMidnight = nil
-                override.reminderEnabled = true
-            }
-            reminderTimeClamped = clamped != newValue
-        })
-    }
-
-    private var reminderFixedTimeBinding: Binding<Date> {
-        Binding(get: {
-            if let overrideMinutes = alarmConfigStore.override(for: schedule.date, timeZone: timeZone)?.reminderTimeOverrideMinutesFromMidnight {
-                return dateFromMidnight(for: schedule.date, minutes: overrideMinutes)
-            }
-            return dateFromMidnight(for: schedule.date, minutes: effectiveConfig.reminderFixedTimeMinutes)
-        }, set: { newValue in
-            let validation = TimeValidation.validateDailyTimes(suhoorTime: suhoorTime, reminderTime: newValue)
-            updateOverride { override in
-                override.reminderTimeOverrideMinutesFromMidnight = minutesFromMidnight(for: validation.reminderTime)
-                override.reminderOffsetOverrideMinutes = nil
-                override.reminderEnabled = true
-            }
-            reminderTimeClamped = validation.wasClampedToSuhoor
-        })
-    }
-
-    private var reminderFooterText: String {
-        if !effectiveConfig.reminderEnabled {
-            return Strings.AlarmsTab.reminderOff
-        }
-        if let reminderDate = reminderTime {
-            return Strings.AlarmsTab.willRingAt(TimeFormatters.timeFormatter.string(from: reminderDate))
-        }
-        return Strings.AlarmsTab.reminderOff
     }
 
     private var maxReminderOffsetMinutes: Int {
@@ -348,13 +238,8 @@ struct AlarmDayDetailView: View {
         return max(1, minutesBetween)
     }
 
-    private var reminderOffsetRange: ClosedRange<Int> {
-        let lowerBound = min(5, maxReminderOffsetMinutes)
-        return lowerBound...maxReminderOffsetMinutes
-    }
-
     private var suhoorTime: Date {
-        if let overrideMinutes = effectiveConfig.suhoorTimeOverrideMinutesFromMidnight {
+        if let overrideMinutes = effectiveConfig.resolvedWakeRule.fixedWakeTimeMinutesFromMidnight {
             return dateFromMidnight(for: schedule.date, minutes: overrideMinutes)
         }
         if effectiveConfig.suhoorTimeMode == .fixedTime {
@@ -371,302 +256,389 @@ struct AlarmDayDetailView: View {
         reminderValidationResult?.reminderTime
     }
 
-    private var dayToggleBinding: Binding<Bool> {
-        Binding(get: {
-            isDayEnabled
-        }, set: { newValue in
-            setDayEnabled(newValue)
-        })
-    }
-
     private var configurationList: some View {
         List {
             Section {
                 SummaryHeader(
                     gregorianText: fullGregorianDate,
                     hijriText: HijriDateFormatter.shared.string(from: schedule.date),
+                    purposeText: detailPresentation.heroPurposeText,
                     primaryText: primaryDisplayText,
                     primaryTime: primaryDisplayTime,
-                    titleLabel: heroTitleLabel,
                     fajrText: Strings.AlarmsTab.fajrTime(TimeFormatters.timeFormatter.string(from: currentSchedule.fajrDate)),
-                    isOff: primaryDisplayKind == nil,
-                    intentSelection: computedIntentSelection,
-                    warnings: intentWarnings,
-                    onWarningInfo: { warning in
-                        selectedAbout = warning.about
-                    }
+                    isOff: isSkippingDay,
+                    summaryText: detailPresentation.heroSummaryText,
+                    summaryDetailText: detailPresentation.heroSummaryDetailText,
+                    accessibilitySummary: detailPresentation.accessibilitySummary
                 )
-                .padding(.vertical, 12)
-                .padding(.horizontal, 16)
+                .padding(.vertical, DesignTokens.spacingS)
+                .padding(.horizontal, 12)
             }
             .listRowSeparator(.hidden)
             .listRowBackground(Color(.secondarySystemGroupedBackground))
 
-            Section {
-                Button {
-                    showsTagPicker = true
-                } label: {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Edit day meaning")
-                                .foregroundStyle(.primary)
-                            Text(intentSummaryText)
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(2)
-                                .fixedSize(horizontal: false, vertical: true)
+            if isSkippingDay {
+                Section {
+                    HStack(alignment: .center) {
+                        Button("Restore wake on this date") {
+                            restoreSkippedDate()
                         }
-                        Spacer()
-                        Image(systemName: "chevron.right")
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(.tertiary)
+                        .font(AppTypography.metricLabel)
+                        .appControlStyle(.quiet)
+
+                        Spacer(minLength: 0)
                     }
                 }
-                if canQuickMarkFastingDay {
-                    Button("Mark as Fasting Day") {
-                        fastTagStore.setSelection(
-                            FastIntentSelection(primaryIntent: .voluntary, secondaryTags: []),
-                            for: schedule.date,
-                            timeZone: timeZone
-                        )
-                        rebuildViewState()
-                    }
-                }
-            } header: {
-                Text("Day Meaning")
-                    .textCase(nil)
-            } footer: {
-                Text("Use this to make the date a fasting day, Qada day, or another special morning.")
             }
 
             Section {
-                Toggle("Keep this morning active", isOn: dayToggleBinding)
-            } header: {
-                Text("One-Day Override")
-                    .textCase(nil)
-            } footer: {
-                Text(hasOneDayChanges ? "This date is using one-day changes." : "This date is using your default morning plan.")
-            }
-            .animation(Motion.standard(reduceMotion: reduceMotion), value: dayToggleBinding.wrappedValue)
+                VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
+                    Button {
+                        showsTagPicker = true
+                    } label: {
+                        HStack(alignment: .center, spacing: DesignTokens.spacingS) {
+                            VStack(alignment: .leading, spacing: DesignTokens.textSpacingMicro) {
+                                Text(detailPresentation.dayPurposeTitle)
+                                    .font(AppTypography.rowTitle)
+                                    .foregroundStyle(.primary)
 
-            Section {
-                VStack(spacing: DesignTokens.spacingM) {
-                    AlarmTimingEditor(
-                        title: Strings.Settings.wakeAlarmLabel,
-                        summary: suhoorSummaryText,
-                        isEnabled: suhoorEnabledBinding,
-                        mode: suhoorTimeModeBinding,
-                        relativeValue: suhoorOffsetBinding,
-                        fixedTime: suhoorTimeBinding,
-                        relativeLabel: Strings.AlarmsTab.minutesBeforeFajr,
-                        relativeDetail: Strings.AlarmsTab.willRingAt(TimeFormatters.timeFormatter.string(from: suhoorTime)),
-                        fixedLabel: Strings.AlarmsTab.suhoorTime,
-                        fixedDetail: Strings.AlarmsTab.willRingAt(TimeFormatters.timeFormatter.string(from: suhoorTime)),
-                        relativeRange: 5...240,
-                        relativeStep: 5,
-                        warningText: nil,
-                        isExpanded: expandedAlarm == .suhoor,
-                        onToggleExpanded: { toggleExpanded(.suhoor) },
-                        isDisabled: isSkippingDay
-                    )
+                                if let dayPurposeDetails = detailPresentation.dayPurposeDetails {
+                                    Text(dayPurposeDetails)
+                                        .font(AppTypography.rowBody)
+                                        .foregroundStyle(.secondary)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
 
-                    AlarmTimingEditor(
-                        title: Strings.Settings.reminderLabel,
-                        summary: reminderSummaryText,
-                        isEnabled: reminderEnabledBinding,
-                        mode: reminderTimeModeBinding,
-                        relativeValue: reminderOffsetBinding,
-                        fixedTime: reminderFixedTimeBinding,
-                        relativeLabel: Strings.AlarmsTab.minutesBeforeFajr,
-                        relativeDetail: reminderFooterText,
-                        fixedLabel: Strings.Settings.reminderTime,
-                        fixedDetail: reminderFooterText,
-                        relativeRange: reminderOffsetRange,
-                        relativeStep: 5,
-                        warningText: reminderTimeClamped || reminderValidationResult?.wasClampedToSuhoor == true
-                            ? Strings.Settings.reminderBeforeSuhoorWarning
-                            : nil,
-                        isExpanded: expandedAlarm == .reminder,
-                        onToggleExpanded: { toggleExpanded(.reminder) },
-                        isDisabled: isSkippingDay
-                    )
+                                Text("Choose day purpose")
+                                    .font(AppTypography.metricLabel)
+                                    .foregroundStyle(.secondary)
+                            }
 
-                    SettingsEditorCard(
-                        title: "Fajr Adhan",
-                        subtitle: fajrSummaryText,
-                        trailing: AnyView(
-                            Toggle("", isOn: fajrEnabledBinding)
-                                .labelsHidden()
-                        )
-                    ) {
-                        EmptyView()
+                            Spacer(minLength: DesignTokens.spacingS)
+
+                            Image(systemName: "chevron.right")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.tertiary)
+                        }
                     }
+                    .buttonStyle(.plain)
 
-                    SettingsEditorCard(
-                        title: "Iftar / Maghrib",
-                        subtitle: iftarSummaryText,
-                        trailing: AnyView(
-                            Toggle("", isOn: iftarEnabledBinding)
-                                .labelsHidden()
-                        ),
-                        isExpanded: expandedAlarm == .iftar,
-                        onToggleExpanded: { toggleExpanded(.iftar) }
-                    ) {
-                        if effectiveConfig.iftarEnabled {
+                    if !intentWarnings.isEmpty {
+                        Divider()
+
+                        FlowLayout(spacing: DesignTokens.textSpacingCompact) {
+                            ForEach(intentWarnings, id: \.self) { warning in
+                                WarningChipWithInfo(
+                                    warning: warning,
+                                    onInfo: { selectedAbout = warning.about }
+                                )
+                            }
+                        }
+                    }
+                }
+            } header: {
+                Text("Day purpose")
+                    .textCase(nil)
+            }
+
+            if shouldShowWakeControls {
+                Section {
+                    VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
+                        Text(detailPresentation.adjustStatusText)
+                            .font(AppTypography.metricLabel)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        WakeModeSelector(selection: wakeRuleSelectionBinding)
+
+                        switch wakeRuleSelectionBinding.wrappedValue {
+                        case .defaultPlan:
+                            if let wakeEditorNoteText {
+                                dayDetailInfoRow(
+                                    title: "Latest wake",
+                                    detail: wakeEditorNoteText
+                                )
+                            }
+                        case .preFajr:
+                            Stepper(value: suhoorOffsetBinding, in: 0...240, step: 1) {
+                                VStack(alignment: .leading, spacing: DesignTokens.textSpacingMicro) {
+                                    Text("Minutes before Fajr")
+                                    Text(wakeDraftSummaryText)
+                                        .font(.footnote)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            .accessibilityLabel("Minutes before Fajr")
+                            .accessibilityValue(wakeDraftSummaryText)
+                        case .inFajr:
                             VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
-                                Text("Calculated from sunset. Adjust globally from Prayer times.")
+                                WakeAnchorSelector(selection: wakeAnchorBinding)
+
+                                Stepper(value: suhoorOffsetBinding, in: 0...240, step: 1) {
+                                    VStack(alignment: .leading, spacing: DesignTokens.textSpacingMicro) {
+                                        Text(wakeDeltaEditorLabel)
+                                        Text(wakeDraftSummaryText)
+                                            .font(.footnote)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                                .accessibilityLabel(wakeDeltaEditorLabel)
+                                .accessibilityValue(wakeDraftSummaryText)
+
+                                if let wakeEditorNoteText {
+                                    Text(wakeEditorNoteText)
+                                        .font(.footnote)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                        case .postFajr:
+                            Stepper(value: suhoorOffsetBinding, in: 0...240, step: 1) {
+                                VStack(alignment: .leading, spacing: DesignTokens.textSpacingMicro) {
+                                    Text("Minutes after Fajr ends")
+                                    Text(wakeDraftSummaryText)
+                                        .font(.footnote)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            .accessibilityLabel("Minutes after Fajr ends")
+                            .accessibilityValue(wakeDraftSummaryText)
+
+                            if let wakeEditorNoteText {
+                                Text(wakeEditorNoteText)
                                     .font(.footnote)
                                     .foregroundStyle(.secondary)
+                            }
+                        case .fixedWake:
+                            DatePicker(
+                                "Fixed wake time",
+                                selection: suhoorTimeBinding,
+                                displayedComponents: [.hourAndMinute]
+                            )
+                            .accessibilityLabel("Fixed wake time")
 
-                                Toggle("Notification", isOn: iftarNotificationBinding)
-                                    .disabled(isSkippingDay || !effectiveConfig.iftarEnabled)
-                                Toggle("Alarm", isOn: iftarAlarmBinding)
-                                    .disabled(isSkippingDay || !effectiveConfig.iftarEnabled)
-                                Toggle("Adhan", isOn: iftarAdhanBinding)
-                                    .disabled(isSkippingDay || !effectiveConfig.iftarEnabled)
+                            if let wakeEditorNoteText {
+                                Text(wakeEditorNoteText)
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
                             }
                         }
                     }
+                } header: {
+                    Text("Adjust this date")
+                        .textCase(nil)
                 }
-                .padding(.vertical, 4)
+            }
+
+            Section {
+                VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
+                    Text(detailPresentation.why.statusTitle)
+                        .font(AppTypography.cardTitle)
+                        .foregroundStyle(.primary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    ForEach(detailPresentation.why.rows) { row in
+                        dayDetailInfoRow(title: row.title, detail: row.detail)
+                    }
+                }
             } header: {
-                Text("Wake sequence")
+                Text("Why this wake")
                     .textCase(nil)
             }
-            .animation(Motion.standard(reduceMotion: reduceMotion), value: expandedAlarm)
-            .disabled(!dayToggleBinding.wrappedValue)
-            .opacity(dayToggleBinding.wrappedValue ? 1.0 : 0.5)
 
-            if hasOneDayChanges {
-                Section {
-                    Button("Reset to Default", role: .destructive) {
-                        showsResetConfirmation = true
-                    }
-                } header: {
-                    Text("Reset to Default")
-                        .textCase(nil)
-                } footer: {
-                    Text(Strings.AlarmsTab.resetDayHelper)
-                }
-            }
+            Section {
+                DisclosureGroup("Advanced", isExpanded: $showsAdvancedDetails) {
+                    VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
+                        dayDetailInfoRow(
+                            title: "Source",
+                            detail: detailPresentation.advancedSourceText
+                        )
 
-            if !sourcePresentations.isEmpty {
-                Section {
-                    ForEach(sourcePresentations) { presentation in
-                        ScheduleSourceCard(presentation: presentation)
-                    }
-                } header: {
-                    Text("Why This Morning")
-                        .textCase(nil)
-                }
-            }
+                        if shouldShowCueDisclosure {
+                            Divider()
 
-            if !explicitSourceProvenances.isEmpty || !stoppableProvenances.isEmpty {
-                Section {
-                    if !explicitSourceProvenances.isEmpty {
-                        DetailActionButton(
-                            title: Strings.AlarmsTab.sourceDeleteDay,
-                            subtitle: Strings.AlarmsTab.sourceDeleteDayHelper,
-                            role: .destructive
-                        ) {
-                            Task {
-                                await scheduleManager.deleteExplicitScheduledDate(schedule.date)
-                                dismiss()
-                            }
-                        }
-                    }
-
-                    if !stoppableProvenances.isEmpty {
-                        DetailActionButton(
-                            title: Strings.AlarmsTab.sourceDayExclusion,
-                            subtitle: Strings.AlarmsTab.sourceDayExclusionHelper,
-                            tint: DawnColor.accent
-                        ) {
-                            if stoppableProvenances.count == 1, let provenance = stoppableProvenances.first {
-                                Task {
-                                    await scheduleManager.skipScheduledDate(
-                                        schedule.date,
-                                        scope: suppressionScope(for: provenance)
-                                    )
-                                    dismiss()
+                            DisclosureGroup("Extra cues", isExpanded: $showsCueDetails) {
+                                VStack(alignment: .leading, spacing: DesignTokens.spacingS) {
+                                    ForEach(derivedCueRows) { row in
+                                        dayDetailInfoRow(title: row.title, detail: row.detail)
+                                    }
                                 }
-                            } else {
-                                showsExclusionDialog = true
+                                .padding(.top, DesignTokens.textSpacingCompact)
                             }
                         }
 
-                        ForEach(stoppableProvenances, id: \.id) { provenance in
-                            let actionPresentation = SourceManagementActionPresentation(provenance: provenance)
-                            DetailActionButton(
-                                title: actionPresentation.title,
-                                subtitle: actionPresentation.subtitle,
-                                role: .destructive
-                            ) {
-                                Task {
-                                    await scheduleManager.stopSeries(for: provenance)
-                                    dismiss()
+                        if shouldShowResetSection || !isSkippingDay {
+                            Divider()
+
+                            VStack(alignment: .leading, spacing: DesignTokens.spacingS) {
+                                if shouldShowResetSection {
+                                    Button("Reset to default", role: .destructive) {
+                                        showsResetConfirmation = true
+                                    }
+                                }
+
+                                if !isSkippingDay {
+                                    Button("Skip wake on this date", role: .destructive) {
+                                        skipDate()
+                                    }
                                 }
                             }
                         }
                     }
-                } header: {
-                    Text("Change Planned Source")
-                        .textCase(nil)
+                    .padding(.top, DesignTokens.textSpacingCompact)
                 }
             }
         }
         .listStyle(.insetGrouped)
-        .onChange(of: dayToggleBinding.wrappedValue) { _, newValue in
-            if !newValue {
-                expandedAlarm = nil
+    }
+
+    private var wakeEditorNoteText: String? {
+        switch wakeRuleSelectionBinding.wrappedValue {
+        case .defaultPlan:
+            guard presentationDay.decisionLog.latestWakeCapApplied else { return nil }
+            return "Your latest wake moved this earlier."
+        case .inFajr:
+            guard wakeAnchorBinding.wrappedValue == .fajrStart else { return nil }
+            return "Leaves time before Fajr ends."
+        case .postFajr:
+            return "Set just for this date."
+        case .fixedWake:
+            return "This fixed wake ignores your latest wake."
+        case .preFajr:
+            return nil
+        }
+    }
+
+    private var derivedCueRows: [WakeReasonRow] {
+        let wakeTimeText = TimeFormatters.timeFormatter.string(from: presentationDay.decisionLog.resolvedWakeTime)
+        var rows: [WakeReasonRow] = []
+
+        switch presentationDay.decisionLog.plannedWakeState {
+        case .preFajr:
+            rows.append(
+                WakeReasonRow(
+                    id: "primary-wake",
+                    title: "Wake",
+                    detail: "Set for \(wakeTimeText) before Fajr."
+                )
+            )
+            if effectiveConfig.reminderEnabled, let reminderTime {
+                rows.append(
+                    WakeReasonRow(
+                        id: "fasting-reminder",
+                        title: "Fasting reminder",
+                        detail: "Reminder at \(TimeFormatters.timeFormatter.string(from: reminderTime)) on fasting mornings."
+                    )
+                )
             }
-        }
-    }
-
-    private var suhoorSummaryText: String {
-        guard effectiveConfig.suhoorEnabled, dayToggleBinding.wrappedValue else {
-            return Strings.AlarmList.offLabel
-        }
-        return Strings.AlarmsTab.willRingAt(TimeFormatters.timeFormatter.string(from: suhoorTime))
-    }
-
-    private var reminderSummaryText: String {
-        guard effectiveConfig.reminderEnabled, dayToggleBinding.wrappedValue else {
-            return Strings.AlarmList.offLabel
-        }
-        return reminderFooterText
-    }
-
-    private var fajrSummaryText: String {
-        guard effectiveConfig.fajrEnabled, dayToggleBinding.wrappedValue else {
-            return Strings.AlarmList.offLabel
-        }
-        return Strings.AlarmsTab.willPlayAt(TimeFormatters.timeFormatter.string(from: currentSchedule.fajrDate))
-    }
-
-    private var iftarSummaryText: String {
-        guard effectiveConfig.iftarEnabled, dayToggleBinding.wrappedValue else {
-            return Strings.AlarmList.offLabel
-        }
-        let timeText = TimeFormatters.timeFormatter.string(from: currentSchedule.iftarDate ?? currentSchedule.maghribDate)
-        return "\(effectiveConfig.iftarDelivery.summaryText) · \(timeText)"
-    }
-
-    private func toggleExpanded(_ alarm: ExpandedAlarm) {
-        withAnimation(Motion.standard(reduceMotion: reduceMotion)) {
-            if expandedAlarm == alarm {
-                expandedAlarm = nil
-            } else {
-                expandedAlarm = alarm
+            if effectiveConfig.fajrEnabled {
+                rows.append(
+                    WakeReasonRow(
+                        id: "fajr-start",
+                        title: "At Fajr start",
+                        detail: "If the wake is still active, the Fajr-start sound takes over."
+                    )
+                )
             }
+        case .inFajr:
+            rows.append(
+                WakeReasonRow(
+                    id: "primary-wake",
+                    title: "Wake",
+                    detail: "Set for \(wakeTimeText) during Fajr."
+                )
+            )
+        case .postFajr:
+            rows.append(
+                WakeReasonRow(
+                    id: "primary-wake",
+                    title: "Wake",
+                    detail: "Set for \(wakeTimeText) after Fajr."
+                )
+            )
+        case .fixedWake:
+            rows.append(
+                WakeReasonRow(
+                    id: "primary-wake",
+                    title: "Wake",
+                    detail: "Set for \(wakeTimeText)."
+                )
+            )
+        }
+
+        if effectiveConfig.iftarEnabled && computedIntentSelection.primaryIntent != .other {
+            rows.append(
+                WakeReasonRow(
+                    id: "iftar",
+                    title: "Sunset cue",
+                    detail: "Stays on for this fasting day."
+                )
+            )
+        }
+
+        return rows
+    }
+
+    @ViewBuilder
+    private func dayDetailInfoRow(title: String, detail: String) -> some View {
+        VStack(alignment: .leading, spacing: DesignTokens.textSpacingMicro) {
+            Text(title)
+                .font(AppTypography.rowTitle)
+            Text(detail)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.vertical, DesignTokens.space2)
+    }
+
+    private var wakeDeltaEditorLabel: String {
+        switch wakeRuleSelectionBinding.wrappedValue {
+        case .defaultPlan, .preFajr:
+            return "Minutes before Fajr"
+        case .inFajr:
+            return wakeAnchorBinding.wrappedValue == .fajrEnd
+                ? "Minutes before Fajr ends"
+                : "Minutes after Fajr begins"
+        case .postFajr:
+            return "Minutes after Fajr ends"
+        case .fixedWake:
+            return "Fixed wake time"
         }
     }
 
-    private var usesFixedReminderTime: Bool {
-        if alarmConfigStore.override(for: schedule.date, timeZone: timeZone)?.reminderTimeOverrideMinutesFromMidnight != nil {
-            return true
+    private var wakeDraftSummaryText: String {
+        switch wakeSelectionDraft {
+        case .defaultPlan:
+            return ProductSurfacePresentation.wakeOffsetText(for: presentationDay)
+        case .preFajr:
+            return ProductSurfacePresentation.wakeOffsetText(
+                state: .preFajr,
+                anchor: .fajrStart,
+                deltaMinutes: wakeDeltaDraft,
+                fixedTimeMinutes: nil
+            )
+        case .inFajr:
+            return ProductSurfacePresentation.wakeOffsetText(
+                state: .inFajr,
+                anchor: wakeAnchorDraft == .fajrEnd ? .fajrEnd : .fajrStart,
+                deltaMinutes: wakeDeltaDraft,
+                fixedTimeMinutes: nil
+            )
+        case .postFajr:
+            return ProductSurfacePresentation.wakeOffsetText(
+                state: .postFajr,
+                anchor: .fajrEnd,
+                deltaMinutes: wakeDeltaDraft,
+                fixedTimeMinutes: nil
+            )
+        case .fixedWake:
+            return ProductSurfacePresentation.wakeOffsetText(
+                state: .fixedWake,
+                anchor: .clockTime,
+                deltaMinutes: 0,
+                fixedTimeMinutes: fixedWakeMinutesDraft
+            )
         }
-        return effectiveConfig.reminderTimeMode == .fixedTime
     }
 
     private var reminderValidationResult: TimeValidationResult? {
@@ -692,20 +664,26 @@ struct AlarmDayDetailView: View {
         return calendar
     }
 
-    private func updateOverride(_ update: (inout DailyAlarmOverride) -> Void) {
-        alarmConfigStore.updateOverride(for: schedule.date, timeZone: timeZone, update: update)
-        scheduleManager.requestRescheduleDay(schedule.date)
-        rebuildEditorContext()
-    }
-
     private func setDayEnabled(_ isEnabled: Bool) {
         alarmConfigStore.setDayEnabled(isEnabled, for: schedule.date, timeZone: timeZone)
         scheduleManager.requestRescheduleDay(schedule.date)
-        rebuildEditorContext()
     }
 
-    private var isDayEnabled: Bool {
-        !effectiveConfig.skipDay && effectiveConfig.hasAnyEnabled
+    private func skipDate() {
+        applyEditorDraftIfNeeded()
+        setDayEnabled(false)
+    }
+
+    private func restoreSkippedDate() {
+        setDayEnabled(true)
+    }
+
+    private func resetDateToDefault() {
+        editorCommitTask?.cancel()
+        editorCommitTask = nil
+        hasPendingEditorCommit = false
+        alarmConfigStore.removeOverride(for: schedule.date, timeZone: timeZone)
+        scheduleManager.requestRescheduleDay(schedule.date)
     }
 
     private func clampReminderOffsetIfNeeded() {
@@ -717,7 +695,87 @@ struct AlarmDayDetailView: View {
             draft.reminderOffsetOverrideMinutes = clamped
         }
         scheduleManager.requestRescheduleDay(schedule.date)
-        rebuildEditorContext()
+    }
+
+    private func loadEditorDraft() {
+        wakeSelectionDraft = currentWakeSelection
+        wakeAnchorDraft = currentWakeAnchor
+        wakeDeltaDraft = currentWakeDelta
+        fixedWakeMinutesDraft = currentFixedWakeMinutes
+    }
+
+    private func scheduleEditorCommit() {
+        hasPendingEditorCommit = true
+        editorCommitTask?.cancel()
+        editorCommitTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 250_000_000)
+            applyEditorDraftIfNeeded()
+        }
+    }
+
+    private func applyEditorDraftIfNeeded() {
+        editorCommitTask?.cancel()
+        editorCommitTask = nil
+
+        let wakeChanged = wakeSelectionDraft != currentWakeSelection
+            || wakeAnchorDraft != currentWakeAnchor
+            || wakeDeltaDraft != currentWakeDelta
+            || fixedWakeMinutesDraft != currentFixedWakeMinutes
+
+        hasPendingEditorCommit = false
+        guard wakeChanged else { return }
+
+        alarmConfigStore.updateOverride(for: schedule.date, timeZone: timeZone) { override in
+            applyWakeDraft(to: &override)
+        }
+
+        clampReminderOffsetIfNeeded()
+        scheduleManager.requestRescheduleDay(schedule.date)
+    }
+
+    private func applyWakeDraft(to override: inout DailyAlarmOverride) {
+        switch wakeSelectionDraft {
+        case .defaultPlan:
+            override.wakeStateOverride = nil
+            override.wakeAnchorTypeOverride = nil
+            override.wakeDeltaOverrideMinutes = nil
+            override.fixedWakeTimeOverrideMinutesFromMidnight = nil
+            override.suhoorOffsetOverrideMinutes = nil
+            override.suhoorTimeOverrideMinutesFromMidnight = nil
+            override.suhoorEnabled = nil
+        case .preFajr:
+            override.wakeStateOverride = .preFajr
+            override.wakeAnchorTypeOverride = .fajrStart
+            override.wakeDeltaOverrideMinutes = wakeDeltaDraft
+            override.fixedWakeTimeOverrideMinutesFromMidnight = nil
+            override.suhoorOffsetOverrideMinutes = wakeDeltaDraft
+            override.suhoorTimeOverrideMinutesFromMidnight = nil
+            override.suhoorEnabled = true
+        case .inFajr:
+            override.wakeStateOverride = .inFajr
+            override.wakeAnchorTypeOverride = wakeAnchorDraft == .fajrEnd ? .fajrEnd : .fajrStart
+            override.wakeDeltaOverrideMinutes = wakeDeltaDraft
+            override.fixedWakeTimeOverrideMinutesFromMidnight = nil
+            override.suhoorOffsetOverrideMinutes = wakeDeltaDraft
+            override.suhoorTimeOverrideMinutesFromMidnight = nil
+            override.suhoorEnabled = true
+        case .postFajr:
+            override.wakeStateOverride = .postFajr
+            override.wakeAnchorTypeOverride = .fajrEnd
+            override.wakeDeltaOverrideMinutes = wakeDeltaDraft
+            override.fixedWakeTimeOverrideMinutesFromMidnight = nil
+            override.suhoorOffsetOverrideMinutes = wakeDeltaDraft
+            override.suhoorTimeOverrideMinutesFromMidnight = nil
+            override.suhoorEnabled = true
+        case .fixedWake:
+            override.wakeStateOverride = .fixedWake
+            override.wakeAnchorTypeOverride = .clockTime
+            override.wakeDeltaOverrideMinutes = nil
+            override.fixedWakeTimeOverrideMinutesFromMidnight = fixedWakeMinutesDraft
+            override.suhoorOffsetOverrideMinutes = nil
+            override.suhoorTimeOverrideMinutesFromMidnight = fixedWakeMinutesDraft
+            override.suhoorEnabled = true
+        }
     }
 
     private func rebuildEditorContext() {
@@ -727,12 +785,7 @@ struct AlarmDayDetailView: View {
     }
 
     private func rebuildViewState() {
-        cachedTagPickerSeeds = scheduleManager.activeWindowSnapshot.visibleDays.map(\.tagSeed)
         rebuildEditorContext()
-    }
-
-    private var canQuickMarkFastingDay: Bool {
-        intentWarnings.isEmpty && computedIntentSelection.primaryIntent == .other
     }
 
     private func buildEditorContext() -> DayAlarmEditorContext {
@@ -745,23 +798,37 @@ struct AlarmDayDetailView: View {
         )
         let userIntentSelection = fastTagStore.selection(for: schedule.date, timeZone: timeZone) ?? .default
         let activeDay = scheduleManager.activeDay(for: schedule.date, timeZone: timeZone)
+        let resolvedSchedule = activeDay?.schedule ?? schedule
         let computedTagResult = activeDay?.tagResult
             ?? scheduleManager.tagPreviewResult(
                 for: schedule.date,
                 overrideSelection: userIntentSelection.hasMeaningfulTags ? userIntentSelection : nil,
                 timeZone: timeZone
             )
+        let presentationDay = activeDay
+            ?? ActiveAlarmDay(
+                date: schedule.date,
+                dateKey: schedule.id,
+                schedule: resolvedSchedule,
+                effectiveConfig: effectiveConfig,
+                provenances: [],
+                isImplicitRamadan: false,
+                isExplicitOneOff: false,
+                tagResult: .empty,
+                primaryDisplay: effectiveConfig.primaryDisplay(schedule: resolvedSchedule),
+                sourceSummaryText: "",
+                resolvedDayContext: .standard
+            )
 
         return DayAlarmEditorContext(
             ruleSummary: summary,
             effectiveConfig: effectiveConfig,
-            userIntentSelection: userIntentSelection,
+            presentationDay: presentationDay,
             computedIntentSelection: FastIntentSelection(
                 primaryIntent: computedTagResult.computedPrimaryIntent,
                 secondaryTags: computedTagResult.computedSecondaryTags
             ),
-            intentWarnings: FastIntentEngine.warnings(for: schedule.date, timeZone: timeZone),
-            sourceProvenances: activeDay?.provenances ?? scheduleManager.provenance(for: schedule.date, timeZone: timeZone)
+            intentWarnings: FastIntentEngine.warnings(for: schedule.date, timeZone: timeZone)
         )
     }
 
@@ -775,8 +842,41 @@ struct AlarmDayDetailView: View {
         return calendar.date(byAdding: .minute, value: minutes, to: start) ?? start
     }
 
+    private var currentWakeSelection: DayWakeRuleSelection {
+        if let overrideState = dayOverride?.wakeStateOverride {
+            return DayWakeRuleSelection(overrideState)
+        }
+        if dayOverride?.fixedWakeTimeOverrideMinutesFromMidnight != nil
+            || dayOverride?.suhoorTimeOverrideMinutesFromMidnight != nil {
+            return .fixedWake
+        }
+        return .defaultPlan
+    }
+
+    private var currentWakeAnchor: WakeAnchorType {
+        if let anchor = dayOverride?.wakeAnchorTypeOverride {
+            return anchor == .fajrEnd ? .fajrEnd : anchor == .clockTime ? .clockTime : .fajrStart
+        }
+        return effectiveConfig.resolvedWakeRule.anchorType ?? .fajrStart
+    }
+
+    private var currentWakeDelta: Int {
+        dayOverride?.wakeDeltaOverrideMinutes
+            ?? dayOverride?.suhoorOffsetOverrideMinutes
+            ?? effectiveConfig.resolvedWakeRule.deltaMinutes
+    }
+
+    private var currentFixedWakeMinutes: Int {
+        dayOverride?.fixedWakeTimeOverrideMinutesFromMidnight
+            ?? dayOverride?.suhoorTimeOverrideMinutesFromMidnight
+            ?? minutesFromMidnight(for: currentSchedule.wakeDate)
+    }
+
     private var primaryDisplayText: String {
-        guard let primaryDisplayKind else { return Strings.AlarmList.offLabel }
+        if isSkippingDay {
+            return detailPresentation.heroSummaryText
+        }
+        guard let primaryDisplayKind else { return detailPresentation.heroSummaryText }
         switch primaryDisplayKind {
         case .suhoor:
             return TimeFormatters.timeFormatter.string(from: suhoorTime)
@@ -793,6 +893,7 @@ struct AlarmDayDetailView: View {
     }
 
     private var primaryDisplayTime: Date? {
+        guard !isSkippingDay else { return nil }
         guard let primaryDisplayKind else { return nil }
         switch primaryDisplayKind {
         case .suhoor:
@@ -803,34 +904,6 @@ struct AlarmDayDetailView: View {
             return currentSchedule.fajrDate
         case .iftar:
             return currentSchedule.iftarDate ?? currentSchedule.maghribDate
-        }
-    }
-
-    private var primaryDisplayLabel: String {
-        guard let primaryDisplayKind else { return Strings.AlarmsTab.alarmOffLabel }
-        switch primaryDisplayKind {
-        case .suhoor:
-            return Strings.AlarmsTab.suhoorLabel
-        case .reminder:
-            return Strings.AlarmsTab.reminderLabel
-        case .fajr:
-            return Strings.AlarmsTab.fajrAdhanLabel
-        case .iftar:
-            return "Iftar / Maghrib"
-        }
-    }
-
-    private var heroTitleLabel: String {
-        guard let primaryDisplayKind else { return Strings.AlarmsTab.alarmOffLabel }
-        switch primaryDisplayKind {
-        case .suhoor:
-            return Strings.Settings.wakeAlarmLabel
-        case .reminder:
-            return Strings.Settings.reminderLabel
-        case .fajr:
-            return Strings.AlarmsTab.fajrAdhanLabel
-        case .iftar:
-            return "Iftar / Maghrib"
         }
     }
 
@@ -854,57 +927,195 @@ struct AlarmDayDetailView: View {
         SummaryHeader.fullDateFormatter.string(from: schedule.date)
     }
 
-    private var suhoorTimeModeBinding: Binding<AlarmTimingEditorMode> {
-        Binding(get: {
-            usesFixedSuhoorTime ? .fixedTime : .beforeFajr
-        }, set: { newValue in
-            suhoorFixedTimeBinding.wrappedValue = newValue == .fixedTime
-        })
+}
+
+enum DayWakeRuleSelection: String, CaseIterable, Identifiable, Equatable {
+    case defaultPlan
+    case preFajr
+    case inFajr
+    case postFajr
+    case fixedWake
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .defaultPlan:
+            return "Use default"
+        case .preFajr:
+            return "Before Fajr"
+        case .inFajr:
+            return "During Fajr"
+        case .postFajr:
+            return "After Fajr"
+        case .fixedWake:
+            return "Fixed wake"
+        }
     }
 
-    private var reminderTimeModeBinding: Binding<AlarmTimingEditorMode> {
-        Binding(get: {
-            usesFixedReminderTime ? .fixedTime : .beforeFajr
-        }, set: { newValue in
-            switch newValue {
-            case .fixedTime:
-                let reminderDate = reminderTime
-                    ?? dateFromMidnight(for: schedule.date, minutes: effectiveConfig.reminderFixedTimeMinutes)
-                reminderFixedTimeBinding.wrappedValue = reminderDate
-            case .beforeFajr:
-                reminderOffsetBinding.wrappedValue = effectiveConfig.reminderMinutesBeforeFajr
-            }
-        })
+    var subtitle: String? {
+        switch self {
+        case .defaultPlan:
+            return "Keep your usual morning plan."
+        case .preFajr:
+            return "Wake before Fajr begins."
+        case .inFajr:
+            return "Wake during the Fajr window."
+        case .postFajr:
+            return "Wake after the Fajr window."
+        case .fixedWake:
+            return "Set a specific wake time."
+        }
+    }
+
+    init(_ state: MorningWakeRuleState) {
+        switch state {
+        case .preFajr:
+            self = .preFajr
+        case .inFajr:
+            self = .inFajr
+        case .postFajr:
+            self = .postFajr
+        case .fixedWake:
+            self = .fixedWake
+        }
     }
 }
 
-private enum ExpandedAlarm {
-    case suhoor
-    case reminder
-    case iftar
+private struct WakeModeSelector: View {
+    @Binding var selection: DayWakeRuleSelection
+
+    var body: some View {
+        VStack(spacing: DesignTokens.spacingS) {
+            ForEach(DayWakeRuleSelection.allCases) { option in
+                WakeSelectionRow(
+                    title: option.title,
+                    subtitle: option.subtitle,
+                    isSelected: selection == option
+                ) {
+                    selection = option
+                }
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Wake timing")
+    }
+}
+
+private struct WakeAnchorSelector: View {
+    @Binding var selection: WakeAnchorType
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: DesignTokens.spacingS) {
+            Text("Count from")
+                .font(AppTypography.metricLabel)
+                .foregroundStyle(.secondary)
+
+            WakeSelectionRow(
+                title: "Count from Fajr start",
+                subtitle: "Use the beginning of Fajr as the anchor.",
+                isSelected: selection == .fajrStart
+            ) {
+                selection = .fajrStart
+            }
+
+            WakeSelectionRow(
+                title: "Count from Fajr end",
+                subtitle: "Use the end of Fajr as the anchor.",
+                isSelected: selection == .fajrEnd
+            ) {
+                selection = .fajrEnd
+            }
+        }
+    }
+}
+
+private struct WakeSelectionRow: View {
+    let title: String
+    let subtitle: String?
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(alignment: .top, spacing: DesignTokens.spacingS) {
+                VStack(alignment: .leading, spacing: DesignTokens.textSpacingMicro) {
+                    Text(title)
+                        .font(AppTypography.rowTitle)
+                        .foregroundStyle(.primary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    if let subtitle {
+                        Text(subtitle)
+                            .font(AppTypography.rowBody)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+
+                Spacer(minLength: DesignTokens.spacingS)
+
+                Image(systemName: iconName)
+                    .font(AppTypography.controlIcon)
+                    .foregroundStyle(iconColor)
+                    .padding(.top, DesignTokens.space2)
+            }
+            .padding(.horizontal, DesignTokens.spacingM)
+            .padding(.vertical, DesignTokens.spacingS)
+            .background(backgroundShape)
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(title)
+        .accessibilityValue(isSelected ? "Selected" : "Not selected")
+        .accessibilityHint("Double tap to choose this option.")
+    }
+
+    private var iconName: String {
+        isSelected ? "checkmark.circle.fill" : "circle"
+    }
+
+    private var iconColor: Color {
+        isSelected ? DawnColor.accent : Color(.tertiaryLabel)
+    }
+
+    private var backgroundFill: Color {
+        isSelected ? DawnColor.accent.opacity(0.10) : Color(.secondarySystemBackground)
+    }
+
+    private var borderColor: Color {
+        isSelected ? DawnColor.accent.opacity(0.35) : Color(.separator).opacity(0.2)
+    }
+
+    private var backgroundShape: some View {
+        RoundedRectangle(cornerRadius: DesignTokens.innerCardRadius, style: .continuous)
+            .fill(backgroundFill)
+            .overlay(
+                RoundedRectangle(cornerRadius: DesignTokens.innerCardRadius, style: .continuous)
+                    .stroke(borderColor, lineWidth: 1)
+            )
+    }
 }
 
 private struct DayAlarmEditorContext {
     let ruleSummary: RuleSummary
     let effectiveConfig: EffectiveDailyConfig
-    let userIntentSelection: FastIntentSelection
+    let presentationDay: ActiveAlarmDay
     let computedIntentSelection: FastIntentSelection
     let intentWarnings: [FastWarning]
-    let sourceProvenances: [ResolvedScheduledDateProvenance]
 }
 
 private struct SummaryHeader: View {
     let gregorianText: String
     let hijriText: String
+    let purposeText: String
     let primaryText: String
     let primaryTime: Date?
-    let titleLabel: String
     let fajrText: String
     let isOff: Bool
-    let intentSelection: FastIntentSelection
-    let warnings: [FastWarning]
-    let onWarningInfo: (FastWarning) -> Void
-    @ScaledMetric(relativeTo: .largeTitle) private var timeFontSize: CGFloat = 42
+    let summaryText: String
+    let summaryDetailText: String?
+    let accessibilitySummary: String
 
     private static let timeMainFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -932,69 +1143,64 @@ private struct SummaryHeader: View {
     }()
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
+            VStack(alignment: .leading, spacing: DesignTokens.textSpacingMicro) {
                 Text(gregorianText)
                     .font(.callout)
                     .foregroundStyle(.secondary)
 
                 Text(hijriText)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-
-                Text(titleLabel)
-                    .font(.footnote)
+                    .font(AppTypography.rowBody)
                     .foregroundStyle(.secondary)
             }
 
-            Spacer()
-                .frame(height: 12)
+            Text(purposeText)
+                .font(.footnote.weight(.medium))
+                .foregroundStyle(.secondary)
 
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(primaryTimeMain)
-                    .font(.system(size: timeFontSize, weight: .light))
-                    .foregroundStyle(isOff ? .secondary : .primary)
-                    .monospacedDigit()
-                    .minimumScaleFactor(0.8)
+            if primaryTime != nil {
+                VStack(alignment: .leading, spacing: DesignTokens.textSpacingCompact) {
+                    AppTimeDisplay(
+                        main: primaryTimeMain,
+                        suffix: primaryTimeSuffix,
+                        style: .detail,
+                        mainWeight: .light,
+                        suffixWeight: .medium,
+                        mainColor: isOff ? .secondary : .primary,
+                        suffixColor: isOff ? .secondary : nil
+                    )
 
-                if let primaryTimeSuffix {
-                    Text(primaryTimeSuffix)
-                        .font(.system(size: timeFontSize * 0.6, weight: .medium))
-                        .foregroundStyle(isOff ? .secondary : .primary)
-                        .opacity(isOff ? 1 : 0.84)
-                        .baselineOffset(1)
+                    summaryCopy
                 }
+            } else {
+                summaryCopy
             }
-
-            Spacer()
-                .frame(height: 7)
 
             Text(fajrText)
-                .font(.footnote)
+                .font(AppTypography.rowBody)
                 .foregroundStyle(.secondary)
                 .monospacedDigit()
-
-            if !tagElements.isEmpty {
-                Spacer()
-                    .frame(height: 10)
-
-                FlowLayout(spacing: 6) {
-                    FastPrimaryIntentCapsule(intent: intentSelection.primaryIntent)
-                    ForEach(intentSelection.secondaryTags.sorted { $0.title < $1.title }, id: \.self) { tag in
-                        FastSecondaryTagCapsule(tag: tag)
-                    }
-                    ForEach(warnings, id: \.self) { warning in
-                        WarningChipWithInfo(
-                            warning: warning,
-                            onInfo: { onWarningInfo(warning) }
-                        )
-                    }
-                }
-            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilitySummary)
+    }
+
+    @ViewBuilder
+    private var summaryCopy: some View {
+        VStack(alignment: .leading, spacing: DesignTokens.textSpacingCompact) {
+            Text(summaryText)
+                .font(AppTypography.cardTitle)
+                .foregroundStyle(.primary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if let summaryDetailText {
+                Text(summaryDetailText)
+                    .font(AppTypography.rowBody)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
     }
 
     private var primaryTimeMain: String {
@@ -1008,59 +1214,6 @@ private struct SummaryHeader: View {
         guard let primaryTime else { return nil }
         return SummaryHeader.timeSuffixFormatter.string(from: primaryTime)
     }
-
-    private var accessibilitySummary: String {
-        var parts = ["\(titleLabel), \(primaryText).", "\(fajrText)."]
-        if !tagElements.isEmpty {
-            parts.append("Tags: \(tagElements.joined(separator: ", ")).")
-        }
-        return parts.joined(separator: " ")
-    }
-
-    private var tagElements: [String] {
-        var tags: [String] = []
-        if intentSelection.primaryIntent != .other || !intentSelection.secondaryTags.isEmpty {
-            tags.append(intentSelection.primaryIntent.style.title)
-        }
-        tags.append(contentsOf: intentSelection.secondaryTags.sorted { $0.title < $1.title }.map(\.title))
-        tags.append(contentsOf: warnings.map(\.title))
-        return tags
-    }
-}
-private struct FastPrimaryIntentCapsule: View {
-    let intent: FastPrimaryIntent
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-
-    var body: some View {
-        let style = intent.style
-        let isAccessibility = dynamicTypeSize.isAccessibilitySize
-        CapsuleLabelView(
-            title: style.title,
-            shortTitle: style.shortTitle,
-            systemImage: style.systemImage,
-            color: style.color,
-            prominence: .strong,
-            useIconOnly: isAccessibility
-        )
-    }
-}
-
-private struct FastSecondaryTagCapsule: View {
-    let tag: FastSecondaryVirtueTag
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-
-    var body: some View {
-        let style = tag.style
-        let isAccessibility = dynamicTypeSize.isAccessibilitySize
-        CapsuleLabelView(
-            title: style.title,
-            shortTitle: style.shortTitle,
-            systemImage: style.systemImage,
-            color: style.color,
-            prominence: .subtle,
-            useIconOnly: isAccessibility
-        )
-    }
 }
 
 private struct WarningChipWithInfo: View {
@@ -1068,11 +1221,11 @@ private struct WarningChipWithInfo: View {
     let onInfo: () -> Void
 
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: DesignTokens.textSpacingTight) {
             FastWarningCapsule(warning: warning)
             Button(action: onInfo) {
                 Image(systemName: "info.circle")
-                    .font(.caption)
+                    .font(AppTypography.rowMeta)
                     .foregroundStyle(.secondary)
                     .frame(width: 24, height: 24)
             }
@@ -1114,10 +1267,10 @@ private struct CapsuleLabelView: View {
     let useIconOnly: Bool
 
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: DesignTokens.textSpacingTight) {
             if let systemImage {
                 Image(systemName: systemImage)
-                    .font(.caption2.weight(.semibold))
+                    .font(font)
             }
             if !useIconOnly {
                 Text(displayText)
@@ -1127,8 +1280,8 @@ private struct CapsuleLabelView: View {
         }
         .font(font)
         .foregroundStyle(foregroundColor)
-        .padding(.vertical, 4)
-        .padding(.horizontal, 8)
+        .padding(.vertical, DesignTokens.badgeVerticalPadding)
+        .padding(.horizontal, DesignTokens.badgeHorizontalPadding)
         .background(background)
         .clipShape(Capsule())
         .overlay(
@@ -1211,7 +1364,7 @@ private struct ScheduleSourcePresentation: Identifiable {
     private static func subtitle(for provenance: ResolvedScheduledDateProvenance) -> String {
         switch provenance.sourceOrigin {
         case .defaultDailyPlan:
-            return "This date is included by your default daily morning plan."
+            return "This date comes from your default morning plan."
         case .manualSingleDay:
             return Strings.AlarmsTab.sourceManualHelper
         case .defaultRamadan:
@@ -1242,7 +1395,7 @@ private struct SourceManagementActionPresentation {
     private static func subtitle(for provenance: ResolvedScheduledDateProvenance) -> String {
         switch provenance.sourceOrigin {
         case .defaultDailyPlan:
-            return "Adjust the default daily morning plan from Plans."
+            return "Adjust the default morning plan from Plans."
         case .manualGregorianRange:
             return "Removes every date that came from this saved date range."
         case .recurringIslamic(let rule):
@@ -1265,15 +1418,16 @@ private struct ScheduleSourceCard: View {
     let presentation: ScheduleSourcePresentation
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: DesignTokens.textSpacingTight) {
             Text(presentation.title)
+                .font(AppTypography.rowTitle)
                 .foregroundStyle(.primary)
             Text(presentation.subtitle)
-                .font(.footnote)
+                .font(AppTypography.rowBody)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, DesignTokens.accessoryInset)
     }
 }
 
@@ -1286,16 +1440,17 @@ private struct DetailActionButton: View {
 
     var body: some View {
         Button(role: role, action: action) {
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: DesignTokens.textSpacingTight) {
                 Text(title)
+                    .font(AppTypography.rowTitle)
                     .foregroundStyle(foregroundStyle)
                 Text(subtitle)
-                    .font(.footnote)
+                    .font(AppTypography.rowBody)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.vertical, 2)
+            .padding(.vertical, DesignTokens.accessoryInset)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

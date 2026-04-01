@@ -8,23 +8,23 @@ struct ActionRowView: View {
     var body: some View {
         HStack(spacing: DesignTokens.spacingM) {
             Image(systemName: systemImage)
-                .font(.system(size: 16, weight: .semibold))
+                .font(AppTypography.toolbarIcon)
                 .foregroundStyle(DawnColor.accent)
-                .frame(width: 28, height: 28)
+                .frame(width: DesignTokens.smallControlFrame, height: DesignTokens.smallControlFrame)
                 .background(
                     Circle()
                         .fill(DawnColor.glassWarmOverlay.opacity(0.14))
                 )
 
             Text(title)
-                .font(.subheadline.weight(.semibold))
+                .font(AppTypography.rowTitle)
                 .foregroundStyle(.primary)
 
             Spacer()
 
             if showsChevron {
                 Image(systemName: "chevron.right")
-                    .font(.subheadline.weight(.semibold))
+                    .font(AppTypography.navAccessory)
                     .foregroundStyle(.secondary)
             }
         }

@@ -15,13 +15,15 @@ enum MorningPlanResolver {
         ]
 
         if effectiveConfig.hasOverrides {
+            let overrideWakeRule = effectiveConfig.resolvedWakeRule
             let overridePlan = MorningPlan(
                 id: "override-\(dateKey)",
                 title: "Date override",
                 kind: .explicitDateOverride,
-                wakeAnchorType: defaultPlan.wakeAnchorType,
-                wakeDelta: defaultPlan.wakeDelta,
-                fixedWakeTimeCompatibilityMinutesFromMidnight: defaultPlan.fixedWakeTimeCompatibilityMinutesFromMidnight,
+                wakeRule: overrideWakeRule,
+                wakeAnchorType: overrideWakeRule.compatibilityWakeAnchorType,
+                wakeDelta: overrideWakeRule.compatibilityWakeDelta,
+                fixedWakeTimeCompatibilityMinutesFromMidnight: overrideWakeRule.fixedWakeTimeMinutesFromMidnight,
                 reminderEnabled: effectiveConfig.reminderEnabled,
                 wakeAlarmEnabled: effectiveConfig.suhoorEnabled,
                 fajrBoundaryNoticeEnabled: effectiveConfig.fajrEnabled,
@@ -40,6 +42,7 @@ enum MorningPlanResolver {
                 id: "qada-\(dateKey)",
                 title: "Qada day",
                 kind: .qadaAssignment,
+                wakeRule: defaultPlan.wakeRule,
                 wakeAnchorType: defaultPlan.wakeAnchorType,
                 wakeDelta: defaultPlan.wakeDelta,
                 fixedWakeTimeCompatibilityMinutesFromMidnight: defaultPlan.fixedWakeTimeCompatibilityMinutesFromMidnight,
@@ -61,6 +64,7 @@ enum MorningPlanResolver {
                 id: "overlay-\(dateKey)",
                 title: "Context overlay",
                 kind: .generatedObservance,
+                wakeRule: defaultPlan.wakeRule,
                 wakeAnchorType: defaultPlan.wakeAnchorType,
                 wakeDelta: defaultPlan.wakeDelta,
                 fixedWakeTimeCompatibilityMinutesFromMidnight: defaultPlan.fixedWakeTimeCompatibilityMinutesFromMidnight,

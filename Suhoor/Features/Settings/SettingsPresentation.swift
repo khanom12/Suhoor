@@ -4,39 +4,16 @@ struct SettingsSummaryFormatter {
     private static let expectedPermissionCount = AppPermissionKind.allCases.count
 
     static func defaultAlarmsSummary(config: DefaultAlarmConfig) -> String {
-        let wakeSummary: String
-        if !config.suhoorEnabledDefault {
-            wakeSummary = Strings.SettingsSummary.wakeOff
-        } else {
-            switch config.defaultSuhoorTimeMode {
-            case .relativeToFajrMinusMinutes:
-                wakeSummary = Strings.SettingsSummary.wakeBeforeFajr(config.defaultSuhoorOffsetMinutes)
-            case .fixedTime:
-                wakeSummary = Strings.SettingsSummary.wakeFixed(timeText(minutesFromMidnight: config.defaultSuhoorOffsetMinutes))
-            }
+        let wakeSummary = ProductSurfacePresentation.defaultWakeTimingText(for: config)
+        let cueSummary = config.fastingReminderEnabledDefault
+            ? "Fasting reminder on"
+            : "Fasting reminder off"
+
+        var parts = [wakeSummary, cueSummary]
+        if let latestCap = config.defaultLatestWakeCapMinutesFromMidnight {
+            parts.append("Latest wake \(timeText(minutesFromMidnight: latestCap))")
         }
-
-        let reminderSummary: String
-        if !config.reminderEnabledDefault {
-            reminderSummary = Strings.SettingsSummary.reminderOff
-        } else {
-            switch config.defaultReminderTimeMode {
-            case .beforeFajr:
-                reminderSummary = Strings.SettingsSummary.reminderBeforeFajr(config.defaultReminderMinutesBeforeFajr)
-            case .fixedTime:
-                reminderSummary = Strings.SettingsSummary.reminderFixed(timeText(minutesFromMidnight: config.defaultReminderFixedTimeMinutes))
-            }
-        }
-
-        let fajrSummary = config.fajrEnabledDefault
-            ? Strings.SettingsSummary.fajrOn
-            : Strings.SettingsSummary.fajrOff
-
-        let iftarSummary = config.iftarEnabledDefault
-            ? "Iftar \(config.defaultIftarDelivery.summaryText)"
-            : "Iftar Off"
-
-        return [wakeSummary, reminderSummary, fajrSummary, iftarSummary].joined(separator: " · ")
+        return parts.joined(separator: " · ")
     }
 
     static func locationSummary(settings: AppSettings, locationService: LocationService) -> String {
@@ -243,6 +220,7 @@ enum SettingsDestination: String, CaseIterable, Identifiable {
     case location
     case prayerTimes
     case hijriCalendarCorrections
+    case alarmBehavior
     case permissionsReliability
     case quietPeriod
     case about
@@ -257,6 +235,8 @@ enum SettingsDestination: String, CaseIterable, Identifiable {
             return Strings.Settings.prayerTimesTitle
         case .hijriCalendarCorrections:
             return Strings.Settings.hijriCalendarTitle
+        case .alarmBehavior:
+            return "Wake Sounds & Reserve"
         case .permissionsReliability:
             return Strings.Settings.permissionsReliabilityTitle
         case .quietPeriod:
@@ -274,6 +254,8 @@ enum SettingsDestination: String, CaseIterable, Identifiable {
             return "moon.stars"
         case .hijriCalendarCorrections:
             return "calendar.badge.clock"
+        case .alarmBehavior:
+            return "speaker.wave.3"
         case .permissionsReliability:
             return "checkmark.shield"
         case .quietPeriod:
@@ -286,6 +268,7 @@ enum SettingsDestination: String, CaseIterable, Identifiable {
 
 enum SettingsDestinationGroup: CaseIterable, Identifiable {
     case calendarTimes
+    case morningRules
     case appHealth
     case about
 
@@ -293,6 +276,8 @@ enum SettingsDestinationGroup: CaseIterable, Identifiable {
         switch self {
         case .calendarTimes:
             return "calendar-times"
+        case .morningRules:
+            return "morning-rules"
         case .appHealth:
             return "app-health"
         case .about:
@@ -304,6 +289,8 @@ enum SettingsDestinationGroup: CaseIterable, Identifiable {
         switch self {
         case .calendarTimes:
             return Strings.Settings.calendarTimesGroup
+        case .morningRules:
+            return "Morning Rules"
         case .appHealth:
             return Strings.Settings.appHealthGroup
         case .about:
@@ -315,6 +302,8 @@ enum SettingsDestinationGroup: CaseIterable, Identifiable {
         switch self {
         case .calendarTimes:
             return [.location, .prayerTimes, .hijriCalendarCorrections]
+        case .morningRules:
+            return [.alarmBehavior]
         case .appHealth:
             return [.permissionsReliability, .quietPeriod]
         case .about:

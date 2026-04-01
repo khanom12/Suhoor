@@ -5,53 +5,52 @@ struct PrayerTimeSettingsView: View {
     @EnvironmentObject private var scheduleManager: ScheduleManager
 
     var body: some View {
-        Form {
-            Section {
+        SettingsScrollPage {
+            SettingsGroup(
+                title: Strings.Settings.prayerTimeCalculationSection,
+                supportingText: Strings.Settings.prayerTimesHelper,
+                footer: Strings.Settings.fajrAdjustmentHelper
+            ) {
                 NavigationLink {
                     CalculationMethodSelectionView()
                 } label: {
-                    valueRow(
-                        title: Strings.Settings.calculationMethodTitle,
-                        value: settingsStore.settings.calculationMethod.displayName
+                    SettingsRow {
+                        SettingsNavigationRow {
+                            SettingsValueRow(
+                                title: Strings.Settings.calculationMethodTitle,
+                                value: settingsStore.settings.calculationMethod.displayName
+                            )
+                        }
+                    }
+                }
+
+                AppGroupDivider()
+
+                SettingsRow {
+                    RelativeOffsetControl(
+                        label: Strings.Settings.fajrAdjustment,
+                        detail: Strings.Settings.fajrAdjustmentHelper,
+                        value: fajrAdjustmentBinding,
+                        range: -30...30,
+                        step: 1
                     )
                 }
 
-                RelativeOffsetControl(
-                    label: Strings.Settings.fajrAdjustment,
-                    detail: Strings.Settings.fajrAdjustmentHelper,
-                    value: fajrAdjustmentBinding,
-                    range: -30...30,
-                    step: 1
-                )
+                AppGroupDivider()
 
-                RelativeOffsetControl(
-                    label: "Maghrib adjustment",
-                    detail: "Adjust sunset/Maghrib earlier or later.",
-                    value: maghribAdjustmentBinding,
-                    range: -30...30,
-                    step: 1
-                )
-            } header: {
-                SettingsSectionHeader(
-                    title: Strings.Settings.prayerTimeCalculationSection,
-                    supportingText: Strings.Settings.prayerTimesHelper
-                )
-            } footer: {
-                Text(Strings.Settings.fajrAdjustmentHelper)
+                SettingsRow {
+                    RelativeOffsetControl(
+                        label: "Maghrib adjustment",
+                        detail: "Adjust sunset/Maghrib earlier or later.",
+                        value: maghribAdjustmentBinding,
+                        range: -30...30,
+                        step: 1
+                    )
+                }
             }
         }
-        .formStyle(.grouped)
         .navigationTitle(Strings.Settings.prayerTimesTitle)
         .navigationBarTitleDisplayMode(.inline)
-    }
-
-    private func valueRow(title: String, value: String) -> some View {
-        HStack {
-            Text(title)
-            Spacer()
-            Text(value)
-                .foregroundStyle(.secondary)
-        }
     }
 
     private var fajrAdjustmentBinding: Binding<Int> {
@@ -80,35 +79,43 @@ struct CalculationMethodSelectionView: View {
     @EnvironmentObject private var scheduleManager: ScheduleManager
 
     var body: some View {
-        List {
-            ForEach(CalculationMethod.allCases) { method in
-                Button {
-                    settingsStore.update { draft in
-                        draft.calculationMethod = method
-                    }
-                    scheduleManager.requestRefresh(reason: .settingsChanged)
-                } label: {
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack {
-                            Text(method.displayName)
-                                .foregroundStyle(.primary)
-                            Spacer()
-                            if settingsStore.settings.calculationMethod == method {
-                                Image(systemName: "checkmark")
-                                    .foregroundStyle(DawnColor.accent)
+        SettingsScrollPage {
+            SettingsGroup {
+                ForEach(Array(CalculationMethod.allCases.enumerated()), id: \.element.id) { index, method in
+                    Button {
+                        settingsStore.update { draft in
+                            draft.calculationMethod = method
+                        }
+                        scheduleManager.requestRefresh(reason: .settingsChanged)
+                    } label: {
+                        SettingsRow {
+                            VStack(alignment: .leading, spacing: 4) {
+                                HStack {
+                                    Text(method.displayName)
+                                        .foregroundStyle(.primary)
+                                    Spacer()
+                                    if settingsStore.settings.calculationMethod == method {
+                                        Image(systemName: "checkmark")
+                                            .foregroundStyle(DawnColor.accent)
+                                    }
+                                }
+
+                                Text(method.settingsDescription)
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
                             }
                         }
-
-                        Text(method.settingsDescription)
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .buttonStyle(.plain)
+
+                    if index < CalculationMethod.allCases.count - 1 {
+                        AppGroupDivider()
+                    }
                 }
             }
         }
-        .listStyle(.insetGrouped)
         .navigationTitle(Strings.Settings.calculationMethodTitle)
         .navigationBarTitleDisplayMode(.inline)
     }

@@ -1533,8 +1533,13 @@ struct SuhoorTests {
         let config = DefaultAlarmConfig(
             suhoorEnabledDefault: true,
             reminderEnabledDefault: false,
+            fastingReminderEnabledDefault: false,
             fajrEnabledDefault: false,
             iftarEnabledDefault: true,
+            defaultWakeState: .preFajr,
+            defaultWakeAnchorType: .fajrStart,
+            defaultWakeDeltaMinutes: 30,
+            defaultLatestWakeCapMinutesFromMidnight: nil,
             defaultSuhoorTimeMode: .relativeToFajrMinusMinutes,
             defaultSuhoorOffsetMinutes: 30,
             defaultReminderTimeMode: .beforeFajr,
@@ -1550,7 +1555,7 @@ struct SuhoorTests {
 
         let summary = SettingsSummaryFormatter.defaultAlarmsSummary(config: config)
 
-        #expect(summary == "Wake 30 min before Fajr · Reminder off · Fajr adhan off")
+        #expect(summary == "30 min before Fajr · Fasting reminder off")
     }
 
     @Test
@@ -1649,6 +1654,10 @@ struct SuhoorTests {
             reminderEnabled: false,
             fajrEnabled: false,
             iftarEnabled: false,
+            defaultWakeRule: DefaultAlarmConfig.default.defaultWakeRule,
+            resolvedWakeRule: DefaultAlarmConfig.default.defaultWakeRule,
+            wakeRuleWasOverridden: false,
+            tahajjudRefinement: false,
             suhoorTimeMode: .relativeToFajrMinusMinutes,
             suhoorOffsetMinutes: 30,
             reminderTimeMode: .beforeFajr,
@@ -1693,6 +1702,10 @@ struct SuhoorTests {
             reminderEnabled: false,
             fajrEnabled: false,
             iftarEnabled: false,
+            defaultWakeRule: DefaultAlarmConfig.default.defaultWakeRule,
+            resolvedWakeRule: DefaultAlarmConfig.default.defaultWakeRule,
+            wakeRuleWasOverridden: false,
+            tahajjudRefinement: false,
             suhoorTimeMode: .relativeToFajrMinusMinutes,
             suhoorOffsetMinutes: 30,
             reminderTimeMode: .beforeFajr,

@@ -36,7 +36,9 @@ final class FastLogStore: ObservableObject {
         _ status: FastLogStatus,
         for dateKey: String,
         intentSnapshot: FastIntentSnapshot? = nil,
-        now: Date = Date()
+        now: Date = Date(),
+        qadaEffect: PersistedQadaEffect? = nil,
+        source: String? = nil
     ) {
         if status == .unknown {
             updateEntry(nil, for: dateKey)
@@ -54,6 +56,8 @@ final class FastLogStore: ObservableObject {
         if entry.intentSnapshot == nil {
             entry.intentSnapshot = intentSnapshot
         }
+        entry.qadaEffect = qadaEffect
+        entry.source = source ?? entry.source
         updateEntry(entry, for: dateKey)
     }
 
@@ -73,6 +77,15 @@ final class FastLogStore: ObservableObject {
             guard var entry = entriesByDateKey[key] else { continue }
             entry.status = .completed
             entry.updatedAt = now
+            if entry.qadaEffect == nil,
+               entry.intentSnapshot?.primaryIntent == .qadaMakeup {
+                entry.qadaEffect = PersistedQadaEffect(
+                    countsTowardQada: true,
+                    completedDelta: 1,
+                    remainingAfterEffect: nil,
+                    explanation: "Completed Qada fasts reduce what remains."
+                )
+            }
             entriesByDateKey[key] = entry
         }
         bumpRevision()

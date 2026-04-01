@@ -52,7 +52,7 @@ struct ProductSurfacePresentationTests {
         )
 
         #expect(snapshot.upcomingSpecialMornings.count == 3)
-        #expect(snapshot.upcomingSpecialMornings.contains(where: { $0.title == "Adjusted" }))
+        #expect(snapshot.upcomingSpecialMornings.contains(where: { $0.title == "Changed" }))
         #expect(snapshot.upcomingSpecialMornings.contains(where: { $0.title == "Qada fast" }))
         #expect(snapshot.upcomingSpecialMornings.contains(where: { $0.title == "Fasting day" }))
         #expect(snapshot.qadaSummary == "2 completed · 4 remaining")
@@ -116,7 +116,7 @@ struct ProductSurfacePresentationTests {
     }
 
     @Test
-    func homeSupportDecisionShowsFajrCheckInBeforeFastingCheckInDuringMorningWindow() {
+    func homeSupportDecisionShowsFastingStatusBeforeFajrCheckInDuringMorningWindow() {
         let currentDay = makeActiveDay(
             day: 5,
             context: .fasting,
@@ -149,10 +149,10 @@ struct ProductSurfacePresentationTests {
         ).supportDecision?.presentation
 
         switch result {
-        case .fajrCompletionPrompt:
-            #expect(Bool(true))
+        case .fasting(let presentation):
+            #expect(presentation.phase == .fastingStatusPrompt)
         default:
-            Issue.record("Expected Fajr completion prompt during morning window.")
+            Issue.record("Expected fasting status prompt during the morning window.")
         }
     }
 
@@ -233,7 +233,10 @@ struct ProductSurfacePresentationTests {
         switch result {
         case .fasting(let presentation):
             #expect(presentation.phase == .fastCompletionPrompt)
-            #expect(presentation.title == "How did today go?")
+            #expect(presentation.title == "Did you complete today's fast?")
+            #expect(presentation.detail == "Record it to keep your Qada progress accurate.")
+            #expect(presentation.primaryActionTitle == "Yes, completed")
+            #expect(presentation.secondaryActionTitle == "Not completed")
         default:
             Issue.record("Expected fast completion prompt after Maghrib.")
         }
@@ -682,7 +685,8 @@ struct ProductSurfacePresentationTests {
             permissionSnapshot: .empty
         )
 
-        #expect(snapshot.contextSummaryText == "Today • Qada fast")
+        #expect(snapshot.gregorianText.isEmpty == false)
+        #expect(snapshot.hijriText.isEmpty == false)
         #expect(snapshot.supportDecision == supportDecision)
     }
 
@@ -724,12 +728,371 @@ struct ProductSurfacePresentationTests {
             fastLogEntries: fastEntries
         )
 
-        #expect(snapshot.defaultMorningPlanSummary.wakeRelation == "45 min before Fajr")
-        #expect(snapshot.defaultMorningPlanSummary.followUp == "Off")
-        #expect(snapshot.defaultMorningPlanSummary.fastingDaySupport == "Iftar support on")
+        #expect(snapshot.defaultMorningPlanSummary.wakeTiming == "Before Fajr")
+        #expect(snapshot.defaultMorningPlanSummary.anchor == "From Fajr start")
+        #expect(snapshot.defaultMorningPlanSummary.wakeOffset == "45 min before Fajr")
+        #expect(snapshot.defaultMorningPlanSummary.reserveBeforeEnd == "Not needed")
+        #expect(snapshot.defaultMorningPlanSummary.latestWake == "Off")
+        #expect(snapshot.defaultMorningPlanSummary.fastingCues == "Reminder + Fajr cue")
+        #expect(snapshot.defaultMorningPlanSummary.prayerTimes == "Fajr cue on")
         #expect(snapshot.configuredPlansSnapshot.upcomingSpecialMornings.count == 2)
         #expect(snapshot.qadaProgress.completed == 1)
         #expect(snapshot.qadaProgress.remaining == 2)
+    }
+
+    @Test
+    func homeHeroSublineReflectsResolvedWakeLanguage() {
+        let day = makeActiveDay(
+            day: 12,
+            context: .standard,
+            supportingTags: [.dailyPlan],
+            provenances: [defaultDailyProvenance]
+        )
+
+        let subline = ProductSurfacePresentation.homeHeroSubline(for: day)
+
+        #expect(subline.contains("Before Fajr"))
+        #expect(subline.contains("Fajr at") == false)
+    }
+
+    @Test
+    func homeHeroPresentationUsesCondensedDescriptorExplanationAndStatus() {
+        let day = makeActiveDay(
+            day: 12,
+            context: .standard,
+            supportingTags: [.dailyPlan],
+            provenances: [manualProvenance(label: "Manual morning")],
+            hasOverrides: true
+        )
+
+        let presentation = ProductSurfacePresentation.homeHeroPresentation(for: day)
+
+        #expect(presentation.label == "Tomorrow's wake")
+        #expect(presentation.descriptorText == "Regular Fajr morning")
+        #expect(presentation.explanationText == "30 min before Fajr")
+        #expect(presentation.statusText == "Adjusted for this date")
+    }
+
+    @Test
+    func scheduleRowPresentationUsesMorningTimelineCopy() {
+        let day = makeActiveDay(
+            day: 13,
+            context: .standard,
+            supportingTags: [.dailyPlan],
+            provenances: [defaultDailyProvenance]
+        )
+
+        let defaultPresentation = ProductSurfacePresentation.scheduleRowPresentation(for: day, hasDayOverride: false)
+        let adjustedPresentation = ProductSurfacePresentation.scheduleRowPresentation(for: day, hasDayOverride: true)
+
+        #expect(defaultPresentation.detailText.contains("before Fajr"))
+        #expect(defaultPresentation.stateLabel == "Before Fajr")
+        #expect(defaultPresentation.secondaryExplanation == nil)
+        #expect(adjustedPresentation.secondaryExplanation == "Changed for this date")
+        #expect(adjustedPresentation.chipTitles.contains("Changed"))
+    }
+
+    @Test
+    func wakeAvailabilityPresentationTracksDefaultChangedAndSkippedStates() {
+        let defaultDay = makeActiveDay(
+            day: 14,
+            context: .standard,
+            supportingTags: [.dailyPlan],
+            provenances: [defaultDailyProvenance]
+        )
+        let changedDay = makeActiveDay(
+            day: 15,
+            context: .standard,
+            supportingTags: [.dailyPlan],
+            provenances: [manualProvenance(label: "Manual day")]
+        )
+        let skippedDay = makeActiveDay(
+            day: 16,
+            context: .standard,
+            supportingTags: [.dailyPlan],
+            provenances: [defaultDailyProvenance],
+            skipDay: true
+        )
+
+        let defaultAvailability = ProductSurfacePresentation.wakeAvailabilityPresentation(
+            for: defaultDay,
+            hasCustomChange: false
+        )
+        let changedAvailability = ProductSurfacePresentation.wakeAvailabilityPresentation(
+            for: changedDay,
+            hasCustomChange: true
+        )
+        let skippedAvailability = ProductSurfacePresentation.wakeAvailabilityPresentation(
+            for: skippedDay,
+            hasCustomChange: false
+        )
+
+        #expect(defaultAvailability.state == .activeDefault)
+        #expect(defaultAvailability.statusSummary == "Follows your usual plan")
+        #expect(changedAvailability.state == .activeOverride)
+        #expect(changedAvailability.availabilityLabel == "Changed for this date")
+        #expect(skippedAvailability.state == .skipped)
+        #expect(skippedAvailability.statusSummary == "Morning off for this date")
+    }
+
+    @Test
+    func alarmDayDetailPresentationUsesUsualPlanLanguageForDefaultDates() {
+        let day = makeActiveDay(
+            day: 17,
+            context: .standard,
+            supportingTags: [.dailyPlan],
+            provenances: [defaultDailyProvenance]
+        )
+
+        let presentation = AlarmDayDetailPresentation(
+            day: day,
+            computedIntentSelection: .default,
+            warnings: [],
+            draftSelection: .defaultPlan,
+            draftAnchor: .fajrStart,
+            draftDeltaMinutes: 30,
+            draftFixedWakeMinutes: 300
+        )
+
+        #expect(presentation.adjustStatusText == "Using your usual plan")
+        #expect(presentation.why.statusTitle == "Using your usual morning plan")
+        #expect(presentation.why.rows.map(\.title) == ["Usual plan"])
+        #expect(presentation.why.rows.first?.detail.contains("Before Fajr") == true)
+    }
+
+    @Test
+    func alarmDayDetailPresentationShowsCurrentAndUsualSummariesForAdjustedDates() {
+        let day = makeActiveDay(
+            day: 18,
+            context: .standard,
+            supportingTags: [.dailyPlan],
+            provenances: [defaultDailyProvenance]
+        )
+
+        let presentation = AlarmDayDetailPresentation(
+            day: day,
+            computedIntentSelection: .default,
+            warnings: [],
+            draftSelection: .inFajr,
+            draftAnchor: .fajrEnd,
+            draftDeltaMinutes: 40,
+            draftFixedWakeMinutes: 300
+        )
+
+        #expect(presentation.adjustStatusText == "Adjusted for this date")
+        #expect(presentation.why.statusTitle == "This date is adjusted")
+        #expect(presentation.why.rows.prefix(2).map(\.title) == ["Current", "Usual plan"])
+        #expect(presentation.why.rows.first?.detail == "During Fajr, 40 min before Fajr ends")
+        #expect(presentation.why.rows.dropFirst().first?.detail == "Before Fajr, 30 min before Fajr")
+    }
+
+    @Test
+    func alarmDayDetailPresentationClarifiesSkippedDates() {
+        let day = makeActiveDay(
+            day: 19,
+            context: .standard,
+            supportingTags: [.dailyPlan],
+            provenances: [defaultDailyProvenance],
+            skipDay: true
+        )
+
+        let presentation = AlarmDayDetailPresentation(
+            day: day,
+            computedIntentSelection: .default,
+            warnings: [],
+            draftSelection: .defaultPlan,
+            draftAnchor: .fajrStart,
+            draftDeltaMinutes: 30,
+            draftFixedWakeMinutes: 300
+        )
+
+        #expect(presentation.heroSummaryText == "No wake on this date")
+        #expect(presentation.why.statusTitle == "No wake on this date")
+        #expect(presentation.why.rows.first?.detail == "No wake on this date.")
+    }
+
+    @Test
+    func alarmDayDetailPresentationRemapsDefaultPlanSourceCopy() {
+        let day = makeActiveDay(
+            day: 20,
+            context: .standard,
+            supportingTags: [.dailyPlan],
+            provenances: [defaultDailyProvenance],
+            sourceSummaryTextOverride: "Provided by your daily morning plan"
+        )
+
+        let presentation = AlarmDayDetailPresentation(
+            day: day,
+            computedIntentSelection: .default,
+            warnings: [],
+            draftSelection: .defaultPlan,
+            draftAnchor: .fajrStart,
+            draftDeltaMinutes: 30,
+            draftFixedWakeMinutes: 300
+        )
+
+        #expect(presentation.advancedSourceText == "Based on your usual morning plan")
+    }
+
+    @Test
+    func skippedScheduleRowPresentationShowsSkippedState() {
+        let day = makeActiveDay(
+            day: 17,
+            context: .standard,
+            supportingTags: [.dailyPlan],
+            provenances: [defaultDailyProvenance],
+            skipDay: true
+        )
+
+        let presentation = ProductSurfacePresentation.scheduleRowPresentation(for: day, hasDayOverride: true)
+
+        #expect(presentation.stateLabel == "Skipped")
+        #expect(presentation.detailText == "No wake for this date")
+        #expect(presentation.availability.statusSummary == "Morning off for this date")
+        #expect(presentation.chipTitles.contains("Skipped"))
+    }
+
+    @Test
+    func wakePagePresentationUsesCompactOrdinarySummary() {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let entry = makeWakeRowEntry(
+            day: 18,
+            context: .standard,
+            supportingTags: [.dailyPlan],
+            provenances: [defaultDailyProvenance]
+        )
+
+        let row = WakePagePresentation.row(
+            for: entry,
+            currentDate: makeDate(day: 1, hour: 0, minute: 0),
+            timeZone: timeZone
+        )
+        let card = WakePagePresentation.card(
+            for: entry,
+            currentDate: makeDate(day: 1, hour: 0, minute: 0),
+            timeZone: timeZone
+        )
+
+        #expect(row.subtitle == "Ordinary Fajr day • 30 min before Fajr")
+        #expect(card.title == "Ordinary Fajr day")
+        #expect(card.subtitle == "30 min before Fajr")
+    }
+
+    @Test
+    func wakePagePresentationUsesRamadanSummary() {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let entry = makeWakeRowEntry(
+            day: 19,
+            context: .fasting,
+            supportingTags: [.ramadan],
+            provenances: [manualProvenance(label: "Ramadan plan")]
+        )
+
+        let row = WakePagePresentation.row(
+            for: entry,
+            currentDate: makeDate(day: 1, hour: 0, minute: 0),
+            timeZone: timeZone
+        )
+
+        #expect(row.subtitle == "Ramadan fast • 30 min before Fajr")
+    }
+
+    @Test
+    func wakePagePresentationUsesAdjustedCopyForSpecialOverrides() {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let entry = makeWakeRowEntry(
+            day: 20,
+            context: .qadaFast,
+            supportingTags: [.qada],
+            provenances: [manualProvenance(label: "Qada plan")],
+            hasDayOverride: true
+        )
+
+        let row = WakePagePresentation.row(
+            for: entry,
+            currentDate: makeDate(day: 1, hour: 0, minute: 0),
+            timeZone: timeZone
+        )
+        let card = WakePagePresentation.card(
+            for: entry,
+            currentDate: makeDate(day: 1, hour: 0, minute: 0),
+            timeZone: timeZone
+        )
+
+        #expect(row.subtitle == "Qada fast • Adjusted • 30 min before Fajr")
+        #expect(card.badgeTitle == "Adjusted")
+        #expect(card.title == "Qada fast")
+        #expect(card.subtitle == "30 min before Fajr")
+        #expect(row.accessibilityLabel.contains("Changed") == false)
+    }
+
+    @Test
+    func wakePagePresentationUsesTahajjudSummary() {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let entry = makeWakeRowEntry(
+            day: 21,
+            context: .tahajjud,
+            supportingTags: [],
+            provenances: [manualProvenance(label: "Tahajjud plan")]
+        )
+
+        let row = WakePagePresentation.row(
+            for: entry,
+            currentDate: makeDate(day: 1, hour: 0, minute: 0),
+            timeZone: timeZone
+        )
+
+        #expect(row.subtitle == "Tahajjud planned • 30 min before Fajr")
+    }
+
+    @Test
+    func wakePagePresentationClarifiesSkippedRows() {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let entry = makeWakeRowEntry(
+            day: 22,
+            context: .standard,
+            supportingTags: [.dailyPlan],
+            provenances: [defaultDailyProvenance],
+            skipDay: true,
+            hasDayOverride: true
+        )
+
+        let row = WakePagePresentation.row(
+            for: entry,
+            currentDate: makeDate(day: 1, hour: 0, minute: 0),
+            timeZone: timeZone
+        )
+
+        #expect(row.subtitle == "Skipped for this date")
+        #expect(row.trailingTime == nil)
+        #expect(row.trailingStatusText == "No wake")
+    }
+
+    @Test
+    func wakePagePresentationAddsLatestWakeCapContext() {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let entry = makeWakeRowEntry(
+            day: 23,
+            context: .standard,
+            supportingTags: [.dailyPlan],
+            provenances: [defaultDailyProvenance],
+            latestWakeCapMinutesFromMidnight: 300,
+            latestWakeCapApplied: true
+        )
+
+        let row = WakePagePresentation.row(
+            for: entry,
+            currentDate: makeDate(day: 1, hour: 0, minute: 0),
+            timeZone: timeZone
+        )
+        let card = WakePagePresentation.card(
+            for: entry,
+            currentDate: makeDate(day: 1, hour: 0, minute: 0),
+            timeZone: timeZone
+        )
+
+        #expect(row.subtitle == "Ordinary Fajr day • 30 min before Fajr • Moved earlier by latest wake")
+        #expect(card.subtitle == "30 min before Fajr • Moved earlier by latest wake")
     }
 
     @Test
@@ -834,12 +1197,22 @@ struct ProductSurfacePresentationTests {
         context: MorningContextType,
         supportingTags: [DayTag],
         provenances: [ResolvedScheduledDateProvenance],
+        skipDay: Bool = false,
         dailyCompletion: DailyCompletionSnapshot? = nil,
-        scheduledEvents: [ScheduledEvent] = []
+        scheduledEvents: [ScheduledEvent] = [],
+        wakeAnchorType: WakeAnchorType = .fajrStart,
+        plannedWakeState: MorningWakeRuleState = .preFajr,
+        resolvedWakeState: ResolvedWakeState = .preFajr,
+        wakeDeltaMinutes: Int = 30,
+        latestWakeCapMinutesFromMidnight: Int? = nil,
+        latestWakeCapApplied: Bool = false,
+        hasOverrides: Bool = false,
+        sourceSummaryTextOverride: String? = nil
     ) -> ActiveAlarmDay {
         let date = makeDate(day: day, hour: 0, minute: 0)
         let fajr = makeDate(day: day, hour: 5, minute: 30)
         let wake = makeDate(day: day, hour: 5, minute: 0)
+        let fajrEnd = makeDate(day: day, hour: 6, minute: 45)
         let schedule = DaySchedule(
             date: date,
             fajrDate: fajr,
@@ -849,7 +1222,7 @@ struct ProductSurfacePresentationTests {
             boundaryDate: fajr,
             iftarDate: makeDate(day: day, hour: 18, minute: 30),
             locationDescription: "Toronto",
-            offsetMinutes: 30,
+            offsetMinutes: wakeDeltaMinutes,
             calculationMethodName: "Muslim World League",
             timeZone: .current
         )
@@ -857,11 +1230,15 @@ struct ProductSurfacePresentationTests {
         let effectiveConfig = EffectiveDailyConfig(
             date: date,
             defaultsActive: true,
-            skipDay: false,
+            skipDay: skipDay,
             suhoorEnabled: true,
             reminderEnabled: true,
             fajrEnabled: true,
             iftarEnabled: false,
+            defaultWakeRule: DefaultAlarmConfig.default.defaultWakeRule,
+            resolvedWakeRule: DefaultAlarmConfig.default.defaultWakeRule,
+            wakeRuleWasOverridden: false,
+            tahajjudRefinement: false,
             suhoorTimeMode: .relativeToFajrMinusMinutes,
             suhoorOffsetMinutes: 30,
             reminderTimeMode: .beforeFajr,
@@ -872,7 +1249,7 @@ struct ProductSurfacePresentationTests {
             fajrSoundChoice: .adhanSoft,
             iftarDelivery: .off,
             iftarSoundChoice: .systemDefault,
-            hasOverrides: false
+            hasOverrides: skipDay || hasOverrides
         )
 
         let resolvedContext = ResolvedDayContext(
@@ -880,6 +1257,61 @@ struct ProductSurfacePresentationTests {
             secondaryContexts: [],
             supportingTags: supportingTags,
             explanation: ContextExplanation(summary: "Context test", details: [])
+        )
+        let prayerWindow = DailyPrayerWindow(
+            date: date,
+            fajrStart: fajr,
+            fajrEnd: fajrEnd,
+            maghrib: makeDate(day: day, hour: 18, minute: 30)
+        )
+        let anchorDate: Date
+        switch wakeAnchorType {
+        case .fajrStart, .masjidFajr:
+            anchorDate = fajr
+        case .fajrEnd:
+            anchorDate = fajrEnd
+        case .clockTime:
+            anchorDate = wake
+        }
+        let wakeDelta = WakeDelta(
+            relation: plannedWakeState == .postFajr ? .after : .before,
+            minutes: wakeDeltaMinutes
+        )
+        let decisionLog = RuleDecisionLog(
+            dateKey: dayKey(day: day),
+            resolverVersion: 1,
+            decisionHash: "decision-\(day)",
+            prayerWindow: prayerWindow,
+            candidateContexts: [context],
+            resolvedDayContext: resolvedContext,
+            candidatePlans: [],
+            selectedPlanID: "plan-\(day)",
+            precedenceReason: "test",
+            resolvedBehaviorProfile: MorningBehaviorProfile(
+                wakeAnchorType: wakeAnchorType,
+                wakeDelta: wakeDelta,
+                fixedWakeTimeCompatibilityMinutesFromMidnight: nil,
+                reminderEnabled: true,
+                wakeAlarmEnabled: !skipDay,
+                wakeFollowUpEnabled: false,
+                fajrBoundaryNoticeEnabled: true,
+                iftarReminderEnabled: false,
+                resolvedWakeState: resolvedWakeState,
+                plannedWakeState: plannedWakeState,
+                latestWakeCapMinutesFromMidnight: latestWakeCapMinutesFromMidnight,
+                latestWakeCapApplied: latestWakeCapApplied
+            ),
+            resolvedAnchor: WakeAnchor(type: wakeAnchorType, date: anchorDate, providerNotes: nil),
+            resolvedDelta: wakeDelta,
+            candidateWakeTime: wake,
+            resolvedWakeTime: wake,
+            resolvedWakeState: resolvedWakeState,
+            plannedWakeState: plannedWakeState,
+            latestWakeCapMinutesFromMidnight: latestWakeCapMinutesFromMidnight,
+            latestWakeCapApplied: latestWakeCapApplied,
+            resolvedSequenceTemplate: WakeSequenceTemplate(id: "sequence-\(day)", name: "Test", steps: []),
+            materializedEvents: [],
+            compatibilityNotes: []
         )
 
         return ActiveAlarmDay(
@@ -892,10 +1324,45 @@ struct ProductSurfacePresentationTests {
             isExplicitOneOff: provenances.allSatisfy(\.isExplicitOneOff),
             tagResult: .empty,
             primaryDisplay: PrimaryDisplay(time: wake, kind: .suhoor),
-            sourceSummaryText: provenances.map(\.label).joined(separator: " • "),
+            sourceSummaryText: sourceSummaryTextOverride ?? provenances.map(\.label).joined(separator: " • "),
             resolvedDayContext: resolvedContext,
             scheduledEvents: scheduledEvents,
+            decisionLog: decisionLog,
             dailyCompletion: dailyCompletion
+        )
+    }
+
+    private func makeWakeRowEntry(
+        day: Int,
+        context: MorningContextType,
+        supportingTags: [DayTag],
+        provenances: [ResolvedScheduledDateProvenance],
+        skipDay: Bool = false,
+        hasDayOverride: Bool = false,
+        wakeAnchorType: WakeAnchorType = .fajrStart,
+        plannedWakeState: MorningWakeRuleState = .preFajr,
+        resolvedWakeState: ResolvedWakeState = .preFajr,
+        wakeDeltaMinutes: Int = 30,
+        latestWakeCapMinutesFromMidnight: Int? = nil,
+        latestWakeCapApplied: Bool = false
+    ) -> WakeRowEntry {
+        let activeDay = makeActiveDay(
+            day: day,
+            context: context,
+            supportingTags: supportingTags,
+            provenances: provenances,
+            skipDay: skipDay,
+            wakeAnchorType: wakeAnchorType,
+            plannedWakeState: plannedWakeState,
+            resolvedWakeState: resolvedWakeState,
+            wakeDeltaMinutes: wakeDeltaMinutes,
+            latestWakeCapMinutesFromMidnight: latestWakeCapMinutesFromMidnight,
+            latestWakeCapApplied: latestWakeCapApplied,
+            hasOverrides: hasDayOverride
+        )
+        return WakeRowActionResolver.makeEntry(
+            activeDay: activeDay,
+            overrideDateKeys: hasDayOverride ? [activeDay.dateKey] : []
         )
     }
 
@@ -948,6 +1415,11 @@ struct ProductSurfacePresentationTests {
             id: "plan-\(day)",
             title: "Daily plan",
             kind: .defaultDaily,
+            wakeRule: MorningWakeRule(
+                state: .preFajr,
+                anchorType: .fajrStart,
+                deltaMinutes: 30
+            ),
             wakeAnchorType: .fajrStart,
             wakeDelta: WakeDelta(relation: .before, minutes: 30),
             fixedWakeTimeCompatibilityMinutesFromMidnight: nil,

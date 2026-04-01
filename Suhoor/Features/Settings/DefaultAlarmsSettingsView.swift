@@ -1,222 +1,333 @@
 import SwiftUI
 
 struct DefaultAlarmsSettingsView: View {
+    @EnvironmentObject private var appNavigator: AppNavigator
     @EnvironmentObject private var alarmConfigStore: AlarmConfigStore
     @EnvironmentObject private var scheduleManager: ScheduleManager
     @EnvironmentObject private var settingsStore: SuhoorSettingsStore
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    @State private var reminderTimeClamped = false
-    @State private var expandedAlarm: DefaultAlarmSection? = .suhoor
+    @State private var draftDefaults = DefaultAlarmConfig.default
+    @State private var draftSettings = AppSettings.default
+    @State private var hasPendingCommit = false
+    @State private var commitTask: Task<Void, Never>?
 
     var body: some View {
-        Form {
-            Section {
-                LabeledContent("Wake relation to Fajr", value: wakeSummaryText)
-                LabeledContent("Reminder", value: reminderSummaryText)
-                LabeledContent("Follow-up", value: followUpSummaryText)
-                LabeledContent("Fajr notice", value: fajrDefaultBinding.wrappedValue ? "On" : "Off")
-                LabeledContent("Fasting-day support", value: iftarDefaultBinding.wrappedValue ? "Iftar support on" : "Wake-only support")
-
-                if usesFixedTimeCompatibility {
-                    Text("Fixed-time wake settings are preserved for compatibility. Fajr-relative planning is the long-term default.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
+        SettingsScrollPage {
+            SettingsGroup(
+                title: "Summary",
+                supportingText: "Choose how mornings normally relate to Fajr."
+            ) {
+                SettingsRow {
+                    SettingsValueRow(title: "Wake timing", value: planSummary.wakeTiming)
                 }
-            } header: {
-                SettingsSectionHeader(
-                    title: "Default Morning Plan",
-                    supportingText: "Choose your everyday wake relation to Fajr and the support around it."
-                )
+                AppGroupDivider()
+                SettingsRow {
+                    SettingsValueRow(title: "Anchor", value: planSummary.anchor)
+                }
+                AppGroupDivider()
+                SettingsRow {
+                    SettingsValueRow(title: "Wake offset", value: planSummary.wakeOffset)
+                }
+                AppGroupDivider()
+                SettingsRow {
+                    SettingsValueRow(title: "Reserve before Fajr ends", value: planSummary.reserveBeforeEnd)
+                }
+                AppGroupDivider()
+                SettingsRow {
+                    SettingsValueRow(title: "Latest wake", value: planSummary.latestWake)
+                }
+                AppGroupDivider()
+                SettingsRow {
+                    SettingsValueRow(title: "Fasting mornings", value: planSummary.fastingCues)
+                }
+                AppGroupDivider()
+                SettingsRow {
+                    SettingsValueRow(title: "Sounds", value: planSummary.sounds)
+                }
             }
 
-            Section {
-                Toggle(Strings.Settings.wakeAlarmLabel, isOn: suhoorDefaultBinding)
-                Toggle(Strings.Settings.reminderLabel, isOn: reminderDefaultBinding)
-                Toggle(Strings.Settings.fajrAdhanLabel, isOn: fajrDefaultBinding)
-                Toggle("Iftar / Maghrib", isOn: iftarDefaultBinding)
-                Toggle("Wake follow-up", isOn: wakeFollowUpEnabledBinding)
-
-                if settingsStore.settings.snoozeEnabled {
-                    Picker("Follow-up delay", selection: wakeFollowUpMinutesBinding) {
-                        ForEach([5, 9, 10, 15], id: \.self) { value in
-                            Text("\(value) minutes").tag(value)
+            SettingsGroup(
+                title: "Morning Rules",
+                supportingText: "Set the usual relationship between your wake and Fajr."
+            ) {
+                SettingsRow {
+                    Picker("Wake timing", selection: defaultWakeStateBinding) {
+                        ForEach(DefaultWakeState.allCases) { state in
+                            Text(defaultWakeStateTitle(state)).tag(state)
                         }
                     }
                 }
-            } header: {
-                SettingsSectionHeader(
-                    title: "Wake sequence",
-                    supportingText: "Turn the supporting wake events on or off."
-                )
-            }
 
-            Section {
-                VStack(spacing: DesignTokens.spacingM) {
-                    AlarmTimingEditor(
-                        title: Strings.Settings.wakeAlarmLabel,
-                        summary: wakeSummaryText,
-                        isEnabled: suhoorDefaultBinding,
-                        mode: suhoorEditorModeBinding,
-                        relativeValue: defaultSuhoorOffsetBinding,
-                        fixedTime: defaultSuhoorTimeBinding,
-                        relativeLabel: Strings.Settings.minutesBeforeFajr,
-                        relativeDetail: Strings.AlarmsTab.willRingAt(defaultSuhoorComputedTimeText),
-                        fixedLabel: Strings.Settings.wakeTimeLabel,
-                        fixedDetail: Strings.AlarmsTab.willRingAt(defaultSuhoorComputedTimeText),
-                        relativeRange: 5...240,
-                        relativeStep: 5,
-                        warningText: nil,
-                        isExpanded: expandedAlarm == .suhoor,
-                        onToggleExpanded: { toggleExpanded(.suhoor) }
-                    )
-
-                    AlarmTimingEditor(
-                        title: Strings.Settings.reminderLabel,
-                        summary: reminderSummaryText,
-                        isEnabled: reminderDefaultBinding,
-                        mode: reminderEditorModeBinding,
-                        relativeValue: reminderDefaultOffsetBinding,
-                        fixedTime: defaultReminderTimeBinding,
-                        relativeLabel: Strings.Settings.minutesBeforeFajr,
-                        relativeDetail: defaultReminderFooterText,
-                        fixedLabel: Strings.Settings.reminderTime,
-                        fixedDetail: defaultReminderFooterText,
-                        relativeRange: reminderOffsetRange,
-                        relativeStep: 1,
-                        warningText: showsReminderBeforeSuhoorWarning ? Strings.Settings.reminderBeforeSuhoorWarning : nil,
-                        isExpanded: expandedAlarm == .reminder,
-                        onToggleExpanded: { toggleExpanded(.reminder) }
-                    )
-
-                    SettingsEditorCard(
-                        title: Strings.Settings.fajrAdhanLabel,
-                        subtitle: fajrSummaryText,
-                        trailing: AnyView(
-                            Toggle("", isOn: fajrDefaultBinding)
-                                .labelsHidden()
-                        )
-                    ) {
-                        EmptyView()
+                if draftDefaults.defaultWakeState == .inFajr {
+                    AppGroupDivider()
+                    SettingsRow {
+                        Picker("Anchor", selection: defaultWakeAnchorBinding) {
+                            Text("From Fajr start").tag(WakeAnchorType.fajrStart)
+                            Text("From Fajr end").tag(WakeAnchorType.fajrEnd)
+                        }
                     }
+                }
 
-                    SettingsEditorCard(
-                        title: "Iftar / Maghrib",
-                        subtitle: iftarSummaryText,
-                        trailing: AnyView(
-                            Toggle("", isOn: iftarDefaultBinding)
-                                .labelsHidden()
-                        ),
-                        isExpanded: expandedAlarm == .iftar,
-                        onToggleExpanded: { toggleExpanded(.iftar) }
-                    ) {
-                        if alarmConfigStore.defaults.iftarEnabledDefault {
-                            VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
-                                Text("Timing follows sunset. Adjust it from Prayer times.")
+                AppGroupDivider()
+                SettingsRow {
+                    Stepper(value: wakeDeltaBinding, in: 0...240, step: 1) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(deltaRowTitle)
+                            Text(deltaSummaryText)
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+
+                if showsReserveEditor {
+                    AppGroupDivider()
+                    SettingsRow {
+                        Stepper(value: reserveBeforeEndBinding, in: 1...60, step: 1) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Reserve before Fajr ends")
+                                Text("\(normalizedDraftSettings.clampedReserveBeforeEndMinutes) min")
                                     .font(.footnote)
                                     .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
 
-                                Toggle("Notification", isOn: iftarNotificationBinding)
-                                Toggle("Alarm", isOn: iftarAlarmBinding)
-                                Toggle("Adhan", isOn: iftarAdhanBinding)
+                    AppGroupDivider()
+                    SettingsRow {
+                        Text("Keeps enough time before Fajr ends.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+
+                AppGroupDivider()
+                SettingsRow {
+                    Toggle("Latest wake", isOn: latestWakeCapEnabledBinding)
+                }
+
+                if draftDefaults.defaultLatestWakeCapMinutesFromMidnight != nil {
+                    AppGroupDivider()
+                    SettingsRow {
+                        DatePicker(
+                            "Never wake later than",
+                            selection: latestWakeCapBinding,
+                            displayedComponents: [.hourAndMinute]
+                        )
+                    }
+
+                    AppGroupDivider()
+                    SettingsRow {
+                        Text("Keeps your wake from drifting later through the year.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+
+            SettingsGroup(
+                title: "Cues",
+                supportingText: "These cues support the same morning instead of becoming separate wake setups."
+            ) {
+                SettingsRow {
+                    Toggle("Play cue at Fajr start when waking before Fajr", isOn: fajrDefaultBinding)
+                }
+                AppGroupDivider()
+                SettingsRow {
+                    Toggle("Use fasting reminder on fasting mornings", isOn: fastingReminderDefaultBinding)
+                }
+
+                if draftDefaults.fastingReminderEnabledDefault {
+                    AppGroupDivider()
+                    SettingsRow {
+                        Stepper(value: reminderDefaultOffsetBinding, in: 1...180, step: 1) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Reminder lead")
+                                Text("\(draftDefaults.defaultReminderMinutesBeforeFajr) min before Fajr")
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
                             }
                         }
                     }
                 }
-                .padding(.vertical, 4)
-            } header: {
-                SettingsSectionHeader(title: "Timing")
+
+                AppGroupDivider()
+                SettingsRow {
+                    Toggle("Wake follow-up", isOn: wakeFollowUpEnabledBinding)
+                }
+
+                if draftSettings.snoozeEnabled {
+                    AppGroupDivider()
+                    SettingsRow {
+                        Picker("Follow-up delay", selection: wakeFollowUpMinutesBinding) {
+                            ForEach([5, 9, 10, 15], id: \.self) { value in
+                                Text("\(value) minutes").tag(value)
+                            }
+                        }
+                    }
+                }
             }
 
-            Section {
-                if let preview = scheduleManager.schedules.first {
-                    previewRow(
-                        title: Strings.Settings.wakeAlarmLabel,
-                        value: alarmConfigStore.defaults.suhoorEnabledDefault
-                            ? TimeFormatters.timeFormatter.string(from: preview.wakeDate)
-                            : Strings.AlarmList.offLabel
-                    )
-
-                    previewRow(
-                        title: Strings.Settings.reminderLabel,
-                        value: alarmConfigStore.defaults.reminderEnabledDefault
-                            ? preview.reminderDate.map { TimeFormatters.timeFormatter.string(from: $0) } ?? "--"
-                            : Strings.AlarmList.offLabel
-                    )
-
-                    previewRow(
-                        title: Strings.Settings.fajrAdhanLabel,
-                        value: alarmConfigStore.defaults.fajrEnabledDefault
-                            ? TimeFormatters.timeFormatter.string(from: preview.fajrDate)
-                            : Strings.AlarmList.offLabel
-                    )
-
-                    previewRow(
-                        title: "Iftar / Maghrib",
-                        value: alarmConfigStore.defaults.iftarEnabledDefault
-                            ? TimeFormatters.timeFormatter.string(from: preview.iftarDate ?? preview.maghribDate)
-                            : Strings.AlarmList.offLabel
-                    )
-                } else {
-                    Text(Strings.Settings.previewUnavailable)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
+            SettingsGroup(
+                title: "Sounds",
+                supportingText: "Wake sounds and reserve-before-end live in Settings."
+            ) {
+                Button {
+                    appNavigator.openAlarmBehavior()
+                } label: {
+                    SettingsRow {
+                        SettingsSummaryRow(
+                            title: "Wake Sounds & Reserve",
+                            subtitle: "Edit Pre-Fajr, Fajr-start, during-Fajr, after-Fajr, and fixed-wake sounds.",
+                            systemImage: "speaker.wave.3",
+                            badgeText: planSummary.sounds,
+                            badgeTone: .neutral,
+                            showsDisclosureIndicator: true
+                        )
+                    }
                 }
-            } header: {
-                SettingsSectionHeader(
-                    title: Strings.Settings.previewSection,
-                    supportingText: Strings.Settings.previewHelper
-                )
+                .buttonStyle(.plain)
+            }
+
+            SettingsGroup(
+                title: "Validation",
+                supportingText: "Defaults validate against the next rolling 365 days for your current location and prayer calculation."
+            ) {
+                SettingsRow {
+                    validationRow
+                }
+            }
+
+            SettingsGroup(
+                title: Strings.Settings.previewSection,
+                supportingText: "Tomorrow reflects the same resolver used on Home and Wake."
+            ) {
+                if let previewDay {
+                    SettingsRow {
+                        previewRow(
+                            title: "Final wake time",
+                            value: TimeFormatters.timeFormatter.string(from: previewDay.decisionLog.resolvedWakeTime)
+                        )
+                    }
+                    AppGroupDivider()
+                    SettingsRow {
+                        previewRow(
+                            title: "Resolved wake type",
+                            value: ProductSurfacePresentation.wakeStateLabel(for: previewDay)
+                        )
+                    }
+                    AppGroupDivider()
+                    SettingsRow {
+                        previewRow(
+                            title: "Fajr start time",
+                            value: TimeFormatters.timeFormatter.string(from: previewDay.schedule.fajrDate)
+                        )
+                    }
+                    AppGroupDivider()
+                    SettingsRow {
+                        previewRow(
+                            title: "Latest wake effect",
+                            value: previewCapSummary(for: previewDay)
+                        )
+                    }
+                } else {
+                    SettingsRow {
+                        Text(Strings.Settings.previewUnavailable)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
         }
-        .formStyle(.grouped)
         .navigationTitle(Strings.Settings.defaultAlarmsScreenTitle)
         .navigationBarTitleDisplayMode(.inline)
+        .task {
+            loadDraftFromStores()
+        }
+        .onChange(of: alarmConfigStore.currentRevision) { _, _ in
+            guard !hasPendingCommit else { return }
+            loadDraftFromStores()
+        }
+        .onChange(of: settingsStore.currentRevision) { _, _ in
+            guard !hasPendingCommit else { return }
+            loadDraftFromStores()
+        }
+        .onDisappear {
+            applyDraftIfNeeded()
+        }
     }
 
-    private var usesFixedTimeCompatibility: Bool {
-        alarmConfigStore.defaults.defaultSuhoorTimeMode == .fixedTime
-            || alarmConfigStore.defaults.defaultReminderTimeMode == .fixedTime
+    private var validationResult: DefaultWakeRuleValidationResult? {
+        scheduleManager.defaultWakeValidation()
     }
 
-    private var wakeSummaryText: String {
-        guard alarmConfigStore.defaults.suhoorEnabledDefault else {
-            return Strings.AlarmsTab.alarmOffLabel
-        }
-        if alarmConfigStore.defaults.defaultSuhoorTimeMode == .fixedTime {
-            return Strings.SettingsSummary.wakeFixed(defaultSuhoorComputedTimeText)
-        }
-        return Strings.SettingsSummary.wakeBeforeFajr(defaultSuhoorOffsetBinding.wrappedValue)
+    private var planSummary: DefaultMorningPlanSurfaceSummary {
+        ProductSurfaceSnapshots.defaultMorningPlanSummary(
+            defaults: normalizedDraftDefaults,
+            settings: normalizedDraftSettings
+        )
     }
 
-    private var reminderSummaryText: String {
-        guard alarmConfigStore.defaults.reminderEnabledDefault else {
-            return Strings.AlarmsTab.alarmOffLabel
-        }
-        if alarmConfigStore.defaults.defaultReminderTimeMode == .fixedTime {
-            return Strings.SettingsSummary.reminderFixed(defaultReminderComputedTimeText)
-        }
-        return Strings.SettingsSummary.reminderBeforeFajr(reminderDefaultOffsetBinding.wrappedValue)
+    private var previewDay: ActiveAlarmDay? {
+        scheduleManager.nextWakeEventSummary?.day
+            ?? scheduleManager.activeWindowSnapshot.visibleDays.first(where: {
+                !$0.effectiveConfig.skipDay && $0.effectiveConfig.hasAnyEnabled
+            })
     }
 
-    private var fajrSummaryText: String {
-        alarmConfigStore.defaults.fajrEnabledDefault
-            ? Strings.AlarmsTab.fajrHelper
-            : Strings.AlarmsTab.alarmOffLabel
+    private var showsReserveEditor: Bool {
+        draftDefaults.defaultWakeState == .inFajr
+            && draftDefaults.normalizedDefaultWakeAnchorType == .fajrStart
     }
 
-    private var iftarSummaryText: String {
-        guard alarmConfigStore.defaults.iftarEnabledDefault else {
-            return Strings.AlarmsTab.alarmOffLabel
+    private var deltaRowTitle: String {
+        switch draftDefaults.defaultWakeState {
+        case .preFajr:
+            return "Minutes before Fajr"
+        case .inFajr:
+            return draftDefaults.normalizedDefaultWakeAnchorType == .fajrEnd
+                ? "Minutes before Fajr ends"
+                : "Minutes after Fajr begins"
         }
-        return alarmConfigStore.defaults.defaultIftarDelivery.summaryText
     }
 
-    private var followUpSummaryText: String {
-        guard settingsStore.settings.snoozeEnabled else {
-            return Strings.AlarmsTab.alarmOffLabel
+    private var deltaSummaryText: String {
+        ProductSurfacePresentation.defaultWakeOffsetText(for: normalizedDraftDefaults)
+    }
+
+    @ViewBuilder
+    private var validationRow: some View {
+        if let validationResult {
+            if validationResult.isValid {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Valid across 365 days")
+                    if validationResult.capPulledIntoPreFajrCount > 0 {
+                        Text("The latest wake cap pulls \(validationResult.capPulledIntoPreFajrCount) in-Fajr morning(s) earlier into Pre-Fajr.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            } else {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Needs adjustment")
+                    if let message = validationResult.message {
+                        Text(message)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                    if let firstInvalidDateKey = validationResult.firstInvalidDateKey {
+                        Text(firstInvalidDateKey)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        } else {
+            Text("Validation needs a usable location first.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
         }
-        return "\(settingsStore.settings.snoozeMinutes) min after wake"
     }
 
     private func previewRow(title: String, value: String) -> some View {
@@ -229,10 +340,62 @@ struct DefaultAlarmsSettingsView: View {
         }
     }
 
-    private func toggleExpanded(_ section: DefaultAlarmSection) {
-        withAnimation(Motion.standard(reduceMotion: reduceMotion)) {
-            expandedAlarm = expandedAlarm == section ? nil : section
-        }
+    private var defaultWakeStateBinding: Binding<DefaultWakeState> {
+        Binding(get: {
+            draftDefaults.defaultWakeState
+        }, set: { newValue in
+            draftDefaults.defaultWakeState = newValue
+            if newValue == .preFajr {
+                draftDefaults.defaultWakeAnchorType = .fajrStart
+            }
+            commitWakeRuleEdit()
+        })
+    }
+
+    private var defaultWakeAnchorBinding: Binding<WakeAnchorType> {
+        Binding(get: {
+            draftDefaults.normalizedDefaultWakeAnchorType
+        }, set: { newValue in
+            draftDefaults.defaultWakeAnchorType = newValue == .fajrEnd ? .fajrEnd : .fajrStart
+            commitWakeRuleEdit()
+        })
+    }
+
+    private var wakeDeltaBinding: Binding<Int> {
+        Binding(get: {
+            draftDefaults.defaultWakeDeltaMinutes
+        }, set: { newValue in
+            draftDefaults.defaultWakeDeltaMinutes = max(0, newValue)
+            commitWakeRuleEdit()
+        })
+    }
+
+    private var latestWakeCapEnabledBinding: Binding<Bool> {
+        Binding(get: {
+            draftDefaults.defaultLatestWakeCapMinutesFromMidnight != nil
+        }, set: { newValue in
+            if newValue {
+                draftDefaults.defaultLatestWakeCapMinutesFromMidnight
+                    = draftDefaults.defaultLatestWakeCapMinutesFromMidnight
+                    ?? DateHelpers.minutesFromMidnight(for: Date(), timeZone: .current)
+            } else {
+                draftDefaults.defaultLatestWakeCapMinutesFromMidnight = nil
+            }
+            rescheduleFromDefaults()
+        })
+    }
+
+    private var latestWakeCapBinding: Binding<Date> {
+        Binding(get: {
+            dateFromMidnight(
+                for: Date(),
+                minutes: draftDefaults.defaultLatestWakeCapMinutesFromMidnight
+                    ?? DateHelpers.minutesFromMidnight(for: Date(), timeZone: .current)
+            )
+        }, set: { newValue in
+            draftDefaults.defaultLatestWakeCapMinutesFromMidnight = minutesFromMidnight(for: newValue)
+            rescheduleFromDefaults()
+        })
     }
 
     private var suhoorDefaultBinding: Binding<Bool> {
@@ -240,28 +403,44 @@ struct DefaultAlarmsSettingsView: View {
             alarmConfigStore.defaults.suhoorEnabledDefault
         }, set: { newValue in
             alarmConfigStore.defaults.suhoorEnabledDefault = newValue
-            if newValue {
-                Task { _ = await scheduleManager.enableFromUserAction() }
-            } else {
-                rescheduleFromDefaults()
-            }
+            rescheduleFromDefaults()
         })
     }
 
     private var reminderDefaultBinding: Binding<Bool> {
         Binding(get: {
-            alarmConfigStore.defaults.reminderEnabledDefault
+            draftDefaults.reminderEnabledDefault
         }, set: { newValue in
-            alarmConfigStore.defaults.reminderEnabledDefault = newValue
+            draftDefaults.reminderEnabledDefault = newValue
+            draftDefaults.fastingReminderEnabledDefault = newValue
+            rescheduleFromDefaults()
+        })
+    }
+
+    private var fastingReminderDefaultBinding: Binding<Bool> {
+        Binding(get: {
+            draftDefaults.fastingReminderEnabledDefault
+        }, set: { newValue in
+            draftDefaults.fastingReminderEnabledDefault = newValue
+            draftDefaults.reminderEnabledDefault = newValue
+            rescheduleFromDefaults()
+        })
+    }
+
+    private var reminderDefaultOffsetBinding: Binding<Int> {
+        Binding(get: {
+            draftDefaults.defaultReminderMinutesBeforeFajr
+        }, set: { newValue in
+            draftDefaults.defaultReminderMinutesBeforeFajr = max(1, newValue)
             rescheduleFromDefaults()
         })
     }
 
     private var fajrDefaultBinding: Binding<Bool> {
         Binding(get: {
-            alarmConfigStore.defaults.fajrEnabledDefault
+            draftDefaults.fajrEnabledDefault
         }, set: { newValue in
-            alarmConfigStore.defaults.fajrEnabledDefault = newValue
+            draftDefaults.fajrEnabledDefault = newValue
             rescheduleFromDefaults()
         })
     }
@@ -275,232 +454,120 @@ struct DefaultAlarmsSettingsView: View {
         })
     }
 
-    private var iftarNotificationBinding: Binding<Bool> {
-        Binding(get: {
-            alarmConfigStore.defaults.defaultIftarDelivery.notification
-        }, set: { newValue in
-            var delivery = alarmConfigStore.defaults.defaultIftarDelivery
-            delivery.notification = newValue
-            alarmConfigStore.defaults.defaultIftarDelivery = delivery.normalized()
-            rescheduleFromDefaults()
-        })
-    }
-
-    private var iftarAlarmBinding: Binding<Bool> {
-        Binding(get: {
-            alarmConfigStore.defaults.defaultIftarDelivery.normalized().alarm
-        }, set: { newValue in
-            var delivery = alarmConfigStore.defaults.defaultIftarDelivery
-            delivery.alarm = newValue
-            alarmConfigStore.defaults.defaultIftarDelivery = delivery.normalized()
-            rescheduleFromDefaults()
-        })
-    }
-
-    private var iftarAdhanBinding: Binding<Bool> {
-        Binding(get: {
-            alarmConfigStore.defaults.defaultIftarDelivery.normalized().adhan
-        }, set: { newValue in
-            var delivery = alarmConfigStore.defaults.defaultIftarDelivery
-            delivery.adhan = newValue
-            alarmConfigStore.defaults.defaultIftarDelivery = delivery.normalized()
-            rescheduleFromDefaults()
-        })
-    }
-
     private var wakeFollowUpEnabledBinding: Binding<Bool> {
         Binding(get: {
-            settingsStore.settings.snoozeEnabled
+            draftSettings.snoozeEnabled
         }, set: { newValue in
-            settingsStore.update { draft in
-                draft.snoozeEnabled = newValue
-            }
+            draftSettings.snoozeEnabled = newValue
             rescheduleFromDefaults()
         })
     }
 
     private var wakeFollowUpMinutesBinding: Binding<Int> {
         Binding(get: {
-            settingsStore.settings.snoozeMinutes
+            draftSettings.snoozeMinutes
         }, set: { newValue in
-            settingsStore.update { draft in
-                draft.snoozeMinutes = newValue
-            }
+            draftSettings.snoozeMinutes = newValue
             rescheduleFromDefaults()
         })
     }
 
-    private var suhoorEditorModeBinding: Binding<AlarmTimingEditorMode> {
+    private var reserveBeforeEndBinding: Binding<Int> {
         Binding(get: {
-            alarmConfigStore.defaults.defaultSuhoorTimeMode == .fixedTime ? .fixedTime : .beforeFajr
+            normalizedDraftSettings.clampedReserveBeforeEndMinutes
         }, set: { newValue in
-            suhoorTimeModeBinding.wrappedValue = newValue == .fixedTime ? .fixedTime : .relativeToFajrMinusMinutes
-        })
-    }
-
-    private var reminderEditorModeBinding: Binding<AlarmTimingEditorMode> {
-        Binding(get: {
-            alarmConfigStore.defaults.defaultReminderTimeMode == .fixedTime ? .fixedTime : .beforeFajr
-        }, set: { newValue in
-            reminderTimeModeBinding.wrappedValue = newValue == .fixedTime ? .fixedTime : .beforeFajr
-        })
-    }
-
-    private var suhoorTimeModeBinding: Binding<SuhoorTimeMode> {
-        Binding(get: {
-            alarmConfigStore.defaults.defaultSuhoorTimeMode
-        }, set: { newValue in
-            alarmConfigStore.defaults.defaultSuhoorTimeMode = newValue
-            if newValue == .fixedTime, let wakeDate = scheduleManager.schedules.first?.wakeDate {
-                alarmConfigStore.defaults.defaultSuhoorOffsetMinutes = minutesFromMidnight(for: wakeDate)
-            } else if newValue == .relativeToFajrMinusMinutes,
-                      alarmConfigStore.defaults.defaultSuhoorOffsetMinutes > 240 {
-                alarmConfigStore.defaults.defaultSuhoorOffsetMinutes = 30
-            }
-            clampReminderFixedTimeIfNeeded()
+            draftSettings.reserveBeforeEndMinutes = max(1, newValue)
             rescheduleFromDefaults()
         })
     }
 
-    private var defaultSuhoorOffsetBinding: Binding<Int> {
-        Binding(get: {
-            alarmConfigStore.defaults.defaultSuhoorOffsetMinutes
-        }, set: { newValue in
-            alarmConfigStore.defaults.defaultSuhoorOffsetMinutes = newValue
-            clampReminderFixedTimeIfNeeded()
-            rescheduleFromDefaults()
-        })
-    }
-
-    private var defaultSuhoorTimeBinding: Binding<Date> {
-        Binding(get: {
-            dateFromMidnight(for: Date(), minutes: alarmConfigStore.defaults.defaultSuhoorOffsetMinutes)
-        }, set: { newValue in
-            alarmConfigStore.defaults.defaultSuhoorOffsetMinutes = minutesFromMidnight(for: newValue)
-            clampReminderFixedTimeIfNeeded()
-            rescheduleFromDefaults()
-        })
-    }
-
-    private var reminderDefaultOffsetBinding: Binding<Int> {
-        Binding(get: {
-            alarmConfigStore.defaults.defaultReminderMinutesBeforeFajr
-        }, set: { newValue in
-            let clamped = min(newValue, maxReminderDefaultOffset)
-            alarmConfigStore.defaults.defaultReminderMinutesBeforeFajr = clamped
-            reminderTimeClamped = clamped != newValue
-            rescheduleFromDefaults()
-        })
-    }
-
-    private var reminderTimeModeBinding: Binding<ReminderTimeMode> {
-        Binding(get: {
-            alarmConfigStore.defaults.defaultReminderTimeMode
-        }, set: { newValue in
-            alarmConfigStore.defaults.defaultReminderTimeMode = newValue
-            if newValue == .fixedTime {
-                let reminderSeed = scheduleManager.schedules.first?.reminderDate
-                    ?? scheduleManager.schedules.first?.fajrDate
-                    ?? Date()
-                alarmConfigStore.defaults.defaultReminderFixedTimeMinutes = minutesFromMidnight(for: reminderSeed)
-                clampReminderFixedTimeIfNeeded()
-            } else {
-                reminderTimeClamped = false
-            }
-            rescheduleFromDefaults()
-        })
-    }
-
-    private var defaultReminderTimeBinding: Binding<Date> {
-        Binding(get: {
-            dateFromMidnight(for: Date(), minutes: alarmConfigStore.defaults.defaultReminderFixedTimeMinutes)
-        }, set: { newValue in
-            alarmConfigStore.defaults.defaultReminderFixedTimeMinutes = minutesFromMidnight(for: newValue)
-            clampReminderFixedTimeIfNeeded()
-            rescheduleFromDefaults()
-        })
-    }
-
-    private var showsReminderBeforeSuhoorWarning: Bool {
-        reminderTimeClamped
-    }
-
-    private var maxReminderDefaultOffset: Int {
-        guard let schedule = scheduleManager.schedules.first else { return 180 }
-        let minutesBetween = Int(round(schedule.fajrDate.timeIntervalSince(schedule.wakeDate) / 60))
-        return max(5, min(180, minutesBetween))
-    }
-
-    private var reminderOffsetRange: ClosedRange<Int> {
-        let lowerBound = min(5, maxReminderDefaultOffset)
-        return lowerBound...maxReminderDefaultOffset
-    }
-
-    private var defaultSuhoorComputedTimeText: String {
-        if alarmConfigStore.defaults.defaultSuhoorTimeMode == .fixedTime {
-            return TimeFormatters.timeFormatter.string(from: defaultSuhoorTimeBinding.wrappedValue)
+    private func defaultWakeStateTitle(_ state: DefaultWakeState) -> String {
+        switch state {
+        case .preFajr:
+            return "Before Fajr"
+        case .inFajr:
+            return "During Fajr"
         }
-        return scheduleManager.schedules.first.map { TimeFormatters.timeFormatter.string(from: $0.wakeDate) } ?? "--"
     }
 
-    private var defaultReminderComputedTimeText: String {
-        if alarmConfigStore.defaults.defaultReminderTimeMode == .fixedTime {
-            return TimeFormatters.timeFormatter.string(from: defaultReminderTimeBinding.wrappedValue)
-        }
-        return scheduleManager.schedules.first?.reminderDate.map { TimeFormatters.timeFormatter.string(from: $0) } ?? "--"
-    }
-
-    private var defaultReminderFooterText: String {
-        if !alarmConfigStore.defaults.reminderEnabledDefault {
-            return Strings.AlarmsTab.reminderOff
-        }
-        return Strings.AlarmsTab.willRingAt(defaultReminderComputedTimeText)
+    private func commitWakeRuleEdit() {
+        draftDefaults.defaultSuhoorTimeMode = .relativeToFajrMinusMinutes
+        draftDefaults.defaultSuhoorOffsetMinutes = draftDefaults.defaultWakeDeltaMinutes
+        rescheduleFromDefaults()
     }
 
     private func rescheduleFromDefaults() {
-        scheduleManager.requestRefresh(reason: .settingsChanged)
-    }
-
-    private func clampReminderFixedTimeIfNeeded() {
-        guard alarmConfigStore.defaults.defaultReminderTimeMode == .fixedTime else {
-            reminderTimeClamped = false
-            return
-        }
-        guard let suhoorTime = defaultSuhoorSampleTime else { return }
-        let reminderTime = dateFromMidnight(for: Date(), minutes: alarmConfigStore.defaults.defaultReminderFixedTimeMinutes)
-        let validation = TimeValidation.validateDailyTimes(suhoorTime: suhoorTime, reminderTime: reminderTime)
-        reminderTimeClamped = validation.wasClampedToSuhoor
-        if validation.wasClampedToSuhoor {
-            alarmConfigStore.defaults.defaultReminderFixedTimeMinutes = minutesFromMidnight(for: validation.reminderTime)
-        }
-    }
-
-    private var defaultSuhoorSampleTime: Date? {
-        if alarmConfigStore.defaults.defaultSuhoorTimeMode == .fixedTime {
-            return dateFromMidnight(for: Date(), minutes: alarmConfigStore.defaults.defaultSuhoorOffsetMinutes)
-        }
-        return scheduleManager.schedules.first?.wakeDate
-    }
-
-    private var calendar: Calendar {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = .current
-        return calendar
+        scheduleDraftCommit()
     }
 
     private func minutesFromMidnight(for date: Date) -> Int {
-        let start = calendar.startOfDay(for: date)
-        return max(0, Int(round(date.timeIntervalSince(start) / 60)))
+        DateHelpers.minutesFromMidnight(for: date, timeZone: .current)
     }
 
     private func dateFromMidnight(for day: Date, minutes: Int) -> Date {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .current
         let start = calendar.startOfDay(for: day)
         return calendar.date(byAdding: .minute, value: minutes, to: start) ?? start
     }
-}
 
-private enum DefaultAlarmSection {
-    case suhoor
-    case reminder
-    case iftar
+    private func previewCapSummary(for day: ActiveAlarmDay) -> String {
+        if day.decisionLog.latestWakeCapApplied {
+            return "Moved earlier by your latest wake"
+        }
+        return "No cap applied"
+    }
+
+    private var normalizedDraftDefaults: DefaultAlarmConfig {
+        var defaults = draftDefaults
+        defaults.defaultSuhoorTimeMode = .relativeToFajrMinusMinutes
+        defaults.defaultSuhoorOffsetMinutes = defaults.defaultWakeDeltaMinutes
+        if defaults.defaultWakeState == .preFajr {
+            defaults.defaultWakeAnchorType = .fajrStart
+        }
+        defaults.fastingReminderEnabledDefault = defaults.reminderEnabledDefault
+        return defaults
+    }
+
+    private var normalizedDraftSettings: AppSettings {
+        var settings = draftSettings
+        settings.reserveBeforeEndMinutes = max(1, settings.reserveBeforeEndMinutes)
+        return settings
+    }
+
+    private func loadDraftFromStores() {
+        draftDefaults = alarmConfigStore.defaults
+        draftSettings = settingsStore.settings
+    }
+
+    private func scheduleDraftCommit() {
+        hasPendingCommit = true
+        commitTask?.cancel()
+        commitTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 250_000_000)
+            applyDraftIfNeeded()
+        }
+    }
+
+    private func applyDraftIfNeeded() {
+        commitTask?.cancel()
+        commitTask = nil
+
+        let nextDefaults = normalizedDraftDefaults
+        let nextSettings = normalizedDraftSettings
+        let defaultsChanged = alarmConfigStore.defaults != nextDefaults
+        let settingsChanged = settingsStore.settings != nextSettings
+
+        if defaultsChanged {
+            alarmConfigStore.defaults = nextDefaults
+        }
+        if settingsChanged {
+            settingsStore.set(nextSettings)
+        }
+
+        hasPendingCommit = false
+        if defaultsChanged || settingsChanged {
+            scheduleManager.requestRefresh(reason: .settingsChanged)
+        }
+    }
 }

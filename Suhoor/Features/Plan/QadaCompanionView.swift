@@ -23,6 +23,7 @@ struct QadaCompanionView: View {
             .padding(.horizontal, DesignTokens.spacingL)
             .padding(.vertical, DesignTokens.spacingL)
         }
+        .appScrollableChrome()
         .navigationTitle("Qada")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -36,13 +37,21 @@ struct QadaCompanionView: View {
 
     @ViewBuilder
     private var headerCard: some View {
-        GlassCard(style: .header, tintColor: FastPrimaryIntent.qadaMakeup.style.color, tintOpacity: 0.12) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text(headerTitle)
-                    .font(.title3.weight(.semibold))
-                Text(headerSubtitle)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+        AppGlassSurface(variant: .hero) {
+            HStack(alignment: .top, spacing: DesignTokens.spacingM) {
+                VStack(alignment: .leading, spacing: DesignTokens.textSpacingRegular) {
+                    Text(headerTitle)
+                        .font(AppTypography.heroTitle)
+                    Text(headerSubtitle)
+                        .font(AppTypography.cardBody)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer(minLength: DesignTokens.spacingM)
+
+                Image(systemName: "checklist")
+                    .font(AppTypography.cardSymbol)
+                    .foregroundStyle(FastPrimaryIntent.qadaMakeup.style.color)
             }
         }
     }
@@ -50,24 +59,23 @@ struct QadaCompanionView: View {
     @ViewBuilder
     private var recoveryCard: some View {
         if case .needsRecovery(let snapshot) = state {
-            GlassCard(tintColor: FastPrimaryIntent.qadaMakeup.style.color, tintOpacity: 0.08) {
-                VStack(alignment: .leading, spacing: 10) {
+            AppGlassSurface(variant: .tinted, tint: .orange) {
+                VStack(alignment: .leading, spacing: DesignTokens.textSpacingMedium) {
                     Text("One planned Qada day still needs to be rescheduled.")
-                        .font(.headline.weight(.semibold))
+                        .font(AppTypography.cardTitle)
                     if let missedDate = snapshot.missedDate {
                         Text("Last planned date: \(mediumDate(missedDate)). Move it to the next available date when you're ready.")
-                            .font(.footnote)
+                            .font(AppTypography.cardBody)
                             .foregroundStyle(.secondary)
                     } else {
                         Text("Move it to the next available date when you're ready.")
-                            .font(.footnote)
+                            .font(AppTypography.cardBody)
                             .foregroundStyle(.secondary)
                     }
                     Button("Reschedule day") {
                         onRecoverMissedDay()
                     }
-                    .buttonStyle(.borderedProminent)
-                    .tint(DawnColor.accent)
+                    .appControlStyle(.primary, tint: .orange)
                 }
             }
         }
@@ -76,8 +84,8 @@ struct QadaCompanionView: View {
     private var batchCard: some View {
         let snapshot = currentSnapshot
 
-        return GlassCard {
-            VStack(alignment: .leading, spacing: 12) {
+        return AppGlassSurface(variant: .quiet) {
+            VStack(alignment: .leading, spacing: DesignTokens.textSpacingComfortable) {
                 if let nextDate = snapshot?.nextPlannedDate {
                     summaryRow(title: "Next Qada", value: mediumDate(nextDate))
                 } else {
@@ -89,7 +97,7 @@ struct QadaCompanionView: View {
                     summaryRow(title: "Overall", value: snapshot.remainingText)
                 } else {
                     Text("Plan the next small batch when you’re ready.")
-                        .font(.footnote)
+                        .font(AppTypography.cardBody)
                         .foregroundStyle(.secondary)
                 }
             }
@@ -97,27 +105,25 @@ struct QadaCompanionView: View {
     }
 
     private var actionCard: some View {
-        GlassCard {
-            VStack(alignment: .leading, spacing: 12) {
+        AppGlassSurface(variant: .standard) {
+            VStack(alignment: .leading, spacing: DesignTokens.textSpacingComfortable) {
                 Button(primaryActionTitle) {
                     primaryAction()
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(DawnColor.accent)
+                .appControlStyle(.primary)
 
                 if showsViewCurrentBatchSecondaryAction {
                     Button("View current batch") {
                         onViewCurrentBatch()
                     }
-                    .buttonStyle(.bordered)
+                    .appControlStyle(.secondary)
                 }
 
                 Button("Adjust total") {
                     onAdjustTotal()
                 }
-                .buttonStyle(.plain)
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(.secondary)
+                .font(AppTypography.metricLabel)
+                .appControlStyle(.quiet)
             }
         }
     }
@@ -202,11 +208,11 @@ struct QadaCompanionView: View {
     private func summaryRow(title: String, value: String) -> some View {
         HStack(alignment: .top) {
             Text(title)
-                .font(.footnote.weight(.semibold))
+                .font(AppTypography.metricLabel)
                 .foregroundStyle(.secondary)
             Spacer()
             Text(value)
-                .font(.footnote)
+                .font(AppTypography.metricValue)
                 .multilineTextAlignment(.trailing)
         }
     }

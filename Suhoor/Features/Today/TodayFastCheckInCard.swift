@@ -1,15 +1,16 @@
 import SwiftUI
 
 struct TodayFastCheckInCard: View {
-    @EnvironmentObject private var fastLogStore: FastLogStore
+    @EnvironmentObject private var scheduleManager: ScheduleManager
+    @EnvironmentObject private var completionSurfaceStore: CompletionSurfaceStore
     @State private var isPulsing = false
 
     let presentation: FastingHomeSupportPresentation
     var onLater: (() -> Void)? = nil
 
     var body: some View {
-        GlassCard(style: .header, tintColor: tint.color, tintOpacity: tint.opacity) {
-            VStack(alignment: .leading, spacing: DesignTokens.dashboardCardInternalSpacing) {
+        AppGlassSurface(variant: .quiet, contentPadding: DesignTokens.spacingM) {
+            VStack(alignment: .leading, spacing: DesignTokens.textSpacingMedium) {
                 switch presentation.phase {
                 case .fastingStatusPrompt, .fastCompletionPrompt:
                     promptContent
@@ -28,11 +29,11 @@ struct TodayFastCheckInCard: View {
         }
     }
 
-    private var currentStatus: FastLogStatus {
-        fastLogStore.status(for: presentation.dateKey)
+    private var currentStatus: FastCompletionStatus {
+        completionSurfaceStore.fastStatus(for: presentation.dateKey)
     }
 
-    private var effectiveStatus: FastLogStatus {
+    private var effectiveStatus: FastCompletionStatus {
         if presentation.phase == .fastCompletionLogged, currentStatus == .inProgress {
             return .completed
         }
@@ -41,55 +42,65 @@ struct TodayFastCheckInCard: View {
 
     @ViewBuilder
     private var promptContent: some View {
-        VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
-            HStack(alignment: .top, spacing: DesignTokens.spacingM) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(presentation.title)
-                        .font(DesignTokens.cardTitleFont)
+        VStack(alignment: .leading, spacing: DesignTokens.textSpacingMedium) {
+            VStack(alignment: .leading, spacing: DesignTokens.textSpacingCompact) {
+                Text(presentation.title)
+                    .font(AppTypography.cardTitle)
+                    .fixedSize(horizontal: false, vertical: true)
 
-                    Text(presentation.detail)
-                        .font(DesignTokens.cardSubtitleFont)
-                        .foregroundStyle(.secondary)
-                }
-
-                Spacer()
-
-                historyButton
+                Text(presentation.detail)
+                    .font(AppTypography.cardBody)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
-            HStack(spacing: DesignTokens.spacingS) {
-                if let primaryActionTitle = presentation.primaryActionTitle {
-                    Button {
-                        withAnimation(.easeInOut(duration: 0.22)) {
-                            fastLogStore.setStatus(primaryActionStatus, for: presentation.dateKey, intentSnapshot: presentation.intentSnapshot)
-                        }
-                    } label: {
-                        Text(primaryActionTitle)
-                            .frame(maxWidth: .infinity)
+            if let primaryActionTitle = presentation.primaryActionTitle {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.22)) {
+                        scheduleManager.performCompletionEdit(
+                            .setFastStatus(
+                                dateKey: presentation.dateKey,
+                                status: primaryActionCompletionStatus,
+                                intentSnapshot: presentation.intentSnapshot
+                            ),
+                            source: .homeCard
+                        )
                     }
-                    .buttonStyle(.borderedProminent)
-                    .tint(.green)
+                } label: {
+                    Text(primaryActionTitle)
+                        .frame(maxWidth: .infinity, minHeight: 44)
                 }
+                .appControlStyle(.primary, tint: .green)
+            }
 
+            HStack(alignment: .center, spacing: DesignTokens.spacingS) {
                 if let secondaryActionTitle = presentation.secondaryActionTitle {
                     Button {
                         withAnimation(.easeInOut(duration: 0.22)) {
-                            fastLogStore.setStatus(.missed, for: presentation.dateKey, intentSnapshot: presentation.intentSnapshot)
+                            scheduleManager.performCompletionEdit(
+                                .setFastStatus(
+                                    dateKey: presentation.dateKey,
+                                    status: .notCompleted,
+                                    intentSnapshot: presentation.intentSnapshot
+                                ),
+                                source: .homeCard
+                            )
                         }
                     } label: {
                         Text(secondaryActionTitle)
-                            .frame(maxWidth: .infinity)
+                            .frame(maxWidth: .infinity, minHeight: 44)
                     }
-                    .buttonStyle(.bordered)
-                    .tint(presentation.phase == .fastCompletionPrompt ? .red : .secondary)
+                    .appControlStyle(.secondary)
                 }
-            }
 
-            if let onLater {
-                Button(Strings.HomeSurface.fajrPromptLater, action: onLater)
-                    .buttonStyle(.plain)
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(DawnColor.accent)
+                if let onLater {
+                    Button(action: onLater) {
+                        Text(Strings.HomeSurface.fajrPromptLater)
+                            .font(AppTypography.metricLabel)
+                            .frame(minHeight: 44)
+                    }
+                    .appControlStyle(.quiet)
+                }
             }
         }
     }
@@ -97,18 +108,19 @@ struct TodayFastCheckInCard: View {
     @ViewBuilder
     private var loggedContent: some View {
         ZStack(alignment: .top) {
-            VStack(spacing: DesignTokens.spacingXS) {
+            VStack(spacing: DesignTokens.textSpacingCompact) {
                 Text(presentation.statusTitle ?? statusTitle)
-                    .font(.title3.weight(.semibold))
+                    .font(AppTypography.cardSymbol)
                     .foregroundStyle(statusColor)
                     .frame(maxWidth: .infinity, alignment: .center)
                     .opacity(shouldPulse ? (isPulsing ? 1.0 : 0.82) : 1.0)
                     .scaleEffect(shouldPulse ? (isPulsing ? 1.0 : 0.99) : 1.0)
 
                 Text(presentation.detail)
-                    .font(DesignTokens.cardSubtitleFont)
+                    .font(AppTypography.cardBody)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             .frame(maxWidth: .infinity, minHeight: 88, alignment: .center)
             .onAppear {
@@ -143,10 +155,9 @@ struct TodayFastCheckInCard: View {
             FastHistoryView()
         } label: {
             Text("View history")
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(DawnColor.accent)
+                .font(AppTypography.metricLabel)
         }
-        .buttonStyle(.plain)
+        .appControlStyle(.quiet)
         .accessibilityLabel("Open fast completion history")
     }
 
@@ -154,18 +165,20 @@ struct TodayFastCheckInCard: View {
     private var undoButton: some View {
         Button {
             withAnimation(.easeInOut(duration: 0.22)) {
-                fastLogStore.setStatus(.unknown, for: presentation.dateKey)
+                scheduleManager.performCompletionEdit(
+                    .clearFastStatus(dateKey: presentation.dateKey),
+                    source: .homeCard
+                )
             }
         } label: {
             Text("Clear")
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(DawnColor.accent)
+                .font(AppTypography.metricLabel)
         }
-        .buttonStyle(.plain)
+        .appControlStyle(.quiet)
         .accessibilityLabel("Clear fasting status")
     }
 
-    private var primaryActionStatus: FastLogStatus {
+    private var primaryActionCompletionStatus: FastCompletionStatus {
         switch presentation.phase {
         case .fastingStatusPrompt:
             return .inProgress
@@ -186,9 +199,9 @@ struct TodayFastCheckInCard: View {
             return "Fasting in progress"
         case .completed:
             return "Fast completed"
-        case .missed:
+        case .notCompleted:
             return "Not completed"
-        case .unknown:
+        case .unknown, .notRequired:
             return ""
         }
     }
@@ -201,19 +214,8 @@ struct TodayFastCheckInCard: View {
             return .orange
         case .completed:
             return .green
-        case .missed:
+        case .notCompleted, .notRequired:
             return .secondary
-        }
-    }
-
-    private var tint: (color: Color?, opacity: Double) {
-        switch effectiveStatus {
-        case .completed:
-            return (Color.green, 0.12)
-        case .inProgress:
-            return (DawnColor.lightApricot100, 0.22)
-        case .missed, .unknown:
-            return (nil, 0.0)
         }
     }
 
@@ -221,6 +223,13 @@ struct TodayFastCheckInCard: View {
         guard presentation.phase == .fastCompletionLogged, currentStatus == .inProgress else {
             return
         }
-        fastLogStore.setStatus(.completed, for: presentation.dateKey, intentSnapshot: presentation.intentSnapshot)
+        scheduleManager.performCompletionEdit(
+            .setFastStatus(
+                dateKey: presentation.dateKey,
+                status: .completed,
+                intentSnapshot: presentation.intentSnapshot
+            ),
+            source: .homeCard
+        )
     }
 }

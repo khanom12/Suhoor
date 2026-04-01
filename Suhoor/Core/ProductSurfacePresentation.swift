@@ -99,9 +99,31 @@ struct ConfiguredPlansSnapshot: Equatable, Sendable {
 struct ScheduleRowPresentation: Equatable, Sendable {
     let wakeTime: Date
     let meaningText: String
+    let availability: WakeAvailabilityPresentation
+    let stateLabel: String
+    let secondaryExplanation: String?
     let detailText: String
     let chipTitles: [String]
     let provenanceText: String?
+}
+
+enum WakeAvailabilityState: Equatable, Sendable {
+    case activeDefault
+    case activeOverride
+    case skipped
+}
+
+struct WakeAvailabilityPresentation: Equatable, Sendable {
+    let state: WakeAvailabilityState
+    let availabilityLabel: String
+    let statusSummary: String
+    let statusDetail: String
+}
+
+struct WakeReasonRow: Identifiable, Equatable, Sendable {
+    let id: String
+    let title: String
+    let detail: String
 }
 
 struct WakeProgressSnapshot: Equatable, Sendable {
@@ -144,7 +166,7 @@ enum ProductSurfacePresentation {
         }
     }
 
-    static let ordinaryDaySummaryText = "Ordinary Fajr day"
+    static let ordinaryDaySummaryText = "Regular Fajr morning"
 
     static func meaningfulSecondaryContextTitles(
         from resolvedDayContext: ResolvedDayContext,
@@ -180,23 +202,22 @@ enum ProductSurfacePresentation {
         let resolved = day.resolvedDayContext
         let tags = Set(resolved.supportingTags)
 
-        if resolved.primaryContext == .standard && meaningfulSecondaryContextTitles(from: resolved).isEmpty {
-            return nil
-        }
-
         if resolved.primaryContext == .qadaFast || tags.contains(.qada) {
             return "Qada planned"
         }
         if resolved.primaryContext == .tahajjud {
             return "Tahajjud planned"
         }
-        if tags.contains(.ramadan) {
-            return "Fasting tomorrow"
-        }
         if let observance = observanceTitle(from: resolved) {
             return observance
         }
-        if resolved.primaryContext == .fasting || resolved.primaryContext == .sunnahFast || resolved.primaryContext == .suhoor {
+        if tags.contains(.ramadan) {
+            return "Ramadan fast"
+        }
+        if resolved.primaryContext == .sunnahFast {
+            return "Sunnah fast"
+        }
+        if resolved.primaryContext == .fasting || resolved.primaryContext == .suhoor {
             return "Fasting tomorrow"
         }
 
@@ -204,27 +225,70 @@ enum ProductSurfacePresentation {
     }
 
     static func homeHeroLabel(for day: ActiveAlarmDay) -> String {
-        homeHeroMeaningText(for: day) == nil ? "Next wake" : "Tomorrow's wake"
+        "Tomorrow's wake"
+    }
+
+    static func homeHeroPresentation(for day: ActiveAlarmDay) -> HomeHeroPresentation {
+        HomeHeroPresentation(
+            label: homeHeroLabel(for: day),
+            descriptorText: homeHeroDescriptorText(for: day),
+            explanationText: homeHeroTimingText(for: day),
+            statusText: homeHeroStatusText(for: day)
+        )
     }
 
     static func homeHeroSubline(for day: ActiveAlarmDay) -> String {
-        let fajrText = "Fajr at \(TimeFormatters.timeFormatter.string(from: day.schedule.fajrDate))"
-        if let meaning = homeHeroMeaningText(for: day) {
-            return "\(meaning) • \(fajrText)"
-        }
-        return "For \(fajrText)"
+        let presentation = homeHeroPresentation(for: day)
+        return [
+            presentation.descriptorText,
+            presentation.explanationText,
+            presentation.statusText
+        ]
+        .compactMap { $0 }
+        .joined(separator: " • ")
+    }
+
+    static func homeHeroDescriptorText(for day: ActiveAlarmDay) -> String {
+        homeHeroMeaningText(for: day) ?? wakeStateLabel(for: day)
     }
 
     static func scheduleChipTitles(
         for day: ActiveAlarmDay,
         hasDayOverride: Bool,
-        limit: Int = 2
+        limit: Int = 3
     ) -> [String] {
-        var titles = meaningfulSecondaryContextTitles(from: day.resolvedDayContext, limit: limit)
-        if hasDayOverride && titles.count < limit {
-            titles.append("Adjusted")
+        var titles: [String] = []
+        let resolved = day.resolvedDayContext
+        let tags = Set(resolved.supportingTags)
+
+        if resolved.primaryContext == .qadaFast || tags.contains(.qada) {
+            titles.append("Qada")
+        } else if tags.contains(.ramadan)
+            || resolved.primaryContext == .fasting
+            || resolved.primaryContext == .suhoor
+            || resolved.primaryContext == .sunnahFast {
+            titles.append("Fasting")
         }
-        return Array(titles.prefix(limit))
+
+        if resolved.primaryContext == .tahajjud || day.effectiveConfig.tahajjudRefinement {
+            titles.append("Tahajjud")
+        }
+
+        if day.decisionLog.latestWakeCapApplied {
+            titles.append("Cap applied")
+        }
+
+        if day.effectiveConfig.skipDay {
+            titles.append("Skipped")
+        } else if day.decisionLog.plannedWakeState == .fixedWake {
+            titles.append("Fixed wake")
+        } else if day.decisionLog.plannedWakeState == .postFajr {
+            titles.append("After Fajr")
+        } else if hasDayOverride {
+            titles.append("Changed")
+        }
+
+        return Array(NSOrderedSet(array: titles).array.prefix(limit)).compactMap { $0 as? String }
     }
 
     static func dayMeaningText(
@@ -270,6 +334,8 @@ enum ProductSurfacePresentation {
             anchorTitle = "Fajr ends"
         case .masjidFajr:
             anchorTitle = "masjid Fajr"
+        case .clockTime:
+            return "Fixed wake"
         }
 
         if delta.minutes == 0 {
@@ -283,6 +349,46 @@ enum ProductSurfacePresentation {
         case .after:
             return "\(delta.minutes) \(unit) after \(anchorTitle)"
         }
+    }
+
+    static func wakeListTimingText(for day: ActiveAlarmDay) -> String {
+        if day.effectiveConfig.skipDay {
+            return "No wake for this date"
+        }
+        if day.decisionLog.plannedWakeState == .fixedWake {
+            return "Set for this date"
+        }
+        return wakeOffsetText(for: day)
+    }
+
+    static func wakeAvailabilityPresentation(
+        for day: ActiveAlarmDay,
+        hasCustomChange: Bool
+    ) -> WakeAvailabilityPresentation {
+        if day.effectiveConfig.skipDay {
+            return WakeAvailabilityPresentation(
+                state: .skipped,
+                availabilityLabel: "Skipped",
+                statusSummary: "Morning off for this date",
+                statusDetail: "No wake or extra morning cues are set for this date."
+            )
+        }
+
+        if hasCustomChange {
+            return WakeAvailabilityPresentation(
+                state: .activeOverride,
+                availabilityLabel: "Changed for this date",
+                statusSummary: "Changed for this date",
+                statusDetail: "This morning has its own wake."
+            )
+        }
+
+        return WakeAvailabilityPresentation(
+            state: .activeDefault,
+            availabilityLabel: "Usual plan",
+            statusSummary: "Follows your usual plan",
+            statusDetail: "Your usual morning plan is still in effect."
+        )
     }
 
     static func configuredPlansSnapshot(
@@ -317,6 +423,7 @@ enum ProductSurfacePresentation {
         for day: ActiveAlarmDay,
         hasDayOverride: Bool
     ) -> ScheduleRowPresentation {
+        let availability = wakeAvailabilityPresentation(for: day, hasCustomChange: hasDayOverride)
         let nonDefaultProvenances = day.provenances.filter { $0.sourceOrigin != .defaultDailyPlan }
         let provenanceText: String?
         if nonDefaultProvenances.isEmpty || day.resolvedDayContext.primaryContext != .standard {
@@ -326,17 +433,285 @@ enum ProductSurfacePresentation {
             provenanceText = labels.joined(separator: " • ")
         }
 
-        let relationText = wakeRelationText(delta: day.decisionLog.resolvedDelta, anchor: day.decisionLog.resolvedAnchor.type)
-        let detailPrefix = hasDayOverride ? "Adjusted" : relationText
-        let detailText = "\(detailPrefix) • Fajr at \(TimeFormatters.timeFormatter.string(from: day.schedule.fajrDate))"
-
         return ScheduleRowPresentation(
             wakeTime: day.schedule.wakeDate,
             meaningText: dayMeaningText(for: day, style: .wakeRow),
-            detailText: detailText,
-            chipTitles: [],
+            availability: availability,
+            stateLabel: availability.state == .skipped ? availability.availabilityLabel : wakeStateLabel(for: day),
+            secondaryExplanation: scheduleSecondaryExplanation(for: day, hasDayOverride: hasDayOverride),
+            detailText: wakeListTimingText(for: day),
+            chipTitles: scheduleChipTitles(for: day, hasDayOverride: hasDayOverride),
             provenanceText: provenanceText
         )
+    }
+
+    static func defaultWakeTimingText(for defaults: DefaultAlarmConfig) -> String {
+        switch defaults.defaultWakeState {
+        case .preFajr:
+            return "Before Fajr"
+        case .inFajr:
+            return "During Fajr"
+        }
+    }
+
+    static func defaultWakeAnchorText(for defaults: DefaultAlarmConfig) -> String {
+        switch defaults.defaultWakeState {
+        case .preFajr:
+            return "From Fajr start"
+        case .inFajr:
+            return defaults.normalizedDefaultWakeAnchorType == .fajrEnd
+                ? "From Fajr end"
+                : "From Fajr start"
+        }
+    }
+
+    static func defaultWakeOffsetText(for defaults: DefaultAlarmConfig) -> String {
+        wakeOffsetText(
+            state: defaults.defaultWakeState == .preFajr ? .preFajr : .inFajr,
+            anchor: defaults.normalizedDefaultWakeAnchorType,
+            deltaMinutes: defaults.defaultWakeDeltaMinutes,
+            fixedTimeMinutes: nil
+        )
+    }
+
+    static func defaultReserveSummaryText(
+        defaults: DefaultAlarmConfig,
+        settings: AppSettings
+    ) -> String {
+        guard defaults.defaultWakeState == .inFajr,
+              defaults.normalizedDefaultWakeAnchorType == .fajrStart else {
+            return "Not needed"
+        }
+        return "\(settings.clampedReserveBeforeEndMinutes) min"
+    }
+
+    static func latestWakeSummaryText(minutesFromMidnight: Int?) -> String {
+        guard let minutesFromMidnight else { return "Off" }
+        return "Never after \(SettingsSummaryFormatter.timeText(minutesFromMidnight: minutesFromMidnight))"
+    }
+
+    static func defaultFastingCueSummaryText(
+        defaults: DefaultAlarmConfig,
+        settings _: AppSettings
+    ) -> String {
+        var parts: [String] = []
+        if defaults.fastingReminderEnabledDefault && defaults.reminderEnabledDefault {
+            parts.append("Reminder")
+        }
+        if defaults.defaultWakeState == .preFajr && defaults.fajrEnabledDefault {
+            parts.append("Fajr cue")
+        }
+        return parts.isEmpty ? "No extra cues" : parts.joined(separator: " + ")
+    }
+
+    static func soundSummaryText(settings: AppSettings) -> String {
+        let defaultSettings = AppSettings.default
+        let isCustom = settings.preFajrWakeSoundSelectionGlobal != defaultSettings.preFajrWakeSoundSelectionGlobal
+            || settings.fajrStartSoundSelectionGlobal != defaultSettings.fajrStartSoundSelectionGlobal
+            || settings.inFajrWakeSoundSelectionGlobal != defaultSettings.inFajrWakeSoundSelectionGlobal
+            || settings.postFajrWakeSoundSelectionGlobal != defaultSettings.postFajrWakeSoundSelectionGlobal
+            || settings.fixedWakeSoundSelectionGlobal != defaultSettings.fixedWakeSoundSelectionGlobal
+        return isCustom ? "Custom" : "Default"
+    }
+
+    static func wakeStateLabel(for day: ActiveAlarmDay) -> String {
+        if day.effectiveConfig.skipDay {
+            return "Skipped"
+        }
+        if day.decisionLog.plannedWakeState == .fixedWake {
+            return "Fixed wake"
+        }
+        switch day.decisionLog.resolvedWakeState {
+        case .preFajr:
+            return "Before Fajr"
+        case .inFajr:
+            return "During Fajr"
+        case .postFajr:
+            return "After Fajr"
+        }
+    }
+
+    static func wakeOffsetText(
+        state: MorningWakeRuleState,
+        anchor: WakeAnchorType,
+        deltaMinutes: Int,
+        fixedTimeMinutes: Int?
+    ) -> String {
+        switch state {
+        case .preFajr:
+            return deltaMinutes == 1 ? "1 min before Fajr" : "\(deltaMinutes) min before Fajr"
+        case .inFajr:
+            if anchor == .fajrEnd {
+                return deltaMinutes == 1 ? "1 min before Fajr ends" : "\(deltaMinutes) min before Fajr ends"
+            }
+            return deltaMinutes == 1 ? "1 min after Fajr begins" : "\(deltaMinutes) min after Fajr begins"
+        case .postFajr:
+            return deltaMinutes == 1 ? "1 min after Fajr ends" : "\(deltaMinutes) min after Fajr ends"
+        case .fixedWake:
+            guard let fixedTimeMinutes else { return "Fixed wake" }
+            return SettingsSummaryFormatter.timeText(minutesFromMidnight: fixedTimeMinutes)
+        }
+    }
+
+    static func homeHeroTimingText(for day: ActiveAlarmDay) -> String {
+        if day.decisionLog.plannedWakeState == .fixedWake {
+            return "Uses a fixed wake for this morning"
+        }
+        return wakeOffsetText(for: day)
+    }
+
+    static func homeHeroStatusText(for day: ActiveAlarmDay) -> String? {
+        if day.decisionLog.latestWakeCapApplied {
+            return "Moved earlier by your latest wake"
+        }
+        if day.effectiveConfig.hasOverrides {
+            return "Adjusted for this date"
+        }
+        return nil
+    }
+
+    static func wakeOffsetText(for day: ActiveAlarmDay) -> String {
+        let decision = day.decisionLog
+        return wakeOffsetText(
+            state: decision.plannedWakeState,
+            anchor: decision.resolvedAnchor.type,
+            deltaMinutes: decision.resolvedDelta.minutes,
+            fixedTimeMinutes: decision.plannedWakeState == .fixedWake
+                ? DateHelpers.minutesFromMidnight(for: decision.resolvedWakeTime, timeZone: .current)
+                : nil
+        )
+    }
+
+    static func scheduleSecondaryExplanation(
+        for day: ActiveAlarmDay,
+        hasDayOverride: Bool
+    ) -> String? {
+        let availability = wakeAvailabilityPresentation(for: day, hasCustomChange: hasDayOverride)
+        if day.decisionLog.latestWakeCapApplied {
+            return "Moved earlier by latest wake"
+        }
+        if availability.state == .skipped {
+            return nil
+        }
+        if day.decisionLog.plannedWakeState == .fixedWake && hasDayOverride {
+            return "For this date only"
+        }
+        if day.decisionLog.plannedWakeState == .postFajr && hasDayOverride {
+            return "Available for this date only"
+        }
+        if availability.state == .activeOverride {
+            return availability.availabilityLabel
+        }
+        return nil
+    }
+
+    static func wakeExplanationText(
+        for day: ActiveAlarmDay,
+        hasDayOverride: Bool
+    ) -> String {
+        let availability = wakeAvailabilityPresentation(for: day, hasCustomChange: hasDayOverride)
+        let decision = day.decisionLog
+        let stateText = wakeOffsetText(for: day)
+
+        if availability.state == .skipped {
+            return availability.statusSummary
+        }
+
+        if decision.latestWakeCapApplied,
+           let cap = decision.latestWakeCapMinutesFromMidnight {
+            return "\(stateText) · no later than \(SettingsSummaryFormatter.timeText(minutesFromMidnight: cap))"
+        }
+
+        if hasDayOverride && decision.plannedWakeState == .fixedWake {
+            return "Fixed wake for this date"
+        }
+        if hasDayOverride && decision.plannedWakeState == .postFajr {
+            return "\(stateText) · available for this date only"
+        }
+        if hasDayOverride {
+            return "\(stateText) · changed for this date"
+        }
+
+        return stateText
+    }
+
+    static func wakeReasonRows(
+        for day: ActiveAlarmDay,
+        hasDayOverride: Bool
+    ) -> [WakeReasonRow] {
+        var rows: [WakeReasonRow] = []
+
+        rows.append(
+            WakeReasonRow(
+                id: "usual-plan",
+                title: "Usual plan",
+                detail: "\(defaultPlanTitle(for: day)), \(defaultPlanWakeText(for: day))"
+            )
+        )
+
+        if let latestWakeCap = day.decisionLog.latestWakeCapMinutesFromMidnight {
+            rows.append(
+                WakeReasonRow(
+                    id: "latest-wake",
+                    title: "Latest wake limit",
+                    detail: "No later than \(SettingsSummaryFormatter.timeText(minutesFromMidnight: latestWakeCap))"
+                )
+            )
+        }
+
+        if day.decisionLog.latestWakeCapApplied {
+            rows.append(
+                WakeReasonRow(
+                    id: "cap-applied",
+                    title: "Moved earlier",
+                    detail: "Today's wake would have landed later, so your latest wake pulled it earlier."
+                )
+            )
+        }
+
+        let resolved = day.resolvedDayContext
+        let tags = Set(resolved.supportingTags)
+        if tags.contains(.qada) || resolved.primaryContext == .qadaFast {
+            rows.append(WakeReasonRow(id: "qada", title: "Qada", detail: "Counts toward what remains."))
+        } else if tags.contains(.ramadan)
+            || resolved.primaryContext == .fasting
+            || resolved.primaryContext == .suhoor
+            || resolved.primaryContext == .sunnahFast {
+            rows.append(WakeReasonRow(id: "fasting", title: "Fasting", detail: "This morning is planned as a fast."))
+        }
+
+        if resolved.primaryContext == .tahajjud || day.effectiveConfig.tahajjudRefinement {
+            rows.append(WakeReasonRow(id: "tahajjud", title: "Tahajjud", detail: "Added for this date."))
+        }
+
+        if hasDayOverride && day.decisionLog.plannedWakeState == .postFajr {
+            rows.append(
+                WakeReasonRow(
+                    id: "wake-change",
+                    title: "Wake change",
+                    detail: "Moved to after Fajr for this date."
+                )
+            )
+        }
+
+        if hasDayOverride && day.decisionLog.plannedWakeState == .fixedWake {
+            rows.append(
+                WakeReasonRow(
+                    id: "wake-change",
+                    title: "Wake change",
+                    detail: "Set to \(TimeFormatters.timeFormatter.string(from: day.decisionLog.resolvedWakeTime)) for this date."
+                )
+            )
+        }
+
+        return rows
+    }
+
+    static func wakeSourceSummaryText(for day: ActiveAlarmDay) -> String {
+        if day.sourceSummaryText.isEmpty == false {
+            return day.sourceSummaryText
+        }
+        return "Usual morning plan"
     }
 
     static func wakeProgressSnapshot(from events: [DebugEvent]) -> WakeProgressSnapshot {
@@ -377,6 +752,29 @@ enum ProductSurfacePresentation {
         )
     }
 
+    private static func defaultPlanTitle(for day: ActiveAlarmDay) -> String {
+        switch day.effectiveConfig.defaultWakeRule.state {
+        case .preFajr:
+            return "Before Fajr"
+        case .inFajr:
+            return "During Fajr"
+        case .postFajr:
+            return "After Fajr"
+        case .fixedWake:
+            return "Fixed wake"
+        }
+    }
+
+    private static func defaultPlanWakeText(for day: ActiveAlarmDay) -> String {
+        let rule = day.effectiveConfig.defaultWakeRule
+        return wakeOffsetText(
+            state: rule.state,
+            anchor: rule.anchorType ?? .fajrStart,
+            deltaMinutes: rule.deltaMinutes,
+            fixedTimeMinutes: rule.fixedWakeTimeMinutesFromMidnight
+        )
+    }
+
     private static func isConfiguredSpecialMorning(
         day: ActiveAlarmDay,
         overrideDateKeys: Set<String>
@@ -411,8 +809,12 @@ enum ProductSurfacePresentation {
         let primaryTitle = dayMeaningText(for: day, style: .history)
 
         let title: String
-        if hasOverride && nonDefaultProvenances.isEmpty && day.resolvedDayContext.primaryContext == .standard {
-            title = "Adjusted"
+        if hasOverride && day.decisionLog.plannedWakeState == .fixedWake {
+            title = "Fixed wake"
+        } else if hasOverride && day.decisionLog.plannedWakeState == .postFajr {
+            title = "After Fajr"
+        } else if hasOverride && nonDefaultProvenances.isEmpty && day.resolvedDayContext.primaryContext == .standard {
+            title = "Changed"
         } else if day.resolvedDayContext.primaryContext != .standard {
             title = primaryTitle
         } else if let firstProvenance = provenanceLabels.first {
@@ -425,11 +827,11 @@ enum ProductSurfacePresentation {
 
         var subtitleParts = [
             WakeRowPresentation.dateLabel(for: day.date),
-            wakeRelationText(delta: day.decisionLog.resolvedDelta, anchor: day.decisionLog.resolvedAnchor.type)
+            wakeExplanationText(for: day, hasDayOverride: hasOverride)
         ]
 
         if hasOverride && nonDefaultProvenances.isEmpty {
-            subtitleParts.append("Adjusted")
+            subtitleParts.append("Changed")
         } else if let firstProvenance = provenanceLabels.first {
             subtitleParts.append(firstProvenance)
         }

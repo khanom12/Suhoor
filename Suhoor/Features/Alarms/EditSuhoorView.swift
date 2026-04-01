@@ -50,12 +50,12 @@ struct EditSuhoorView: View {
                 }
             } else {
                 Text(Strings.AlarmList.notSetUp)
-                    .font(.footnote)
+                    .font(AppTypography.cardBody)
                     .foregroundStyle(.secondary)
             }
 
             Text(Strings.AlarmDetail.updatesFooter)
-                .font(.footnote)
+                .font(AppTypography.cardBody)
                 .foregroundStyle(.secondary)
         }
     }
@@ -75,11 +75,11 @@ struct EditSuhoorView: View {
             }
 
             Text(Strings.AlarmDetail.wakeHelper)
-                .font(.footnote)
+                .font(AppTypography.cardBody)
                 .foregroundStyle(.secondary)
 
             Text(Strings.AlarmDetail.wakeCustomHelper)
-                .font(.footnote)
+                .font(AppTypography.cardBody)
                 .foregroundStyle(.secondary)
         }
     }
@@ -93,7 +93,7 @@ struct EditSuhoorView: View {
             .frame(maxWidth: .infinity, alignment: .center)
 
             Text(Strings.AlarmDetail.alertDefaultsHelper)
-                .font(.footnote)
+                .font(AppTypography.cardBody)
                 .foregroundStyle(.secondary)
         }
     }
@@ -110,7 +110,7 @@ struct EditSuhoorView: View {
                 }
 
                 Text(Strings.AlarmDetail.snoozeHelper)
-                    .font(.footnote)
+                    .font(AppTypography.cardBody)
                     .foregroundStyle(.secondary)
             }
         }

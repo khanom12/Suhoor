@@ -2,22 +2,23 @@ import SwiftUI
 
 struct FastHistoryView: View {
     @EnvironmentObject private var scheduleManager: ScheduleManager
+    @EnvironmentObject private var completionSurfaceStore: CompletionSurfaceStore
 
     private let days = 30
 
     var body: some View {
-        let snapshot = scheduleManager.fastHistorySurfaceSnapshot(days: days)
+        let snapshot = completionSurfaceStore.state.fastHistorySnapshot
 
         List {
             Section {
                 if snapshot.rows.isEmpty {
                     Text(snapshot.emptyText)
-                        .font(.footnote)
+                        .font(AppTypography.cardBody)
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(snapshot.rows) { row in
                         HistoryRow(row: row) { intent in
-                            scheduleManager.performCompletionEdit(intent)
+                            scheduleManager.performCompletionEdit(intent, source: .historyEdit)
                         }
                     }
                 }
@@ -40,16 +41,16 @@ struct FastHistoryView: View {
                 HStack(alignment: .top, spacing: DesignTokens.spacingM) {
                     VStack(alignment: .leading, spacing: DesignTokens.spacingXS) {
                         Text(row.gregorianText)
-                            .font(DesignTokens.cardTitleFont)
+                            .font(AppTypography.cardTitle)
                         Text(row.hijriText)
-                            .font(DesignTokens.cardSubtitleFont)
+                            .font(AppTypography.cardBody)
                             .foregroundStyle(.secondary)
                         Text(row.meaningText)
-                            .font(DesignTokens.cardSubtitleFont)
+                            .font(AppTypography.cardBody)
                             .foregroundStyle(.secondary)
                         if let qadaEffectText = row.qadaEffectText {
                             Text(qadaEffectText)
-                                .font(DesignTokens.cardSubtitleFont)
+                                .font(AppTypography.cardBody)
                                 .foregroundStyle(.secondary)
                         }
                     }
@@ -57,7 +58,7 @@ struct FastHistoryView: View {
                     Spacer()
 
                     Text(row.statusText)
-                        .font(.footnote.weight(.semibold))
+                        .font(AppTypography.metricLabel)
                         .foregroundStyle(statusColor)
                 }
 

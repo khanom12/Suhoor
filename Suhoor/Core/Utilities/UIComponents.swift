@@ -9,7 +9,7 @@ struct TimeText: View {
 
     var body: some View {
         if let parts = timeParts {
-            HStack(alignment: .firstTextBaseline, spacing: 4) {
+            HStack(alignment: .firstTextBaseline, spacing: DesignTokens.textSpacingTight) {
                 Text(parts.main)
                     .font(font)
                     .monospacedDigit()
@@ -66,9 +66,9 @@ struct RuleBadgeView: View {
 
     var body: some View {
         Text(text)
-            .font(.caption2.weight(.semibold))
-            .padding(.horizontal, 6)
-            .padding(.vertical, 3)
+            .font(AppTypography.badge)
+            .padding(.horizontal, DesignTokens.badgeHorizontalPadding)
+            .padding(.vertical, DesignTokens.badgeVerticalPadding)
             .foregroundStyle(.secondary)
             .background(
                 Capsule(style: .continuous)
@@ -84,23 +84,23 @@ struct MaterialBannerView: View {
     let action: (() -> Void)?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: DesignTokens.textSpacingCompact) {
             Text(title)
-                .font(.subheadline.weight(.semibold))
+                .font(AppTypography.rowTitle)
                 .foregroundStyle(.primary)
 
             if let message = message {
                 Text(message)
-                    .font(.footnote)
+                    .font(AppTypography.cardBody)
                     .foregroundStyle(.secondary)
             }
 
             if let actionTitle = actionTitle, let action = action {
                 Button(actionTitle, action: action)
-                    .font(.footnote.weight(.semibold))
+                    .font(AppTypography.metricLabel)
             }
         }
-        .padding(12)
+        .padding(DesignTokens.rowVerticalPadding)
         .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 }
@@ -110,15 +110,15 @@ struct TwoLineTitleView: View {
     let dateLine: String
 
     var body: some View {
-        VStack(spacing: 2) {
+        VStack(spacing: DesignTokens.textSpacingMicro) {
             Text(titleLine)
-                .font(.headline.weight(.semibold))
+                .font(AppTypography.cardTitle)
                 .foregroundStyle(Color.black)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
                 .allowsTightening(true)
             Text(dateLine)
-                .font(.subheadline)
+                .font(AppTypography.metricValue)
                 .foregroundStyle(Color.black.opacity(0.85))
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
@@ -135,7 +135,7 @@ struct SingleLineTitleView: View {
 
     var body: some View {
         Text(titleLine)
-            .font(.headline.weight(.semibold))
+            .font(AppTypography.cardTitle)
             .foregroundStyle(Color.black)
             .lineLimit(1)
             .minimumScaleFactor(0.8)
@@ -169,15 +169,15 @@ struct CollapsingHeaderView: View {
                         .stroke(Color.white.opacity(0.2), lineWidth: 0.5)
                 )
 
-            VStack(spacing: 2) {
+            VStack(spacing: DesignTokens.textSpacingMicro) {
                 Text(title)
-                    .font(.headline.weight(.semibold))
+                    .font(AppTypography.cardTitle)
                     .foregroundStyle(Color.black)
                     .lineLimit(1)
                     .minimumScaleFactor(0.85)
                 if let subtitle {
                     Text(subtitle)
-                        .font(.subheadline)
+                        .font(AppTypography.metricValue)
                         .foregroundStyle(Color.black.opacity(0.85))
                         .lineLimit(1)
                         .minimumScaleFactor(0.85)
@@ -185,7 +185,7 @@ struct CollapsingHeaderView: View {
                 }
                 if let tertiary {
                     Text(tertiary)
-                        .font(.footnote.weight(.semibold))
+                        .font(AppTypography.metricLabel)
                         .foregroundStyle(Color.black.opacity(0.85))
                         .lineLimit(1)
                         .minimumScaleFactor(0.85)

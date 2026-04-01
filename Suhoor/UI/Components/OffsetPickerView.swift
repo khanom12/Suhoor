@@ -45,7 +45,7 @@ struct OffsetPickerView: View {
 
             if let sentenceText {
                 Text(sentenceText(baseMinutes))
-                    .font(.footnote)
+                    .font(AppTypography.cardBody)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -88,20 +88,20 @@ struct OffsetPickerView: View {
             }
         } label: {
             let subtitle = presetLabels?[minutes]
-            VStack(spacing: 2) {
+            VStack(spacing: DesignTokens.textSpacingMicro) {
                 Text("\(minutes) min")
-                    .font(.callout.weight(.semibold))
+                    .font(AppTypography.rowTitle)
                 if let subtitle {
                     Text(subtitle)
-                        .font(.caption2)
+                        .font(AppTypography.rowMeta)
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
                 }
             }
             .multilineTextAlignment(.center)
             .frame(maxWidth: .infinity, minHeight: tileHeight)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 6)
+            .padding(.horizontal, DesignTokens.compactChipHorizontalPadding)
+            .padding(.vertical, DesignTokens.compactChipVerticalPadding)
             .background(tileFill(isSelected: isSelected), in: tileShape)
             .overlay {
                 tileShape
@@ -122,10 +122,10 @@ struct OffsetPickerView: View {
             }
         } label: {
             Text("Custom")
-                .font(.callout.weight(.semibold))
+                .font(AppTypography.rowTitle)
                 .frame(maxWidth: .infinity, minHeight: tileHeight)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 6)
+                .padding(.horizontal, DesignTokens.compactChipHorizontalPadding)
+                .padding(.vertical, DesignTokens.compactChipVerticalPadding)
                 .background(tileFill(isSelected: isSelected), in: tileShape)
                 .overlay {
                     tileShape
@@ -158,7 +158,8 @@ struct OffsetPickerView: View {
             }
 
             Text("\(baseMinutes) min")
-                .font(.headline.weight(.semibold).monospacedDigit())
+                .font(AppTypography.summaryMetricValue)
+                .monospacedDigit()
                 .frame(minWidth: 92, minHeight: 44)
 
             stepButton(systemImage: "plus") {
@@ -169,7 +170,7 @@ struct OffsetPickerView: View {
         }
         .frame(maxWidth: 220)
         .frame(maxWidth: .infinity)
-        .padding(.horizontal, 4)
+        .padding(.horizontal, DesignTokens.textSpacingTight)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Custom offset")
         .accessibilityValue("\(baseMinutes) minutes")
@@ -178,7 +179,7 @@ struct OffsetPickerView: View {
     private func stepButton(systemImage: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: systemImage)
-                .font(.headline.weight(.semibold))
+                .font(AppTypography.controlIcon)
                 .frame(width: 44, height: 44)
         }
         .buttonStyle(CustomStepButtonStyle())

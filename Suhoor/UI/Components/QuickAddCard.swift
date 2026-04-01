@@ -28,16 +28,16 @@ struct QuickAddCard<LeadingAccessory: View, Action: View>: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .top, spacing: 12) {
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack(spacing: 8) {
+        VStack(alignment: .leading, spacing: DesignTokens.textSpacingMedium) {
+            HStack(alignment: .top, spacing: DesignTokens.space12) {
+                VStack(alignment: .leading, spacing: DesignTokens.textSpacingCompact) {
+                    HStack(spacing: DesignTokens.inlineSpacingMedium) {
                         Text(title)
-                            .font(.body.weight(.semibold))
+                            .font(AppTypography.rowTitle)
                         leadingAccessory()
                     }
                     Text(description)
-                        .font(.footnote)
+                        .font(AppTypography.rowBody)
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
                 }
@@ -47,14 +47,14 @@ struct QuickAddCard<LeadingAccessory: View, Action: View>: View {
 
             if let previewLine {
                 Text(previewLine)
-                    .font(.footnote)
+                    .font(AppTypography.rowBody)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
             }
 
             if let statusLine {
                 Text(statusLine)
-                    .font(.footnote)
+                    .font(AppTypography.rowBody)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
             }
@@ -62,11 +62,11 @@ struct QuickAddCard<LeadingAccessory: View, Action: View>: View {
             if let detailLine {
                 DisclosureGroup(Strings.AddSchedule.detailsTitle) {
                     Text(detailLine)
-                        .font(.footnote)
+                        .font(AppTypography.rowBody)
                         .foregroundStyle(.secondary)
-                        .padding(.top, 4)
+                        .padding(.top, DesignTokens.textSpacingTight)
                 }
-                .font(.footnote.weight(.semibold))
+                .font(AppTypography.metricLabel)
                 .foregroundStyle(.secondary)
             }
         }

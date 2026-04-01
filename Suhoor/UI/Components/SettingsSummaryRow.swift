@@ -6,25 +6,23 @@ struct SettingsSummaryRow: View {
     let systemImage: String
     var badgeText: String? = nil
     var badgeTone: SettingsBadgeTone = .neutral
+    var showsDisclosureIndicator: Bool = false
 
     var body: some View {
         HStack(spacing: DesignTokens.spacingM) {
             Image(systemName: systemImage)
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(DawnColor.accent)
-                .frame(width: 30, height: 30)
-                .background(
-                    Circle()
-                        .fill(DawnColor.glassWarmOverlay.opacity(0.14))
-                )
+                .font(AppTypography.controlIcon)
+                .foregroundStyle(.primary)
+                .frame(width: DesignTokens.regularControlFrame, height: DesignTokens.regularControlFrame)
+                .background(iconBackground)
 
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: DesignTokens.textSpacingMicro) {
                 Text(title)
-                    .font(.body.weight(.semibold))
+                    .font(AppTypography.rowTitle)
                     .foregroundStyle(.primary)
 
                 Text(subtitle)
-                    .font(.footnote)
+                    .font(AppTypography.rowBody)
                     .foregroundStyle(.secondary)
                     .lineLimit(3)
                     .fixedSize(horizontal: false, vertical: true)
@@ -35,10 +33,25 @@ struct SettingsSummaryRow: View {
             if let badgeText {
                 SettingsStatusBadge(text: badgeText, tone: badgeTone)
             }
+
+            if showsDisclosureIndicator {
+                Image(systemName: "chevron.right")
+                    .font(AppTypography.navAccessory)
+                    .foregroundStyle(.tertiary)
+            }
         }
-        .frame(minHeight: 56)
+        .frame(minHeight: DesignTokens.settingsSummaryMinHeight)
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
+    }
+
+    private var iconBackground: some View {
+        Circle()
+            .fill(Color.secondary.opacity(0.10))
+            .overlay {
+                Circle()
+                    .stroke(Color.white.opacity(0.08), lineWidth: 1)
+            }
     }
 }
 
@@ -81,10 +94,10 @@ struct SettingsStatusBadge: View {
 
     var body: some View {
         Text(text)
-            .font(.caption.weight(.semibold))
+            .font(AppTypography.badge)
             .foregroundStyle(tone.foregroundStyle)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
+            .padding(.horizontal, DesignTokens.badgeHorizontalPadding)
+            .padding(.vertical, DesignTokens.badgeVerticalPadding)
             .background(
                 Capsule(style: .continuous)
                     .fill(tone.backgroundStyle)

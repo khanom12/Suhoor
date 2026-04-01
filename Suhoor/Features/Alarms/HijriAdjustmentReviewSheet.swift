@@ -10,17 +10,17 @@ struct HijriAdjustmentReviewSheet: View {
         NavigationStack {
             List {
                 ForEach(changes) { change in
-                    VStack(alignment: .leading, spacing: 6) {
+                    VStack(alignment: .leading, spacing: DesignTokens.textSpacingCompact) {
                         Text(hijriLabel(for: change))
-                            .font(.headline)
+                            .font(AppTypography.rowTitle)
                         Text(dateShiftText(for: change))
-                            .font(.subheadline)
+                            .font(AppTypography.metricValue)
                             .foregroundStyle(.secondary)
                         Text(change.sourceLabel)
-                            .font(.footnote)
+                            .font(AppTypography.rowBody)
                             .foregroundStyle(.secondary)
                     }
-                    .padding(.vertical, 4)
+                    .padding(.vertical, DesignTokens.textSpacingTight)
                 }
             }
             .navigationTitle(Strings.AlarmList.hijriAdjustmentsReviewTitle)

@@ -47,7 +47,7 @@ struct PlanWhiteDaysView: View {
                     NavigationLink("Manage corrections") {
                         HijriCalendarSettingsView()
                     }
-                    .font(.footnote.weight(.semibold))
+                    .font(AppTypography.metricLabel)
                 }
             }
         }

@@ -207,25 +207,26 @@ struct AboutTagSheet: View {
                 VStack(alignment: .leading, spacing: 16) {
                     if let subtitle = about.subtitle {
                         Text(subtitle)
-                            .font(.footnote)
+                            .font(AppTypography.cardBody)
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
 
                     Text(about.aboutText)
-                        .font(.body)
+                        .font(AppTypography.rowTitle)
                         .fixedSize(horizontal: false, vertical: true)
 
                     if !about.bullets.isEmpty {
-                        VStack(alignment: .leading, spacing: 6) {
+                        VStack(alignment: .leading, spacing: DesignTokens.textSpacingCompact) {
                             Text("When it applies")
-                                .font(.footnote.weight(.semibold))
+                                .font(AppTypography.metricLabel)
                                 .foregroundStyle(.secondary)
                             ForEach(about.bullets, id: \.self) { bullet in
-                                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                                HStack(alignment: .firstTextBaseline, spacing: DesignTokens.textSpacingCompact) {
                                     Text("•")
                                         .foregroundStyle(.secondary)
                                     Text(bullet)
+                                        .font(AppTypography.cardBody)
                                         .fixedSize(horizontal: false, vertical: true)
                                 }
                             }
@@ -234,7 +235,7 @@ struct AboutTagSheet: View {
 
                     if about.showsScheduleNote {
                         Text("This does not change your alarm schedule.")
-                            .font(.caption)
+                            .font(AppTypography.rowMeta)
                             .foregroundStyle(.secondary)
                     }
                 }

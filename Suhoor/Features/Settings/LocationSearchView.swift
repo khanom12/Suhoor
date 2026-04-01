@@ -19,70 +19,87 @@ struct LocationSearchView: View {
     }
 
     var body: some View {
-        List {
-            Section {
+        SettingsScrollPage {
+            SettingsGroup(title: Strings.Settings.locationSearchLocalSection) {
                 if localResults.isEmpty {
-                    Text(Strings.Settings.locationSearchNoResults)
-                        .foregroundStyle(.secondary)
+                    SettingsRow {
+                        Text(Strings.Settings.locationSearchNoResults)
+                            .foregroundStyle(.secondary)
+                    }
                 } else {
-                    ForEach(localResults) { city in
+                    ForEach(Array(localResults.enumerated()), id: \.element.id) { index, city in
                         Button {
                             onSelectCity(city)
                             dismiss()
                         } label: {
-                            HStack {
-                                Text(city.name)
-                                    .foregroundStyle(.primary)
-                                Spacer()
-                                if city.name == selectedName {
-                                    Image(systemName: "checkmark")
-                                        .foregroundStyle(DawnColor.accent)
+                            SettingsRow {
+                                HStack {
+                                    Text(city.name)
+                                        .foregroundStyle(.primary)
+                                    Spacer()
+                                    if city.name == selectedName {
+                                        Image(systemName: "checkmark")
+                                            .foregroundStyle(DawnColor.accent)
+                                    }
                                 }
                             }
                         }
+                        .buttonStyle(.plain)
+
+                        if index < localResults.count - 1 {
+                            AppGroupDivider()
+                        }
                     }
                 }
-            } header: {
-                Text(Strings.Settings.locationSearchLocalSection)
             }
 
-            Section {
+            SettingsGroup(title: Strings.Settings.locationSearchOnlineSection) {
                 if isSearching {
-                    HStack {
-                        Spacer()
-                        ProgressView()
-                        Spacer()
+                    SettingsRow {
+                        HStack {
+                            Spacer()
+                            ProgressView()
+                            Spacer()
+                        }
                     }
                 } else if let errorMessage {
-                    Text(errorMessage)
-                        .foregroundStyle(.secondary)
+                    SettingsRow {
+                        Text(errorMessage)
+                            .foregroundStyle(.secondary)
+                    }
                 } else if onlineResults.isEmpty {
-                    Text(Strings.Settings.locationSearchPrompt)
-                        .foregroundStyle(.secondary)
+                    SettingsRow {
+                        Text(Strings.Settings.locationSearchPrompt)
+                            .foregroundStyle(.secondary)
+                    }
                 } else {
-                    ForEach(onlineResults) { result in
+                    ForEach(Array(onlineResults.enumerated()), id: \.element.id) { index, result in
                         Button {
                             onSelectMapItem(result.mapItem)
                             dismiss()
                         } label: {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(primaryLine(for: result.mapItem))
-                                    .foregroundStyle(.primary)
-                                if let secondary = secondaryLine(for: result.mapItem) {
-                                    Text(secondary)
-                                        .font(.footnote)
-                                        .foregroundStyle(.secondary)
+                            SettingsRow {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(primaryLine(for: result.mapItem))
+                                        .foregroundStyle(.primary)
+                                    if let secondary = secondaryLine(for: result.mapItem) {
+                                        Text(secondary)
+                                            .font(.footnote)
+                                            .foregroundStyle(.secondary)
+                                    }
                                 }
+                                .frame(maxWidth: .infinity, alignment: .leading)
                             }
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .buttonStyle(.plain)
+
+                        if index < onlineResults.count - 1 {
+                            AppGroupDivider()
                         }
                     }
                 }
-            } header: {
-                Text(Strings.Settings.locationSearchOnlineSection)
             }
         }
-        .listStyle(.insetGrouped)
         .navigationTitle(Strings.Settings.locationSearchTitle)
         .navigationBarTitleDisplayMode(.inline)
         .searchable(text: $query, prompt: Strings.Settings.locationSearchPlaceholder)

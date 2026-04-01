@@ -342,8 +342,13 @@ struct ScheduleManagerHijriTests {
         let legacyDefaults = DefaultAlarmConfig(
             suhoorEnabledDefault: false,
             reminderEnabledDefault: false,
+            fastingReminderEnabledDefault: false,
             fajrEnabledDefault: false,
             iftarEnabledDefault: true,
+            defaultWakeState: .preFajr,
+            defaultWakeAnchorType: .fajrStart,
+            defaultWakeDeltaMinutes: 30,
+            defaultLatestWakeCapMinutesFromMidnight: nil,
             defaultSuhoorTimeMode: .relativeToFajrMinusMinutes,
             defaultSuhoorOffsetMinutes: 30,
             defaultReminderTimeMode: .beforeFajr,
@@ -1238,11 +1243,14 @@ struct ScheduleManagerHijriTests {
         )
 
         let resolution = MorningScheduleResolver.resolve(input: input)
+        let boundaryEvent = resolution?.decisionLog.materializedEvents.first(where: { $0.type == .fajrBoundaryNotice })
 
         #expect(resolution != nil)
         #expect(resolution?.decisionLog.dateKey == dateKey)
         #expect(resolution?.decisionLog.materializedEvents.isEmpty == false)
-        #expect(resolution?.decisionLog.materializedEvents.contains(where: { $0.type == .fajrBoundaryNotice }) == false)
+        #expect(boundaryEvent != nil)
+        #expect(boundaryEvent?.deliveryKinds.isEmpty == true)
+        #expect(boundaryEvent?.fajrStartBehavior == .takeoverIfUnresolvedOtherwiseCue)
         #expect(resolution?.resolvedDayContext.primaryContext == .standard)
     }
 
@@ -1345,10 +1353,16 @@ struct ScheduleManagerHijriTests {
 
     @Test
     func morningPlanResolverPrefersExplicitOverrideOverContextPlans() {
+        let wakeRule = MorningWakeRule(
+            state: .preFajr,
+            anchorType: .fajrStart,
+            deltaMinutes: 45
+        )
         let defaultPlan = MorningPlan(
             id: "default-daily",
             title: "Daily morning plan",
             kind: .defaultDaily,
+            wakeRule: wakeRule,
             wakeAnchorType: .fajrStart,
             wakeDelta: WakeDelta(relation: .before, minutes: 45),
             fixedWakeTimeCompatibilityMinutesFromMidnight: nil,
@@ -1608,18 +1622,176 @@ struct ScheduleManagerHijriTests {
         let progressSnapshot = manager.progressSurfaceSnapshot(
             wakeProgressSource: FixedWakeProgressSource()
         )
+        let fajrWindowSnapshot = manager.fajrWindowSurfaceSnapshot(
+            period: .sevenDays,
+            overlay: .compareSafe,
+            selectedDateKey: tomorrowKey,
+            timeZone: timeZone
+        )
 
         #expect(wakeSnapshot.overrideDateKeys.contains(tomorrowKey))
         #expect(wakeSnapshot.visibleDays.contains(where: { $0.dateKey == tomorrowKey }))
         #expect(homeSnapshot.heroLabel?.isEmpty == false)
-        #expect(homeSnapshot.heroSubline?.contains("Fajr at") == true)
+        #expect(homeSnapshot.heroSubline?.contains("Fajr at") == false)
+        #expect(homeSnapshot.heroPresentation?.descriptorText.isEmpty == false)
+        #expect(homeSnapshot.heroPresentation?.explanationText.isEmpty == false)
         #expect(plansSnapshot.configuredPlansSnapshot.upcomingSpecialMornings.isEmpty == false)
-        #expect(plansSnapshot.defaultMorningPlanSummary.wakeLead.isEmpty == false)
+        #expect(plansSnapshot.defaultMorningPlanSummary.wakeTiming.isEmpty == false)
         #expect(progressSnapshot.fajrTodaySummary == "Fajr completed")
         #expect(progressSnapshot.fastTodaySummary == "Qada completed")
         #expect(progressSnapshot.fastSectionTitle.isEmpty == false)
         #expect(progressSnapshot.qadaProgress.remaining == 1)
         #expect(progressSnapshot.wakeProgress.summaryTitle == "Wake activity")
+        #expect(fajrWindowSnapshot.activeOverlay == .compareSafe)
+        #expect(fajrWindowSnapshot.selectedDateKey == tomorrowKey)
+        #expect(fajrWindowSnapshot.points.contains(where: { $0.dateKey == tomorrowKey && $0.isOverride }))
+        #expect(fajrWindowSnapshot.selectedDay?.comparisonItem?.label == "Safer option")
+    }
+
+    @Test
+    @MainActor
+    func fajrWindowCachingReusesDatasetAndOverlayWorkUntilRevisionChanges() async throws {
+        let suiteName = "ScheduleManagerHijriTests.FajrWindowCaching"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+
+        let settingsStore = SuhoorSettingsStore(defaults: defaults)
+        settingsStore.update { draft in
+            draft.isConfigured = true
+            draft.locationMode = .fixed
+            draft.fixedLocation = FixedLocation(latitude: 43.6532, longitude: -79.3832)
+        }
+
+        let manager = ScheduleManager(
+            settingsStore: settingsStore,
+            locationService: LocationService(),
+            alarmConfigStore: AlarmConfigStore(defaultsStore: defaults),
+            hijriAdjustmentStore: HijriMonthAdjustmentStore(defaults: defaults),
+            cacheStore: ScheduleCacheStore(defaults: defaults)
+        )
+
+        await manager.refreshSchedules(force: true)
+        let firstSelectedKey = try #require(manager.activeWindowSnapshot.visibleDays.first?.dateKey)
+        let secondSelectedKey = try #require(manager.activeWindowSnapshot.visibleDays.dropFirst().first?.dateKey)
+
+        _ = manager.fajrWindowSurfaceSnapshot(
+            period: .oneYear,
+            overlay: .myWake,
+            selectedDateKey: firstSelectedKey,
+            timeZone: timeZone
+        )
+        let datasetBuildCount = manager.fajrWindowDatasetBuildCount
+
+        _ = manager.fajrWindowSurfaceSnapshot(
+            period: .oneYear,
+            overlay: .myWake,
+            selectedDateKey: secondSelectedKey,
+            timeZone: timeZone
+        )
+        #expect(manager.fajrWindowDatasetBuildCount == datasetBuildCount)
+
+        _ = manager.fajrWindowSurfaceSnapshot(
+            period: .oneYear,
+            overlay: .compareFasting,
+            selectedDateKey: firstSelectedKey,
+            timeZone: timeZone
+        )
+        let fastingOverlayBuildCount = manager.fajrWindowOverlayBuildCounts[.compareFasting] ?? 0
+
+        _ = manager.fajrWindowSurfaceSnapshot(
+            period: .oneYear,
+            overlay: .compareFasting,
+            selectedDateKey: secondSelectedKey,
+            timeZone: timeZone
+        )
+        #expect((manager.fajrWindowOverlayBuildCounts[.compareFasting] ?? 0) == fastingOverlayBuildCount)
+
+        await manager.refreshSchedules(force: true)
+        _ = manager.fajrWindowSurfaceSnapshot(
+            period: .oneYear,
+            overlay: .myWake,
+            selectedDateKey: firstSelectedKey,
+            timeZone: timeZone
+        )
+        #expect(manager.fajrWindowDatasetBuildCount == datasetBuildCount + 1)
+    }
+
+    @Test
+    @MainActor
+    func fajrWindowDetailStoreDoesNotEagerlyBuildFastingOverlayOnLoadOrPeriodChange() async throws {
+        let suiteName = "ScheduleManagerHijriTests.FajrWindowNoPrefetch"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .autoupdatingCurrent
+        let manager = await makeConfiguredScheduleManager(defaults: defaults)
+        let store = FajrWindowDetailStore()
+
+        store.load(using: manager, timeZone: timeZone)
+        #expect((manager.fajrWindowOverlayBuildCounts[.compareFasting] ?? 0) == 0)
+
+        store.setPeriod(.thirtyDays, using: manager, timeZone: timeZone)
+        #expect((manager.fajrWindowOverlayBuildCounts[.compareFasting] ?? 0) == 0)
+    }
+
+    @Test
+    @MainActor
+    func fajrWindowDetailStoreBuildsFastingOverlayOnDemandAndReusesCache() async throws {
+        let suiteName = "ScheduleManagerHijriTests.FajrWindowOnDemandOverlay"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .autoupdatingCurrent
+        let manager = await makeConfiguredScheduleManager(defaults: defaults)
+        let store = FajrWindowDetailStore()
+
+        store.load(using: manager, timeZone: timeZone)
+        store.setOverlay(.compareFasting, using: manager, timeZone: timeZone)
+        #expect(store.requestedOverlay == .compareFasting)
+
+        await waitForFajrOverlayLoad(in: store)
+        let firstBuildCount = manager.fajrWindowOverlayBuildCounts[.compareFasting] ?? 0
+        #expect(firstBuildCount == 1)
+
+        store.setOverlay(.myWake, using: manager, timeZone: timeZone)
+        store.setOverlay(.compareFasting, using: manager, timeZone: timeZone)
+        await waitForFajrOverlayLoad(in: store)
+
+        #expect((manager.fajrWindowOverlayBuildCounts[.compareFasting] ?? 0) == firstBuildCount)
+    }
+
+    @Test
+    @MainActor
+    func fajrWindowDetailStoreRefreshContextReloadsForTimezoneChanges() async throws {
+        let suiteName = "ScheduleManagerHijriTests.FajrWindowRefreshContext"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        let manager = await makeConfiguredScheduleManager(defaults: defaults)
+        let store = FajrWindowDetailStore()
+        let toronto = TimeZone(identifier: "America/Toronto") ?? .autoupdatingCurrent
+        let london = TimeZone(identifier: "Europe/London") ?? .autoupdatingCurrent
+        let now = Date(timeIntervalSince1970: 1_774_337_200)
+
+        store.refreshIfNeeded(
+            using: manager,
+            refreshContext: .current(revision: manager.currentRevision, now: now, timeZone: toronto),
+            timeZone: toronto
+        )
+        let initialBuildCount = manager.fajrWindowDatasetBuildCount
+        #expect(initialBuildCount == 1)
+
+        store.refreshIfNeeded(
+            using: manager,
+            refreshContext: .current(revision: manager.currentRevision, now: now, timeZone: toronto),
+            timeZone: toronto
+        )
+        #expect(manager.fajrWindowDatasetBuildCount == initialBuildCount)
+
+        store.refreshIfNeeded(
+            using: manager,
+            refreshContext: .current(revision: manager.currentRevision, now: now, timeZone: london),
+            timeZone: london
+        )
+        #expect(manager.fajrWindowDatasetBuildCount == initialBuildCount + 1)
     }
 
     @Test
@@ -1768,7 +1940,7 @@ struct ScheduleManagerHijriTests {
 
     @Test
     @MainActor
-    func wakeRowPresentationUsesMeaningFirstDetailWithoutChips() async {
+    func wakeRowPresentationUsesResolvedStateAndAdjustmentCopy() async {
         let suiteName = "ScheduleManagerHijriTests.WakeRowPresentation"
         let defaults = UserDefaults(suiteName: suiteName)!
         defaults.removePersistentDomain(forName: suiteName)
@@ -1825,9 +1997,10 @@ struct ScheduleManagerHijriTests {
 
         let presentation = ProductSurfacePresentation.scheduleRowPresentation(for: activeDay, hasDayOverride: true)
         #expect(presentation.meaningText.isEmpty == false)
-        #expect(presentation.detailText.contains("Adjusted"))
-        #expect(presentation.detailText.contains("Fajr at"))
-        #expect(presentation.chipTitles.isEmpty)
+        #expect(presentation.stateLabel.isEmpty == false)
+        #expect(presentation.secondaryExplanation == "Changed for this date")
+        #expect(presentation.detailText.contains("before Fajr"))
+        #expect(presentation.chipTitles.contains("Changed"))
     }
 
     private static func makeDate(
@@ -1901,7 +2074,14 @@ struct ScheduleManagerHijriTests {
         fajrEnabled: Bool,
         hasOverrides: Bool = false
     ) -> EffectiveDailyConfig {
-        EffectiveDailyConfig(
+        let wakeRule = MorningWakeRule(
+            state: suhoorTimeMode == .fixedTime ? .fixedWake : .preFajr,
+            anchorType: suhoorTimeMode == .fixedTime ? .clockTime : .fajrStart,
+            deltaMinutes: suhoorTimeMode == .fixedTime ? 0 : suhoorOffsetMinutes,
+            fixedWakeTimeMinutesFromMidnight: suhoorTimeMode == .fixedTime ? suhoorOffsetMinutes : nil,
+            isLegacyFixedWakeCompatibility: suhoorTimeMode == .fixedTime
+        )
+        return EffectiveDailyConfig(
             date: date,
             defaultsActive: true,
             skipDay: false,
@@ -1909,6 +2089,10 @@ struct ScheduleManagerHijriTests {
             reminderEnabled: true,
             fajrEnabled: fajrEnabled,
             iftarEnabled: false,
+            defaultWakeRule: wakeRule,
+            resolvedWakeRule: wakeRule,
+            wakeRuleWasOverridden: hasOverrides,
+            tahajjudRefinement: false,
             suhoorTimeMode: suhoorTimeMode,
             suhoorOffsetMinutes: suhoorOffsetMinutes,
             reminderTimeMode: .beforeFajr,
@@ -1921,6 +2105,37 @@ struct ScheduleManagerHijriTests {
             iftarSoundChoice: .adhanSoft,
             hasOverrides: hasOverrides
         )
+    }
+
+    @MainActor
+    private func makeConfiguredScheduleManager(defaults: UserDefaults) async -> ScheduleManager {
+        let settingsStore = SuhoorSettingsStore(defaults: defaults)
+        settingsStore.update { draft in
+            draft.isConfigured = true
+            draft.locationMode = .fixed
+            draft.fixedLocation = FixedLocation(latitude: 43.6532, longitude: -79.3832)
+        }
+
+        let manager = ScheduleManager(
+            settingsStore: settingsStore,
+            locationService: LocationService(),
+            alarmConfigStore: AlarmConfigStore(defaultsStore: defaults),
+            hijriAdjustmentStore: HijriMonthAdjustmentStore(defaults: defaults),
+            cacheStore: ScheduleCacheStore(defaults: defaults)
+        )
+
+        await manager.refreshSchedules(force: true)
+        return manager
+    }
+
+    @MainActor
+    private func waitForFajrOverlayLoad(in store: FajrWindowDetailStore) async {
+        for _ in 0..<12 {
+            if store.loadingOverlay == nil {
+                return
+            }
+            await Task.yield()
+        }
     }
 
 }

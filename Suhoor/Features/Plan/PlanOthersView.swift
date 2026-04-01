@@ -54,7 +54,7 @@ struct PlanOthersView: View {
             Section {
                 HStack {
                     Text("\(selectedKeys.count)/\(scheduleCount) selected")
-                        .font(.footnote)
+                        .font(AppTypography.cardBody)
                         .foregroundStyle(.secondary)
                     Spacer()
                 }

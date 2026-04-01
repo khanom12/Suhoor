@@ -9,81 +9,95 @@ struct SettingsRootView: View {
     @State private var showingCopiedAlert = false
 
     var body: some View {
-        Form {
+        SettingsScrollPage {
             if !issues.isEmpty {
-                Section {
+                SettingsGroup(title: Strings.Settings.needsAttentionSection) {
                     ForEach(issues) { issue in
                         NavigationLink {
                             destinationView(for: issue.destination)
                         } label: {
-                            SettingsSummaryRow(
-                                title: issue.title,
-                                subtitle: issue.message,
-                                systemImage: issue.systemImage,
-                                badgeText: issue.statusText,
-                                badgeTone: badgeTone(for: issue.tone)
-                            )
+                            SettingsRow {
+                                SettingsSummaryRow(
+                                    title: issue.title,
+                                    subtitle: issue.message,
+                                    systemImage: issue.systemImage,
+                                    badgeText: issue.statusText,
+                                    badgeTone: badgeTone(for: issue.tone),
+                                    showsDisclosureIndicator: true
+                                )
+                            }
+                        }
+
+                        if issue.id != issues.last?.id {
+                            AppGroupDivider()
                         }
                     }
-                } header: {
-                    SettingsSectionHeader(title: Strings.Settings.needsAttentionSection)
                 }
             }
 
             ForEach(SettingsDestinationGroup.allCases) { group in
-                Section {
-                    ForEach(group.destinations) { destination in
+                SettingsGroup(title: group.title) {
+                    ForEach(Array(group.destinations.enumerated()), id: \.element.id) { index, destination in
                         NavigationLink {
                             destinationView(for: destination)
                         } label: {
-                            SettingsSummaryRow(
-                                title: destination.title,
-                                subtitle: summary(for: destination),
-                                systemImage: destination.systemImage,
-                                badgeText: badgeText(for: destination),
-                                badgeTone: badgeTone(for: destination)
-                            )
+                            SettingsRow {
+                                SettingsSummaryRow(
+                                    title: destination.title,
+                                    subtitle: summary(for: destination),
+                                    systemImage: destination.systemImage,
+                                    badgeText: badgeText(for: destination),
+                                    badgeTone: badgeTone(for: destination),
+                                    showsDisclosureIndicator: true
+                                )
+                            }
+                        }
+
+                        if index < group.destinations.count - 1 {
+                            AppGroupDivider()
                         }
                     }
-                } header: {
-                    SettingsSectionHeader(title: group.title)
                 }
             }
 
-            Section {
+            SettingsGroup(
+                title: "Support",
+                footer: "Diagnostics leave out precise location unless you add it yourself."
+            ) {
                 Button {
                     openFeedbackEmail()
                 } label: {
-                    SettingsSummaryRow(
-                        title: "Send Feedback",
-                        subtitle: "Share feedback or report a problem.",
-                        systemImage: "envelope",
-                        badgeText: nil,
-                        badgeTone: .neutral
-                    )
+                    SettingsRow {
+                        SettingsSummaryRow(
+                            title: "Send Feedback",
+                            subtitle: "Share feedback or report a problem.",
+                            systemImage: "envelope",
+                            badgeText: nil,
+                            badgeTone: .neutral
+                        )
+                    }
                 }
                 .buttonStyle(.plain)
+
+                AppGroupDivider()
 
                 Button {
                     UIPasteboard.general.string = diagnosticsText
                     showingCopiedAlert = true
                 } label: {
-                    SettingsSummaryRow(
-                        title: "Copy Diagnostics",
-                        subtitle: "Version, device, locale, and permission summary.",
-                        systemImage: "doc.on.doc",
-                        badgeText: nil,
-                        badgeTone: .neutral
-                    )
+                    SettingsRow {
+                        SettingsSummaryRow(
+                            title: "Copy Diagnostics",
+                            subtitle: "Version, device, locale, and permission summary.",
+                            systemImage: "doc.on.doc",
+                            badgeText: nil,
+                            badgeTone: .neutral
+                        )
+                    }
                 }
                 .buttonStyle(.plain)
-            } header: {
-                SettingsSectionHeader(title: "Support")
-            } footer: {
-                Text("Diagnostics leave out precise location unless you add it yourself.")
             }
         }
-        .formStyle(.grouped)
         .navigationTitle(Strings.Settings.title)
         .navigationBarTitleDisplayMode(.large)
         .toolbar {
@@ -91,6 +105,7 @@ struct SettingsRootView: View {
                 Button("Done") {
                     dismiss()
                 }
+                .buttonStyle(.plain)
             }
         }
         .alert("Copied", isPresented: $showingCopiedAlert) {
@@ -116,6 +131,12 @@ struct SettingsRootView: View {
             return SettingsSummaryFormatter.prayerTimesSummary(settings: settingsStore.settings)
         case .hijriCalendarCorrections:
             return SettingsSummaryFormatter.hijriCorrectionsSummary(scheduleManager: scheduleManager)
+        case .alarmBehavior:
+            return [
+                "Sounds \(ProductSurfacePresentation.soundSummaryText(settings: settingsStore.settings))",
+                "Reserve \(settingsStore.settings.clampedReserveBeforeEndMinutes) min",
+                "Fajr start \(settingsStore.settings.fajrStartSoundSelectionGlobal.displayName)"
+            ].joined(separator: " · ")
         case .permissionsReliability:
             return SettingsSummaryFormatter.permissionsSummary(
                 settings: settingsStore.settings,
@@ -137,7 +158,7 @@ struct SettingsRootView: View {
 
     private func badgeText(for destination: SettingsDestination) -> String? {
         switch destination {
-        case .prayerTimes, .hijriCalendarCorrections, .about:
+        case .prayerTimes, .hijriCalendarCorrections, .alarmBehavior, .about:
             return nil
         case .quietPeriod:
             return settingsStore.settings.quietPeriodEnabled ? "On" : nil
@@ -177,7 +198,7 @@ struct SettingsRootView: View {
                 return badgeTone(for: issue.tone)
             }
             return .neutral
-        case .prayerTimes, .hijriCalendarCorrections, .about:
+        case .prayerTimes, .hijriCalendarCorrections, .alarmBehavior, .about:
             return .neutral
         case .quietPeriod:
             return settingsStore.settings.quietPeriodEnabled ? .warning : .neutral
@@ -202,6 +223,8 @@ struct SettingsRootView: View {
             PrayerTimeSettingsView()
         case .hijriCalendarCorrections:
             HijriCalendarSettingsView()
+        case .alarmBehavior:
+            AlarmBehaviorSettingsView()
         case .permissionsReliability:
             PermissionsReliabilityView()
         case .quietPeriod:
@@ -256,5 +279,133 @@ struct SettingsRootView: View {
 
         let urlString = "mailto:?subject=\(encode(subject))&body=\(encode(body))"
         return URL(string: urlString)
+    }
+}
+
+struct AlarmBehaviorSettingsView: View {
+    @EnvironmentObject private var settingsStore: SuhoorSettingsStore
+    @EnvironmentObject private var scheduleManager: ScheduleManager
+    @State private var draftSettings = AppSettings.default
+    @State private var hasPendingCommit = false
+    @State private var commitTask: Task<Void, Never>?
+
+    var body: some View {
+        SettingsScrollPage {
+            SettingsGroup(
+                title: "Wake Sounds",
+                supportingText: "Choose the sound used before Fajr, at Fajr start, during Fajr, after Fajr, and for fixed wakes."
+            ) {
+                soundPickerRow(
+                    title: "Pre-Fajr wake sound",
+                    binding: soundBinding(\.preFajrWakeSoundSelectionGlobal)
+                )
+                AppGroupDivider()
+                soundPickerRow(
+                    title: "At Fajr start sound",
+                    binding: soundBinding(\.fajrStartSoundSelectionGlobal)
+                )
+                AppGroupDivider()
+                soundPickerRow(
+                    title: "Wake during Fajr sound",
+                    binding: soundBinding(\.inFajrWakeSoundSelectionGlobal)
+                )
+                AppGroupDivider()
+                soundPickerRow(
+                    title: "Wake after Fajr sound",
+                    binding: soundBinding(\.postFajrWakeSoundSelectionGlobal)
+                )
+                AppGroupDivider()
+                soundPickerRow(
+                    title: "Fixed wake sound",
+                    binding: soundBinding(\.fixedWakeSoundSelectionGlobal)
+                )
+            }
+
+            SettingsGroup(
+                title: "Reserve Before Fajr Ends",
+                supportingText: "Applies when the default wake is In-Fajr and anchored to Fajr start."
+            ) {
+                SettingsRow {
+                    Stepper(value: reserveBinding, in: 1...60, step: 1) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Reserve")
+                            Text("\(normalizedDraftSettings.clampedReserveBeforeEndMinutes) min")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+        }
+        .navigationTitle("Wake Sounds & Reserve")
+        .navigationBarTitleDisplayMode(.inline)
+        .task {
+            loadDraftFromStore()
+        }
+        .onChange(of: settingsStore.currentRevision) { _, _ in
+            guard !hasPendingCommit else { return }
+            loadDraftFromStore()
+        }
+        .onDisappear {
+            applyDraftIfNeeded()
+        }
+    }
+
+    private func soundPickerRow(title: String, binding: Binding<SoundChoice>) -> some View {
+        SettingsRow {
+            Picker(title, selection: binding) {
+                ForEach(SoundChoice.allCases) { choice in
+                    Text(choice.displayName).tag(choice)
+                }
+            }
+        }
+    }
+
+    private func soundBinding(_ keyPath: WritableKeyPath<AppSettings, SoundChoice>) -> Binding<SoundChoice> {
+        Binding(get: {
+            draftSettings[keyPath: keyPath]
+        }, set: { newValue in
+            draftSettings[keyPath: keyPath] = newValue
+            scheduleDraftCommit()
+        })
+    }
+
+    private var reserveBinding: Binding<Int> {
+        Binding(get: {
+            normalizedDraftSettings.clampedReserveBeforeEndMinutes
+        }, set: { newValue in
+            draftSettings.reserveBeforeEndMinutes = max(1, newValue)
+            scheduleDraftCommit()
+        })
+    }
+
+    private var normalizedDraftSettings: AppSettings {
+        var settings = draftSettings
+        settings.reserveBeforeEndMinutes = max(1, settings.reserveBeforeEndMinutes)
+        return settings
+    }
+
+    private func loadDraftFromStore() {
+        draftSettings = settingsStore.settings
+    }
+
+    private func scheduleDraftCommit() {
+        hasPendingCommit = true
+        commitTask?.cancel()
+        commitTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 250_000_000)
+            applyDraftIfNeeded()
+        }
+    }
+
+    private func applyDraftIfNeeded() {
+        commitTask?.cancel()
+        commitTask = nil
+        let nextSettings = normalizedDraftSettings
+        let changed = settingsStore.settings != nextSettings
+        hasPendingCommit = false
+        guard changed else { return }
+        settingsStore.set(nextSettings)
+        scheduleManager.requestRefresh(reason: .settingsChanged)
     }
 }

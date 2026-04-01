@@ -10,6 +10,7 @@ enum RootTab: Hashable {
 
 enum SettingsRoute: Hashable {
     case hijriCorrections
+    case alarmBehavior
 }
 
 struct RootTabView: View {
@@ -34,7 +35,7 @@ struct RootTabView: View {
                 AlarmsHomeView()
             }
             .tabItem {
-                Label("Wake", systemImage: "alarm")
+                Label(Strings.AlarmsTab.title, systemImage: "alarm")
             }
             .tag(RootTab.wake)
 
@@ -82,10 +83,13 @@ struct RootTabView: View {
             }
             .tag(RootTab.progress)
         }
+        .background(AppPageBackground().ignoresSafeArea())
+        .tabBarMinimizeBehavior(.onScrollDown)
         .fullScreenCover(isPresented: $isShowingQadaWizard) {
             NavigationStack {
                 QadaPlannerView()
             }
+            .appPresentedChrome()
         }
         .sheet(isPresented: $isShowingSettings) {
             NavigationStack(path: $settingsPath) {
@@ -94,9 +98,12 @@ struct RootTabView: View {
                         switch destination {
                         case .hijriCorrections:
                             HijriCalendarSettingsView()
+                        case .alarmBehavior:
+                            AlarmBehaviorSettingsView()
                         }
                     }
             }
+            .appPresentedChrome()
         }
         .onReceive(appNavigator.$latestRequest.compactMap { $0 }) { request in
             handle(request.intent)
@@ -122,6 +129,8 @@ struct RootTabView: View {
             presentSettings()
         case .openHijriCorrections:
             presentSettings(route: .hijriCorrections)
+        case .openAlarmBehavior:
+            presentSettings(route: .alarmBehavior)
         case .openDefaultMorningPlan:
             selectedTab = .plans
             planPath.removeLast(planPath.count)

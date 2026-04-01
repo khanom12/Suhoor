@@ -52,6 +52,10 @@ final class AlarmStateStore {
         store(entries: entries)
     }
 
+    func isUnresolved(id: UUID) -> Bool {
+        entry(for: id)?.state.isScheduled ?? false
+    }
+
     func clear() {
         UserDefaults.standard.removeObject(forKey: storageKey)
     }

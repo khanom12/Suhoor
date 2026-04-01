@@ -20,11 +20,11 @@ struct TodayAshuraProgressCard: View {
                 GlassCard(style: .header) {
                     VStack(alignment: .leading, spacing: DesignTokens.dashboardCardInternalSpacing) {
                         HStack(alignment: .center, spacing: DesignTokens.spacingS) {
-                            VStack(alignment: .leading, spacing: 2) {
+                            VStack(alignment: .leading, spacing: DesignTokens.textSpacingMicro) {
                                 Text("Ashura \(String(model.hijriYear))")
-                                    .font(DesignTokens.cardTitleFont)
+                                    .font(AppTypography.cardTitle)
                                 Text("Muharram 9, 10, and 11")
-                                    .font(DesignTokens.cardSubtitleFont)
+                                    .font(AppTypography.cardBody)
                                     .foregroundStyle(.secondary)
                             }
 
@@ -49,7 +49,7 @@ struct TodayAshuraProgressCard: View {
                         .animation(Motion.spring(reduceMotion: reduceMotion), value: model.displayFilledCount)
 
                         Text("Track the Muharram 9, 10, and 11 sequence.")
-                            .font(DesignTokens.cardSubtitleFont)
+                            .font(AppTypography.cardBody)
                             .foregroundStyle(.secondary)
                     }
                 }

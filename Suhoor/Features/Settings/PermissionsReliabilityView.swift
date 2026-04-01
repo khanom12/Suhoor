@@ -5,45 +5,53 @@ struct PermissionsReliabilityView: View {
     @EnvironmentObject private var scheduleManager: ScheduleManager
 
     var body: some View {
-        Form {
-            Section {
-                SettingsInfoBanner(
-                    title: modeSummaryTitle,
-                    message: modeSummaryMessage,
-                    systemImage: modeSystemImage
-                )
-            }
+        SettingsScrollPage {
+            SettingsInfoBanner(
+                title: modeSummaryTitle,
+                message: modeSummaryMessage,
+                systemImage: modeSystemImage
+            )
 
-            Section {
-                ForEach(presentations) { presentation in
+            SettingsGroup(title: Strings.Settings.permissionsSection) {
+                ForEach(Array(presentations.enumerated()), id: \.element.id) { index, presentation in
                     PermissionStatusRow(
                         presentation: presentation,
                         action: presentation.actionTitle == nil ? nil : {
                             Task { await handleAction(for: presentation) }
                         }
                     )
+
+                    if index < presentations.count - 1 {
+                        AppGroupDivider()
+                    }
                 }
-            } header: {
-                SettingsSectionHeader(title: Strings.Settings.permissionsSection)
             }
 
-            Section {
-                DisclosureGroup(Strings.SettingsReliability.educationTitle) {
-                    Text(Strings.SettingsReliability.educationBody)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .padding(.top, 4)
+            SettingsGroup(title: Strings.Settings.alarmReliabilityTitle) {
+                SettingsRow {
+                    DisclosureGroup(Strings.SettingsReliability.educationTitle) {
+                        Text(Strings.SettingsReliability.educationBody)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .padding(.top, 4)
+                    }
                 }
 
-                NavigationLink(Strings.Settings.alarmReliabilityLearnMore) {
+                AppGroupDivider()
+
+                NavigationLink {
                     AlarmInfoView()
+                } label: {
+                    SettingsRow {
+                        SettingsNavigationRow {
+                            Text(Strings.Settings.alarmReliabilityLearnMore)
+                                .font(.footnote.weight(.semibold))
+                                .foregroundStyle(.primary)
+                        }
+                    }
                 }
-                .font(.footnote.weight(.semibold))
-            } header: {
-                SettingsSectionHeader(title: Strings.Settings.alarmReliabilityTitle)
             }
         }
-        .formStyle(.grouped)
         .navigationTitle(Strings.Settings.permissionsReliabilityTitle)
         .navigationBarTitleDisplayMode(.inline)
     }
@@ -108,16 +116,30 @@ private struct PermissionStatusRow: View {
     let action: (() -> Void)?
 
     var body: some View {
-        SettingsEditorCard(
-            title: presentation.title,
-            subtitle: presentation.message,
-            trailing: AnyView(
-                SettingsStatusBadge(text: presentation.statusText, tone: badgeTone)
-            )
-        ) {
+        VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
+            SettingsRow {
+                HStack(alignment: .top, spacing: DesignTokens.spacingM) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(presentation.title)
+                            .font(.body.weight(.semibold))
+                        Text(presentation.message)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    Spacer(minLength: DesignTokens.spacingM)
+
+                    SettingsStatusBadge(text: presentation.statusText, tone: badgeTone)
+                }
+            }
+
             if let actionTitle = presentation.actionTitle, let action {
-                Button(actionTitle, action: action)
-                    .buttonStyle(.borderedProminent)
+                SettingsRow(verticalPadding: 0) {
+                    Button(actionTitle, action: action)
+                        .appControlStyle(.primary)
+                }
+                .padding(.bottom, DesignTokens.spacingM)
             }
         }
     }

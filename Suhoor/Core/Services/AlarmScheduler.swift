@@ -15,13 +15,13 @@ final class AlarmScheduler {
     }
 
     func scheduleAll(
-        entries: [(DaySchedule, EffectiveDailyConfig)],
+        days: [ActiveAlarmDay],
         settings: AppSettings,
         canUseAlarmKit: Bool,
         cancelWindowDays: Int
     ) async -> Bool {
         let nextPlans = buildPlannedEvents(
-            entries: entries,
+            days: days,
             settings: settings,
             canUseAlarmKit: canUseAlarmKit
         )
@@ -38,35 +38,40 @@ final class AlarmScheduler {
     }
 
     func scheduleDay(
-        schedule: DaySchedule,
-        config: EffectiveDailyConfig,
+        day: ActiveAlarmDay,
         settings: AppSettings,
         canUseAlarmKit: Bool
     ) async -> Bool {
         let nextPlans = buildPlannedEvents(
-            entries: [(schedule, config)],
+            days: [day],
             settings: settings,
             canUseAlarmKit: canUseAlarmKit
         )
         return await reconcile(
             to: nextPlans,
             settings: settings,
-            affectedDayIDs: [schedule.id]
+            affectedDayIDs: [day.id]
         )
     }
 
-    func cancelDay(schedule: DaySchedule) async {
-        if lastPlannedEvents.values.contains(where: { $0.dayID == schedule.id }) == false {
-            await routineScheduler.cancelWake(for: schedule)
-            await routineScheduler.cancelReminder(for: schedule)
-            await routineScheduler.cancelAdhan(for: schedule)
-            await routineScheduler.cancelIftar(for: schedule)
+    func cancelDay(day: ActiveAlarmDay) async {
+        if lastPlannedEvents.values.contains(where: { $0.dayID == day.id }) == false {
+            for event in day.scheduledEvents {
+                for deliveryKind in event.deliveryKinds {
+                    await routineScheduler.cancelEvent(
+                        identifier: SchedulingIdentifiers.identifier(for: event, deliveryKind: deliveryKind),
+                        event: event,
+                        deliveryKind: deliveryKind,
+                        schedule: day.schedule
+                    )
+                }
+            }
             return
         }
         _ = await reconcile(
             to: [:],
             settings: nil,
-            affectedDayIDs: [schedule.id]
+            affectedDayIDs: [day.id]
         )
     }
 
@@ -117,104 +122,33 @@ final class AlarmScheduler {
     }
 
     private func buildPlannedEvents(
-        entries: [(DaySchedule, EffectiveDailyConfig)],
+        days: [ActiveAlarmDay],
         settings: AppSettings,
         canUseAlarmKit: Bool
     ) -> [String: PlannedScheduledEvent] {
         let now = Date()
-        let channel: PlannedScheduledEvent.Channel = canUseAlarmKit ? .alarmKit : .notification
         var plans: [String: PlannedScheduledEvent] = [:]
 
-        for (schedule, config) in entries {
-            guard !config.skipDay else { continue }
+        for day in days {
+            guard !day.effectiveConfig.skipDay else { continue }
 
-            if config.suhoorEnabled, schedule.wakeDate > now {
-                let plan = PlannedScheduledEvent(
-                    planID: SchedulingIdentifiers.dailyIdentifier(for: schedule, kind: .wake),
-                    dayID: schedule.id,
-                    kind: .wake,
-                    channel: channel,
-                    fireDate: schedule.wakeDate,
-                    schedule: schedule,
-                    label: settings.label,
-                    snoozeMinutes: FeatureFlags.enableSnooze && settings.snoozeEnabled ? settings.snoozeMinutes : nil
-                )
-                plans[plan.planID] = plan
-            }
+            for event in day.scheduledEvents where event.fireDate > now {
+                for deliveryKind in event.deliveryKinds {
+                    let channel: PlannedScheduledEvent.Channel
+                    if deliveryKind == .iftarNotification {
+                        channel = .notification
+                    } else {
+                        channel = canUseAlarmKit ? .alarmKit : .notification
+                    }
 
-            if config.reminderEnabled, let reminderDate = schedule.reminderDate, reminderDate > now {
-                if reminderDate < schedule.wakeDate {
-                    Logging.scheduler.warning("Reminder earlier than Suhoor for \(schedule.id). Skipping reminder scheduling.")
-                } else {
                     let plan = PlannedScheduledEvent(
-                        planID: SchedulingIdentifiers.dailyIdentifier(for: schedule, kind: .reminder),
-                        dayID: schedule.id,
-                        kind: .reminder,
+                        planID: SchedulingIdentifiers.identifier(for: event, deliveryKind: deliveryKind),
+                        dayID: day.id,
+                        kind: deliveryKind,
                         channel: channel,
-                        fireDate: reminderDate,
-                        schedule: schedule,
-                        label: settings.label,
-                        snoozeMinutes: nil
-                    )
-                    plans[plan.planID] = plan
-                }
-            }
-
-            if config.fajrEnabled, let boundaryDate = schedule.boundaryDate, boundaryDate > now {
-                let plan = PlannedScheduledEvent(
-                    planID: SchedulingIdentifiers.dailyIdentifier(for: schedule, kind: .boundary),
-                    dayID: schedule.id,
-                    kind: .boundary,
-                    channel: channel,
-                    fireDate: boundaryDate,
-                    schedule: schedule,
-                    label: settings.label,
-                    snoozeMinutes: nil
-                )
-                plans[plan.planID] = plan
-            }
-
-            if config.iftarEnabled, let iftarDate = schedule.iftarDate, iftarDate > now {
-                let delivery = config.iftarDelivery.normalized()
-                if delivery.includesNotification {
-                    let plan = PlannedScheduledEvent(
-                        planID: SchedulingIdentifiers.dailyIdentifier(for: schedule, kind: .iftarNotification),
-                        dayID: schedule.id,
-                        kind: .iftarNotification,
-                        channel: .notification,
-                        fireDate: iftarDate,
-                        schedule: schedule,
-                        label: settings.label,
-                        snoozeMinutes: nil
-                    )
-                    plans[plan.planID] = plan
-                }
-
-                switch delivery.audibleMode {
-                case .none:
-                    break
-                case .alarm:
-                    let plan = PlannedScheduledEvent(
-                        planID: SchedulingIdentifiers.dailyIdentifier(for: schedule, kind: .iftarAlarm),
-                        dayID: schedule.id,
-                        kind: .iftarAlarm,
-                        channel: channel,
-                        fireDate: iftarDate,
-                        schedule: schedule,
-                        label: settings.label,
-                        snoozeMinutes: nil
-                    )
-                    plans[plan.planID] = plan
-                case .adhan:
-                    let plan = PlannedScheduledEvent(
-                        planID: SchedulingIdentifiers.dailyIdentifier(for: schedule, kind: .iftarAdhan),
-                        dayID: schedule.id,
-                        kind: .iftarAdhan,
-                        channel: channel,
-                        fireDate: iftarDate,
-                        schedule: schedule,
-                        label: settings.label,
-                        snoozeMinutes: nil
+                        fireDate: event.fireDate,
+                        schedule: day.schedule,
+                        event: event
                     )
                     plans[plan.planID] = plan
                 }
@@ -225,52 +159,24 @@ final class AlarmScheduler {
     }
 
     private func schedule(_ plan: PlannedScheduledEvent, settings: AppSettings) async -> Bool {
-        switch plan.kind {
-        case .wake:
-            let suhoorSettings = settings.withSuhoorEnabled(true)
-            return await routineScheduler.scheduleWake(
-                for: plan.schedule,
-                settings: suhoorSettings,
-                canUseAlarmKit: plan.channel == .alarmKit
-            )
-        case .reminder:
-            return await routineScheduler.scheduleReminder(
-                for: plan.schedule,
-                settings: settings,
-                canUseAlarmKit: plan.channel == .alarmKit
-            )
-        case .boundary:
-            return await routineScheduler.scheduleAdhan(
-                for: plan.schedule,
-                settings: settings,
-                canUseAlarmKit: plan.channel == .alarmKit
-            )
-        case .iftarNotification:
-            return await routineScheduler.scheduleIftarNotification(
-                for: plan.schedule,
-                settings: settings
-            )
-        case .iftarAlarm, .iftarAdhan:
-            return await routineScheduler.scheduleIftarAudible(
-                for: plan.schedule,
-                settings: settings,
-                canUseAlarmKit: plan.channel == .alarmKit,
-                kind: plan.kind
-            )
-        }
+        await routineScheduler.scheduleEvent(
+            identifier: plan.planID,
+            event: plan.event,
+            deliveryKind: plan.kind,
+            schedule: plan.schedule,
+            settings: settings,
+            canUseAlarmKit: plan.channel == .alarmKit,
+            now: Date()
+        )
     }
 
     private func cancel(_ plan: PlannedScheduledEvent) async {
-        switch plan.kind {
-        case .wake:
-            await routineScheduler.cancelWake(for: plan.schedule)
-        case .reminder:
-            await routineScheduler.cancelReminder(for: plan.schedule)
-        case .boundary:
-            await routineScheduler.cancelAdhan(for: plan.schedule)
-        case .iftarNotification, .iftarAlarm, .iftarAdhan:
-            await routineScheduler.cancelIftar(for: plan.schedule)
-        }
+        await routineScheduler.cancelEvent(
+            identifier: plan.planID,
+            event: plan.event,
+            deliveryKind: plan.kind,
+            schedule: plan.schedule
+        )
     }
 }
 
@@ -286,6 +192,5 @@ private struct PlannedScheduledEvent: Equatable {
     let channel: Channel
     let fireDate: Date
     let schedule: DaySchedule
-    let label: String
-    let snoozeMinutes: Int?
+    let event: ScheduledEvent
 }

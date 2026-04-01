@@ -5,18 +5,18 @@ struct PermissionCardView: View {
     let action: (() -> Void)?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: DesignTokens.textSpacingComfortable) {
             HStack(alignment: .firstTextBaseline) {
                 Text(presentation.title)
-                    .font(.headline.weight(.semibold))
+                    .font(AppTypography.cardTitle)
                 Spacer()
                 Text(presentation.statusText)
-                    .font(.caption.weight(.semibold))
+                    .font(AppTypography.badge)
                     .foregroundStyle(statusColor)
             }
 
             Text(presentation.message)
-                .font(.footnote)
+                .font(AppTypography.cardBody)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
@@ -26,7 +26,7 @@ struct PermissionCardView: View {
 
             if presentation.showsSimulatorHint {
                 Text(Strings.LocationAccess.simulatorHint)
-                    .font(.footnote)
+                    .font(AppTypography.cardBody)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }

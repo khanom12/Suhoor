@@ -56,13 +56,17 @@ enum CompletionProjectionBuilder {
                 dailyCompletion: day.dailyCompletion
             )
         }
-        let fajrPrompt = currentDay.flatMap { day in
-            fajrPromptPresentation(
+        let fajrPrompt: FajrHomeSupportPresentation? = {
+            guard let day = currentDay,
+                  !day.decisionLog.suppressDefaultPrayerPrompt else {
+                return nil
+            }
+            return fajrPromptPresentation(
                 now: now,
                 schedule: todaySchedule,
                 dailyCompletion: day.dailyCompletion
             )
-        }
+        }()
         let prayerPromptsSuppressed = settings.quietPeriodEnabled && settings.pausePrayerPrompts
         let fastingPromptsSuppressed = settings.quietPeriodEnabled && settings.pauseFastingPrompts
 
@@ -90,16 +94,6 @@ enum CompletionProjectionBuilder {
                     )
                 }
             case .fajrMorning:
-                if let fajrPrompt, !prayerPromptsSuppressed {
-                    return HomeCompletionProjection(
-                        dailyCompletion: dailyCompletion,
-                        supportDecision: HomeSupportDecision(
-                            presentation: .fajrCompletionPrompt(fajrPrompt),
-                            reason: "Fajr completion is the most immediate unresolved act.",
-                            isDismissible: false
-                        )
-                    )
-                }
                 if let forbiddenWarning, !fastingPromptsSuppressed {
                     return HomeCompletionProjection(
                         dailyCompletion: dailyCompletion,
@@ -115,7 +109,17 @@ enum CompletionProjectionBuilder {
                         dailyCompletion: dailyCompletion,
                         supportDecision: HomeSupportDecision(
                             presentation: .fasting(fastingPresentation),
-                            reason: "Fasting status is still relevant after wake.",
+                            reason: "Fasting status is still more relevant than a prayer prompt during the same morning.",
+                            isDismissible: false
+                        )
+                    )
+                }
+                if let fajrPrompt, !prayerPromptsSuppressed {
+                    return HomeCompletionProjection(
+                        dailyCompletion: dailyCompletion,
+                        supportDecision: HomeSupportDecision(
+                            presentation: .fajrCompletionPrompt(fajrPrompt),
+                            reason: "Fajr completion remains relevant once fasting day-state support is satisfied.",
                             isDismissible: false
                         )
                     )
@@ -152,6 +156,16 @@ enum CompletionProjectionBuilder {
                     )
                 }
             case .afterMaghrib:
+                if let forbiddenWarning, !fastingPromptsSuppressed {
+                    return HomeCompletionProjection(
+                        dailyCompletion: dailyCompletion,
+                        supportDecision: HomeSupportDecision(
+                            presentation: .forbiddenFastNotice(forbiddenWarning),
+                            reason: "Forbidden-fast guidance still comes before reflective completion prompts.",
+                            isDismissible: true
+                        )
+                    )
+                }
                 if let fastingPresentation, !fastingPromptsSuppressed {
                     return HomeCompletionProjection(
                         dailyCompletion: dailyCompletion,
@@ -476,9 +490,9 @@ enum CompletionProjectionBuilder {
                     dateKey: dateKey,
                     intentSnapshot: intent,
                     title: Strings.HomeSurface.fastCompletionTitle,
-                    detail: isQada ? "Mark your fast so your Qada progress stays accurate." : Strings.HomeSurface.fastCompletionBody,
-                    primaryActionTitle: "Fast completed",
-                    secondaryActionTitle: "Didn't complete it",
+                    detail: isQada ? "Record it to keep your Qada progress accurate." : Strings.HomeSurface.fastCompletionBody,
+                    primaryActionTitle: "Yes, completed",
+                    secondaryActionTitle: "Not completed",
                     statusTitle: nil,
                     showsUndo: false
                 )

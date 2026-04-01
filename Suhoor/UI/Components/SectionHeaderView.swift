@@ -12,16 +12,16 @@ struct SectionHeaderView: View {
     var body: some View {
         HStack(alignment: .firstTextBaseline) {
             Text(title)
-                .font(DesignTokens.sectionHeaderFont)
+                .appTextRole(.eyebrow)
             Spacer()
             if let meta {
                 Text(meta)
-                    .font(.subheadline)
+                    .font(AppTypography.rowBody)
                     .foregroundStyle(.secondary)
             }
         }
         .padding(.top, DesignTokens.spacingXS)
         .padding(.bottom, DesignTokens.spacingS)
-        .padding(.horizontal, 2)
+        .padding(.horizontal, DesignTokens.accessoryInset)
     }
 }

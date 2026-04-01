@@ -5,6 +5,11 @@ struct AlarmRecord: Identifiable, Codable, Equatable {
     let kind: ScheduleEventKind
     let scheduledDate: Date
     let fajrDateTime: Date?
+    let dateKey: String?
+    let wakeSessionID: String?
+    let soundRole: MorningSoundRole?
+    let wakeSessionRole: WakeSessionEventRole?
+    let fajrStartBehavior: FajrStartBehavior
     let isTest: Bool
     let testRunId: UUID?
     let label: String
@@ -14,6 +19,11 @@ struct AlarmRecord: Identifiable, Codable, Equatable {
         kind: ScheduleEventKind,
         scheduledDate: Date,
         fajrDateTime: Date? = nil,
+        dateKey: String? = nil,
+        wakeSessionID: String? = nil,
+        soundRole: MorningSoundRole? = nil,
+        wakeSessionRole: WakeSessionEventRole? = nil,
+        fajrStartBehavior: FajrStartBehavior = .none,
         isTest: Bool = false,
         testRunId: UUID? = nil,
         label: String
@@ -22,6 +32,11 @@ struct AlarmRecord: Identifiable, Codable, Equatable {
         self.kind = kind
         self.scheduledDate = scheduledDate
         self.fajrDateTime = fajrDateTime
+        self.dateKey = dateKey
+        self.wakeSessionID = wakeSessionID
+        self.soundRole = soundRole
+        self.wakeSessionRole = wakeSessionRole
+        self.fajrStartBehavior = fajrStartBehavior
         self.isTest = isTest
         self.testRunId = testRunId
         self.label = label
@@ -47,6 +62,10 @@ final class AlarmRecordStore {
 
     func records() -> [AlarmRecord] {
         loadRecords()
+    }
+
+    func records(forWakeSessionID wakeSessionID: String) -> [AlarmRecord] {
+        loadRecords().filter { $0.wakeSessionID == wakeSessionID }
     }
 
     func remove(id: UUID) {
@@ -80,5 +99,20 @@ final class AlarmRecordStore {
     private func store(records: [AlarmRecord]) {
         guard let data = try? JSONEncoder().encode(records) else { return }
         UserDefaults.standard.set(data, forKey: storageKey)
+    }
+}
+
+enum WakeSessionTakeoverResolver {
+    static func shouldTakeOverAtFajrStart(
+        record: AlarmRecord,
+        alarmState: AlarmKnownState
+    ) -> Bool {
+        guard record.fajrStartBehavior == .takeoverIfUnresolvedOtherwiseCue else { return false }
+        switch alarmState {
+        case .alerting, .countdown, .paused, .scheduled:
+            return true
+        case .dismissed, .unknown:
+            return false
+        }
     }
 }

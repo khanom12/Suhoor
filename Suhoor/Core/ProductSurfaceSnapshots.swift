@@ -3,14 +3,35 @@ import Foundation
 struct HomeSurfaceSnapshot: Equatable, Sendable {
     let gregorianText: String
     let hijriText: String
-    let heroLabel: String?
-    let heroSubline: String?
+    let heroPresentation: HomeHeroPresentation?
     let nextWakeEventSummary: NextWakeEventSummary?
     let supportDecision: HomeSupportDecision?
+
+    var heroLabel: String? {
+        heroPresentation?.label
+    }
+
+    var heroSubline: String? {
+        guard let heroPresentation else { return nil }
+        return [
+            heroPresentation.descriptorText,
+            heroPresentation.explanationText,
+            heroPresentation.statusText
+        ]
+        .compactMap { $0 }
+        .joined(separator: " • ")
+    }
 
     var supportCard: HomeSupportCardPresentation? {
         supportDecision?.presentation
     }
+}
+
+struct HomeHeroPresentation: Equatable, Sendable {
+    let label: String
+    let descriptorText: String
+    let explanationText: String
+    let statusText: String?
 }
 
 struct WakeSurfaceSnapshot: Equatable, Sendable {
@@ -20,9 +41,13 @@ struct WakeSurfaceSnapshot: Equatable, Sendable {
 }
 
 struct DefaultMorningPlanSurfaceSummary: Equatable, Sendable {
-    let wakeLead: String
-    let extraWakeBuffer: String
-    let reminders: String
+    let wakeTiming: String
+    let anchor: String
+    let wakeOffset: String
+    let reserveBeforeEnd: String
+    let latestWake: String
+    let fastingCues: String
+    let sounds: String
     let prayerTimes: String
     let tahajjudBehavior: String?
 }
@@ -42,6 +67,17 @@ struct ProgressSurfaceSnapshot: Equatable, Sendable {
     let fastSummary: String
     let qadaProgress: QadaProgressSnapshot
     let wakeProgress: WakeProgressSnapshot
+
+    static let empty = ProgressSurfaceSnapshot(
+        headlineText: nil,
+        fastSectionTitle: "Fasts",
+        fajrTodaySummary: "Not logged",
+        fajrSummary: "No logged mornings yet",
+        fastTodaySummary: "Not logged",
+        fastSummary: "No logged fasts yet",
+        qadaProgress: QadaProgressSnapshot(remaining: 0, completed: 0, baselineOwed: 0),
+        wakeProgress: .empty
+    )
 }
 
 enum ProductSurfaceSnapshots {
@@ -49,38 +85,26 @@ enum ProductSurfaceSnapshots {
         defaults: DefaultAlarmConfig,
         settings: AppSettings
     ) -> DefaultMorningPlanSurfaceSummary {
-        let wakeLead: String
-        switch defaults.defaultSuhoorTimeMode {
-        case .relativeToFajrMinusMinutes:
-            wakeLead = "\(defaults.defaultSuhoorOffsetMinutes) min before Fajr"
-        case .fixedTime:
-            let timeText = SettingsSummaryFormatter.timeText(minutesFromMidnight: defaults.defaultSuhoorOffsetMinutes)
-            wakeLead = "Fixed at \(timeText)"
-        }
-
-        let reminderSummary: String
-        switch defaults.defaultReminderTimeMode {
-        case .beforeFajr:
-            reminderSummary = defaults.reminderEnabledDefault
-                ? "Reminder \(defaults.defaultReminderMinutesBeforeFajr) min before Fajr"
-                : "Reminder off"
-        case .fixedTime:
-            let timeText = SettingsSummaryFormatter.timeText(minutesFromMidnight: defaults.defaultReminderFixedTimeMinutes)
-            reminderSummary = defaults.reminderEnabledDefault
-                ? "Reminder at \(timeText)"
-                : "Reminder off"
-        }
-
-        let prayerTimes = defaults.fajrEnabledDefault
-            ? "Fajr adhan on"
-            : "Fajr adhan off"
-
         return DefaultMorningPlanSurfaceSummary(
-            wakeLead: wakeLead,
-            extraWakeBuffer: settings.snoozeEnabled ? "\(settings.snoozeMinutes) min follow-up" : "Off",
-            reminders: reminderSummary,
-            prayerTimes: prayerTimes,
-            tahajjudBehavior: nil
+            wakeTiming: ProductSurfacePresentation.defaultWakeTimingText(for: defaults),
+            anchor: ProductSurfacePresentation.defaultWakeAnchorText(for: defaults),
+            wakeOffset: ProductSurfacePresentation.defaultWakeOffsetText(for: defaults),
+            reserveBeforeEnd: ProductSurfacePresentation.defaultReserveSummaryText(
+                defaults: defaults,
+                settings: settings
+            ),
+            latestWake: ProductSurfacePresentation.latestWakeSummaryText(
+                minutesFromMidnight: defaults.defaultLatestWakeCapMinutesFromMidnight
+            ),
+            fastingCues: ProductSurfacePresentation.defaultFastingCueSummaryText(
+                defaults: defaults,
+                settings: settings
+            ),
+            sounds: ProductSurfacePresentation.soundSummaryText(settings: settings),
+            prayerTimes: defaults.fajrEnabledDefault ? "Fajr cue on" : "Fajr cue off",
+            tahajjudBehavior: defaults.defaultWakeState == .preFajr
+                ? "Tahajjud stays a date-level refinement."
+                : nil
         )
     }
 

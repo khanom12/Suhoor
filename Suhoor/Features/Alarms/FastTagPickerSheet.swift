@@ -1,10 +1,43 @@
 import SwiftUI
 
+enum FastTagPickerPresentation: Equatable {
+    case standard
+    case dayDetail
+
+    var navigationTitle: String {
+        switch self {
+        case .standard:
+            return "Tags"
+        case .dayDetail:
+            return "Day purpose"
+        }
+    }
+
+    var observanceSectionTitle: String {
+        switch self {
+        case .standard:
+            return "Also matches Sunnah observances"
+        case .dayDetail:
+            return "Sunnah observances for this date"
+        }
+    }
+
+    var normalizationNoteText: String {
+        switch self {
+        case .standard:
+            return "Tag rules updated for this date."
+        case .dayDetail:
+            return "Day purpose updated for this date."
+        }
+    }
+}
+
 struct FastTagPickerSheet: View {
     let date: Date
     let initialSelection: FastIntentSelection
     let seeds: [ActiveTagComputationSeed]
     let selections: [String: FastIntentSelection]
+    let presentation: FastTagPickerPresentation
     let onSave: (FastIntentSelection) -> Void
 
     @Environment(\.dismiss) private var dismiss
@@ -18,12 +51,14 @@ struct FastTagPickerSheet: View {
         initialSelection: FastIntentSelection,
         seeds: [ActiveTagComputationSeed],
         selections: [String: FastIntentSelection],
+        presentation: FastTagPickerPresentation = .standard,
         onSave: @escaping (FastIntentSelection) -> Void
     ) {
         self.date = date
         self.initialSelection = initialSelection
         self.seeds = seeds
         self.selections = selections
+        self.presentation = presentation
         self.onSave = onSave
         _selection = State(initialValue: initialSelection)
     }
@@ -38,17 +73,23 @@ struct FastTagPickerSheet: View {
             effectivePrimary: computedResult.computedPrimaryIntent,
             timeZone: timeZone
         )
+        let displayedObservanceTags = observanceTags(
+            for: computedResult,
+            timeZone: timeZone
+        )
+        let showsObservanceList = presentation == .standard
+            || computedResult.computedPrimaryIntent == .voluntary
 
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 if let note = suggestions.note {
                     Text(note)
-                        .font(.footnote)
+                        .font(AppTypography.cardBody)
                         .foregroundStyle(.secondary)
                 }
 
                 if !warnings.isEmpty {
-                    FlowLayout(spacing: 6) {
+                    FlowLayout(spacing: DesignTokens.textSpacingCompact) {
                         ForEach(warnings, id: \.self) { warning in
                             WarningChipWithInfo(
                                 warning: warning,
@@ -59,10 +100,10 @@ struct FastTagPickerSheet: View {
                 }
 
                 Text("Purpose")
-                    .font(.headline)
+                    .font(AppTypography.cardTitle)
                 if let purposeHelper = policy.purposeHelperText {
                     Text(purposeHelper)
-                        .font(.footnote)
+                        .font(AppTypography.cardBody)
                         .foregroundStyle(.secondary)
                 }
 
@@ -89,37 +130,45 @@ struct FastTagPickerSheet: View {
                     }
                 }
 
-                Text("Also matches Sunnah observences")
-                    .font(.caption.weight(.semibold))
+                Text(presentation.observanceSectionTitle)
+                    .font(AppTypography.badge)
                     .foregroundStyle(.secondary)
                 if let secondaryHelper = policy.secondaryHelperText {
                     Text(secondaryHelper)
-                        .font(.footnote)
+                        .font(AppTypography.cardBody)
                         .foregroundStyle(.secondary)
                 }
 
-                VStack(spacing: 0) {
-                    ForEach(FastSecondaryVirtueTag.allCases) { tag in
-                        let isApplicable = FastIntentEngine.isCalendarApplicable(tag: tag, on: date, timeZone: timeZone)
-                        let isSuppressed = computedResult.suppressedSecondaryTags.contains(tag)
-                        let isEligibleButNotCounted = tag == .shawwalSix && isApplicable && !isSuppressed && !computedResult.computedSecondaryTags.contains(tag)
-                        ObservanceStatusRow(
-                            title: tag.about.title,
-                            subtitle: tag.about.subtitle,
-                            systemImage: tag.style.systemImage,
-                            color: tag.style.color,
-                            isSelected: computedResult.computedSecondaryTags.contains(tag),
-                            statusText: statusText(for: tag, computedResult: computedResult, timeZone: timeZone),
-                            isSuppressed: isSuppressed,
-                            isDimmed: !computedResult.computedSecondaryTags.contains(tag) && !isEligibleButNotCounted,
-                            onInfo: { selectedAbout = tag.about }
-                        )
+                if showsObservanceList {
+                    if displayedObservanceTags.isEmpty, presentation == .dayDetail {
+                        Text("No Sunnah observances match this date.")
+                            .font(AppTypography.cardBody)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    VStack(spacing: 0) {
+                        ForEach(displayedObservanceTags) { tag in
+                            let isApplicable = FastIntentEngine.isCalendarApplicable(tag: tag, on: date, timeZone: timeZone)
+                            let isSuppressed = computedResult.suppressedSecondaryTags.contains(tag)
+                            let isEligibleButNotCounted = tag == .shawwalSix && isApplicable && !isSuppressed && !computedResult.computedSecondaryTags.contains(tag)
+                            ObservanceStatusRow(
+                                title: tag.about.title,
+                                subtitle: tag.about.subtitle,
+                                systemImage: tag.style.systemImage,
+                                color: tag.style.color,
+                                isSelected: computedResult.computedSecondaryTags.contains(tag),
+                                statusText: statusText(for: tag, computedResult: computedResult, timeZone: timeZone),
+                                isSuppressed: isSuppressed,
+                                isDimmed: !computedResult.computedSecondaryTags.contains(tag) && !isEligibleButNotCounted,
+                                onInfo: { selectedAbout = tag.about }
+                            )
+                        }
                     }
                 }
 
                 if let noteText {
                     Text(noteText)
-                        .font(.footnote)
+                        .font(AppTypography.cardBody)
                         .foregroundStyle(.secondary)
                         .transition(.opacity)
                 }
@@ -128,15 +177,15 @@ struct FastTagPickerSheet: View {
                     selection = .default
                     Haptics.light()
                 }
-                .font(.footnote)
+                .font(AppTypography.cardBody)
                 .foregroundStyle(.red)
                 .buttonStyle(.plain)
             }
-            .padding(.horizontal, 16)
+            .padding(.horizontal, DesignTokens.spacingL)
             .padding(.top, 24)
             .padding(.bottom, 24)
         }
-        .navigationTitle("Tags")
+        .navigationTitle(presentation.navigationTitle)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
@@ -189,7 +238,25 @@ struct FastTagPickerSheet: View {
         )
         if normalized != selection {
             selection = normalized
-            showNote("Tag rules updated for this date.")
+            showNote(presentation.normalizationNoteText)
+        }
+    }
+
+    private func observanceTags(
+        for computedResult: TagComputationResult,
+        timeZone: TimeZone
+    ) -> [FastSecondaryVirtueTag] {
+        if presentation == .standard {
+            return FastSecondaryVirtueTag.allCases
+        }
+
+        return FastSecondaryVirtueTag.allCases.filter { tag in
+            let isApplicable = FastIntentEngine.isCalendarApplicable(tag: tag, on: date, timeZone: timeZone)
+            let isSelected = computedResult.computedSecondaryTags.contains(tag)
+            let isSuppressed = computedResult.suppressedSecondaryTags.contains(tag)
+            let isEligibleButNotCounted = tag == .shawwalSix && isApplicable && !isSuppressed && !isSelected
+
+            return isApplicable || isSelected || isSuppressed || isEligibleButNotCounted
         }
     }
 
@@ -253,9 +320,9 @@ private struct PrimaryOptionRow: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .top, spacing: DesignTokens.space12) {
             Button(action: onSelect) {
-                HStack(alignment: .top, spacing: 12) {
+                HStack(alignment: .top, spacing: DesignTokens.space12) {
                     TagIconCapsule(
                         systemImage: systemImage,
                         color: color,
@@ -263,20 +330,20 @@ private struct PrimaryOptionRow: View {
                         isPrimary: isPrimary
                     )
 
-                    VStack(alignment: .leading, spacing: 6) {
+                    VStack(alignment: .leading, spacing: DesignTokens.textSpacingCompact) {
                         Text(title)
-                            .font(.body.weight(.medium))
+                            .font(AppTypography.rowTitle)
                             .foregroundStyle(.primary)
                             .fixedSize(horizontal: false, vertical: true)
                         if let subtitle {
                             Text(subtitle)
-                                .font(.footnote)
+                                .font(AppTypography.rowBody)
                                 .foregroundStyle(.secondary)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                         if let statusText {
                             Text(statusText)
-                                .font(.caption)
+                                .font(AppTypography.rowMeta)
                                 .foregroundStyle(.secondary)
                         }
                     }
@@ -285,18 +352,18 @@ private struct PrimaryOptionRow: View {
             .buttonStyle(.plain)
             .disabled(isDisabled)
 
-            Spacer(minLength: 8)
+            Spacer(minLength: DesignTokens.inlineSpacingMedium)
 
             Button(action: onInfo) {
                 Image(systemName: "info.circle")
-                    .font(dynamicTypeSize.isAccessibilitySize ? .body : .footnote)
+                    .font(dynamicTypeSize.isAccessibilitySize ? AppTypography.controlIcon : AppTypography.compactControlIcon)
                     .foregroundStyle(.secondary)
                     .frame(width: 44, height: 44)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("About \(title)")
         }
-        .padding(.vertical, 12)
+        .padding(.vertical, DesignTokens.rowVerticalPadding)
         .opacity(isDisabled ? 0.5 : 1.0)
     }
 }
@@ -315,7 +382,7 @@ private struct ObservanceStatusRow: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .top, spacing: DesignTokens.space12) {
             TagIconCapsule(
                 systemImage: systemImage,
                 color: color,
@@ -323,35 +390,35 @@ private struct ObservanceStatusRow: View {
                 isPrimary: false
             )
 
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: DesignTokens.textSpacingCompact) {
                 Text(title)
-                    .font(.body.weight(.medium))
+                    .font(AppTypography.rowTitle)
                     .foregroundStyle(isDimmed ? .secondary : .primary)
                     .fixedSize(horizontal: false, vertical: true)
                 if let subtitle {
                     Text(subtitle)
-                        .font(.footnote)
+                        .font(AppTypography.rowBody)
                         .foregroundStyle(isDimmed ? .tertiary : .secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 Text(statusText)
-                    .font(.caption)
+                    .font(AppTypography.rowMeta)
                     .foregroundStyle(isSuppressed ? .secondary : (isDimmed ? .tertiary : .secondary))
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            Spacer(minLength: 8)
+            Spacer(minLength: DesignTokens.inlineSpacingMedium)
 
             Button(action: onInfo) {
                 Image(systemName: "info.circle")
-                    .font(dynamicTypeSize.isAccessibilitySize ? .body : .footnote)
+                    .font(dynamicTypeSize.isAccessibilitySize ? AppTypography.controlIcon : AppTypography.compactControlIcon)
                     .foregroundStyle(.secondary)
                     .frame(width: 44, height: 44)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("About \(title)")
         }
-        .padding(.vertical, 12)
+        .padding(.vertical, DesignTokens.rowVerticalPadding)
         .opacity(isDimmed ? 0.55 : 1.0)
     }
 }
@@ -365,10 +432,10 @@ private struct TagIconCapsule: View {
     var body: some View {
         let imageName = systemImage ?? "tag"
         Image(systemName: imageName)
-            .font(.caption.weight(.semibold))
+            .font(AppTypography.badge)
             .foregroundStyle(isSelected ? color : .secondary)
-            .padding(.vertical, 6)
-            .padding(.horizontal, 10)
+            .padding(.vertical, DesignTokens.compactChipVerticalPadding)
+            .padding(.horizontal, DesignTokens.chipHorizontalPaddingCompact)
             .background(backgroundColor)
             .clipShape(Capsule())
             .overlay(
@@ -397,11 +464,11 @@ private struct WarningChipWithInfo: View {
     let onInfo: () -> Void
 
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: DesignTokens.textSpacingTight) {
             FastWarningCapsule(warning: warning)
             Button(action: onInfo) {
                 Image(systemName: "info.circle")
-                    .font(.caption)
+                    .font(AppTypography.rowMeta)
                     .foregroundStyle(.secondary)
                     .frame(width: 24, height: 24)
             }
@@ -442,16 +509,16 @@ private struct TagEditPolicy {
 
         if isForbidden {
             self.purposeHelperText = "Locked: fasting is forbidden on this date."
-            self.secondaryHelperText = "Sunnah observence tags are hidden on forbidden dates."
+            self.secondaryHelperText = "Sunnah observances are hidden on forbidden dates."
         } else if isRamadan {
             self.purposeHelperText = "Locked for Ramadan: this fast is obligatory."
-            self.secondaryHelperText = "Sunnah observence tags are hidden during Ramadan."
+            self.secondaryHelperText = "Sunnah observances are hidden during Ramadan."
         } else if isObligatoryPrimary {
             self.purposeHelperText = nil
-            self.secondaryHelperText = "Sunnah observence tags are suppressed when the purpose is obligatory."
+            self.secondaryHelperText = "Sunnah observances are suppressed when the purpose is obligatory."
         } else if effectivePrimary == .other {
             self.purposeHelperText = nil
-            self.secondaryHelperText = "Choose Voluntary to see date-derived Sunnah observences."
+            self.secondaryHelperText = "Choose Voluntary to see Sunnah observances for this date."
         } else {
             self.purposeHelperText = nil
             self.secondaryHelperText = nil
@@ -467,15 +534,15 @@ private struct FastWarningCapsule: View {
     let warning: FastWarning
 
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: DesignTokens.textSpacingTight) {
             Image(systemName: warning.systemImage)
-                .font(.caption2.weight(.semibold))
+                .font(AppTypography.badge)
             Text(warning.title)
         }
-        .font(.caption2.weight(.semibold))
+        .font(AppTypography.badge)
         .foregroundStyle(.red)
-        .padding(.vertical, 4)
-        .padding(.horizontal, 8)
+        .padding(.vertical, DesignTokens.badgeVerticalPadding)
+        .padding(.horizontal, DesignTokens.badgeHorizontalPadding)
         .background(Color.clear)
         .clipShape(Capsule())
         .overlay(

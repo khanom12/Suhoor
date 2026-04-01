@@ -4,7 +4,203 @@ struct WakeRowView: View {
     let entry: WakeRowEntry
     let onSelect: () -> Void
 
-    @ScaledMetric(relativeTo: .largeTitle) private var timeFontSize: CGFloat = 46
+    private var display: WakePageRowDisplay {
+        WakePagePresentation.row(for: entry)
+    }
+
+    init(
+        entry: WakeRowEntry,
+        onSelect: @escaping () -> Void
+    ) {
+        self.entry = entry
+        self.onSelect = onSelect
+    }
+
+    var body: some View {
+        Button(action: onSelect) {
+            HStack(alignment: .firstTextBaseline, spacing: DesignTokens.spacingM) {
+                VStack(alignment: .leading, spacing: DesignTokens.textSpacingCompact) {
+                    Text(display.title)
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(titleColor)
+
+                    Text(display.subtitle)
+                        .font(.footnote)
+                        .foregroundStyle(subtitleColor)
+                        .lineLimit(2)
+                        .truncationMode(.tail)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: DesignTokens.spacingS)
+
+                trailingView
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(display.accessibilityLabel)
+        }
+        .buttonStyle(.plain)
+        .padding(.vertical, DesignTokens.space6)
+    }
+
+    @ViewBuilder
+    private var trailingView: some View {
+        if let trailingTime = display.trailingTime {
+            WakeAlarmTimeLockup(
+                date: trailingTime,
+                isDisabled: false,
+                displayStyle: .row
+            )
+            .fixedSize(horizontal: true, vertical: false)
+        } else if let trailingStatusText = display.trailingStatusText {
+            Text(trailingStatusText)
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(Color.secondary)
+                .multilineTextAlignment(.trailing)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var titleColor: Color {
+        display.isInactive ? Color.primary.opacity(0.62) : Color.primary.opacity(0.9)
+    }
+
+    private var subtitleColor: Color {
+        display.isInactive ? Color.secondary.opacity(0.82) : .secondary
+    }
+}
+
+struct WakeFeaturedEntryCard: View {
+    let entry: WakeRowEntry
+    let onSelect: () -> Void
+
+    private var display: WakePageCardDisplay {
+        WakePagePresentation.card(for: entry)
+    }
+
+    var body: some View {
+        AppGlassSurface(variant: .standard, contentPadding: 16) {
+            VStack(alignment: .leading, spacing: DesignTokens.spacingS) {
+                HStack(alignment: .center, spacing: DesignTokens.spacingS) {
+                    Text(display.overline)
+                        .appTextRole(.eyebrow)
+                    Spacer()
+                    if let badgeTitle = display.badgeTitle {
+                        WakeContextChip(title: badgeTitle, isDisabled: false, compact: true)
+                    }
+                }
+
+                Text(display.dateLabel)
+                    .font(AppTypography.badge)
+                    .foregroundStyle(.secondary)
+
+                WakeAlarmTimeLockup(
+                    date: entry.schedule.wakeDate,
+                    isDisabled: display.isInactive,
+                    displayStyle: .featured
+                )
+
+                VStack(alignment: .leading, spacing: DesignTokens.textSpacingCompact) {
+                    Text(display.title)
+                        .font(AppTypography.rowTitle)
+
+                    Text(display.subtitle)
+                        .font(AppTypography.cardBody)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .contentShape(Rectangle())
+            .onTapGesture(perform: onSelect)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(display.accessibilityLabel)
+        }
+    }
+}
+
+struct WakeMonthSectionHeader: View {
+    let title: String
+
+    var body: some View {
+        HStack(alignment: .center, spacing: DesignTokens.spacingS) {
+            Text(title)
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(.secondary)
+            Spacer()
+        }
+    }
+}
+
+struct WakeContextChip: View {
+    let title: String
+    let isDisabled: Bool
+    var compact: Bool = false
+
+    var body: some View {
+        Text(title)
+            .font(AppTypography.badge)
+            .foregroundStyle(Color.secondary)
+            .padding(.horizontal, compact ? DesignTokens.compactChipHorizontalPadding : DesignTokens.badgeHorizontalPadding)
+            .padding(.vertical, compact ? DesignTokens.compactChipVerticalPadding : DesignTokens.badgeVerticalPadding)
+            .background(
+                Capsule()
+                    .fill(Color.secondary.opacity(0.08))
+                    .overlay {
+                        Capsule().stroke(Color.white.opacity(0.08), lineWidth: 1)
+                    }
+            )
+            .opacity(isDisabled ? 0.55 : 1.0)
+    }
+}
+
+private struct WakeAlarmTimeLockup: View {
+    enum DisplayStyle: Equatable {
+        case featured
+        case row
+    }
+
+    let date: Date
+    let isDisabled: Bool
+    let displayStyle: DisplayStyle
+
+    @ScaledMetric(relativeTo: .title3) private var rowTimePointSize: CGFloat = 28
+    @ScaledMetric(relativeTo: .title2) private var featuredTimePointSize: CGFloat = 36
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 3) {
+            Text(Self.timeMainFormatter.string(from: date))
+                .font(AppTypography.timeDisplayFont(size: timePointSize, weight: displayStyle == .row ? .regular : .light))
+                .foregroundStyle(isDisabled ? Color.secondary : Color.primary)
+                .monospacedDigit()
+                .minimumScaleFactor(DesignTokens.timeDisplayMinScaleFactor)
+
+            Text(Self.timeSuffixFormatter.string(from: date))
+                .font(AppTypography.timeDisplayFont(size: timePointSize * suffixScale, weight: .regular))
+                .foregroundStyle(isDisabled ? Color(UIColor.tertiaryLabel) : Color.secondary)
+                .monospacedDigit()
+                .baselineOffset(2)
+        }
+    }
+
+    private var timePointSize: CGFloat {
+        switch displayStyle {
+        case .featured:
+            return featuredTimePointSize
+        case .row:
+            return rowTimePointSize
+        }
+    }
+
+    private var suffixScale: CGFloat {
+        switch displayStyle {
+        case .featured:
+            return 0.46
+        case .row:
+            return 0.42
+        }
+    }
 
     private static let timeMainFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -21,131 +217,6 @@ struct WakeRowView: View {
         formatter.locale = .current
         return formatter
     }()
-
-    init(
-        entry: WakeRowEntry,
-        onSelect: @escaping () -> Void
-    ) {
-        self.entry = entry
-        self.onSelect = onSelect
-    }
-
-    var body: some View {
-        Button(action: onSelect) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(dateLabel)
-                    .font(.footnote)
-                    .foregroundStyle(isDisabled ? .tertiary : .secondary)
-
-                HStack(alignment: .center, spacing: DesignTokens.spacingM) {
-                    HStack(alignment: .firstTextBaseline, spacing: 6) {
-                        Text(primaryTimeMain)
-                            .font(.system(size: timeFontSize, weight: .regular, design: .default))
-                            .monospacedDigit()
-                            .foregroundStyle(isDisabled ? .tertiary : .primary)
-                            .minimumScaleFactor(0.8)
-
-                        if let primaryTimeSuffix {
-                            Text(primaryTimeSuffix)
-                                .font(.system(size: timeFontSize * 0.55, weight: .regular, design: .default))
-                                .monospacedDigit()
-                                .foregroundStyle(isDisabled ? .tertiary : .secondary)
-                                .baselineOffset(1)
-                        }
-                    }
-
-                    Spacer(minLength: DesignTokens.spacingM)
-
-                    Image(systemName: "chevron.right")
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(.tertiary)
-                }
-
-                Text(entry.rowPresentation.meaningText)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(isDisabled ? .tertiary : .primary)
-
-                Text(entry.rowPresentation.detailText)
-                    .font(.callout)
-                    .foregroundStyle(isDisabled ? .tertiary : .secondary)
-                    .monospacedDigit()
-
-                if let provenanceText = entry.rowPresentation.provenanceText {
-                    Text(provenanceText)
-                        .font(.caption)
-                        .foregroundStyle(isDisabled ? .tertiary : .secondary)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .layoutPriority(1)
-            .contentShape(Rectangle())
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(accessibilitySummary)
-        }
-        .buttonStyle(.plain)
-        .padding(.vertical, 6)
-    }
-
-    private var primaryTimeMain: String {
-        Self.timeMainFormatter.string(from: entry.schedule.wakeDate)
-    }
-
-    private var primaryTimeSuffix: String? {
-        Self.timeSuffixFormatter.string(from: entry.schedule.wakeDate)
-    }
-
-    private var dateLabel: String {
-        WakeRowPresentation.dateLabel(for: entry.schedule.date)
-    }
-
-    private var accessibilitySummary: String {
-        var summary = "\(WakeRowPresentation.accessibilityDateLabel(for: entry.schedule.date)). Wake at \(primaryTimeText). \(entry.rowPresentation.meaningText). \(entry.rowPresentation.detailText)."
-        if let provenanceText = entry.rowPresentation.provenanceText {
-            summary += " \(provenanceText)."
-        }
-        return summary
-    }
-
-    private var isDisabled: Bool { !entry.isEnabled }
-
-    private var primaryTimeText: String {
-        TimeFormatters.timeFormatter.string(from: entry.schedule.wakeDate)
-    }
-}
-
-struct WakeContextChip: View {
-    let title: String
-    let isDisabled: Bool
-
-    var body: some View {
-        Text(title)
-            .font(.caption.weight(.semibold))
-            .foregroundStyle(Color.secondary)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(
-                Capsule()
-                    .fill(Color(.secondarySystemGroupedBackground))
-            )
-            .opacity(isDisabled ? 0.55 : 1.0)
-    }
-}
-
-struct MonthWakeCountBadge: View {
-    let count: Int
-
-    var body: some View {
-        Text("\(count)")
-            .font(.caption.weight(.semibold))
-            .foregroundStyle(count == 0 ? .secondary : DawnColor.accent)
-            .padding(.vertical, 4)
-            .padding(.horizontal, 8)
-            .background(
-                Capsule()
-                    .fill(count == 0 ? Color.secondary.opacity(0.12) : DawnColor.accent.opacity(0.14))
-            )
-            .accessibilityLabel(Strings.AlarmsTab.alarmCountAccessibility(count))
-    }
 }
 
 enum WakeRowPresentation {
@@ -268,10 +339,10 @@ struct WakeFilterChip: View {
                     .lineLimit(1)
             }
         }
-        .font((isCompact ? Font.caption2 : Font.caption).weight(.semibold))
+        .font(AppTypography.badge)
         .foregroundStyle(base)
-        .padding(.vertical, isCompact ? 3 : 4)
-        .padding(.horizontal, isCompact ? 6 : 8)
+        .padding(.vertical, isCompact ? DesignTokens.compactChipVerticalPadding : DesignTokens.badgeVerticalPadding)
+        .padding(.horizontal, isCompact ? DesignTokens.compactChipHorizontalPadding : DesignTokens.badgeHorizontalPadding)
         .background(Capsule().fill(base.opacity(fillOpacity)))
         .overlay(
             Capsule()

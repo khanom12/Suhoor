@@ -8,52 +8,69 @@ struct LocationSettingsView: View {
     @EnvironmentObject private var locationService: LocationService
 
     var body: some View {
-        Form {
-            Section {
-                Picker(Strings.Settings.locationMode, selection: $settingsStore.settings.locationMode) {
-                    Text(Strings.Settings.locationAutomatic).tag(LocationMode.auto)
-                    Text(Strings.Settings.locationChooseCity).tag(LocationMode.fixed)
-                }
-                .pickerStyle(.segmented)
-                .onChange(of: settingsStore.settings.locationMode) { _, newValue in
-                    if newValue == .fixed, settingsStore.settings.fixedLocation == nil {
-                        applySelectedCity(City.defaultCity)
+        SettingsScrollPage {
+            SettingsGroup {
+                SettingsRow {
+                    Picker(Strings.Settings.locationMode, selection: $settingsStore.settings.locationMode) {
+                        Text(Strings.Settings.locationAutomatic).tag(LocationMode.auto)
+                        Text(Strings.Settings.locationChooseCity).tag(LocationMode.fixed)
                     }
-                    scheduleManager.requestRefresh(reason: .settingsChanged)
+                    .pickerStyle(.segmented)
+                    .onChange(of: settingsStore.settings.locationMode) { _, newValue in
+                        if newValue == .fixed, settingsStore.settings.fixedLocation == nil {
+                            applySelectedCity(City.defaultCity)
+                        }
+                        scheduleManager.requestRefresh(reason: .settingsChanged)
+                    }
                 }
             }
 
             if settingsStore.settings.locationMode == .auto {
-                Section {
-                    valueRow(
-                        title: Strings.Settings.currentCityTitle,
-                        value: locationService.locationName.isEmpty
-                            ? Strings.Settings.locationWaiting
-                            : locationService.locationName
-                    )
-
-                    HStack {
-                        Text(Strings.Settings.locationStatus)
-                        Spacer()
-                        SettingsStatusBadge(text: permissionStatusText, tone: permissionBadgeTone)
+                SettingsGroup(title: Strings.Settings.locationAutomatic) {
+                    SettingsRow {
+                        SettingsValueRow(
+                            title: Strings.Settings.currentCityTitle,
+                            value: locationService.locationName.isEmpty
+                                ? Strings.Settings.locationWaiting
+                                : locationService.locationName
+                        )
                     }
 
-                    Text(permissionMessage)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+                    AppGroupDivider()
+
+                    SettingsRow {
+                        HStack {
+                            Text(Strings.Settings.locationStatus)
+                            Spacer()
+                            SettingsStatusBadge(text: permissionStatusText, tone: permissionBadgeTone)
+                        }
+                    }
+
+                    AppGroupDivider()
+
+                    SettingsRow {
+                        Text(permissionMessage)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
 
                     if let actionTitle = permissionActionTitle {
-                        Button(actionTitle) {
-                            handleLocationAction()
+                        AppGroupDivider()
+
+                        SettingsRow {
+                            Button(actionTitle) {
+                                handleLocationAction()
+                            }
+                            .appControlStyle(.primary)
                         }
-                        .buttonStyle(.borderedProminent)
                     }
-                } header: {
-                    Text(Strings.Settings.locationAutomatic)
                 }
             } else {
-                Section {
+                SettingsGroup(
+                    title: Strings.Settings.locationChooseCity,
+                    footer: Strings.Settings.fixedLocationHelper
+                ) {
                     NavigationLink {
                         LocationSearchView(
                             selectedName: fixedLocationName,
@@ -61,35 +78,24 @@ struct LocationSettingsView: View {
                             onSelectMapItem: applyMapItem
                         )
                     } label: {
-                        valueRow(
-                            title: Strings.Settings.cityLabel,
-                            value: fixedLocationName ?? City.defaultCity.name
-                        )
+                        SettingsRow {
+                            SettingsNavigationRow {
+                                SettingsValueRow(
+                                    title: Strings.Settings.cityLabel,
+                                    value: fixedLocationName ?? City.defaultCity.name
+                                )
+                            }
+                        }
                     }
-                } header: {
-                    Text(Strings.Settings.locationChooseCity)
-                } footer: {
-                    Text(Strings.Settings.fixedLocationHelper)
                 }
             }
         }
-        .formStyle(.grouped)
         .navigationTitle(Strings.Settings.locationSection)
         .navigationBarTitleDisplayMode(.inline)
         .task {
             if settingsStore.settings.locationMode == .fixed, settingsStore.settings.fixedLocation == nil {
                 applySelectedCity(City.defaultCity)
             }
-        }
-    }
-
-    private func valueRow(title: String, value: String) -> some View {
-        HStack {
-            Text(title)
-            Spacer()
-            Text(value)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.trailing)
         }
     }
 

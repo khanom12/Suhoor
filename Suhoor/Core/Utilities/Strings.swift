@@ -38,7 +38,7 @@ enum Strings {
         static let learnMore = "Learn more"
         static let alarmDenied = "Using notifications. Allow alarms for reliability."
         static let notificationsFallback = "Using notifications (less reliable)."
-        static let scheduleUnable = "Wake couldn’t load. Tap to retry."
+        static let scheduleUnable = "Wake list couldn’t load. Tap to retry."
         static let hijriAdjustmentsTitle = "Hijri corrections updated"
         static func hijriAdjustmentsMessage(_ count: Int) -> String {
             "\(count) date\(count == 1 ? "" : "s") adjusted."
@@ -49,6 +49,8 @@ enum Strings {
     }
 
     enum AlarmsTab {
+        static let title = "Wake"
+        static let openAlarm = "View wake"
         static let scheduleWindow = "Days shown"
         static func nextDays(_ count: Int) -> String { "Next \(count) days" }
         static func todayHeader(gregorian: String, hijri: String) -> String {
@@ -56,33 +58,35 @@ enum Strings {
         }
         static let listRangeTitle = "Wake list range"
         static let listRangeHelper = "Controls how many days are shown in the Wake tab list."
-        static let emptyTitle = "No upcoming wakes yet"
-        static let emptySubtitle = "Shape your daily plan in Plans."
+        static let emptyTitle = "No wakes planned"
+        static let emptySubtitle = "Shape your default morning plan in Plans and Suhoor will bring each wake here."
+        static let noUpcomingAlarms = "No upcoming wakes are ready yet."
+        static let listUpdating = "Your wake list is still updating."
         static let customizedBadge = "Customized"
         static let skippedBadge = "Skipped"
         static let todayLabel = "Today"
         static let tomorrowLabel = "Tomorrow"
         static func ramadanDayLabel(_ day: Int) -> String { "Fasting Day \(day)" }
         static let suhoorLabel = "Wake"
-        static let reminderLabel = "Wake reminder"
+        static let reminderLabel = "Reminder"
         static let fajrLabel = "Fajr"
         static let onLabel = "On"
         static let offLabel = "Off"
         static let enabledLabel = "Enabled"
-        static let useFixedTime = "Use fixed time (compatibility)"
+        static let useFixedTime = "Use fixed wake"
         static let timeModeLabel = "Time mode"
         static let beforeFajrLabel = "Before Fajr"
         static let fixedTimeLabel = "Fixed"
         static let minutesBeforeFajr = "Minutes before Fajr"
         static let alarmOffLabel = "Off"
         static let fajrAdhanLabel = "Fajr (Adhan)"
-        static let suhoorAlarmLabel = "Wake Alarm"
-        static let reminderAlarmLabel = "Wake Reminder"
-        static let dayDisabledHelper = "If off, no wake events will run on this date."
-        static let dayEnableToConfigureHelper = "Turn on \"Enable this day\" to configure this morning."
-        static let resetDayTitle = "Reset this morning to defaults?"
-        static let resetDayMessage = "This removes day-specific edits and restores the default morning plan you saved during onboarding or in Plans."
-        static let suhoorTime = "Wake time"
+        static let suhoorAlarmLabel = "Wake"
+        static let reminderAlarmLabel = "Reminder"
+        static let dayDisabledHelper = "If skipped, this date won't wake or play supporting morning cues."
+        static let dayEnableToConfigureHelper = "Restore this date to edit its wake."
+        static let resetDayTitle = "Reset this date to default?"
+        static let resetDayMessage = "This date will go back to your usual morning plan."
+        static let suhoorTime = "Alarm time"
         static func suhoorComputed(_ time: String) -> String { "Computed: \(time)" }
         static func reminderOffsetLabel(_ minutes: Int) -> String { "Minutes before Fajr: \(minutes)m" }
         static func reminderComputed(_ time: String) -> String { "Computed: \(time)" }
@@ -93,8 +97,8 @@ enum Strings {
         static func willPlayAt(_ time: String) -> String { "Will play at \(time)" }
         static func computedAt(_ time: String) -> String { "Computed: \(time)" }
         static let fajrHelper = "Matches your calculated Fajr time."
-        static let resetDay = "Reset this morning to defaults"
-        static let resetDayHelper = "Restores the default morning plan and removes any edits made just for this date."
+        static let resetDay = "Reset to default"
+        static let resetDayHelper = "Restores your usual morning plan for this date."
         static let sourceGeneratedHelper = "This morning is included because of a recurring plan or saved date range."
         static let sourceManualHelper = "This morning was added directly."
         static let sourceDayExclusion = "Exclude this date from the plan"
@@ -102,7 +106,7 @@ enum Strings {
         static let sourceDeleteDay = "Delete this planned morning"
         static let sourceDeleteDayHelper = "Removes this one manually added morning."
         static let defaultsSection = "Default Morning Plan"
-        static let suhoorMode = "Wake timing mode"
+        static let suhoorMode = "Alarm timing mode"
         static let activationMode = "Activation mode"
         static let activeStartDate = "Start date"
         static let activeEndDate = "End date"
@@ -122,10 +126,16 @@ enum Strings {
             "Can’t combine with \(titles)."
         }
         static func alarmCountAccessibility(_ count: Int) -> String {
-            "\(count) scheduled morning\(count == 1 ? "" : "s") in this month"
+            "\(count) scheduled wake\(count == 1 ? "" : "s") in this month"
         }
         static func hijriMonthStarts(_ date: String) -> String { "Starts \(date)" }
         static func hijriMonthStarted(_ date: String) -> String { "Started \(date)" }
+        static let dayToggleTitle = "Skip wake on this date"
+        static let dayToggleSectionTitle = "This morning"
+        static let dayToggleOverrideFooter = "This date uses a one-day wake change."
+        static let dayToggleDefaultFooter = "This date uses your default morning plan."
+        static let settingsSectionTitle = "Morning settings"
+        static let settingsSectionFooter = "Adjust this morning’s wake and supporting cues without changing your broader plan."
     }
 
     enum AddSchedule {
@@ -271,9 +281,9 @@ enum Strings {
         static let fajrRow = "Fajr"
         static let updatesFooter = "Updates daily based on your location and Fajr."
         static let wakeSection = "Wake"
-        static let wakeMe = "Wake me"
-        static let wakeHelper = "Your main wake alarm."
-        static let wakeCustomHelper = "Customize any day later in Wake."
+        static let wakeMe = "Wake time"
+        static let wakeHelper = "Your main wake."
+        static let wakeCustomHelper = "Customize any day later on the Alarm screen."
         static let reminderSection = "Reminder"
         static let reminderToggle = "Reminder before Fajr"
         static let reminderTime = "Time"
@@ -287,9 +297,9 @@ enum Strings {
         static let snoozeSection = "Snooze"
         static let snoozeToggle = "Snooze"
         static let snoozeDuration = "Duration"
-        static let snoozeHelper = "Only for Wake."
+        static let snoozeHelper = "Only for the main alarm."
         static let labelSection = "Label"
-        static let viewSchedule = "Open Wake"
+        static let viewSchedule = "View wake"
     }
 
     enum Settings {
@@ -303,8 +313,8 @@ enum Strings {
         static let prayerTimesTitle = "Prayer times"
         static let prayerTimesHelper = "Choose how Fajr is calculated for your morning plan."
         static let permissionsReliabilityTitle = "Permissions & reliability"
-        static let alarmReliabilityTitle = "Alarm reliability"
-        static let alarmReliabilitySummary = "How wake-ups work, when notifications are used, and what to check if alarms are quiet."
+        static let alarmReliabilityTitle = "Wake reliability"
+        static let alarmReliabilitySummary = "How wake-ups work, when notifications are used, and what to check if they are quiet."
         static let alarmReliabilityLearnMore = "Learn how wake-ups work"
         static let aboutDescription = "Suhoor is a Fajr-centered wake and morning-orientation app that keeps your next wake, reminders, and supporting observances aligned with local prayer times."
         static let badgeLocating = "Locating"
@@ -313,12 +323,12 @@ enum Strings {
         static let badgeReady = "Ready"
         static let defaultsEnabledSection = "Default wake support"
         static let defaultsEnabledHelper = "These defaults apply to your morning plan unless a date has its own override."
-        static let defaultSuhoorToggle = "Main wake enabled by default"
-        static let defaultReminderToggle = "Wake reminder enabled by default"
+        static let defaultSuhoorToggle = "Main alarm enabled by default"
+        static let defaultReminderToggle = "Reminder enabled by default"
         static let defaultFajrToggle = "Fajr notice enabled by default"
-        static let suhoorTimingSection = "Wake timing"
-        static let suhoorTimingHelper = "Applies to the main wake only."
-        static let suhoorTimeBasedOn = "Wake time is based on"
+        static let suhoorTimingSection = "Alarm timing"
+        static let suhoorTimingHelper = "Applies to the main alarm only."
+        static let suhoorTimeBasedOn = "Alarm time is based on"
         static let suhoorMinutesBeforeFajr = "Minutes before Fajr"
         static let reminderTimingSection = "Reminder timing"
         static let reminderTimingHelper = "Applies to the Reminder alarm only."
@@ -334,26 +344,26 @@ enum Strings {
         static let alarmsListRangeSection = "Wake list range"
         static let alarmsListRangeHelper = "Controls how many days are shown in the Wake tab list."
         static let alarmsListRangeLabel = "Show next"
-        static let alertsSection = "Wake sequence"
-        static let wakeAlarmLabel = "Main wake"
-        static let reminderLabel = "Wake reminder"
+        static let alertsSection = "Morning cues"
+        static let wakeAlarmLabel = "Wake"
+        static let reminderLabel = "Reminder"
         static let fajrAdhanLabel = "Fajr adhan"
         static let defaultAlarmsHelper = "These defaults apply to your daily morning plan unless a specific date overrides them."
-        static let wakeAlarmSection = "Wake alarm"
-        static let wakeAlarmHelper = "Your main wake-up time around Fajr."
+        static let wakeAlarmSection = "Wake"
+        static let wakeAlarmHelper = "Your main wake around Fajr."
         static let reminderSection = "Reminder"
         static let reminderScreenHelper = "Use a reminder when you want a heads-up before Fajr."
         static let timeStyleLabel = "Time style"
-        static let fixedTime = "Fixed time (compatibility)"
+        static let fixedTime = "Fixed wake"
         static let wakeTimeLabel = "Wake time"
         static let wakeOffsetTitle = "Wake relation to Fajr"
         static let reminderOffsetTitle = "Reminder time"
         static let minutesBeforeFajr = "Minutes before Fajr"
         static func offsetValue(_ minutes: Int) -> String { "\(minutes) min" }
-        static let previewSection = "Next wake preview"
+        static let previewSection = "Preview"
         static let previewUnavailable = "Preview will appear once your next wake is ready."
         static let previewHelper = "Preview uses your current morning plan and location."
-        static let routineDefaultsSection = "Wake timing"
+        static let routineDefaultsSection = "Alarm timing"
         static let reminderToggle = "Reminder before Fajr"
         static let reminderHelper = "Applies to all days."
         static let reminderMinutes = "Minutes before Fajr"
@@ -443,7 +453,7 @@ enum Strings {
     }
 
     enum AboutAlarms {
-        static let title = "Alarm reliability"
+        static let title = "Wake reliability"
         static let bullet1 = "AlarmKit provides the most reliable wake-ups when your device supports it."
         static let bullet2 = "If alarms aren’t available, Suhoor falls back to notifications for reminders and wake-ups."
         static let bullet3 = "If alarms are too quiet, check your device’s Ringtone & Alerts volume."
@@ -513,23 +523,23 @@ enum Strings {
     }
 
     enum HomeSurface {
-        static let heroTitle = "Next wake"
+        static let heroTitle = "Tomorrow's wake"
         static let heroEmptyTitle = "Set up your mornings"
-        static let heroEmptyBody = "Start with your daily plan."
-        static let heroEmptyAction = "Start with Plans"
-        static let heroAction = "View tomorrow"
+        static let heroEmptyBody = "Start with your default morning plan."
+        static let heroEmptyAction = "Open Plans"
+        static let heroAction = "See details"
         static let fajrPromptTitle = "Did you pray Fajr?"
         static let fajrPromptBody = "Record today before you move on."
         static let fajrPromptPrimary = "Yes, I did"
         static let fajrPromptSecondary = "Not today"
         static let fajrPromptLater = "Later"
-        static let fastCompletionTitle = "How did today go?"
-        static let fastCompletionBody = "Mark your fast so your progress stays accurate."
+        static let fastCompletionTitle = "Did you complete today's fast?"
+        static let fastCompletionBody = "Record it to keep your progress accurate."
     }
 
     enum PlansSurface {
-        static let defaultSubtitle = "Your usual Fajr-centered wake rhythm"
-        static let upcomingSubtitle = "Dates that differ from your usual plan"
+        static let defaultSubtitle = "Your usual Fajr-centered morning plan"
+        static let upcomingSubtitle = "Mornings that differ from your usual plan"
         static let upcomingEmptyTitle = "Nothing special is planned yet"
         static let upcomingEmptyBody = "Your regular Fajr mornings are still set."
         static let planByDateSubtitle = "Choose a date and shape it directly"
@@ -543,7 +553,7 @@ enum Strings {
         static let fajrFooter = "Your recent prayer record."
         static let fastFooter = "Completed and not-completed fasting days."
         static let qadaFooter = "Completed Qada fasts reduce what remains."
-        static let wakeFooter = "Recent wake follow-through, kept secondary."
+        static let wakeFooter = "A light review of recent wake follow-through."
         static let qadaEnablePrompt = "Add Qada from Plans when you need it."
     }
 

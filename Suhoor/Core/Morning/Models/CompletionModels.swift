@@ -168,6 +168,16 @@ struct CompletionStateSnapshot: Sendable {
     func records(for dateKey: String) -> [CompletionRecord] {
         recordsByDateKey[dateKey] ?? []
     }
+
+    static let empty = CompletionStateSnapshot(
+        recordsByDateKey: [:],
+        qadaLedgerSnapshot: QadaLedgerSnapshot(
+            trackingStartDateKey: "",
+            baselineOwed: 0,
+            completed: 0,
+            remaining: 0
+        )
+    )
 }
 
 struct CompletionHistoryProjection: Equatable, Sendable {
@@ -215,6 +225,13 @@ struct FajrHistorySurfaceSnapshot: Equatable, Sendable {
     let rows: [FajrHistoryRowSnapshot]
     let emptyText: String
     let footerText: String
+
+    static let empty = FajrHistorySurfaceSnapshot(
+        summaryText: "No prayer check-ins yet",
+        rows: [],
+        emptyText: "No mornings available yet.",
+        footerText: Strings.HistorySurface.fajrFooter
+    )
 }
 
 struct FastHistorySurfaceSnapshot: Equatable, Sendable {
@@ -222,6 +239,13 @@ struct FastHistorySurfaceSnapshot: Equatable, Sendable {
     let rows: [FastHistoryRowSnapshot]
     let emptyText: String
     let footerText: String
+
+    static let empty = FastHistorySurfaceSnapshot(
+        summaryText: "No fasting days in the last 30 days",
+        rows: [],
+        emptyText: "No fasting days in the last 30 days.",
+        footerText: Strings.HistorySurface.fastFooter
+    )
 }
 
 enum CompletionEditIntent: Equatable, Sendable {

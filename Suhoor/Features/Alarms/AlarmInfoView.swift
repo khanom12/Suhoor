@@ -14,12 +14,12 @@ struct AlarmInfoView: View {
             }
 
             Section {
-                VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: DesignTokens.textSpacingMedium) {
                     Text("• \(Strings.AboutAlarms.bullet1)")
                     Text("• \(Strings.AboutAlarms.bullet2)")
                     Text("• \(Strings.AboutAlarms.bullet3)")
                 }
-                .font(.footnote)
+                .font(AppTypography.cardBody)
                 .foregroundStyle(.secondary)
             }
         }

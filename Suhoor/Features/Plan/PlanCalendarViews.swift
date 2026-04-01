@@ -96,7 +96,7 @@ struct SuhoorCalendarView: View {
             LazyVGrid(columns: columns, spacing: 10) {
                 ForEach(Array(weekdaySymbols.enumerated()), id: \.offset) { _, symbol in
                     Text(symbol)
-                        .font(.caption.weight(.semibold))
+                        .font(AppTypography.badge)
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity)
                 }
@@ -197,7 +197,7 @@ struct SuhoorCalendarView: View {
     private var header: some View {
         HStack {
             Text(GregorianDateFormatter.shared.monthYearString(for: clampedFocusedDate(focusedDate)))
-                .font(.headline.weight(.semibold))
+                .font(AppTypography.cardTitle)
             Spacer()
         }
     }
@@ -536,7 +536,7 @@ private struct SuhoorCalendarDayCell: View {
     var body: some View {
         Button(action: onSelect) {
             Text(state.dayNumberText)
-                .font(.subheadline.weight(isSelected ? .semibold : .medium))
+                .font(AppTypography.calendarDayNumber(isSelected: isSelected))
                 .foregroundStyle(textColor)
                 .frame(width: SuhoorCalendarMetrics.daySize, height: SuhoorCalendarMetrics.daySize)
                 .background(baseBackground)
@@ -733,35 +733,35 @@ struct SuhoorCalendarDetailCard: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: DesignTokens.textSpacingMedium) {
             Text(detail.gregorianText)
-                .font(.headline.weight(.semibold))
+                .font(AppTypography.cardTitle)
             Text(detail.hijriText)
-                .font(.subheadline)
+                .font(AppTypography.metricValue)
                 .foregroundStyle(.secondary)
 
             if let selectionStatus {
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: DesignTokens.textSpacingCompact) {
                     Text("Status")
-                        .font(.footnote.weight(.semibold))
+                        .font(AppTypography.metricLabel)
                         .foregroundStyle(.secondary)
 
                     Text(selectionStatus.title)
-                        .font(.footnote.weight(.semibold))
+                        .font(AppTypography.metricLabel)
                         .foregroundStyle(selectionStatus.color)
 
                     Text(selectionStatus.detailLabel)
-                        .font(.footnote.weight(.semibold))
+                        .font(AppTypography.metricLabel)
                         .foregroundStyle(.secondary)
 
                     Text(selectionStatus.reason)
-                        .font(.footnote)
+                        .font(AppTypography.cardBody)
                         .foregroundStyle(.secondary)
                 }
             }
 
             if !detail.warnings.isEmpty {
-                FlowLayout(spacing: 6) {
+                FlowLayout(spacing: DesignTokens.textSpacingCompact) {
                     ForEach(detail.warnings, id: \.self) { warning in
                         SuhoorCalendarTagChip(
                             text: warning.title,
@@ -775,10 +775,10 @@ struct SuhoorCalendarDetailCard: View {
             let observanceTags = detail.isAlreadyActive ? detail.computedSecondaryTags : detail.previewSecondaryTags
             if !observanceTags.isEmpty {
                 Text("Observances")
-                    .font(.footnote.weight(.semibold))
+                    .font(AppTypography.metricLabel)
                     .foregroundStyle(.secondary)
 
-                FlowLayout(spacing: 6) {
+                FlowLayout(spacing: DesignTokens.textSpacingCompact) {
                     ForEach(observanceTags, id: \.self) { tag in
                         SuhoorCalendarTagChip(
                             text: tag.shortTitle,
@@ -789,13 +789,13 @@ struct SuhoorCalendarDetailCard: View {
                 }
             } else if selectionStatus == nil {
                 Text(notScheduledText)
-                    .font(.footnote)
+                    .font(AppTypography.cardBody)
                     .foregroundStyle(.secondary)
             }
 
             if detail.isAlreadyActive, let sourceSummary = detail.activeSourceSummary {
                 Text(sourceSummary)
-                    .font(.footnote)
+                    .font(AppTypography.cardBody)
                     .foregroundStyle(.secondary)
             }
         }
@@ -821,9 +821,9 @@ private struct SuhoorCalendarTagChip: View {
                 Image(systemName: systemImage)
             }
         }
-        .font(.caption.weight(.semibold))
-        .padding(.horizontal, DesignTokens.spacingS)
-        .padding(.vertical, DesignTokens.spacingXS)
+        .font(AppTypography.badge)
+        .padding(.horizontal, DesignTokens.badgeHorizontalPadding)
+        .padding(.vertical, DesignTokens.badgeVerticalPadding)
         .background(color.opacity(0.18))
         .foregroundStyle(color)
         .clipShape(Capsule(style: .continuous))

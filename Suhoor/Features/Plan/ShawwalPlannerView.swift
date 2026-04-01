@@ -30,14 +30,14 @@ struct ShawwalPlannerView: View {
                 .pickerStyle(.segmented)
 
                 Text(strategy.description)
-                    .font(.footnote)
+                    .font(AppTypography.cardBody)
                     .foregroundStyle(.secondary)
             } header: {
                 Text("Shawwal 6")
             } footer: {
                 if let model {
                     Text(model.isComplete ? "All six are complete." : "\(model.remainingCount) remaining in Shawwal \(model.hijriYear).")
-                        .font(.footnote)
+                        .font(AppTypography.cardBody)
                         .foregroundStyle(.secondary)
                 }
             }
@@ -67,7 +67,7 @@ struct ShawwalPlannerView: View {
             Section {
                 HStack {
                     Text("\(selectedKeys.count)/\(remaining) selected")
-                        .font(.footnote)
+                        .font(AppTypography.cardBody)
                         .foregroundStyle(.secondary)
                     Spacer()
                     Button("Regenerate") { regeneratePlan(remaining: remaining) }

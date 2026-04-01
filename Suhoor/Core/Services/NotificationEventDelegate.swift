@@ -3,10 +3,15 @@ import UserNotifications
 
 final class NotificationEventDelegate: NSObject, UNUserNotificationCenterDelegate {
     static let shared = NotificationEventDelegate()
-    private let fastCompletionPromptHandler: FastCompletionPromptHandling
+    private var fastCompletionPromptHandler: any FastCompletionPromptHandling
 
     private override init() {
         self.fastCompletionPromptHandler = NoopFastCompletionPromptHandler()
+    }
+
+    @MainActor
+    func configure(fastCompletionPromptHandler: any FastCompletionPromptHandling) {
+        self.fastCompletionPromptHandler = fastCompletionPromptHandler
     }
 
     func userNotificationCenter(
@@ -27,10 +32,12 @@ final class NotificationEventDelegate: NSObject, UNUserNotificationCenterDelegat
         let id = response.notification.request.identifier
         EventTimelineLog.shared.record(category: "notifications", message: "didReceive id=\(id) action=\(response.actionIdentifier)")
         if response.notification.request.content.categoryIdentifier == NotificationScheduler.iftarCategoryIdentifier {
-            fastCompletionPromptHandler.handleIftarNotificationResponse(
-                identifier: id,
-                actionIdentifier: response.actionIdentifier
-            )
+            Task { @MainActor [fastCompletionPromptHandler] in
+                fastCompletionPromptHandler.handleIftarNotificationResponse(
+                    identifier: id,
+                    actionIdentifier: response.actionIdentifier
+                )
+            }
         }
         completionHandler()
     }

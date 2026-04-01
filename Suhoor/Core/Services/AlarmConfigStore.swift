@@ -665,6 +665,9 @@ final class AlarmConfigStore: ObservableObject {
         let key = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
         let override = overridesByDay[key]
         let skipDay = override?.skipDay ?? false
+        let defaultWakeRule = defaults.defaultWakeRule
+        let overrideWakeRule = override?.resolvedWakeRule(defaults: defaults)
+        let resolvedWakeRule = overrideWakeRule ?? defaultWakeRule
 
         let baseSuhoorEnabled = defaultsActive ? defaults.suhoorEnabledDefault : false
         let baseReminderEnabled = defaultsActive ? defaults.reminderEnabledDefault : false
@@ -690,7 +693,18 @@ final class AlarmConfigStore: ObservableObject {
             reminderTimeMode = defaults.defaultReminderTimeMode
         }
         let suhoorOffset = ruleSummary.finalOffsetMinutes
-        let suhoorTimeOverride = override?.suhoorTimeOverrideMinutesFromMidnight
+        let suhoorTimeOverride: Int?
+        let suhoorTimeMode: SuhoorTimeMode
+        let effectiveSuhoorOffset: Int
+        if let fixedMinutes = resolvedWakeRule.fixedWakeTimeMinutesFromMidnight {
+            suhoorTimeOverride = fixedMinutes
+            suhoorTimeMode = .fixedTime
+            effectiveSuhoorOffset = fixedMinutes
+        } else {
+            suhoorTimeOverride = override?.suhoorTimeOverrideMinutesFromMidnight
+            suhoorTimeMode = .relativeToFajrMinusMinutes
+            effectiveSuhoorOffset = resolvedWakeRule.deltaMinutes
+        }
         let reminderTimeOverride = override?.reminderTimeOverrideMinutesFromMidnight
 
         if skipDay || ruleSummary.disabledForDay {
@@ -713,8 +727,12 @@ final class AlarmConfigStore: ObservableObject {
             reminderEnabled: reminderEnabled,
             fajrEnabled: fajrEnabled,
             iftarEnabled: iftarEnabled,
-            suhoorTimeMode: defaults.defaultSuhoorTimeMode,
-            suhoorOffsetMinutes: suhoorOffset,
+            defaultWakeRule: defaultWakeRule,
+            resolvedWakeRule: resolvedWakeRule,
+            wakeRuleWasOverridden: overrideWakeRule != nil,
+            tahajjudRefinement: override?.tahajjudRefinement ?? false,
+            suhoorTimeMode: suhoorTimeMode,
+            suhoorOffsetMinutes: effectiveSuhoorOffset,
             reminderTimeMode: reminderTimeMode,
             reminderMinutesBeforeFajr: reminderOffset,
             reminderFixedTimeMinutes: defaults.defaultReminderFixedTimeMinutes,
@@ -753,8 +771,13 @@ final class AlarmConfigStore: ObservableObject {
                     defaults = DefaultAlarmConfig(
                         suhoorEnabledDefault: legacySettings.isEnabled,
                         reminderEnabledDefault: legacySettings.reminderEnabledGlobal,
+                        fastingReminderEnabledDefault: legacySettings.reminderEnabledGlobal,
                         fajrEnabledDefault: legacySettings.atFajrEnabledGlobal,
                         iftarEnabledDefault: true,
+                        defaultWakeState: .preFajr,
+                        defaultWakeAnchorType: .fajrStart,
+                        defaultWakeDeltaMinutes: legacySettings.baseWakeOffsetMinutes,
+                        defaultLatestWakeCapMinutesFromMidnight: nil,
                         defaultSuhoorTimeMode: .relativeToFajrMinusMinutes,
                         defaultSuhoorOffsetMinutes: legacySettings.baseWakeOffsetMinutes,
                         defaultReminderTimeMode: .beforeFajr,
