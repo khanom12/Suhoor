@@ -238,7 +238,7 @@ struct FajrWindowChartView: View {
     }
 
     private var compactBoundaryColor: Color {
-        Color.black.opacity(0.20)
+        Color.black.opacity(0.10)
     }
 
     private var selectedAxisColor: Color {
@@ -251,7 +251,7 @@ struct FajrWindowChartView: View {
 
     private var gridColor: Color {
         layoutStyle == .compact
-            ? Color.black.opacity(0.10)
+            ? Color.black.opacity(0.05)
             : (colorScheme == .dark ? Color.white.opacity(0.12) : Color.black.opacity(0.10))
     }
 
@@ -268,7 +268,7 @@ struct FajrWindowChartView: View {
     }
 
     private var compactBandFill: Color {
-        Color.black.opacity(0.10)
+        Color.black.opacity(0.05)
     }
 
     private var compactPlotMarkerColor: Color {
@@ -284,7 +284,7 @@ struct FajrWindowChartView: View {
     }
 
     private var compactInactiveMarkerColor: Color {
-        Color.black.opacity(0.30)
+        Color.black.opacity(0.20)
     }
 
     private var compactInactiveMarkerSize: CGFloat {

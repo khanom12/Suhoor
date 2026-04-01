@@ -9,34 +9,35 @@ struct WeeklyFajrcastCard: View {
 
     var body: some View {
         Button(action: onOpen) {
-            VStack(spacing: 0) {
-                header
-                    .padding(.horizontal, horizontalInset)
-                    .padding(.top, headerVerticalPadding)
-                    .padding(.bottom, headerVerticalPadding)
+            AppGlassSurface(variant: .standard, contentPadding: 0) {
+                VStack(spacing: 0) {
+                    header
+                        .padding(.horizontal, horizontalInset)
+                        .padding(.top, headerVerticalPadding)
+                        .padding(.bottom, headerVerticalPadding)
 
-                dividerLine
-                    .padding(.horizontal, horizontalInset)
+                    dividerLine
+                        .padding(.horizontal, horizontalInset)
 
-                FajrWindowChartView(
-                    chart: snapshot.chart,
-                    layoutStyle: .compact,
-                    compactSelectedDay: snapshot.selectedDay
-                )
-                .frame(height: chartHeight)
-                .padding(.horizontal, horizontalInset)
-                .padding(.vertical, chartVerticalPadding)
-
-                dividerLine
+                    FajrWindowChartView(
+                        chart: snapshot.chart,
+                        layoutStyle: .compact,
+                        compactSelectedDay: snapshot.selectedDay
+                    )
+                    .frame(height: chartHeight)
                     .padding(.horizontal, horizontalInset)
+                    .padding(.vertical, chartVerticalPadding)
 
-                footer
-                    .padding(.horizontal, horizontalInset)
-                    .padding(.top, footerVerticalPadding)
-                    .padding(.bottom, footerVerticalPadding)
+                    dividerLine
+                        .padding(.horizontal, horizontalInset)
+
+                    footer
+                        .padding(.horizontal, horizontalInset)
+                        .padding(.top, footerVerticalPadding)
+                        .padding(.bottom, footerVerticalPadding)
+                }
+                .frame(maxWidth: .infinity, minHeight: minimumHeight, alignment: .topLeading)
             }
-            .frame(maxWidth: .infinity, minHeight: minimumHeight, alignment: .topLeading)
-            .background(cardShell)
         }
         .buttonStyle(.plain)
         .contentShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
@@ -62,7 +63,7 @@ struct WeeklyFajrcastCard: View {
                 .frame(width: monthTagWidth, height: monthTagHeight)
                 .background(
                     Capsule(style: .continuous)
-                        .fill(Color.black.opacity(0.10))
+                        .fill(Color.black.opacity(0.05))
                 )
         }
         .frame(height: monthTagHeight, alignment: .top)
@@ -80,18 +81,8 @@ struct WeeklyFajrcastCard: View {
 
     private var dividerLine: some View {
         Rectangle()
-            .fill(Color.black.opacity(0.10))
+            .fill(Color.black.opacity(0.05))
             .frame(height: 1)
-    }
-
-    private var cardShell: some View {
-        RoundedRectangle(cornerRadius: 20, style: .continuous)
-            .fill(cardShellFill)
-            .overlay(
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .strokeBorder(shellStrokeColor, lineWidth: 1)
-            )
-            .shadow(color: shadowColor, radius: 24, x: 0, y: 14)
     }
 
     private var accessibilitySummary: String {
@@ -180,27 +171,15 @@ struct WeeklyFajrcastCard: View {
     }
 
     private var titleColor: Color {
-        Color.black.opacity(0.5)
+        Color.black.opacity(0.3)
     }
 
     private var monthTagColor: Color {
-        Color.black.opacity(0.5)
+        Color.black.opacity(0.3)
     }
 
     private var footerColor: Color {
-        Color.black.opacity(0.5)
-    }
-
-    private var cardShellFill: Color {
-        Color.white.opacity(0.50)
-    }
-
-    private var shellStrokeColor: Color {
-        Color.white.opacity(0.08)
-    }
-
-    private var shadowColor: Color {
-        Color.black.opacity(0.18)
+        Color.black.opacity(0.7)
     }
 
     private var monthTagText: String {
