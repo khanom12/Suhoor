@@ -49,6 +49,12 @@ struct FajrWindowChartView: View {
         let rightRailMaxX: CGFloat
     }
 
+    private enum CompactSelectedDayPlacement {
+        case leading
+        case center
+        case trailing
+    }
+
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
@@ -281,6 +287,14 @@ struct FajrWindowChartView: View {
         Color.black.opacity(0.30)
     }
 
+    private var compactInactiveMarkerSize: CGFloat {
+        9
+    }
+
+    private var compactEdgeInactiveMarkerVisibleWidth: CGFloat {
+        compactInactiveMarkerSize / 2
+    }
+
     @ViewBuilder
     private func horizontalGrid(in frame: CGRect) -> some View {
         ForEach(displayTicks) { tick in
@@ -432,13 +446,18 @@ struct FajrWindowChartView: View {
                 skippedMarker
                     .position(x: x, y: y)
             } else {
-                Circle()
-                    .fill(layoutStyle == .compact ? compactInactiveMarkerColor : regularMarkerColor)
-                    .frame(
-                        width: layoutStyle == .compact ? 9 : 7,
-                        height: layoutStyle == .compact ? 9 : 7
-                    )
-                    .position(x: x, y: y)
+                if layoutStyle == .compact, isCompactEdgeInactiveMarker(point) {
+                    compactEdgeInactiveMarker(for: point)
+                        .position(x: compactEdgeInactiveMarkerCenterX(for: point, baseX: x), y: y)
+                } else {
+                    Circle()
+                        .fill(layoutStyle == .compact ? compactInactiveMarkerColor : regularMarkerColor)
+                        .frame(
+                            width: layoutStyle == .compact ? compactInactiveMarkerSize : 7,
+                            height: layoutStyle == .compact ? compactInactiveMarkerSize : 7
+                        )
+                        .position(x: x, y: y)
+                }
             }
         }
     }
@@ -674,6 +693,14 @@ struct FajrWindowChartView: View {
         dynamicTypeSize.isAccessibilitySize ? 0 : 0
     }
 
+    private var compactSelectedCalloutWidth: CGFloat {
+        dynamicTypeSize.isAccessibilitySize ? 82 : 74
+    }
+
+    private var compactEdgeOverlayWidth: CGFloat {
+        dynamicTypeSize.isAccessibilitySize ? 88 : 80
+    }
+
     private var compactXAxisLabelFrameWidth: CGFloat {
         dynamicTypeSize.isAccessibilitySize ? 16 : 14
     }
@@ -746,39 +773,55 @@ struct FajrWindowChartView: View {
     @ViewBuilder
     private func compactSelectedRangeBackdrop(in metrics: CompactLayoutMetrics) -> some View {
         if let selectedPoint = chart.points.first(where: { $0.dateKey == chart.selectedDateKey }) {
+            let placement = compactSelectedDayPlacement(for: selectedPoint)
             let selectedX = xPosition(for: selectedPoint, in: metrics.dayColumnFrame)
 
-            Rectangle()
-                .fill(Color.black.opacity(0.10))
-                .overlay(
-                    Rectangle()
-                        .stroke(Color.white.opacity(0.05), lineWidth: 1)
-                )
-                .frame(
-                    width: max(0, selectedX),
-                    height: metrics.plotFrame.height
-                )
-                .position(
-                    x: max(0, selectedX) / 2,
-                    y: metrics.plotFrame.midY
-                )
+            if placement != .leading {
+                Rectangle()
+                    .fill(Color.black.opacity(0.10))
+                    .overlay(
+                        Rectangle()
+                            .stroke(Color.white.opacity(0.05), lineWidth: 1)
+                    )
+                    .frame(
+                        width: max(0, selectedX),
+                        height: metrics.plotFrame.height
+                    )
+                    .position(
+                        x: max(0, selectedX) / 2,
+                        y: metrics.plotFrame.midY
+                    )
+            }
         }
     }
 
     @ViewBuilder
     private func compactSelectedDayOverlay(in metrics: CompactLayoutMetrics) -> some View {
         if let selectedPoint = chart.points.first(where: { $0.dateKey == chart.selectedDateKey }) {
+            let placement = compactSelectedDayPlacement(for: selectedPoint)
             let selectedX = xPosition(for: selectedPoint, in: metrics.dayColumnFrame)
+            let overlayLayout: (width: CGFloat, centerX: CGFloat) = {
+                switch placement {
+                case .leading:
+                    let width = compactEdgeOverlayWidth
+                    return (width, metrics.plotFrame.minX - 6 + (width / 2))
+                case .trailing:
+                    let width = compactEdgeOverlayWidth
+                    return (width, metrics.dayColumnFrame.maxX + 6 - (width / 2))
+                case .center:
+                    return (compactSelectedCalloutWidth, selectedX)
+                }
+            }()
 
             Rectangle()
                 .fill(Color.white.opacity(0.04))
                 .frame(
-                    width: dynamicTypeSize.isAccessibilitySize ? 82 : 74,
+                    width: overlayLayout.width,
                     height: metrics.plotFrame.maxY
                 )
                 .shadow(color: Color.black.opacity(0.25), radius: 4, x: 0, y: 2)
                 .position(
-                    x: selectedX,
+                    x: overlayLayout.centerX,
                     y: metrics.plotFrame.maxY / 2
                 )
         }
@@ -813,17 +856,40 @@ struct FajrWindowChartView: View {
     private func compactSelectedDayCallout(in metrics: CompactLayoutMetrics) -> some View {
         if let compactSelectedDay,
            let selectedPoint = chart.points.first(where: { $0.dateKey == compactSelectedDay.dateKey }) {
+            let placement = compactSelectedDayPlacement(for: selectedPoint)
             let rawCenterX = xPosition(for: selectedPoint, in: metrics.dayColumnFrame)
-            let calloutWidth: CGFloat = dynamicTypeSize.isAccessibilitySize ? 82 : 74
-            let calloutCenterX = min(
-                max(rawCenterX, metrics.calloutFrame.minX + calloutWidth / 2),
-                metrics.calloutFrame.maxX - calloutWidth / 2
-            )
+            let calloutWidth = compactSelectedCalloutWidth
+            let calloutLayout: (centerX: CGFloat, textAlignment: HorizontalAlignment, contentAlignment: Alignment) = {
+                switch placement {
+                case .leading:
+                    return (
+                        metrics.plotFrame.minX + (calloutWidth / 2),
+                        .leading,
+                        .leading
+                    )
+                case .trailing:
+                    return (
+                        metrics.dayColumnFrame.maxX - (calloutWidth / 2),
+                        .trailing,
+                        .trailing
+                    )
+                case .center:
+                    return (
+                        min(
+                            max(rawCenterX, metrics.calloutFrame.minX + calloutWidth / 2),
+                            metrics.calloutFrame.maxX - calloutWidth / 2
+                        ),
+                        .center,
+                        .center
+                    )
+                }
+            }()
 
-            VStack(spacing: compactCalloutStackSpacing) {
+            VStack(alignment: calloutLayout.textAlignment, spacing: compactCalloutStackSpacing) {
                 Text(compactSelectedDay.relativeLabel)
                     .font(.system(size: compactCalloutLabelPointSize, weight: .medium))
                     .foregroundStyle(compactCalloutPrimaryColor)
+                    .frame(maxWidth: .infinity, alignment: calloutLayout.contentAlignment)
 
                 HStack(alignment: .firstTextBaseline, spacing: 2) {
                     Text(compactSelectedDay.timeMain)
@@ -838,9 +904,10 @@ struct FajrWindowChartView: View {
                             .monospacedDigit()
                     }
                 }
+                .frame(maxWidth: .infinity, alignment: calloutLayout.contentAlignment)
             }
             .frame(width: calloutWidth)
-            .position(x: calloutCenterX, y: metrics.calloutFrame.midY + compactSelectedCalloutYOffset)
+            .position(x: calloutLayout.centerX, y: metrics.calloutFrame.midY + compactSelectedCalloutYOffset)
         }
     }
 
@@ -879,6 +946,40 @@ struct FajrWindowChartView: View {
         guard chart.points.count > 1 else { return width / 2 }
         let step = width / CGFloat(chart.points.count - 1)
         return CGFloat(ordinal) * step
+    }
+
+    private func compactSelectedDayPlacement(for point: FajrWindowPoint) -> CompactSelectedDayPlacement {
+        if point.dayOrdinal == 0 {
+            return .leading
+        }
+
+        if point.dayOrdinal == chart.points.count - 1 {
+            return .trailing
+        }
+
+        return .center
+    }
+
+    private func isCompactEdgeInactiveMarker(_ point: FajrWindowPoint) -> Bool {
+        point.dayOrdinal == 0 || point.dayOrdinal == chart.points.count - 1
+    }
+
+    @ViewBuilder
+    private func compactEdgeInactiveMarker(for point: FajrWindowPoint) -> some View {
+        Circle()
+            .fill(compactInactiveMarkerColor)
+            .frame(width: compactInactiveMarkerSize, height: compactInactiveMarkerSize)
+            .frame(
+                width: compactEdgeInactiveMarkerVisibleWidth,
+                height: compactInactiveMarkerSize,
+                alignment: point.dayOrdinal == 0 ? .trailing : .leading
+            )
+            .clipped()
+    }
+
+    private func compactEdgeInactiveMarkerCenterX(for point: FajrWindowPoint, baseX: CGFloat) -> CGFloat {
+        let offset = compactEdgeInactiveMarkerVisibleWidth / 2
+        return point.dayOrdinal == 0 ? baseX + offset : baseX - offset
     }
 
     private func yPosition(for minute: Int, in frame: CGRect) -> CGFloat {
