@@ -363,8 +363,8 @@ extension View {
     func appScrollableChrome() -> some View {
         self
             .appPageBackground()
-            .toolbarBackground(.clear, for: .navigationBar, .tabBar)
-            .toolbarBackgroundVisibility(.visible, for: .navigationBar, .tabBar)
+            .toolbarBackground(.clear, for: .navigationBar)
+            .toolbarBackgroundVisibility(.visible, for: .navigationBar)
     }
 
     @ViewBuilder

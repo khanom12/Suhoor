@@ -101,10 +101,6 @@ struct WakeScreen: View {
             .padding(.top, DesignTokens.spacingS)
             .padding(.bottom, DesignTokens.spacingL)
         }
-        .safeAreaInset(edge: .bottom) {
-            Color.clear
-                .frame(height: DesignTokens.spacingXL)
-        }
         .appScrollableChrome()
         .navigationTitle(Strings.AlarmsTab.title)
         .navigationBarTitleDisplayMode(.large)

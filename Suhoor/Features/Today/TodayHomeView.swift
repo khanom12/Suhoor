@@ -37,10 +37,6 @@ struct TodayHomeView: View {
                 .padding(.top, DesignTokens.spacingS)
                 .padding(.bottom, DesignTokens.spacingXL)
             }
-            .safeAreaInset(edge: .bottom) {
-                Color.clear
-                    .frame(height: DesignTokens.spacingXL)
-            }
             .appScrollableChrome()
             .navigationTitle("Home")
             .toolbar {
