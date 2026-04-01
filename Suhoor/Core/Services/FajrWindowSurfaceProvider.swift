@@ -913,24 +913,23 @@ struct FajrWindowSurfaceProvider {
             return CompactChartScale(domain: 270...360, ticks: ticks)
         }
 
-        let span = maximum - minimum
-        if span <= 45, let fifteenScale = compactChartScale(minimum: minimum, maximum: maximum, step: 15) {
-            return fifteenScale
-        }
-
-        for step in [30, 45, 60, 75, 90, 105, 120] {
+        for step in stride(from: 10, through: 120, by: 10) {
             if let scale = compactChartScale(minimum: minimum, maximum: maximum, step: step) {
                 return scale
             }
         }
 
-        return compactChartScale(minimum: minimum, maximum: maximum, step: 120)
-            ?? CompactChartScale(
-                domain: max(0, minimum - 30)...min(24 * 60, maximum + 30),
-                ticks: stride(from: max(0, minimum - 30), through: min(24 * 60, maximum + 60), by: 30)
-                    .prefix(4)
-                    .map { FajrWindowChartTick(minutes: $0, label: compactTimeLabel(for: $0)) }
-            )
+        let fallbackStart = tensAlignedFallbackStart(for: minimum)
+        let fallbackTicks = stride(
+            from: fallbackStart,
+            through: min((24 * 60), tensAlignedFallbackEnd(for: maximum)),
+            by: 10
+        )
+        .prefix(4)
+        .map { FajrWindowChartTick(minutes: $0, label: compactTimeLabel(for: $0)) }
+
+        let fallbackEnd = fallbackTicks.last?.minutes ?? fallbackStart
+        return CompactChartScale(domain: fallbackStart...fallbackEnd, ticks: fallbackTicks)
     }
 
     private func compactChartScale(
@@ -939,27 +938,30 @@ struct FajrWindowSurfaceProvider {
         step: Int
     ) -> CompactChartScale? {
         let dayLimit = 24 * 60
-        var start = max(0, (minimum / step) * step)
-        var end = min(dayLimit, ((maximum + step - 1) / step) * step)
+        let visibleBuffer = 10
+        let maxVisibleEnd = dayLimit
+        let bufferedMinimum = max(0, minimum - visibleBuffer)
+        let bufferedMaximum = min(dayLimit, maximum + visibleBuffer)
+        let maxStart = max(0, maxVisibleEnd - (4 * step))
+        let start = min((bufferedMinimum / step) * step, maxStart)
+        let visibleEnd = start + (4 * step)
 
-        while ((end - start) / step) + 1 < 4 {
-            if start - step >= 0 {
-                start -= step
-            } else if end + step <= dayLimit {
-                end += step
-            } else {
-                break
-            }
-        }
+        guard bufferedMaximum <= visibleEnd else { return nil }
 
-        let tickCount = ((end - start) / step) + 1
-        guard tickCount == 4 else { return nil }
-
+        let end = start + (3 * step)
         let ticks = stride(from: start, through: end, by: step).map {
             FajrWindowChartTick(minutes: $0, label: compactTimeLabel(for: $0))
         }
 
         return CompactChartScale(domain: start...end, ticks: ticks)
+    }
+
+    private func tensAlignedFallbackStart(for minimum: Int) -> Int {
+        max(0, ((max(0, minimum - 30)) / 10) * 10)
+    }
+
+    private func tensAlignedFallbackEnd(for maximum: Int) -> Int {
+        min((24 * 60), ((((maximum + 29) / 10) * 10) + 30))
     }
 
     private func chartTicks(for domain: ClosedRange<Int>) -> [FajrWindowChartTick] {

@@ -307,6 +307,150 @@ struct FajrWindowSurfaceProviderTests {
     }
 
     @Test
+    func compactSnapshotPrefersTenMinuteScaleWhenItFits() {
+        let days = (0..<7).map { offset in
+            makeDay(
+                dayOffset: offset,
+                wakeHour: 5,
+                wakeMinute: 10,
+                fajrStartHour: 5,
+                fajrStartMinute: 0,
+                boundaryHour: 5,
+                boundaryMinute: 20
+            )
+        }
+        let dataset = provider.buildDataset(
+            period: .sevenDays,
+            activeDays: days,
+            overrideDateKeys: [],
+            timeZone: .current
+        )
+
+        let compact = provider.compactSnapshot(
+            dataset: dataset,
+            now: days[0].date,
+            timeZone: .current
+        )
+
+        #expect(compact.compactYTicks.count == 4)
+        #expect(compact.compactYTicks[1].minutes - compact.compactYTicks[0].minutes == 10)
+    }
+
+    @Test
+    func compactSnapshotUsesSmallestValidTensOnlyScale() {
+        let days = (0..<7).map { offset in
+            makeDay(
+                dayOffset: offset,
+                wakeHour: 5,
+                wakeMinute: 25,
+                fajrStartHour: 5,
+                fajrStartMinute: 5,
+                boundaryHour: 5,
+                boundaryMinute: 35
+            )
+        }
+        let dataset = provider.buildDataset(
+            period: .sevenDays,
+            activeDays: days,
+            overrideDateKeys: [],
+            timeZone: .current
+        )
+
+        let compact = provider.compactSnapshot(
+            dataset: dataset,
+            now: days[0].date,
+            timeZone: .current
+        )
+
+        let tickMinutes = compact.compactYTicks.map(\.minutes)
+        #expect(compact.compactYTicks.count == 4)
+        #expect(compact.compactYTicks[1].minutes - compact.compactYTicks[0].minutes == 20)
+        #expect(tickMinutes == [280, 300, 320, 340])
+        #expect(tickMinutes.allSatisfy { $0 % 10 == 0 })
+    }
+
+    @Test
+    func compactSnapshotNeverProducesFiveBasedTickMinutes() {
+        let days = [
+            makeDay(dayOffset: 0, wakeHour: 5, wakeMinute: 43, fajrStartHour: 5, fajrStartMinute: 7, boundaryHour: 6, boundaryMinute: 11),
+            makeDay(dayOffset: 1, wakeHour: 5, wakeMinute: 49, fajrStartHour: 5, fajrStartMinute: 12, boundaryHour: 6, boundaryMinute: 18),
+            makeDay(dayOffset: 2, wakeHour: 5, wakeMinute: 55, fajrStartHour: 5, fajrStartMinute: 18, boundaryHour: 6, boundaryMinute: 24),
+            makeDay(dayOffset: 3, wakeHour: 6, wakeMinute: 1, fajrStartHour: 5, fajrStartMinute: 24, boundaryHour: 6, boundaryMinute: 30),
+            makeDay(dayOffset: 4, wakeHour: 6, wakeMinute: 7, fajrStartHour: 5, fajrStartMinute: 29, boundaryHour: 6, boundaryMinute: 37),
+            makeDay(dayOffset: 5, wakeHour: 6, wakeMinute: 12, fajrStartHour: 5, fajrStartMinute: 34, boundaryHour: 6, boundaryMinute: 42),
+            makeDay(dayOffset: 6, wakeHour: 6, wakeMinute: 18, fajrStartHour: 5, fajrStartMinute: 39, boundaryHour: 6, boundaryMinute: 48)
+        ]
+        let dataset = provider.buildDataset(
+            period: .sevenDays,
+            activeDays: days,
+            overrideDateKeys: [],
+            timeZone: .current
+        )
+
+        let compact = provider.compactSnapshot(
+            dataset: dataset,
+            now: days[0].date,
+            timeZone: .current
+        )
+
+        #expect(compact.compactYTicks.map(\.minutes).allSatisfy { $0 % 10 == 0 })
+    }
+
+    @Test
+    func compactSnapshotUsesExtraBottomRowAndBufferToAvoidInflatedStepSizes() {
+        let days = (0..<7).map { offset in
+            makeDay(
+                dayOffset: offset,
+                wakeHour: 4,
+                wakeMinute: 40,
+                fajrStartHour: 5,
+                fajrStartMinute: 25,
+                boundaryHour: 7,
+                boundaryMinute: 5
+            )
+        }
+        let dataset = provider.buildDataset(
+            period: .sevenDays,
+            activeDays: days,
+            overrideDateKeys: [],
+            timeZone: .current
+        )
+
+        let compact = provider.compactSnapshot(
+            dataset: dataset,
+            now: days[0].date,
+            timeZone: .current
+        )
+
+        let tickMinutes = compact.compactYTicks.map(\.minutes)
+        let step = compact.compactYTicks[1].minutes - compact.compactYTicks[0].minutes
+        let visibleEnd = compact.compactYTicks.last!.minutes + step
+        #expect(compact.compactYTicks.count == 4)
+        #expect(step == 50)
+        #expect(tickMinutes == [250, 300, 350, 400])
+        #expect(compact.compactChartDomain.lowerBound <= 270)
+        #expect(visibleEnd >= 435)
+    }
+
+    @Test
+    func compactSnapshotDefaultsToThirtyMinuteTicksWhenNoDataExists() {
+        let dataset = provider.buildDataset(
+            period: .sevenDays,
+            activeDays: [],
+            overrideDateKeys: [],
+            timeZone: .current
+        )
+
+        let compact = provider.compactSnapshot(
+            dataset: dataset,
+            now: Date(),
+            timeZone: .current
+        )
+
+        #expect(compact.compactYTicks.map(\.minutes) == [270, 300, 330, 360])
+    }
+
+    @Test
     func compactSnapshotReportsSkippedTomorrowAlarm() {
         let first = makeDay(dayOffset: 0)
         let skippedTomorrow = makeDay(dayOffset: 1, skipDay: true)

@@ -232,7 +232,7 @@ struct FajrWindowChartView: View {
     }
 
     private var compactBoundaryColor: Color {
-        Color.white.opacity(0.5)
+        Color.black.opacity(0.20)
     }
 
     private var selectedAxisColor: Color {
@@ -240,41 +240,45 @@ struct FajrWindowChartView: View {
     }
 
     private var compactSelectedGuideColor: Color {
-        .white
+        Color.black.opacity(0.70)
     }
 
     private var gridColor: Color {
         layoutStyle == .compact
-            ? Color.white.opacity(0.10)
+            ? Color.black.opacity(0.10)
             : (colorScheme == .dark ? Color.white.opacity(0.12) : Color.black.opacity(0.10))
     }
 
     private var compactPrimaryTextColor: Color {
-        .white
+        Color.black.opacity(0.70)
     }
 
     private var compactSecondaryTextColor: Color {
-        Color.white.opacity(0.5)
+        Color.black.opacity(0.5)
     }
 
     private var compactTertiaryTextColor: Color {
-        Color.white.opacity(0.42)
+        Color.black.opacity(0.42)
     }
 
     private var compactBandFill: Color {
-        Color.black.opacity(0.48)
+        Color.black.opacity(0.10)
     }
 
     private var compactPlotMarkerColor: Color {
-        .white
+        Color.black.opacity(0.70)
     }
 
     private var compactCalloutPrimaryColor: Color {
-        .white
+        Color.black.opacity(0.70)
     }
 
     private var compactCalloutSecondaryColor: Color {
-        Color.white.opacity(0.5)
+        Color.black.opacity(0.5)
+    }
+
+    private var compactInactiveMarkerColor: Color {
+        Color.black.opacity(0.30)
     }
 
     @ViewBuilder
@@ -429,7 +433,7 @@ struct FajrWindowChartView: View {
                     .position(x: x, y: y)
             } else {
                 Circle()
-                    .fill(layoutStyle == .compact ? compactSecondaryTextColor.opacity(0.74) : regularMarkerColor)
+                    .fill(layoutStyle == .compact ? compactInactiveMarkerColor : regularMarkerColor)
                     .frame(
                         width: layoutStyle == .compact ? 9 : 7,
                         height: layoutStyle == .compact ? 9 : 7
@@ -658,16 +662,28 @@ struct FajrWindowChartView: View {
         dynamicTypeSize.isAccessibilitySize ? 11 : 10
     }
 
+    private var compactCalloutStackSpacing: CGFloat {
+        dynamicTypeSize.isAccessibilitySize ? -1 : -2
+    }
+
     private var compactSelectedGuideHalfHeight: CGFloat {
         dynamicTypeSize.isAccessibilitySize ? 7.5 : 6.5
     }
 
     private var compactSelectedCalloutYOffset: CGFloat {
-        dynamicTypeSize.isAccessibilitySize ? -1 : -2
+        dynamicTypeSize.isAccessibilitySize ? 0 : 0
+    }
+
+    private var compactXAxisLabelFrameWidth: CGFloat {
+        dynamicTypeSize.isAccessibilitySize ? 16 : 14
+    }
+
+    private var compactXAxisLabelCenterOffset: CGFloat {
+        dynamicTypeSize.isAccessibilitySize ? 9 : 8
     }
 
     private func compactLayoutMetrics(in size: CGSize) -> CompactLayoutMetrics {
-        let plotTop = dynamicTypeSize.isAccessibilitySize ? 34.0 : 31.0
+        let plotTop = dynamicTypeSize.isAccessibilitySize ? 38.0 : 34.0
         let plotHeight = dynamicTypeSize.isAccessibilitySize ? 94.0 : 89.0
         let rightRailWidth = dynamicTypeSize.isAccessibilitySize ? 40.0 : 35.0
         let plotMinX = 1.0
@@ -733,7 +749,7 @@ struct FajrWindowChartView: View {
             let selectedX = xPosition(for: selectedPoint, in: metrics.dayColumnFrame)
 
             Rectangle()
-                .fill(Color.black.opacity(0.30))
+                .fill(Color.black.opacity(0.10))
                 .overlay(
                     Rectangle()
                         .stroke(Color.white.opacity(0.05), lineWidth: 1)
@@ -804,7 +820,7 @@ struct FajrWindowChartView: View {
                 metrics.calloutFrame.maxX - calloutWidth / 2
             )
 
-            VStack(spacing: dynamicTypeSize.isAccessibilitySize ? 1 : 0) {
+            VStack(spacing: compactCalloutStackSpacing) {
                 Text(compactSelectedDay.relativeLabel)
                     .font(.system(size: compactCalloutLabelPointSize, weight: .medium))
                     .foregroundStyle(compactCalloutPrimaryColor)
@@ -840,7 +856,8 @@ struct FajrWindowChartView: View {
                         ? compactPrimaryTextColor
                         : compactSecondaryTextColor
                 )
-                .position(x: x, y: metrics.weekdayRowY)
+                .frame(width: compactXAxisLabelFrameWidth, alignment: .leading)
+                .position(x: x + compactXAxisLabelCenterOffset, y: metrics.weekdayRowY)
         }
     }
 

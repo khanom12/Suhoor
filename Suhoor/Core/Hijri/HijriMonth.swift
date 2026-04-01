@@ -80,6 +80,64 @@ enum HijriMonth: Int, CaseIterable, Codable, Hashable, Identifiable {
         }
     }
 
+    var weeklyTagPreferredToken: String {
+        switch self {
+        case .muharram:
+            return "Muh"
+        case .safar:
+            return "Saf"
+        case .rabiAlAwwal:
+            return "RabI"
+        case .rabiAlThani:
+            return "RabII"
+        case .jumadaAlAwwal:
+            return "JumI"
+        case .jumadaAlThani:
+            return "JumII"
+        case .rajab:
+            return "Raj"
+        case .shaban:
+            return "Sha"
+        case .ramadan:
+            return "Ram"
+        case .shawwal:
+            return "Shw"
+        case .dhulQadah:
+            return "DhuQ"
+        case .dhulHijjah:
+            return "DhuH"
+        }
+    }
+
+    var weeklyTagCompactToken: String {
+        switch self {
+        case .muharram:
+            return "Muh"
+        case .safar:
+            return "Saf"
+        case .rabiAlAwwal:
+            return "Rb1"
+        case .rabiAlThani:
+            return "Rb2"
+        case .jumadaAlAwwal:
+            return "Jm1"
+        case .jumadaAlThani:
+            return "Jm2"
+        case .rajab:
+            return "Raj"
+        case .shaban:
+            return "Sha"
+        case .ramadan:
+            return "Ram"
+        case .shawwal:
+            return "Shw"
+        case .dhulQadah:
+            return "DQ"
+        case .dhulHijjah:
+            return "DH"
+        }
+    }
+
     var persistenceValue: String {
         String(format: "%02d", rawValue)
     }
