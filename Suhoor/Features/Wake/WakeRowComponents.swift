@@ -1,8 +1,6 @@
 import SwiftUI
 
 enum WakeGlassTheme {
-    static let tintColor: Color = .black
-    static let tintOpacityMultiplier: Double = 10
     static let surfaceVariant: AppGlassSurfaceVariant = .grouped
     static let primaryText = Color.white
     static let secondaryText = Color.white.opacity(0.70)
@@ -27,8 +25,6 @@ struct WakeGlassCard<Content: View>: View {
     var body: some View {
         AppGlassSurface(
             variant: WakeGlassTheme.surfaceVariant,
-            tint: WakeGlassTheme.tintColor,
-            tintOpacityMultiplier: WakeGlassTheme.tintOpacityMultiplier,
             contentPadding: padding
         ) {
             content()

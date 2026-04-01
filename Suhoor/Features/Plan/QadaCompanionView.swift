@@ -59,7 +59,7 @@ struct QadaCompanionView: View {
     @ViewBuilder
     private var recoveryCard: some View {
         if case .needsRecovery(let snapshot) = state {
-            AppGlassSurface(variant: .tinted, tint: .orange) {
+            AppGlassSurface(variant: .tinted) {
                 VStack(alignment: .leading, spacing: DesignTokens.textSpacingMedium) {
                     Text("One planned Qada day still needs to be rescheduled.")
                         .font(AppTypography.cardTitle)

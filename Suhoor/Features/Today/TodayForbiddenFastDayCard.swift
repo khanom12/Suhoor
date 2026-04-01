@@ -12,7 +12,7 @@ struct TodayForbiddenFastDayCard: View {
 
     var body: some View {
         if let model = ForbiddenFastDayEngine.model(kind: kind, mode: mode, now: Date()) {
-            AppGlassSurface(variant: .tinted, tint: accentColor) {
+            AppGlassSurface(variant: .tinted) {
                 VStack(alignment: .leading, spacing: DesignTokens.dashboardCardInternalSpacing) {
                     HStack(alignment: .center, spacing: DesignTokens.spacingS) {
                         VStack(alignment: .leading, spacing: DesignTokens.spacingXS) {

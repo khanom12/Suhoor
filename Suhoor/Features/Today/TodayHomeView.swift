@@ -146,7 +146,7 @@ private struct TodayBlockingIssueCard: View {
     let presentation: PermissionPresentation
 
     var body: some View {
-        AppGlassSurface(variant: .tinted, tint: .orange) {
+        AppGlassSurface(variant: .tinted) {
             VStack(alignment: .leading, spacing: DesignTokens.dashboardCardInternalSpacing) {
                 Text(presentation.title)
                     .font(AppTypography.cardTitle)
@@ -173,7 +173,6 @@ private struct TodayNextWakeHeroCard: View {
     var body: some View {
         AppGlassSurface(
             variant: .hero,
-            tint: DawnColor.lightGold100,
             contentPadding: DesignTokens.spacingL
         ) {
             VStack(alignment: .leading, spacing: DesignTokens.textSpacingMedium) {

@@ -28,7 +28,7 @@ struct PlanCalendarView: View {
                     )
                 }
 
-                GlassCard(tintColor: DawnColor.lightGold200, tintOpacity: 0.14) {
+                GlassCard() {
                     VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
                         VStack(alignment: .leading, spacing: DesignTokens.textSpacingTight) {
                             Text(detail.gregorianText)

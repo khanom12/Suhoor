@@ -71,10 +71,7 @@ struct WakeScreen: View {
                                                 .foregroundStyle(WakeGlassTheme.secondaryText)
                                         }
                                     } else {
-                                        AppInsetGroup(
-                                            tint: WakeGlassTheme.tintColor,
-                                            tintOpacityMultiplier: WakeGlassTheme.tintOpacityMultiplier
-                                        ) {
+                                        AppInsetGroup {
                                             ForEach(Array(section.entries.enumerated()), id: \.element.id) { index, entry in
                                                 WakeRowView(
                                                     entry: entry

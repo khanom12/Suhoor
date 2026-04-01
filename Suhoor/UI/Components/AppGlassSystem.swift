@@ -1,5 +1,11 @@
 import SwiftUI
 
+private enum AppCardGlassTheme {
+    static let tintColor: Color = .black
+    static let tintOpacityMultiplier: Double = 7.5
+    static let forcedContentColorScheme: ColorScheme = .dark
+}
+
 enum AppGlassSurfaceVariant {
     case hero
     case standard
@@ -43,76 +49,32 @@ struct AppGlassStyle {
     ) -> AppGlassStyle {
         switch (variant, prominence) {
         case (.hero, _), (_, .high):
-            return AppGlassStyle(
-                cornerRadius: 26,
-                padding: 16,
-                fallbackMaterial: .regularMaterial,
-                baseOverlayOpacity: 0.10,
-                warmOverlayOpacity: 0.0,
-                tintOpacity: 0.035,
-                strokeOpacityLight: 0.12,
-                strokeOpacityDark: 0.09,
-                ambientShadow: ShadowStyle(y: 6, blur: 14, opacity: 0.04),
-                contactShadow: ShadowStyle(y: 1, blur: 4, opacity: 0.03),
-                nativeGlassKind: .regular
-            )
+            return baseStyle(cornerRadius: 26, padding: 16)
         case (.standard, _):
-            return AppGlassStyle(
-                cornerRadius: 22,
-                padding: 12,
-                fallbackMaterial: .thinMaterial,
-                baseOverlayOpacity: 0.08,
-                warmOverlayOpacity: 0.0,
-                tintOpacity: 0.025,
-                strokeOpacityLight: 0.09,
-                strokeOpacityDark: 0.07,
-                ambientShadow: ShadowStyle(y: 4, blur: 10, opacity: 0.028),
-                contactShadow: ShadowStyle(y: 1, blur: 3, opacity: 0.02),
-                nativeGlassKind: .regular
-            )
+            return baseStyle(cornerRadius: 22, padding: 12)
         case (.quiet, _):
-            return AppGlassStyle(
-                cornerRadius: 18,
-                padding: 10,
-                fallbackMaterial: .thinMaterial,
-                baseOverlayOpacity: 0.06,
-                warmOverlayOpacity: 0.0,
-                tintOpacity: 0.018,
-                strokeOpacityLight: 0.07,
-                strokeOpacityDark: 0.06,
-                ambientShadow: ShadowStyle(y: 2, blur: 6, opacity: 0.015),
-                contactShadow: ShadowStyle(y: 1, blur: 2, opacity: 0.01),
-                nativeGlassKind: .clear
-            )
+            return baseStyle(cornerRadius: 18, padding: 10)
         case (.tinted, _):
-            return AppGlassStyle(
-                cornerRadius: 22,
-                padding: 14,
-                fallbackMaterial: .regularMaterial,
-                baseOverlayOpacity: 0.09,
-                warmOverlayOpacity: 0.0,
-                tintOpacity: 0.05,
-                strokeOpacityLight: 0.09,
-                strokeOpacityDark: 0.08,
-                ambientShadow: ShadowStyle(y: 4, blur: 10, opacity: 0.03),
-                contactShadow: ShadowStyle(y: 1, blur: 3, opacity: 0.02),
-                nativeGlassKind: .regular
-            )
+            return baseStyle(cornerRadius: 22, padding: 14)
         case (.grouped, _):
-            return AppGlassStyle(
-                cornerRadius: 20,
-                padding: 0,
-                fallbackMaterial: .thinMaterial,
-                baseOverlayOpacity: 0.08,
-                warmOverlayOpacity: 0.0,
-                tintOpacity: 0.022,
-                strokeOpacityLight: 0.08,
-                strokeOpacityDark: 0.08,
-                ambientShadow: ShadowStyle(y: 4, blur: 8, opacity: 0.02),
-                contactShadow: ShadowStyle(y: 1, blur: 3, opacity: 0.015),
-                nativeGlassKind: .clear
-            )
+            return baseStyle(cornerRadius: 20, padding: 0)
         }
+    }
+
+    private static func baseStyle(cornerRadius: CGFloat, padding: CGFloat) -> AppGlassStyle {
+        AppGlassStyle(
+            cornerRadius: cornerRadius,
+            padding: padding,
+            fallbackMaterial: .thinMaterial,
+            baseOverlayOpacity: 0.012,
+            warmOverlayOpacity: 0.0,
+            tintOpacity: 0.018,
+            strokeOpacityLight: 0.06,
+            strokeOpacityDark: 0.06,
+            ambientShadow: ShadowStyle(y: 4, blur: 8, opacity: 0.015),
+            contactShadow: ShadowStyle(y: 1, blur: 3, opacity: 0.01),
+            nativeGlassKind: .clear
+        )
     }
 }
 
@@ -189,6 +151,7 @@ struct AppGlassSurface<Content: View>: View {
         content()
             .padding(padding)
             .frame(maxWidth: .infinity, alignment: alignment)
+            .environment(\.colorScheme, AppCardGlassTheme.forcedContentColorScheme)
     }
 
     @available(iOS 26.0, *)
@@ -203,8 +166,8 @@ struct AppGlassSurface<Content: View>: View {
                 shape.fill(surfaceOverlay(for: style))
             }
             .overlay {
-                if let tint {
-                    shape.fill(tint.opacity(resolvedTintOpacity(for: style)))
+                if let resolvedTint {
+                    shape.fill(resolvedTint.opacity(resolvedTintOpacity(for: style)))
                 }
             }
     }
@@ -222,8 +185,8 @@ struct AppGlassSurface<Content: View>: View {
                 shape.fill(DawnColor.glassWarmOverlay.opacity(style.warmOverlayOpacity))
             }
             .overlay {
-                if let tint {
-                    shape.fill(tint.opacity(resolvedTintOpacity(for: style)))
+                if let resolvedTint {
+                    shape.fill(resolvedTint.opacity(resolvedTintOpacity(for: style)))
                 }
             }
     }
@@ -250,14 +213,19 @@ struct AppGlassSurface<Content: View>: View {
         }
 
         var glass = baseGlass.interactive(false)
-        if let tint {
-            glass = glass.tint(tint.opacity(resolvedTintOpacity(for: style)))
+        if let resolvedTint {
+            glass = glass.tint(resolvedTint.opacity(resolvedTintOpacity(for: style)))
         }
         return glass
     }
 
+    private var resolvedTint: Color? {
+        tint ?? AppCardGlassTheme.tintColor
+    }
+
     private func resolvedTintOpacity(for style: AppGlassStyle) -> Double {
-        min(1, max(0, style.tintOpacity * tintOpacityMultiplier))
+        let resolvedMultiplier = tint == nil ? AppCardGlassTheme.tintOpacityMultiplier : tintOpacityMultiplier
+        return min(1, max(0, style.tintOpacity * resolvedMultiplier))
     }
 }
 

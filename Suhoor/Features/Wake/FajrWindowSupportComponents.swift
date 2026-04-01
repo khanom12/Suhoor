@@ -153,8 +153,6 @@ struct FajrWindowActionRows: View {
                 } label: {
                     AppGlassSurface(
                         variant: .grouped,
-                        tint: WakeGlassTheme.tintColor,
-                        tintOpacityMultiplier: WakeGlassTheme.tintOpacityMultiplier,
                         contentPadding: DesignTokens.spacingM
                     ) {
                         HStack(alignment: .center, spacing: DesignTokens.spacingM) {

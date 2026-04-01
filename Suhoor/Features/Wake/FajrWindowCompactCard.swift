@@ -11,8 +11,6 @@ struct WeeklyFajrcastCard: View {
         Button(action: onOpen) {
             AppGlassSurface(
                 variant: .grouped,
-                tint: WakeGlassTheme.tintColor,
-                tintOpacityMultiplier: WakeGlassTheme.tintOpacityMultiplier,
                 contentPadding: 0
             ) {
                 VStack(spacing: 0) {
