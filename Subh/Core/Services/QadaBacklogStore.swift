@@ -26,8 +26,13 @@ final class QadaBacklogStore: ObservableObject {
         delay: 0.2
     )
 
-    init(defaults: UserDefaults = .standard) {
+    init(defaults: UserDefaults = .standard, loadPersistedData: Bool = true) {
         self.defaults = defaults
+        guard loadPersistedData else {
+            let todayKey = DateHelpers.dayIdentifier(for: Date(), timeZone: .current)
+            self.state = QadaBacklogState.empty(startDateKey: todayKey)
+            return
+        }
         if let data = defaults.data(forKey: storageKey),
            let decoded = try? JSONDecoder().decode(QadaBacklogState.self, from: data) {
             self.state = decoded

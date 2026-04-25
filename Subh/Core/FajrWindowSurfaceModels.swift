@@ -340,6 +340,37 @@ struct FajrWindowCompactSnapshot: Equatable, Sendable {
     var yTicks: [FajrWindowChartTick] { chart.yTicks }
     var compactChartDomain: ClosedRange<Int> { chart.compactChartDomain }
     var compactYTicks: [FajrWindowChartTick] { chart.compactYTicks }
+
+    static let empty = FajrWindowCompactSnapshot(
+        period: .sevenDays,
+        chart: FajrWindowChartSnapshot(
+            period: .sevenDays,
+            activeOverlay: .myWake,
+            points: [],
+            renderPoints: [],
+            selectedDateKey: nil,
+            chartDomain: 0...1,
+            xAxisLabels: [],
+            yTicks: [],
+            compactChartDomain: 0...1,
+            compactYTicks: []
+        ),
+        compactInsight: "Subh will show the weekly Fajrcast once schedule data is available.",
+        summary: FajrWindowCompactSummarySnapshot(
+            primaryText: "Fajrcast is waiting for resolved mornings.",
+            secondaryText: nil
+        ),
+        selectedDay: FajrWindowCompactSelectedDaySnapshot(
+            dateKey: "",
+            relativeLabel: "Pending",
+            weekdayTitle: "Pending",
+            iconName: "sun.haze",
+            isAlarmActive: false,
+            timeMain: "--",
+            timeSuffix: nil,
+            accessibilityValue: "Fajrcast is waiting for resolved mornings."
+        )
+    )
 }
 
 struct FajrWindowSurfaceSnapshot: Equatable, Sendable {

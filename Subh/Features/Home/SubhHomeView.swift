@@ -26,7 +26,6 @@ private enum SubhHomeDestination: Identifiable, Hashable {
 struct SubhHomeView: View {
     @EnvironmentObject private var scheduleManager: ScheduleManager
     @EnvironmentObject private var appNavigator: AppNavigator
-    @Environment(\.scenePhase) private var scenePhase
 
     @State private var destination: SubhHomeDestination?
     @State private var settingsPath = NavigationPath()
@@ -102,20 +101,13 @@ struct SubhHomeView: View {
             }
             .appPresentedChrome()
         }
-        .onAppear {
-            scheduleManager.requestRefresh(reason: .foreground)
-        }
-        .onChange(of: scenePhase) { _, newPhase in
-            guard newPhase == .active else { return }
-            scheduleManager.requestRefresh(reason: .foreground)
-        }
         .onReceive(appNavigator.$latestRequest.compactMap { $0 }) { request in
             handle(request.intent)
         }
     }
 
     private var snapshot: MorningHomeSnapshot {
-        scheduleManager.morningHomeSnapshot(timeZone: .autoupdatingCurrent)
+        scheduleManager.currentMorningHomeSnapshot
     }
 
     private func handle(_ intent: AppNavigationIntent) {

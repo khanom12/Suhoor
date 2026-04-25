@@ -25,6 +25,14 @@ struct MorningHomeSnapshot {
     let permissionState: PermissionSnapshot
     let contextFlags: [MorningHomeContextFlag]
 
+    static let empty = MorningHomeSnapshot(
+        tomorrow: nil,
+        weeklyFajrcast: .empty,
+        morningcast: [],
+        permissionState: .empty,
+        contextFlags: []
+    )
+
     var cardKinds: [MorningHomeCardKind] {
         Self.mvpCardKinds
     }

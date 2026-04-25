@@ -21,13 +21,19 @@ final class ScheduleManager: ObservableObject {
     @Published var alarmAuthorizationText: String = "--"
     @Published var notificationAuthorizationText: String = "--"
     @Published private(set) var currentRevision: Int = 0
-    @Published private(set) var permissionSnapshot: PermissionSnapshot = .empty
+    @Published private(set) var permissionSnapshot: PermissionSnapshot = .empty {
+        didSet {
+            refreshCurrentMorningHomeSnapshot()
+        }
+    }
     @Published private(set) var activeWindowSnapshot: ActiveAlarmWindowSnapshot = .empty {
         didSet {
             currentRevision += 1
             clearFajrWindowCaches()
+            refreshCurrentMorningHomeSnapshot()
         }
     }
+    @Published private(set) var currentMorningHomeSnapshot: MorningHomeSnapshot = .empty
     @Published private(set) var bootstrapState: AppBootstrapState = .welcome
     @Published private(set) var hijriAdjustmentChanges: [HijriAdjustmentChange] = []
 
@@ -40,6 +46,7 @@ final class ScheduleManager: ObservableObject {
     private let fajrLogStore: FajrLogStore
     private let qadaBacklogStore: QadaBacklogStore
     private let qadaBatchStore: QadaBatchStore
+    private let usesLegacyContexts: Bool
     private let cacheStore: ScheduleCacheStore
     private let completionRepository: any CompletionRepository
     let completionSurfaceStore: CompletionSurfaceStore
@@ -91,6 +98,7 @@ final class ScheduleManager: ObservableObject {
         fajrLogStore: fajrLogStore,
         qadaBacklogStore: qadaBacklogStore,
         qadaBatchStore: qadaBatchStore,
+        usesLegacyContexts: usesLegacyContexts,
         adjustedHijriCalendar: adjustedHijriCalendar,
         calculator: calculator,
         dependencies: .init(
@@ -168,16 +176,23 @@ final class ScheduleManager: ObservableObject {
         settingsStore: SuhoorSettingsStore,
         locationService: LocationService,
         alarmConfigStore: AlarmConfigStore,
-        fastTagStore: FastTagStore = FastTagStore(),
-        fastLogStore: FastLogStore = FastLogStore(),
-        fajrLogStore: FajrLogStore = FajrLogStore(),
-        qadaBacklogStore: QadaBacklogStore = QadaBacklogStore(),
-        qadaBatchStore: QadaBatchStore = QadaBatchStore(),
+        fastTagStore: FastTagStore? = nil,
+        fastLogStore: FastLogStore? = nil,
+        fajrLogStore: FajrLogStore? = nil,
+        qadaBacklogStore: QadaBacklogStore? = nil,
+        qadaBatchStore: QadaBatchStore? = nil,
+        usesLegacyContexts: Bool = true,
         hijriAdjustmentStore: HijriMonthAdjustmentStore = HijriMonthAdjustmentStore(),
         hijriAdjustmentChangeStore: HijriAdjustmentChangeStore = HijriAdjustmentChangeStore(),
         cacheStore: ScheduleCacheStore = ScheduleCacheStore(),
         completionSurfaceStore: CompletionSurfaceStore? = nil
     ) {
+        let resolvedFastTagStore = fastTagStore ?? FastTagStore(loadPersistedData: usesLegacyContexts)
+        let resolvedFastLogStore = fastLogStore ?? FastLogStore(loadPersistedData: usesLegacyContexts)
+        let resolvedFajrLogStore = fajrLogStore ?? FajrLogStore(loadPersistedData: usesLegacyContexts)
+        let resolvedQadaBacklogStore = qadaBacklogStore ?? QadaBacklogStore(loadPersistedData: usesLegacyContexts)
+        let resolvedQadaBatchStore = qadaBatchStore ?? QadaBatchStore(loadPersistedData: usesLegacyContexts)
+
         self.settingsStore = settingsStore
         self.alarmConfigStore = alarmConfigStore
         self.morningPlanStore = MorningPlanStore(
@@ -186,18 +201,19 @@ final class ScheduleManager: ObservableObject {
             defaultConfig: alarmConfigStore.defaults
         )
         self.locationService = locationService
-        self.fastTagStore = fastTagStore
-        self.fastLogStore = fastLogStore
-        self.fajrLogStore = fajrLogStore
-        self.qadaBacklogStore = qadaBacklogStore
-        self.qadaBatchStore = qadaBatchStore
+        self.fastTagStore = resolvedFastTagStore
+        self.fastLogStore = resolvedFastLogStore
+        self.fajrLogStore = resolvedFajrLogStore
+        self.qadaBacklogStore = resolvedQadaBacklogStore
+        self.qadaBatchStore = resolvedQadaBatchStore
+        self.usesLegacyContexts = usesLegacyContexts
         self.hijriAdjustmentStore = hijriAdjustmentStore
         self.hijriAdjustmentChangeStore = hijriAdjustmentChangeStore
         self.cacheStore = cacheStore
         self.completionRepository = LegacyCompletionRepository(
-            fajrLogStore: fajrLogStore,
-            fastLogStore: fastLogStore,
-            qadaBacklogStore: qadaBacklogStore
+            fajrLogStore: resolvedFajrLogStore,
+            fastLogStore: resolvedFastLogStore,
+            qadaBacklogStore: resolvedQadaBacklogStore
         )
         self.completionCommandGateway = CompletionCommandGateway(repository: completionRepository)
         let hijriCalendarService = HijriCalendarService(adjustmentStore: hijriAdjustmentStore)
@@ -266,44 +282,46 @@ final class ScheduleManager: ObservableObject {
                 defaults: alarmConfigStore.defaults,
                 overridesByDay: alarmConfigStore.overridesByDay,
                 provenanceProvider: { alarmConfigStore.provenance(for: $0, timeZone: $1) },
-                selections: fastTagStore.selections,
+                selections: usesLegacyContexts ? resolvedFastTagStore.selections : [:],
                 visibleHorizonDays: visibleActiveDayLimit,
                 scheduledHorizonDays: scheduledActiveDayLimit,
                 timeZone: .current
             )
-        self.activeTagSelectionRevision = cache.tagSelectionRevision ?? -1
+        self.activeTagSelectionRevision = usesLegacyContexts ? (cache.tagSelectionRevision ?? -1) : -1
         self.schedules = activeWindowSnapshot.visibleDays.map(\.schedule)
         self.hijriAdjustmentChanges = hijriAdjustmentChangeStore.pendingChanges()
 
-        fastTagStore.$selections
-            .dropFirst()
-            .sink { [weak self] _ in
-                Task { @MainActor [weak self] in
-                    self?.retagActiveWindow()
+        if usesLegacyContexts {
+            resolvedFastTagStore.$selections
+                .dropFirst()
+                .sink { [weak self] _ in
+                    Task { @MainActor [weak self] in
+                        self?.retagActiveWindow()
+                    }
                 }
-            }
-            .store(in: &cancellables)
+                .store(in: &cancellables)
 
-        fastLogStore.$currentRevision
-            .dropFirst()
-            .sink { [weak self] _ in
-                self?.refreshCachedCompletionSurfaces(reason: "fast-log-revision")
-            }
-            .store(in: &cancellables)
+            resolvedFastLogStore.$currentRevision
+                .dropFirst()
+                .sink { [weak self] _ in
+                    self?.refreshCachedCompletionSurfaces(reason: "fast-log-revision")
+                }
+                .store(in: &cancellables)
 
-        fajrLogStore.$currentRevision
-            .dropFirst()
-            .sink { [weak self] _ in
-                self?.refreshCachedCompletionSurfaces(reason: "fajr-log-revision")
-            }
-            .store(in: &cancellables)
+            resolvedFajrLogStore.$currentRevision
+                .dropFirst()
+                .sink { [weak self] _ in
+                    self?.refreshCachedCompletionSurfaces(reason: "fajr-log-revision")
+                }
+                .store(in: &cancellables)
 
-        qadaBacklogStore.$state
-            .dropFirst()
-            .sink { [weak self] _ in
-                self?.refreshCachedCompletionSurfaces(reason: "qada-backlog")
-            }
-            .store(in: &cancellables)
+            resolvedQadaBacklogStore.$state
+                .dropFirst()
+                .sink { [weak self] _ in
+                    self?.refreshCachedCompletionSurfaces(reason: "qada-backlog")
+                }
+                .store(in: &cancellables)
+        }
 
         settingsStore.$settings
             .sink { [weak self] _ in
@@ -326,6 +344,7 @@ final class ScheduleManager: ObservableObject {
 
         updateBootstrapState()
         refreshCachedCompletionSurfaces(reason: "init")
+        refreshCurrentMorningHomeSnapshot()
         monthTagResultLookup.handler = { [weak self] date, dateKey, fallback, timeZone in
             guard let self else { return fallback }
             return self.monthTagResultProvider.resolvedTagResult(
@@ -380,17 +399,19 @@ final class ScheduleManager: ObservableObject {
     }
 
     func fajrWindowCompactSnapshot(timeZone: TimeZone = .current) -> FajrWindowCompactSnapshot {
-        let dataset = fajrWindowSurfaceProvider.buildDataset(
-            period: .sevenDays,
-            activeDays: activeDaysForWeeklyFajrcast(timeZone: timeZone),
-            overrideDateKeys: Set(alarmConfigStore.overridesByDay.keys),
-            timeZone: timeZone
-        )
-        return fajrWindowSurfaceProvider.compactSnapshot(
-            dataset: dataset,
-            now: Date(),
-            timeZone: timeZone
-        )
+        PerformanceTrace.measure("fajrcast.compact.build") {
+            let dataset = fajrWindowSurfaceProvider.buildDataset(
+                period: .sevenDays,
+                activeDays: activeDaysForWeeklyFajrcast(timeZone: timeZone),
+                overrideDateKeys: Set(alarmConfigStore.overridesByDay.keys),
+                timeZone: timeZone
+            )
+            return fajrWindowSurfaceProvider.compactSnapshot(
+                dataset: dataset,
+                now: Date(),
+                timeZone: timeZone
+            )
+        }
     }
 
     func fajrWindowDataset(
@@ -488,6 +509,16 @@ final class ScheduleManager: ObservableObject {
     }
 
     func morningHomeSnapshot(timeZone: TimeZone = .current) -> MorningHomeSnapshot {
+        buildMorningHomeSnapshot(timeZone: timeZone)
+    }
+
+    private func refreshCurrentMorningHomeSnapshot(timeZone: TimeZone = .current) {
+        currentMorningHomeSnapshot = PerformanceTrace.measure("home.snapshot.build") {
+            buildMorningHomeSnapshot(timeZone: timeZone)
+        }
+    }
+
+    private func buildMorningHomeSnapshot(timeZone: TimeZone = .current) -> MorningHomeSnapshot {
         let overrideDateKeys = Set(alarmConfigStore.overridesByDay.keys)
         let morningcast = activeWindowSnapshot.visibleDays
             .prefix(MorningHomeSnapshot.maximumMorningcastCount)
@@ -778,6 +809,7 @@ final class ScheduleManager: ObservableObject {
         defaultPrimaryIntent: FastPrimaryIntent? = nil,
         timeZone: TimeZone = .current
     ) -> TagComputationResult {
+        guard usesLegacyContexts else { return .empty }
         let key = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
         if overrideSelection == nil,
            alarmConfigStore.provenance(for: date, timeZone: timeZone).isEmpty == false,
@@ -873,6 +905,7 @@ final class ScheduleManager: ObservableObject {
         requestedOverlay: FajrWindowOverlay,
         timeZone: TimeZone
     ) -> [FajrWindowOverlaySeries] {
+        guard usesLegacyContexts else { return [] }
         var overlays: [FajrWindowOverlaySeries] = []
 
         if let cachedFasting = fajrWindowOverlaySeriesCache[
@@ -1267,6 +1300,7 @@ final class ScheduleManager: ObservableObject {
         reason: String,
         now: Date = Date()
     ) {
+        guard usesLegacyContexts else { return }
         PerformanceTrace.measure(
             "completion.surface-refresh",
             metadata: reason
@@ -1376,6 +1410,10 @@ final class ScheduleManager: ObservableObject {
             now: now,
             timeZone: .current
         ) {
+            guard usesLegacyContexts else {
+                await refreshPermissionSummary()
+                return
+            }
             if activeTagSelectionRevision != fastTagStore.currentRevision {
                 if !activeWindowSnapshot.visibleDays.isEmpty {
                     retagActiveWindow(reason: "tag_selection_revision_mismatch")
@@ -1541,19 +1579,23 @@ final class ScheduleManager: ObservableObject {
                 activeWindowSnapshotBuilder.build(input: input)
             }.value
         }
-        let adjustedVisibleDays = monthTagResultProvider.applyShawwalTagResults(
-            to: result.visibleDays,
-            timeZone: timeZone
-        )
         let adjustedSnapshot: ActiveAlarmWindowSnapshot
-        if adjustedVisibleDays != result.visibleDays {
-            adjustedSnapshot = ActiveAlarmWindowSnapshot(
-                generatedAt: result.generatedAt,
-                visibleDays: adjustedVisibleDays,
-                scheduledDays: Array(adjustedVisibleDays.prefix(scheduledActiveDayLimit)),
-                visibleHorizonDays: result.visibleHorizonDays,
-                scheduledHorizonDays: result.scheduledHorizonDays
+        if usesLegacyContexts {
+            let adjustedVisibleDays = monthTagResultProvider.applyShawwalTagResults(
+                to: result.visibleDays,
+                timeZone: timeZone
             )
+            if adjustedVisibleDays != result.visibleDays {
+                adjustedSnapshot = ActiveAlarmWindowSnapshot(
+                    generatedAt: result.generatedAt,
+                    visibleDays: adjustedVisibleDays,
+                    scheduledDays: Array(adjustedVisibleDays.prefix(scheduledActiveDayLimit)),
+                    visibleHorizonDays: result.visibleHorizonDays,
+                    scheduledHorizonDays: result.scheduledHorizonDays
+                )
+            } else {
+                adjustedSnapshot = result
+            }
         } else {
             adjustedSnapshot = result
         }
@@ -1586,7 +1628,7 @@ final class ScheduleManager: ObservableObject {
             draft.lastSchedulingMode = schedulingMode
         }
 
-        activeTagSelectionRevision = fastTagStore.currentRevision
+        activeTagSelectionRevision = usesLegacyContexts ? fastTagStore.currentRevision : -1
         cacheStore.save(
             ScheduleCacheStore.Cache(
                 lastScheduledDate: settingsStore.settings.lastScheduledDate,
@@ -1614,7 +1656,7 @@ final class ScheduleManager: ObservableObject {
             activeWindowSnapshot = activeWindowSnapshot.removing(dateKey: key)
             schedules = activeWindowSnapshot.visibleDays.map(\.schedule)
             lastUpdated = Date()
-            activeTagSelectionRevision = fastTagStore.currentRevision
+            activeTagSelectionRevision = usesLegacyContexts ? fastTagStore.currentRevision : -1
             cacheStore.save(
                 ScheduleCacheStore.Cache(
                     lastScheduledDate: settingsStore.settings.lastScheduledDate,
@@ -1661,7 +1703,7 @@ final class ScheduleManager: ObservableObject {
         }
 
         lastUpdated = Date()
-        activeTagSelectionRevision = fastTagStore.currentRevision
+        activeTagSelectionRevision = usesLegacyContexts ? fastTagStore.currentRevision : -1
         cacheStore.save(
             ScheduleCacheStore.Cache(
                 lastScheduledDate: settingsStore.settings.lastScheduledDate,
@@ -2560,6 +2602,7 @@ final class ScheduleManager: ObservableObject {
     }
 
     private func retagActiveWindow(reason: String = "tag_selection_changed") {
+        guard usesLegacyContexts else { return }
         guard !activeWindowSnapshot.visibleDays.isEmpty else { return }
         invalidateExpandedMonthSnapshots(reason: reason)
         let token = PerformanceTrace.begin("tags.compute-window", metadata: "visible=\(activeWindowSnapshot.visibleDays.count)")
@@ -2652,7 +2695,8 @@ final class ScheduleManager: ObservableObject {
             stateSnapshot: stateSnapshot,
             resolvedEntries: resolvedEntries,
             visibleHorizonDays: visibleHorizonDays,
-            scheduledHorizonDays: scheduledHorizonDays
+            scheduledHorizonDays: scheduledHorizonDays,
+            usesLegacyContexts: usesLegacyContexts
         )
     }
 

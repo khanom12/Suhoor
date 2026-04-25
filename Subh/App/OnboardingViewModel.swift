@@ -285,9 +285,6 @@ final class OnboardingViewModel: ObservableObject {
 
     func markOnboardingCompleteAndOpenPlans() {
         markOnboardingComplete()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-            AppNavigationBridge.send(.switchToPlans)
-        }
     }
 
     var progressIndex: Int {

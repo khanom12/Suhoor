@@ -20,6 +20,7 @@
 		A1B000001234567890000010 /* TodayCardDismissalStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B000001234567890000109 /* TodayCardDismissalStoreTests.swift */; };
 		A1B000001234567890000011 /* TodayEidCardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B000001234567890000110 /* TodayEidCardTests.swift */; };
 		A1B000001234567890000012 /* AlarmKitTestStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B000001234567890000111 /* AlarmKitTestStoreTests.swift */; };
+		A1B000001234567890000013 /* ScheduleServiceExtractionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B000001234567890000112 /* ScheduleServiceExtractionTests.swift */; };
 		A1B000001234567890000401 /* Subh/Resources/adhan.caf in Resources */ = {isa = PBXBuildFile; fileRef = A1B000001234567890000301 /* Subh/Resources/adhan.caf */; };
 		A1B000001234567890000402 /* Subh/Resources/adhan_fajr.caf in Resources */ = {isa = PBXBuildFile; fileRef = A1B000001234567890000302 /* Subh/Resources/adhan_fajr.caf */; };
 /* End PBXBuildFile section */
@@ -52,6 +53,7 @@
 		A1B000001234567890000109 /* TodayCardDismissalStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodayCardDismissalStoreTests.swift; sourceTree = "<group>"; };
 		A1B000001234567890000110 /* TodayEidCardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodayEidCardTests.swift; sourceTree = "<group>"; };
 		A1B000001234567890000111 /* AlarmKitTestStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlarmKitTestStoreTests.swift; sourceTree = "<group>"; };
+		A1B000001234567890000112 /* ScheduleServiceExtractionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScheduleServiceExtractionTests.swift; sourceTree = "<group>"; };
 		A1B000001234567890000301 /* Subh/Resources/adhan.caf */ = {isa = PBXFileReference; lastKnownFileType = audio.caf; path = Subh/Resources/adhan.caf; sourceTree = "<group>"; };
 		A1B000001234567890000302 /* Subh/Resources/adhan_fajr.caf */ = {isa = PBXFileReference; lastKnownFileType = audio.caf; path = Subh/Resources/adhan_fajr.caf; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -128,6 +130,7 @@
 				A1B000001234567890000109 /* TodayCardDismissalStoreTests.swift */,
 				A1B000001234567890000110 /* TodayEidCardTests.swift */,
 				A1B000001234567890000111 /* AlarmKitTestStoreTests.swift */,
+				A1B000001234567890000112 /* ScheduleServiceExtractionTests.swift */,
 			);
 			path = SubhTests;
 			sourceTree = "<group>";
@@ -260,6 +263,7 @@
 				A1B000001234567890000010 /* TodayCardDismissalStoreTests.swift in Sources */,
 				A1B000001234567890000011 /* TodayEidCardTests.swift in Sources */,
 				A1B000001234567890000012 /* AlarmKitTestStoreTests.swift in Sources */,
+				A1B000001234567890000013 /* ScheduleServiceExtractionTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

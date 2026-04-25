@@ -1522,7 +1522,7 @@ struct ScheduleManagerHijriTests {
 
     @Test
     @MainActor
-    func appNavigatorBridgesLegacyNotificationsIntoTypedNavigation() {
+    func appNavigatorRedirectsRetiredLegacyNotificationsAwayFromPrunedSurfaces() {
         let notificationCenter = NotificationCenter()
         let navigator = AppNavigator(notificationCenter: notificationCenter)
 
@@ -1530,10 +1530,10 @@ struct ScheduleManagerHijriTests {
         #expect(navigator.latestRequest?.intent == .switchToWake)
 
         AppNavigationBridge.send(.openQadaPlanner, notificationCenter: notificationCenter)
-        #expect(navigator.latestRequest?.intent == .openQadaPlanner)
+        #expect(navigator.latestRequest?.intent == .openSettings)
 
         notificationCenter.post(name: .openPlanHome, object: nil)
-        #expect(navigator.latestRequest?.intent == .switchToPlans)
+        #expect(navigator.latestRequest?.intent == .openSettings)
 
         AppNavigationBridge.send(.openHijriCorrections, notificationCenter: notificationCenter)
         #expect(navigator.latestRequest?.intent == .openHijriCorrections)

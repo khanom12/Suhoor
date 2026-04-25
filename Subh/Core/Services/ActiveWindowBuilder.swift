@@ -6,6 +6,7 @@ struct ActiveWindowBuildInput: Sendable {
     let resolvedEntries: [ResolvedScheduledDateEntry]
     let visibleHorizonDays: Int
     let scheduledHorizonDays: Int
+    let usesLegacyContexts: Bool
 }
 
 struct ActiveWindowSnapshotBuilder: Sendable {
@@ -13,19 +14,24 @@ struct ActiveWindowSnapshotBuilder: Sendable {
         let timeZone = input.stateSnapshot.timeZone
         let calculator = PrayerTimeCalculator()
         let sortedEntries = input.resolvedEntries.sorted { $0.date < $1.date }
-        let tagSeeds = sortedEntries.map {
-            ActiveTagComputationSeed(
-                date: $0.date,
-                dateKey: $0.dateKey,
-                defaultPrimaryIntent: $0.provenances.defaultFastPrimaryIntent()
+        let tagResults: [String: TagComputationResult]
+        if input.usesLegacyContexts {
+            let tagSeeds = sortedEntries.map {
+                ActiveTagComputationSeed(
+                    date: $0.date,
+                    dateKey: $0.dateKey,
+                    defaultPrimaryIntent: $0.provenances.defaultFastPrimaryIntent()
+                )
+            }
+            tagResults = TagComputationEngine.results(
+                seeds: tagSeeds,
+                selections: input.stateSnapshot.fastTagSelections,
+                ruleset: .strict,
+                timeZone: timeZone
             )
+        } else {
+            tagResults = [:]
         }
-        let tagResults = TagComputationEngine.results(
-            seeds: tagSeeds,
-            selections: input.stateSnapshot.fastTagSelections,
-            ruleset: .strict,
-            timeZone: timeZone
-        )
 
         var activeDays: [ActiveAlarmDay] = []
         activeDays.reserveCapacity(sortedEntries.count)

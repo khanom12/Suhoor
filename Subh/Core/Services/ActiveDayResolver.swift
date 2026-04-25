@@ -41,6 +41,7 @@ final class ActiveDayResolver {
     private let fajrLogStore: FajrLogStore
     private let qadaBacklogStore: QadaBacklogStore
     private let qadaBatchStore: QadaBatchStore
+    private let usesLegacyContexts: Bool
     private let adjustedHijriCalendar: AdjustedHijriCalendar
     private let calculator: PrayerTimeCalculator
     private let dependencies: Dependencies
@@ -53,6 +54,7 @@ final class ActiveDayResolver {
         fajrLogStore: FajrLogStore,
         qadaBacklogStore: QadaBacklogStore,
         qadaBatchStore: QadaBatchStore,
+        usesLegacyContexts: Bool = true,
         adjustedHijriCalendar: AdjustedHijriCalendar,
         calculator: PrayerTimeCalculator,
         dependencies: Dependencies
@@ -64,6 +66,7 @@ final class ActiveDayResolver {
         self.fajrLogStore = fajrLogStore
         self.qadaBacklogStore = qadaBacklogStore
         self.qadaBatchStore = qadaBatchStore
+        self.usesLegacyContexts = usesLegacyContexts
         self.adjustedHijriCalendar = adjustedHijriCalendar
         self.calculator = calculator
         self.dependencies = dependencies
@@ -87,11 +90,13 @@ final class ActiveDayResolver {
             settings: settings,
             defaultConfig: alarmConfigStore.defaults,
             morningPlanStore: morningPlanStore,
-            fastTagSelections: fastTagStore.selections,
-            fastLogEntries: fastLogStore.entriesByDateKey,
-            fajrLogEntries: fajrLogStore.entriesByDateKey,
-            qadaBacklogState: qadaBacklogStore.state,
-            qadaBatchState: qadaBatchStore.state,
+            fastTagSelections: usesLegacyContexts ? fastTagStore.selections : [:],
+            fastLogEntries: usesLegacyContexts ? fastLogStore.entriesByDateKey : [:],
+            fajrLogEntries: usesLegacyContexts ? fajrLogStore.entriesByDateKey : [:],
+            qadaBacklogState: usesLegacyContexts
+                ? qadaBacklogStore.state
+                : QadaBacklogState.empty(startDateKey: DateHelpers.dayIdentifier(for: Date(), timeZone: timeZone)),
+            qadaBatchState: usesLegacyContexts ? qadaBatchStore.state : .empty,
             overridesByDateKey: alarmConfigStore.overridesByDay,
             coordinate: coordinate,
             timeZone: timeZone,
@@ -325,6 +330,7 @@ final class ActiveDayResolver {
         strategy: TagStrategy,
         timeZone: TimeZone
     ) -> TagComputationResult {
+        guard usesLegacyContexts else { return .empty }
         let defaultPrimaryIntent = provenances.defaultFastPrimaryIntent()
         let fallback = dependencies.tagPreviewResult(date, nil, defaultPrimaryIntent, timeZone)
         guard strategy == .resolved else { return fallback }

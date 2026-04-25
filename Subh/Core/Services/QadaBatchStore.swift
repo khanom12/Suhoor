@@ -31,8 +31,12 @@ final class QadaBatchStore: ObservableObject {
         delay: 0.2
     )
 
-    init(defaults: UserDefaults = .standard) {
+    init(defaults: UserDefaults = .standard, loadPersistedData: Bool = true) {
         self.defaults = defaults
+        guard loadPersistedData else {
+            self.state = .empty
+            return
+        }
         if let data = defaults.data(forKey: storageKey),
            let decoded = try? JSONDecoder().decode(QadaBatchState.self, from: data) {
             self.state = decoded

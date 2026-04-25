@@ -9,11 +9,6 @@ struct SubhApp: App {
     @StateObject private var alarmConfigStore: AlarmConfigStore
     @StateObject private var locationService: LocationService
     @StateObject private var scheduleManager: ScheduleManager
-    @StateObject private var fastTagStore: FastTagStore
-    @StateObject private var fastLogStore: FastLogStore
-    @StateObject private var fajrLogStore: FajrLogStore
-    @StateObject private var qadaBacklogStore: QadaBacklogStore
-    @StateObject private var qadaBatchStore: QadaBatchStore
 
     @Environment(\.scenePhase) private var scenePhase
 
@@ -22,37 +17,17 @@ struct SubhApp: App {
         let settingsStore = SuhoorSettingsStore()
         let alarmConfigStore = AlarmConfigStore(legacySettings: settingsStore.settings)
         let locationService = LocationService()
-        let fastTagStore = FastTagStore()
-        let fastLogStore = FastLogStore()
-        let fajrLogStore = FajrLogStore()
-        let qadaBacklogStore = QadaBacklogStore()
-        let qadaBatchStore = QadaBatchStore()
         let scheduleManager = ScheduleManager(
             settingsStore: settingsStore,
             locationService: locationService,
             alarmConfigStore: alarmConfigStore,
-            fastTagStore: fastTagStore,
-            fastLogStore: fastLogStore,
-            fajrLogStore: fajrLogStore,
-            qadaBacklogStore: qadaBacklogStore,
-            qadaBatchStore: qadaBatchStore
+            usesLegacyContexts: false
         )
         _appNavigator = StateObject(wrappedValue: appNavigator)
         _settingsStore = StateObject(wrappedValue: settingsStore)
         _alarmConfigStore = StateObject(wrappedValue: alarmConfigStore)
         _locationService = StateObject(wrappedValue: locationService)
         _scheduleManager = StateObject(wrappedValue: scheduleManager)
-        _fastTagStore = StateObject(wrappedValue: fastTagStore)
-        _fastLogStore = StateObject(wrappedValue: fastLogStore)
-        _fajrLogStore = StateObject(wrappedValue: fajrLogStore)
-        _qadaBacklogStore = StateObject(wrappedValue: qadaBacklogStore)
-        _qadaBatchStore = StateObject(wrappedValue: qadaBatchStore)
-        scheduleManager.normalizeCompletionStateForLaunch()
-        NotificationEventDelegate.shared.configure(
-            fastCompletionPromptHandler: ScheduleManagerFastCompletionPromptHandler(
-                scheduleManager: scheduleManager
-            )
-        )
         UNUserNotificationCenter.current().delegate = NotificationEventDelegate.shared
     }
 
@@ -66,12 +41,6 @@ struct SubhApp: App {
                 .environmentObject(alarmConfigStore)
                 .environmentObject(locationService)
                 .environmentObject(scheduleManager)
-                .environmentObject(scheduleManager.completionSurfaceStore)
-                .environmentObject(fastTagStore)
-                .environmentObject(fastLogStore)
-                .environmentObject(fajrLogStore)
-                .environmentObject(qadaBacklogStore)
-                .environmentObject(qadaBatchStore)
                 .task {
                     scheduleManager.requestRefresh(reason: .appLaunch)
                 }

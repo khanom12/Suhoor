@@ -13,8 +13,13 @@ final class FastTagStore: ObservableObject {
         delay: 0.2
     )
 
-    init(defaults: UserDefaults = .standard) {
+    init(defaults: UserDefaults = .standard, loadPersistedData: Bool = true) {
         self.defaults = defaults
+        guard loadPersistedData else {
+            self.selections = [:]
+            self.currentRevision = 0
+            return
+        }
         if let data = defaults.data(forKey: storageKey),
            let decoded = try? JSONDecoder().decode([String: FastIntentSelection].self, from: data) {
             self.selections = decoded

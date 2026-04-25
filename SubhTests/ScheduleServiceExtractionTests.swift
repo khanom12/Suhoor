@@ -16,9 +16,9 @@ struct ScheduleServiceExtractionTests {
         coordinator.requestRefresh(reason: .settingsChanged, force: false)
         coordinator.requestRefresh(reason: .manual, force: true)
 
-        try? await Task.sleep(nanoseconds: 350_000_000)
-
-        #expect(received == [PendingScheduleRefresh(reason: .manual, force: true)])
+        #expect(coordinator.pendingRefreshForTesting == PendingScheduleRefresh(reason: .manual, force: true))
+        coordinator.cancelAll()
+        #expect(received.isEmpty)
     }
 
     @Test
@@ -35,6 +35,35 @@ struct ScheduleServiceExtractionTests {
         try? await Task.sleep(nanoseconds: 350_000_000)
 
         #expect(received.isEmpty)
+    }
+
+    @Test
+    @MainActor
+    func refreshCoordinatorDropsDuplicateLifecycleRequestsWhileRefreshIsScheduled() async {
+        var received: [PendingScheduleRefresh] = []
+        let coordinator = ScheduleRefreshCoordinator { request in
+            received.append(request)
+            try? await Task.sleep(nanoseconds: 100_000_000)
+        }
+
+        coordinator.requestRefresh(reason: .appLaunch)
+        coordinator.requestRefresh(reason: .foreground)
+        coordinator.requestRefresh(reason: .foreground)
+
+        #expect(coordinator.pendingRefreshForTesting == PendingScheduleRefresh(reason: .appLaunch, force: true))
+        coordinator.cancelAll()
+        #expect(received.isEmpty)
+    }
+
+    @Test
+    func performanceTraceRecorderCapturesNamedOperations() {
+        PerformanceTraceRecorder.shared.reset()
+
+        _ = PerformanceTrace.measure("test.trace") {
+            "done"
+        }
+
+        #expect(PerformanceTraceRecorder.shared.snapshot().contains { $0.name == "test.trace" })
     }
 
     @Test
@@ -175,7 +204,8 @@ struct ScheduleServiceExtractionTests {
                 )
             ],
             visibleHorizonDays: 2,
-            scheduledHorizonDays: 1
+            scheduledHorizonDays: 1,
+            usesLegacyContexts: false
         )
 
         let snapshotResult = ActiveWindowSnapshotBuilder().build(input: input)

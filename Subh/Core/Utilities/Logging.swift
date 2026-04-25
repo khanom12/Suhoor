@@ -59,6 +59,40 @@ struct PerformanceTraceToken {
     let metadata: String?
 }
 
+final class PerformanceTraceRecorder {
+    struct Entry: Equatable {
+        let name: String
+        let elapsedMs: Double
+        let metadata: String?
+    }
+
+    static let shared = PerformanceTraceRecorder()
+
+    private let lock = NSLock()
+    private var entries: [Entry] = []
+
+    private init() {}
+
+    func record(name: String, elapsedMs: Double, metadata: String?) {
+        lock.lock()
+        entries.append(Entry(name: name, elapsedMs: elapsedMs, metadata: metadata))
+        lock.unlock()
+    }
+
+    func snapshot() -> [Entry] {
+        lock.lock()
+        let snapshot = entries
+        lock.unlock()
+        return snapshot
+    }
+
+    func reset() {
+        lock.lock()
+        entries.removeAll(keepingCapacity: true)
+        lock.unlock()
+    }
+}
+
 enum PerformanceTrace {
     @discardableResult
     static func begin(_ name: String, metadata: String? = nil) -> PerformanceTraceToken {
@@ -66,9 +100,14 @@ enum PerformanceTrace {
     }
 
     static func end(_ token: PerformanceTraceToken, metadata: String? = nil) {
-        #if DEBUG
         let elapsedMs = (CFAbsoluteTimeGetCurrent() - token.startedAt) * 1000
         let metadataParts = [token.metadata, metadata].compactMap { $0 }.filter { !$0.isEmpty }
+        #if DEBUG
+        PerformanceTraceRecorder.shared.record(
+            name: token.name,
+            elapsedMs: elapsedMs,
+            metadata: metadataParts.isEmpty ? nil : metadataParts.joined(separator: " | ")
+        )
         let suffix = metadataParts.isEmpty ? "" : " [\(metadataParts.joined(separator: " | "))]"
         Logging.diagnostics.debug("[perf] \(token.name, privacy: .public) \(elapsedMs, format: .fixed(precision: 2))ms\(suffix, privacy: .public)")
         #endif
