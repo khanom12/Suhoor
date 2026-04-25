@@ -99,7 +99,7 @@ final class AlarmKitScheduler {
         let alertTitle = LocalizedStringResource(stringLiteral: title)
         let alert = AlarmPresentation.Alert(title: alertTitle, secondaryButton: nil, secondaryButtonBehavior: nil)
         let presentation = AlarmPresentation(alert: alert)
-        let metadata = SuhoorAlarmMetadata(kind: kind.rawValue, isTest: false)
+        let metadata = SuhoorAlarmMetadata(kind: kind.rawValue)
         let attributes = AlarmAttributes(presentation: presentation, metadata: metadata, tintColor: .teal)
         let resolvedSound: AlertConfiguration.AlertSound
         if let soundName, !soundName.isEmpty {
@@ -146,53 +146,6 @@ final class AlarmKitScheduler {
         }
     }
 
-    func scheduleTestAlarm(date: Date, label: String, soundName: String? = nil) async -> Bool {
-        if isRunningOnSimulator {
-            return false
-        }
-        do {
-            let id = SchedulingIdentifiers.testAlarmID(for: .wake)
-            _ = try await scheduleAlarm(id: id, kind: .wake, date: date, label: label, soundName: soundName)
-            return true
-        } catch {
-            Logging.scheduler.error("AlarmKit test alarm error: \(error.localizedDescription)")
-            return false
-        }
-    }
-
-    func scheduleTestAlarm(
-        id: UUID,
-        date: Date,
-        label: String,
-        kind: ScheduleEventKind,
-        soundName: String? = nil
-    ) async -> Bool {
-        if isRunningOnSimulator {
-            return false
-        }
-        do {
-            _ = try await scheduleAlarm(id: id, kind: kind, date: date, label: label, soundName: soundName)
-            return true
-        } catch {
-            Logging.scheduler.error("AlarmKit test alarm error: \(error.localizedDescription)")
-            return false
-        }
-    }
-
-    func fetchScheduledAlarms() -> [AlarmKitAuditItem] {
-        guard let alarms = try? alarmManager.alarms else { return [] }
-        return alarms.map { alarm in
-            let (scheduleDescription, nextDate) = scheduleInfo(for: alarm.schedule)
-            return AlarmKitAuditItem(
-                id: alarm.id,
-                title: "Alarm",
-                scheduleDescription: scheduleDescription,
-                nextTriggerDate: nextDate,
-                stateDescription: "\(alarm.state)"
-            )
-        }
-    }
-
     private func scheduleInfo(for schedule: Alarm.Schedule?) -> (String, Date?) {
         guard let schedule else { return ("None", nil) }
         switch schedule {
@@ -203,11 +156,6 @@ final class AlarmKitScheduler {
         @unknown default:
             return ("Unknown", nil)
         }
-    }
-
-    func cancelTestAlarms() {
-        let ids = ScheduleEventKind.allCases.map { SchedulingIdentifiers.testAlarmID(for: $0) }
-        cancel(ids: ids)
     }
 
     private func upcomingSchedules(days: Int) -> [DaySchedule] {
@@ -251,11 +199,9 @@ final class AlarmKitScheduler {
 @available(iOS 26.0, *)
 struct SuhoorAlarmMetadata: AlarmMetadata, Codable {
     let kind: String
-    let isTest: Bool
 
-    init(kind: String = "", isTest: Bool = false) {
+    init(kind: String = "") {
         self.kind = kind
-        self.isTest = isTest
     }
 }
 

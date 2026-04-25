@@ -77,7 +77,7 @@ final class QadaBacklogStore: ObservableObject {
         legacyKey: String
     ) -> QadaBacklogState? {
         guard let data = defaults.data(forKey: legacyKey),
-              let legacy = try? JSONDecoder().decode(QadaPlanState.self, from: data) else {
+              let legacy = try? JSONDecoder().decode(LegacyQadaPlanState.self, from: data) else {
             return nil
         }
         return QadaBacklogState(
@@ -85,4 +85,10 @@ final class QadaBacklogStore: ObservableObject {
             baselineOwed: max(0, legacy.recentBaselineRemaining + legacy.olderBaselineRemaining)
         )
     }
+}
+
+private struct LegacyQadaPlanState: Codable {
+    let trackingStartDateKey: String
+    let recentBaselineRemaining: Int
+    let olderBaselineRemaining: Int
 }

@@ -15,14 +15,8 @@
 		A1B000001234567890000005 /* HijriSpecialDayPlannerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B000001234567890000103 /* HijriSpecialDayPlannerTests.swift */; };
 		A1B000001234567890000006 /* ScheduleManagerHijriTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B000001234567890000104 /* ScheduleManagerHijriTests.swift */; };
 		A1B000001234567890000007 /* ScheduledDateSourceStoreHijriTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B000001234567890000105 /* ScheduledDateSourceStoreHijriTests.swift */; };
-		A1B000001234567890000008 /* ShawwalTodayEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B000001234567890000106 /* ShawwalTodayEngineTests.swift */; };
-		A1B000001234567890000009 /* TodayObservanceEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B000001234567890000108 /* TodayObservanceEngineTests.swift */; };
-		A1B000001234567890000010 /* TodayCardDismissalStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B000001234567890000109 /* TodayCardDismissalStoreTests.swift */; };
-		A1B000001234567890000011 /* TodayEidCardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B000001234567890000110 /* TodayEidCardTests.swift */; };
-		A1B000001234567890000012 /* AlarmKitTestStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B000001234567890000111 /* AlarmKitTestStoreTests.swift */; };
+		A1B000001234567890000012 /* AlarmConfigMigrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B000001234567890000111 /* AlarmConfigMigrationTests.swift */; };
 		A1B000001234567890000013 /* ScheduleServiceExtractionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B000001234567890000112 /* ScheduleServiceExtractionTests.swift */; };
-		A1B000001234567890000401 /* Subh/Resources/adhan.caf in Resources */ = {isa = PBXBuildFile; fileRef = A1B000001234567890000301 /* Subh/Resources/adhan.caf */; };
-		A1B000001234567890000402 /* Subh/Resources/adhan_fajr.caf in Resources */ = {isa = PBXBuildFile; fileRef = A1B000001234567890000302 /* Subh/Resources/adhan_fajr.caf */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -39,7 +33,6 @@
 		07135B722F439A5A007CEEF7 /* Subh.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Subh.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		0731CC082F54CA1200C6864E /* TagComputationEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TagComputationEngineTests.swift; sourceTree = "<group>"; };
 		076EFDFD2F54B8BE00F577DC /* FastClassificationEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FastClassificationEngineTests.swift; sourceTree = "<group>"; };
-		07EF91CF2F43B5E600BD8692 /* SubhTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubhTests.swift; sourceTree = "<group>"; };
 		07EF91D22F43B70800BD8692 /* Subh.xctestplan */ = {isa = PBXFileReference; lastKnownFileType = text; path = Subh.xctestplan; sourceTree = "<group>"; };
 		07EF93432F49055C00BD8692 /* TEST_PLAN.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = TEST_PLAN.md; sourceTree = "<group>"; };
 		A1B000001234567890000101 /* HijriCalendarServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HijriCalendarServiceTests.swift; sourceTree = "<group>"; };
@@ -47,15 +40,9 @@
 		A1B000001234567890000103 /* HijriSpecialDayPlannerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HijriSpecialDayPlannerTests.swift; sourceTree = "<group>"; };
 		A1B000001234567890000104 /* ScheduleManagerHijriTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScheduleManagerHijriTests.swift; sourceTree = "<group>"; };
 		A1B000001234567890000105 /* ScheduledDateSourceStoreHijriTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScheduledDateSourceStoreHijriTests.swift; sourceTree = "<group>"; };
-		A1B000001234567890000106 /* ShawwalTodayEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShawwalTodayEngineTests.swift; sourceTree = "<group>"; };
 		A1B000001234567890000107 /* SubhTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SubhTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		A1B000001234567890000108 /* TodayObservanceEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodayObservanceEngineTests.swift; sourceTree = "<group>"; };
-		A1B000001234567890000109 /* TodayCardDismissalStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodayCardDismissalStoreTests.swift; sourceTree = "<group>"; };
-		A1B000001234567890000110 /* TodayEidCardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodayEidCardTests.swift; sourceTree = "<group>"; };
-		A1B000001234567890000111 /* AlarmKitTestStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlarmKitTestStoreTests.swift; sourceTree = "<group>"; };
+		A1B000001234567890000111 /* AlarmConfigMigrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlarmConfigMigrationTests.swift; sourceTree = "<group>"; };
 		A1B000001234567890000112 /* ScheduleServiceExtractionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScheduleServiceExtractionTests.swift; sourceTree = "<group>"; };
-		A1B000001234567890000301 /* Subh/Resources/adhan.caf */ = {isa = PBXFileReference; lastKnownFileType = audio.caf; path = Subh/Resources/adhan.caf; sourceTree = "<group>"; };
-		A1B000001234567890000302 /* Subh/Resources/adhan_fajr.caf */ = {isa = PBXFileReference; lastKnownFileType = audio.caf; path = Subh/Resources/adhan_fajr.caf; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -91,7 +78,6 @@
 				07135B732F439A5A007CEEF7 /* Products */,
 				07EF91CE2F43B5DC00BD8692 /* SubhTests */,
 				07EF93432F49055C00BD8692 /* TEST_PLAN.md */,
-				072C35FA2F56DA79006306F5 /* Recovered References */,
 			);
 			sourceTree = "<group>";
 		};
@@ -104,19 +90,9 @@
 			name = Products;
 			sourceTree = "<group>";
 		};
-		072C35FA2F56DA79006306F5 /* Recovered References */ = {
-			isa = PBXGroup;
-			children = (
-				A1B000001234567890000301 /* Subh/Resources/adhan.caf */,
-				A1B000001234567890000302 /* Subh/Resources/adhan_fajr.caf */,
-			);
-			name = "Recovered References";
-			sourceTree = "<group>";
-		};
 		07EF91CE2F43B5DC00BD8692 /* SubhTests */ = {
 			isa = PBXGroup;
 			children = (
-				07EF91CF2F43B5E600BD8692 /* SubhTests.swift */,
 				07EF91D22F43B70800BD8692 /* Subh.xctestplan */,
 				076EFDFD2F54B8BE00F577DC /* FastClassificationEngineTests.swift */,
 				0731CC082F54CA1200C6864E /* TagComputationEngineTests.swift */,
@@ -125,11 +101,7 @@
 				A1B000001234567890000103 /* HijriSpecialDayPlannerTests.swift */,
 				A1B000001234567890000104 /* ScheduleManagerHijriTests.swift */,
 				A1B000001234567890000105 /* ScheduledDateSourceStoreHijriTests.swift */,
-				A1B000001234567890000106 /* ShawwalTodayEngineTests.swift */,
-				A1B000001234567890000108 /* TodayObservanceEngineTests.swift */,
-				A1B000001234567890000109 /* TodayCardDismissalStoreTests.swift */,
-				A1B000001234567890000110 /* TodayEidCardTests.swift */,
-				A1B000001234567890000111 /* AlarmKitTestStoreTests.swift */,
+				A1B000001234567890000111 /* AlarmConfigMigrationTests.swift */,
 				A1B000001234567890000112 /* ScheduleServiceExtractionTests.swift */,
 			);
 			path = SubhTests;
@@ -225,8 +197,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				07EF93442F49055C00BD8692 /* TEST_PLAN.md in Resources */,
-				A1B000001234567890000401 /* Subh/Resources/adhan.caf in Resources */,
-				A1B000001234567890000402 /* Subh/Resources/adhan_fajr.caf in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -258,11 +228,7 @@
 				A1B000001234567890000005 /* HijriSpecialDayPlannerTests.swift in Sources */,
 				A1B000001234567890000006 /* ScheduleManagerHijriTests.swift in Sources */,
 				A1B000001234567890000007 /* ScheduledDateSourceStoreHijriTests.swift in Sources */,
-				A1B000001234567890000008 /* ShawwalTodayEngineTests.swift in Sources */,
-				A1B000001234567890000009 /* TodayObservanceEngineTests.swift in Sources */,
-				A1B000001234567890000010 /* TodayCardDismissalStoreTests.swift in Sources */,
-				A1B000001234567890000011 /* TodayEidCardTests.swift in Sources */,
-				A1B000001234567890000012 /* AlarmKitTestStoreTests.swift in Sources */,
+				A1B000001234567890000012 /* AlarmConfigMigrationTests.swift in Sources */,
 				A1B000001234567890000013 /* ScheduleServiceExtractionTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

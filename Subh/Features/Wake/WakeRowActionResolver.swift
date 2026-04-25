@@ -81,12 +81,4 @@ struct WakeRowEntry: Identifiable {
     var isEnabled: Bool { !config.skipDay && config.hasAnyEnabled }
     var primaryTimeDate: Date { schedule.wakeDate }
     var id: String { activeDay.dateKey }
-
-    func matches(filter: WakeTagFilter) -> Bool {
-        guard filter.isActive else { return true }
-        return filter.matches(
-            entryPrimaryIntent: primaryIntent,
-            entrySecondaryTags: secondaryTags
-        )
-    }
 }

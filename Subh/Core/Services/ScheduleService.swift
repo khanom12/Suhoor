@@ -2,16 +2,10 @@ import Foundation
 import CoreLocation
 import Combine
 import UserNotifications
-import AlarmKit
 import os
 
 @MainActor
 final class ScheduleManager: ObservableObject {
-    struct TestRunResult {
-        let success: Bool
-        let message: String
-        let details: [String]
-    }
     @Published var schedules: [DaySchedule] = []
     @Published var schedulingMode: SchedulingMode = .none
     @Published var lastUpdated: Date?
@@ -48,38 +42,20 @@ final class ScheduleManager: ObservableObject {
     private let qadaBatchStore: QadaBatchStore
     private let usesLegacyContexts: Bool
     private let cacheStore: ScheduleCacheStore
-    private let completionRepository: any CompletionRepository
-    let completionSurfaceStore: CompletionSurfaceStore
-    private let completionSurfaceProvider = CompletionSurfaceProvider()
-    private let wakeSurfaceProvider = WakeSurfaceProvider()
     private let fajrWindowSurfaceProvider = FajrWindowSurfaceProvider()
-    private let plansSurfaceProvider = PlansSurfaceProvider()
-    private let homeSurfaceProvider = HomeSurfaceProvider()
     private let nextWakeEventResolver = NextWakeEventResolver()
-    private let calendarPlanningProvider = CalendarPlanningProvider()
-    private let quickAddPreviewProvider = QuickAddPreviewProvider()
-    private let schedulingAuditProvider = SchedulingAuditProvider()
-    private let homeSurfaceAssembler = HomeSurfaceAssembler()
     private let activeWindowSnapshotBuilder = ActiveWindowSnapshotBuilder()
-    private let completionCommandGateway: CompletionCommandGateway
     private let calculator = PrayerTimeCalculator()
     private lazy var dayScheduleBuilder = DayScheduleBuilder(calculator: calculator)
     private let hijriAdjustmentStore: HijriMonthAdjustmentStore
     private let adjustedHijriCalendar: AdjustedHijriCalendar
     private let hijriAdjustmentChangeStore: HijriAdjustmentChangeStore
-    private let alarmRecordStore = AlarmRecordStore()
-    private let alarmStateStore = AlarmStateStore()
-    private let countdownStore = CountdownSessionStore()
-    let testSettingsStore = AlarmKitTestSettingsStore()
-    private let testRunStore = AlarmKitTestRunStore()
 
     private var alarmKitScheduler: AlarmKitScheduler?
     private let notificationScheduler = NotificationScheduler()
     private let routineScheduler: RoutineScheduler
     private let alarmScheduler: AlarmScheduler
     private let alarmCoordinator: AlarmCoordinator?
-    private let countdownManager: CountdownManager
-    private let alarmEventRouter: AlarmEventRouter?
     private let visibleActiveDayLimit = 60
     private let scheduledActiveDayLimit = 30
     private let monthTagResultLookup = MonthTagResultLookup()
@@ -167,7 +143,6 @@ final class ScheduleManager: ObservableObject {
             }
         )
     )
-    private lazy var completionHistoryResolver = CompletionHistoryResolver(resolver: activeDayResolver)
     private lazy var refreshCoordinator = ScheduleRefreshCoordinator { [weak self] request in
         await self?.ensureScheduleWindow(reason: request.reason)
     }
@@ -184,8 +159,7 @@ final class ScheduleManager: ObservableObject {
         usesLegacyContexts: Bool = true,
         hijriAdjustmentStore: HijriMonthAdjustmentStore = HijriMonthAdjustmentStore(),
         hijriAdjustmentChangeStore: HijriAdjustmentChangeStore = HijriAdjustmentChangeStore(),
-        cacheStore: ScheduleCacheStore = ScheduleCacheStore(),
-        completionSurfaceStore: CompletionSurfaceStore? = nil
+        cacheStore: ScheduleCacheStore = ScheduleCacheStore()
     ) {
         let resolvedFastTagStore = fastTagStore ?? FastTagStore(loadPersistedData: usesLegacyContexts)
         let resolvedFastLogStore = fastLogStore ?? FastLogStore(loadPersistedData: usesLegacyContexts)
@@ -210,18 +184,9 @@ final class ScheduleManager: ObservableObject {
         self.hijriAdjustmentStore = hijriAdjustmentStore
         self.hijriAdjustmentChangeStore = hijriAdjustmentChangeStore
         self.cacheStore = cacheStore
-        self.completionRepository = LegacyCompletionRepository(
-            fajrLogStore: resolvedFajrLogStore,
-            fastLogStore: resolvedFastLogStore,
-            qadaBacklogStore: resolvedQadaBacklogStore
-        )
-        self.completionCommandGateway = CompletionCommandGateway(repository: completionRepository)
         let hijriCalendarService = HijriCalendarService(adjustmentStore: hijriAdjustmentStore)
         let adjustedHijriCalendar = AdjustedHijriCalendar(calendarService: hijriCalendarService)
         self.adjustedHijriCalendar = adjustedHijriCalendar
-        self.completionSurfaceStore = completionSurfaceStore ?? CompletionSurfaceStore(
-            adjustedHijriCalendar: adjustedHijriCalendar
-        )
         var resolvedAlarmKit: AlarmKitScheduler?
         #if !targetEnvironment(simulator)
         if #available(iOS 26.0, *) {
@@ -229,22 +194,10 @@ final class ScheduleManager: ObservableObject {
         }
         #endif
         self.alarmKitScheduler = resolvedAlarmKit
-        let liveActivityManager: LiveActivityManaging
-        if #available(iOS 16.1, *) {
-            liveActivityManager = CountdownLiveActivityManager()
-        } else {
-            liveActivityManager = NoopLiveActivityManager()
-        }
-        self.countdownManager = CountdownManager(
-            store: countdownStore,
-            activityManager: liveActivityManager
-        )
         var resolvedCoordinator: AlarmCoordinator?
         if FeatureFlags.useAlarmCoordinatorForScheduling, #available(iOS 26.0, *), let resolvedAlarmKit {
             resolvedCoordinator = AlarmCoordinator(
-                alarmScheduler: resolvedAlarmKit,
-                recordStore: alarmRecordStore,
-                stateStore: alarmStateStore
+                alarmScheduler: resolvedAlarmKit
             )
         }
         self.alarmCoordinator = resolvedCoordinator
@@ -254,17 +207,6 @@ final class ScheduleManager: ObservableObject {
             alarmCoordinator: resolvedCoordinator
         )
         self.alarmScheduler = AlarmScheduler(routineScheduler: routineScheduler)
-        if FeatureFlags.enableCountdown, #available(iOS 26.0, *), alarmCoordinator != nil {
-            self.alarmEventRouter = AlarmEventRouter(
-                recordStore: alarmRecordStore,
-                stateStore: alarmStateStore,
-                countdownManager: countdownManager,
-                enableCountdown: FeatureFlags.enableCountdown
-            )
-            self.alarmEventRouter?.start()
-        } else {
-            self.alarmEventRouter = nil
-        }
         let cache = cacheStore.load()
         let expectedWakeRuleSignature = ScheduleCacheStore.wakeRuleSignature(for: alarmConfigStore.defaults)
         let cacheMatchesWakeRule = cache.wakeRuleSignature == expectedWakeRuleSignature
@@ -301,32 +243,11 @@ final class ScheduleManager: ObservableObject {
                 }
                 .store(in: &cancellables)
 
-            resolvedFastLogStore.$currentRevision
-                .dropFirst()
-                .sink { [weak self] _ in
-                    self?.refreshCachedCompletionSurfaces(reason: "fast-log-revision")
-                }
-                .store(in: &cancellables)
-
-            resolvedFajrLogStore.$currentRevision
-                .dropFirst()
-                .sink { [weak self] _ in
-                    self?.refreshCachedCompletionSurfaces(reason: "fajr-log-revision")
-                }
-                .store(in: &cancellables)
-
-            resolvedQadaBacklogStore.$state
-                .dropFirst()
-                .sink { [weak self] _ in
-                    self?.refreshCachedCompletionSurfaces(reason: "qada-backlog")
-                }
-                .store(in: &cancellables)
         }
 
         settingsStore.$settings
             .sink { [weak self] _ in
                 self?.updateBootstrapState()
-                self?.refreshCachedCompletionSurfaces(reason: "settings")
             }
             .store(in: &cancellables)
 
@@ -343,7 +264,6 @@ final class ScheduleManager: ObservableObject {
             .store(in: &cancellables)
 
         updateBootstrapState()
-        refreshCachedCompletionSurfaces(reason: "init")
         refreshCurrentMorningHomeSnapshot()
         monthTagResultLookup.handler = { [weak self] date, dateKey, fallback, timeZone in
             guard let self else { return fallback }
@@ -366,14 +286,6 @@ final class ScheduleManager: ObservableObject {
         nextWakeEventResolver.resolve(
             activeWindowSnapshot: activeWindowSnapshot,
             now: Date()
-        )
-    }
-
-    var wakeSurfaceSnapshot: WakeSurfaceSnapshot {
-        wakeSurfaceProvider.wakeSurfaceSnapshot(
-            activeWindowSnapshot: activeWindowSnapshot,
-            nextWakeEventSummary: nextWakeEventSummary,
-            overrideDateKeys: Set(alarmConfigStore.overridesByDay.keys)
         )
     }
 
@@ -494,20 +406,6 @@ final class ScheduleManager: ObservableObject {
         )
     }
 
-    func wakeListSnapshot(
-        tagFilter: WakeTagFilter,
-        pinnedEntryIDs: [String],
-        timeZone: TimeZone = .current
-    ) -> WakeListSnapshotBuildResult {
-        wakeSurfaceProvider.wakeListSnapshot(
-            wakeSnapshot: wakeSurfaceSnapshot,
-            tagFilter: tagFilter,
-            pinnedEntryIDs: pinnedEntryIDs,
-            timeZone: timeZone,
-            dependencies: wakeListDataProvider.wakeDependencies(timeZone: timeZone)
-        )
-    }
-
     func morningHomeSnapshot(timeZone: TimeZone = .current) -> MorningHomeSnapshot {
         buildMorningHomeSnapshot(timeZone: timeZone)
     }
@@ -538,84 +436,6 @@ final class ScheduleManager: ObservableObject {
             permissionState: permissionSnapshot,
             contextFlags: MorningHomeContextFlag.flags(for: tomorrowDay?.resolvedDayContext ?? .standard)
         )
-    }
-
-    var plansSurfaceSnapshot: PlansSurfaceSnapshot {
-        plansSurfaceProvider.plansSurfaceSnapshot(
-            defaults: alarmConfigStore.defaults,
-            settings: settingsStore.settings,
-            upcomingDays: activeWindowSnapshot.visibleDays,
-            overrideDateKeys: Set(alarmConfigStore.overridesByDay.keys),
-            qadaBacklogState: qadaBacklogStore.state,
-            fastLogEntries: fastLogStore.entriesByDateKey
-        )
-    }
-
-    func homeSurfaceSnapshot(
-        now: Date,
-        dismissedWarnings: Set<FastWarning>
-    ) -> HomeSurfaceSnapshot {
-        completionSurfaceStore.homeSurfaceSnapshot(
-            now: now,
-            dismissedWarnings: dismissedWarnings
-        )
-    }
-
-    func progressSurfaceSnapshot(
-        wakeProgressSource: WakeProgressSource = DebugEventLogWakeProgressSource()
-    ) -> ProgressSurfaceSnapshot {
-        completionSurfaceProvider.progressSurfaceSnapshot(
-            activeWindowSnapshot: activeWindowSnapshot,
-            now: Date(),
-            completionState: completionSurfaceStore.state.completionStateSnapshot,
-            settings: settingsStore.settings,
-            wakeProgress: wakeProgressSource.snapshot(limit: 20)
-        )
-    }
-
-    func fajrHistorySurfaceSnapshot(
-        days: Int = 30,
-        now: Date = Date()
-    ) -> FajrHistorySurfaceSnapshot {
-        completionSurfaceProvider.fajrHistorySurfaceSnapshot(
-            days: days,
-            now: now,
-            resolver: completionHistoryResolver
-        )
-    }
-
-    func fastHistorySurfaceSnapshot(
-        days: Int = 30,
-        now: Date = Date()
-    ) -> FastHistorySurfaceSnapshot {
-        completionSurfaceProvider.fastHistorySurfaceSnapshot(
-            days: days,
-            now: now,
-            resolver: completionHistoryResolver
-        )
-    }
-
-    func performCompletionEdit(
-        _ intent: CompletionEditIntent,
-        source: CompletionMutationSource = .historyEdit,
-        now: Date = Date()
-    ) {
-        PerformanceTrace.measure(
-            "completion.command",
-            metadata: "source=\(source.rawValue)"
-        ) {
-            completionCommandGateway.perform(intent, source: source, now: now)
-            refreshCachedCompletionSurfaces(reason: "completion-\(source.rawValue)", now: now)
-        }
-    }
-
-    func normalizeCompletionStateForLaunch(
-        todayKey: String? = nil,
-        now: Date = Date()
-    ) {
-        let resolvedTodayKey = todayKey ?? DateHelpers.dayIdentifier(for: now, timeZone: .current)
-        completionRepository.normalizeStaleInProgress(todayKey: resolvedTodayKey, now: now)
-        refreshCachedCompletionSurfaces(reason: "launch-normalization", now: now)
     }
 
     var currentHijriAdjustmentYear: Int {
@@ -795,14 +615,6 @@ final class ScheduleManager: ObservableObject {
         buildActiveDayIfNeeded(for: date, timeZone: timeZone, preferCached: false)
     }
 
-    func duplicateStatus(for date: Date, timeZone: TimeZone = .current) -> DuplicateDateStatus {
-        calendarPlanningProvider.duplicateStatus(
-            for: date,
-            timeZone: timeZone,
-            dependencies: calendarPlanningDependencies()
-        )
-    }
-
     func tagPreviewResult(
         for date: Date,
         overrideSelection: FastIntentSelection? = nil,
@@ -834,58 +646,6 @@ final class ScheduleManager: ObservableObject {
             ruleset: .strict,
             timeZone: timeZone,
             overrideSelection: overrideSelection
-        )
-    }
-
-    func previewIslamicQuickAdd(
-        _ kind: IslamicQuickAddKind,
-        startDate: Date = Date(),
-        timeZone: TimeZone = .current
-    ) -> IslamicQuickAddPreview? {
-        quickAddPreviewProvider.previewIslamicQuickAdd(
-            alarmConfigStore: alarmConfigStore,
-            kind: kind,
-            startDate: startDate,
-            timeZone: timeZone
-        )
-    }
-
-    func previewAshuraQuickAdd(
-        _ pattern: AshuraQuickAddPattern,
-        startDate: Date = Date(),
-        timeZone: TimeZone = .current
-    ) -> AshuraQuickAddPreview? {
-        quickAddPreviewProvider.previewAshuraQuickAdd(
-            alarmConfigStore: alarmConfigStore,
-            pattern: pattern,
-            startDate: startDate,
-            timeZone: timeZone
-        )
-    }
-
-    func previewGregorianRangeAdd(
-        startDate: Date,
-        endDate: Date,
-        timeZone: TimeZone = .current
-    ) -> AddScheduledDatesResult {
-        quickAddPreviewProvider.previewGregorianRangeAdd(
-            alarmConfigStore: alarmConfigStore,
-            startDate: startDate,
-            endDate: endDate,
-            timeZone: timeZone
-        )
-    }
-
-    func islamicQuickAddAvailability(
-        _ kind: IslamicQuickAddKind,
-        startDate: Date = Date(),
-        timeZone: TimeZone = .current
-    ) -> IslamicQuickAddAvailability {
-        quickAddPreviewProvider.islamicQuickAddAvailability(
-            alarmConfigStore: alarmConfigStore,
-            kind: kind,
-            startDate: startDate,
-            timeZone: timeZone
         )
     }
 
@@ -1041,76 +801,9 @@ final class ScheduleManager: ObservableObject {
         fajrWindowOverlaySeriesCache.removeAll(keepingCapacity: true)
     }
 
-    func recommendedAshuraQuickAddPattern(
-        startDate: Date = Date(),
-        timeZone: TimeZone = .current
-    ) -> AshuraQuickAddPattern {
-        quickAddPreviewProvider.recommendedAshuraQuickAddPattern(
-            alarmConfigStore: alarmConfigStore,
-            startDate: startDate,
-            timeZone: timeZone
-        )
-    }
-
-    func ashuraQuickAddAvailability(
-        _ pattern: AshuraQuickAddPattern,
-        startDate: Date = Date(),
-        timeZone: TimeZone = .current
-    ) -> AshuraQuickAddAvailability {
-        quickAddPreviewProvider.ashuraQuickAddAvailability(
-            alarmConfigStore: alarmConfigStore,
-            pattern: pattern,
-            startDate: startDate,
-            timeZone: timeZone
-        )
-    }
-
     func recurringRuleStatus(_ rule: RecurringIslamicRule) -> RecurringRuleStatus {
         let isAdded = alarmConfigStore.hasRecurringIslamicSource(rule)
         return RecurringRuleStatus(rule: rule, isAdded: isAdded, detailText: nil)
-    }
-
-    func calendarMonthContext(
-        displayedMonth: Date,
-        selectedDate: Date,
-        allowedDateRange: ClosedRange<Date>,
-        timeZone: TimeZone = .current
-    ) -> CalendarMonthContext {
-        calendarPlanningProvider.calendarMonthContext(
-            displayedMonth: displayedMonth,
-            selectedDate: selectedDate,
-            allowedDateRange: allowedDateRange,
-            timeZone: timeZone,
-            dependencies: calendarPlanningDependencies()
-        )
-    }
-
-    func calendarDayStates(
-        dates: [Date],
-        selectedDate: Date,
-        allowedDateRange: ClosedRange<Date>,
-        timeZone: TimeZone = .current
-    ) -> [CalendarDayState] {
-        calendarPlanningProvider.calendarDayStates(
-            dates: dates,
-            selectedDate: selectedDate,
-            allowedDateRange: allowedDateRange,
-            timeZone: timeZone,
-            dependencies: calendarPlanningDependencies()
-        )
-    }
-
-    func calendarDayDetail(
-        for date: Date,
-        overrideSelection: FastIntentSelection? = nil,
-        timeZone: TimeZone = .current
-    ) -> CalendarDayDetail {
-        calendarPlanningProvider.calendarDayDetail(
-            for: date,
-            overrideSelection: overrideSelection,
-            timeZone: timeZone,
-            dependencies: calendarPlanningDependencies()
-        )
     }
 
     @discardableResult
@@ -1292,91 +985,6 @@ final class ScheduleManager: ObservableObject {
         ActiveDayResolver.sourceSummary(from: provenances)
     }
 
-    private func currentCompletionStateSnapshot() -> CompletionStateSnapshot {
-        completionSurfaceStore.state.completionStateSnapshot
-    }
-
-    private func refreshCachedCompletionSurfaces(
-        reason: String,
-        now: Date = Date()
-    ) {
-        guard usesLegacyContexts else { return }
-        PerformanceTrace.measure(
-            "completion.surface-refresh",
-            metadata: reason
-        ) {
-            let repositorySnapshot = completionRepository.snapshot()
-            let completionState = CompletionStateAssembler.assemble(
-                completionRecords: repositorySnapshot.records,
-                qadaLedgerSnapshot: repositorySnapshot.qadaLedgerSnapshot
-            )
-            let progressSnapshot = completionSurfaceProvider.progressSurfaceSnapshot(
-                activeWindowSnapshot: activeWindowSnapshot,
-                now: now,
-                completionState: completionState,
-                settings: settingsStore.settings,
-                wakeProgress: DebugEventLogWakeProgressSource().snapshot(limit: 20)
-            )
-            let fajrHistorySnapshot = completionSurfaceProvider.fajrHistorySurfaceSnapshot(
-                days: 30,
-                now: now,
-                resolver: completionHistoryResolver
-            )
-            let fastHistorySnapshot = completionSurfaceProvider.fastHistorySurfaceSnapshot(
-                days: 30,
-                now: now,
-                resolver: completionHistoryResolver
-            )
-            let homeContext = CompletionSurfaceStore.HomeContext(
-                activeWindowSnapshot: activeWindowSnapshot,
-                todaySchedule: schedule(for: now),
-                nextWakeEventSummary: nextWakeEventSummary,
-                settings: settingsStore.settings,
-                permissionSnapshot: permissionSnapshot
-            )
-            let nextRevision = completionSurfaceStore.state.revision + 1
-            completionSurfaceStore.update(
-                state: CompletionSurfaceState(
-                    completionStateSnapshot: completionState,
-                    progressSnapshot: progressSnapshot,
-                    fajrHistorySnapshot: fajrHistorySnapshot,
-                    fastHistorySnapshot: fastHistorySnapshot,
-                    revision: nextRevision
-                ),
-                homeContext: homeContext
-            )
-            #if DEBUG
-            let recordCount = completionState.recordsByDateKey.values.reduce(0) { partialResult, records in
-                partialResult + records.count
-            }
-            Logging.diagnostics.debug(
-                "[perf] completion.surface-state revision=\(nextRevision, privacy: .public) records=\(recordCount, privacy: .public)"
-            )
-            #endif
-        }
-    }
-
-    private func calendarPlanningDependencies() -> CalendarPlanningProvider.Dependencies {
-        CalendarPlanningProvider.Dependencies(
-            activeWindowSnapshot: activeWindowSnapshot,
-            fastTagSelections: fastTagStore.selections,
-            provenance: { [weak self] date, timeZone in
-                self?.provenance(for: date, timeZone: timeZone) ?? []
-            },
-            activeDay: { [weak self] date, timeZone in
-                self?.activeDay(for: date, timeZone: timeZone)
-            },
-            tagPreviewResult: { [weak self] date, overrideSelection, defaultPrimaryIntent, timeZone in
-                self?.tagPreviewResult(
-                    for: date,
-                    overrideSelection: overrideSelection,
-                    defaultPrimaryIntent: defaultPrimaryIntent,
-                    timeZone: timeZone
-                ) ?? .empty
-            }
-        )
-    }
-
     func requestRescheduleDay(_ date: Date, debounce: TimeInterval = 0.18) {
         let normalizedDate = DateHelpers.startOfDay(date, in: .current)
         let key = DateHelpers.dayIdentifier(for: normalizedDate, timeZone: .current)
@@ -1399,9 +1007,6 @@ final class ScheduleManager: ObservableObject {
     }
 
     func ensureScheduleWindow(reason: ScheduleRefreshReason) async {
-        if FeatureFlags.enableCountdown {
-            await countdownManager.reconcileIfNeeded()
-        }
         let now = Date()
         if Self.shouldReuseScheduleWindow(
             reason: reason,
@@ -1448,7 +1053,6 @@ final class ScheduleManager: ObservableObject {
                         wakeRuleSignature: ScheduleCacheStore.wakeRuleSignature(for: alarmConfigStore.defaults)
                     )
                 )
-                refreshCachedCompletionSurfaces(reason: "month-tag-adjustment")
             }
             await refreshPermissionSummary()
             return
@@ -1604,7 +1208,6 @@ final class ScheduleManager: ObservableObject {
         activeWindowSnapshot = adjustedSnapshot
         schedules = adjustedSnapshot.visibleDays.map(\.schedule)
         lastUpdated = Date()
-        refreshCachedCompletionSurfaces(reason: "schedule-refresh")
         Logging.diagnostics.debug("[perf] active-window.visible-count \(result.visibleDays.count, privacy: .public)")
         Logging.diagnostics.debug("[perf] active-window.scheduled-count \(result.scheduledDays.count, privacy: .public)")
 
@@ -1669,7 +1272,6 @@ final class ScheduleManager: ObservableObject {
                 )
             )
             updateBootstrapState()
-            refreshCachedCompletionSurfaces(reason: "reschedule-day-removed")
             return
         }
 
@@ -1716,7 +1318,6 @@ final class ScheduleManager: ObservableObject {
             )
         )
         updateBootstrapState()
-        refreshCachedCompletionSurfaces(reason: "reschedule-day")
     }
 
     func schedule(for date: Date) -> DaySchedule? {
@@ -1820,51 +1421,6 @@ final class ScheduleManager: ObservableObject {
 
     func requestNotificationAuthorization() async -> Bool {
         await notificationScheduler.requestAuthorization()
-    }
-
-    func scheduleTestNotification(kind: ScheduleEventKind) async -> Bool {
-        let status = await notificationScheduler.authorizationStatus()
-        if status == .denied {
-            return false
-        }
-        if status == .notDetermined {
-            let granted = await requestNotificationAuthorization()
-            if !granted { return false }
-        }
-        return await notificationScheduler.scheduleTestNotification(
-            kind: kind,
-            settings: settingsStore.settings,
-            delaySeconds: 5
-        )
-    }
-
-    func scheduleFajrAdhanTest() async -> Bool {
-        let canUseAlarmKit = await alarmKitAvailableAndAuthorized()
-        if canUseAlarmKit, #available(iOS 26.0, *), let alarmKitScheduler {
-            let soundName = alarmSoundName(for: settingsStore.settings.atFajrSoundSelectionGlobal)
-            let date = Date().addingTimeInterval(60)
-            return await alarmKitScheduler.scheduleTestAlarm(
-                id: SchedulingIdentifiers.testAlarmID(for: .boundary),
-                date: date,
-                label: settingsStore.settings.label,
-                kind: .boundary,
-                soundName: soundName
-            )
-        }
-
-        let status = await notificationScheduler.authorizationStatus()
-        if status == .denied {
-            return false
-        }
-        if status == .notDetermined {
-            let granted = await requestNotificationAuthorization()
-            if !granted { return false }
-        }
-        return await notificationScheduler.scheduleFajrAdhanTest(delaySeconds: 60)
-    }
-
-    func cancelTestNotifications() async {
-        await notificationScheduler.cancelTestNotifications()
     }
 
     func requestLocationAuthorization() {
@@ -1991,7 +1547,6 @@ final class ScheduleManager: ObservableObject {
         alarmAuthorizationText = snapshot.alarmAuthorizationText
         notificationAuthorizationText = snapshot.notificationAuthorizationText
         updateBootstrapState()
-        refreshCachedCompletionSurfaces(reason: "permission-summary")
         EventTimelineLog.shared.record(category: "permissions", message: "Permission summary: \(snapshot.summaryText)")
     }
 
@@ -2022,230 +1577,9 @@ final class ScheduleManager: ObservableObject {
         permissionSnapshot = .empty
         activeWindowSnapshot = .empty
         updateBootstrapState()
-        refreshCachedCompletionSurfaces(reason: "reset-all")
         cacheStore.clear()
         alarmConfigStore.resetScheduledDateSources()
         settingsStore.reset()
-    }
-
-    func scheduleTestAlarm() async -> Bool {
-        #if targetEnvironment(simulator)
-        return false
-        #else
-        if #available(iOS 26.0, *), let alarmKitScheduler {
-            if alarmKitScheduler.authorizationState != .authorized {
-                _ = await alarmKitScheduler.requestAuthorization()
-            }
-            guard alarmKitScheduler.isAuthorized else { return false }
-            let date = Date().addingTimeInterval(60)
-            return await alarmKitScheduler.scheduleTestAlarm(date: date, label: settingsStore.settings.label)
-        }
-        return false
-        #endif
-    }
-
-    func cancelTestAlarm() async {
-        #if targetEnvironment(simulator)
-        return
-        #else
-        if #available(iOS 26.0, *), let alarmKitScheduler {
-            alarmKitScheduler.cancelTestAlarms()
-        }
-        await notificationScheduler.cancelTestNotifications()
-        #endif
-    }
-
-    func runThreeEventTest() async -> Bool {
-        let canUseAlarmKit = await alarmKitAvailableAndAuthorized()
-        let details = await routineScheduler.scheduleTestEventsDetails(
-            settings: settingsStore.settings,
-            canUseAlarmKit: canUseAlarmKit
-        )
-        await refreshSchedules(force: true)
-        return details.allSatisfy { $0.success }
-    }
-
-    func runThreeEventTestWithPermissions() async -> TestRunResult {
-        if canRequestAlarmKitAuthorization {
-            _ = await requestAlarmAuthorization()
-        }
-
-        let canUseAlarmKit = await alarmKitAvailableAndAuthorized()
-        let notificationStatus = await notificationAuthorizationStatus()
-        if notificationStatus == .denied {
-            return TestRunResult(
-                success: false,
-                message: "Notifications are denied. Enable them in Settings to run tests.",
-                details: []
-            )
-        }
-        if notificationStatus == .notDetermined {
-            let granted = await requestNotificationAuthorization()
-            if !granted {
-                return TestRunResult(
-                    success: false,
-                    message: "Notifications weren’t granted. Enable them to run tests.",
-                    details: []
-                )
-            }
-        }
-
-        let details = await routineScheduler.scheduleTestEventsDetails(
-            settings: settingsStore.settings,
-            canUseAlarmKit: canUseAlarmKit
-        )
-        await refreshSchedules(force: true)
-        let success = details.allSatisfy { $0.success }
-        let summary = success
-            ? "All test events scheduled. Check alarms/notifications in 1–3 minutes."
-            : "Some test events failed. See details below."
-        let detailLines = details.map { detail in
-            let status = detail.success ? "Scheduled" : "Failed"
-            return "\(detail.kind.title): \(status) via \(detail.channel). \(detail.message)"
-        }
-        return TestRunResult(success: success, message: summary, details: detailLines)
-    }
-
-    func runAlarmKitTestScenario() async -> Bool {
-        guard FeatureFlags.enableAlarmKitTestMode else { return false }
-        guard #available(iOS 26.0, *), let alarmCoordinator else { return false }
-        guard testSettingsStore.settings.isEnabled else { return false }
-        if canRequestAlarmKitAuthorization {
-            _ = await requestAlarmAuthorization()
-        }
-        let canUseAlarmKit = await alarmKitAvailableAndAuthorized()
-        guard canUseAlarmKit else { return false }
-
-        let settings = testSettingsStore.settings
-        let label = "\(settingsStore.settings.label) (TEST)"
-        let snoozeDuration = settingsStore.settings.snoozeEnabled
-            ? TimeInterval(settingsStore.settings.snoozeMinutes * 60)
-            : nil
-        let runner = AlarmKitTestScenarioRunner(
-            alarmCoordinator: alarmCoordinator,
-            testRunStore: testRunStore,
-            timeProvider: SystemTimeProvider()
-        )
-        alarmRecordStore.clearAllTests()
-        let success = await runner.run(
-            settings: settings,
-            label: label,
-            soundName: alarmSoundName(for: settingsStore.settings.atFajrSoundSelectionGlobal),
-            snoozeDuration: snoozeDuration
-        )
-        testSettingsStore.settings.testRunId = testRunStore.load()?.testRunId
-        return success
-    }
-
-    func cancelAlarmKitTestAlarms() async {
-        guard FeatureFlags.enableAlarmKitTestMode else { return }
-        guard #available(iOS 26.0, *), let alarmCoordinator else { return }
-        let ids = ScheduleEventKind.allCases.map { SchedulingIdentifiers.testAlarmID(for: $0) }
-        alarmCoordinator.cancel(ids: ids)
-        alarmRecordStore.clearAllTests()
-        alarmStateStore.clear()
-        testRunStore.clear()
-        DebugEventLog.shared.record(.canceledTestAlarms)
-    }
-
-    func stopCountdownUI() async {
-        guard FeatureFlags.enableCountdown else { return }
-        await countdownManager.stopCountdownByUser()
-    }
-
-    func resetAlarmKitTestState() async {
-        guard FeatureFlags.enableAlarmKitTestMode else { return }
-        await cancelAlarmKitTestAlarms()
-        await countdownManager.stopCountdownByUser()
-        testSettingsStore.reset()
-        testRunStore.clear()
-    }
-
-    func cleanupLiveActivities() async -> Int {
-        guard FeatureFlags.enableCountdown else { return 0 }
-        return await countdownManager.cleanupLiveActivities()
-    }
-
-    func alarmKitTestSnapshot() -> AlarmKitTestSnapshot {
-        guard FeatureFlags.enableAlarmKitTestMode else {
-            return AlarmKitTestSnapshot(
-                now: Date(),
-                testRun: nil,
-                alarmStates: [],
-                countdownSession: nil,
-                events: []
-            )
-        }
-        return AlarmKitTestSnapshot(
-            now: Date(),
-            testRun: testRunStore.load(),
-            alarmStates: alarmStateStore.entries(),
-            countdownSession: countdownStore.loadSession(),
-            events: DebugEventLog.shared.events(limit: 20)
-        )
-    }
-
-    func makeSchedulingAudit() async -> SchedulingAuditSnapshot {
-        activeDayResolver.syncMorningPlanState()
-        let settings = settingsStore.settings
-        let timeZone = TimeZone.current
-        let now = Date()
-        let canUseAlarmKit = await alarmKitAvailableAndAuthorized()
-
-        let snapshot = await schedulingAuditProvider.makeSchedulingAudit(
-            dependencies: .init(
-                settings: settings,
-                coordinate: currentCoordinate(),
-                canUseAlarmKit: canUseAlarmKit,
-                now: now,
-                timeZone: timeZone,
-                dayLabel: { date in
-                    SurfaceDateLabelFormatter.dayLabel(for: date)
-                },
-                dateParticipatesInWakePlan: { date, timeZone in
-                    self.activeDayResolver.dateParticipatesInWakePlan(date, timeZone: timeZone)
-                },
-                effectiveConfig: { date, timeZone in
-                    self.activeDayResolver.effectiveConfig(
-                        for: date,
-                        settings: settings,
-                        timeZone: timeZone
-                    )
-                },
-                buildSchedule: { date, coordinate, timeZone, method, adjustmentMinutes, maghribAdjustmentMinutes, effectiveConfig, locationDescription in
-                    self.dayScheduleBuilder.buildSchedule(
-                        for: date,
-                        coordinate: coordinate,
-                        timeZone: timeZone,
-                        method: method,
-                        adjustmentMinutes: adjustmentMinutes,
-                        maghribAdjustmentMinutes: maghribAdjustmentMinutes,
-                        effectiveConfig: effectiveConfig,
-                        locationDescription: locationDescription
-                    )
-                },
-                pendingRequests: { [notificationScheduler] in
-                    await notificationScheduler.pendingRequests()
-                },
-                alarmKitItems: { [alarmKitScheduler] in
-                    if #available(iOS 26.0, *), let alarmKitScheduler {
-                        return alarmKitScheduler.fetchScheduledAlarms()
-                    }
-                    return []
-                },
-                buildAuditMismatches: { expectedEvents, notificationItems, alarmKitItems in
-                    self.buildAuditMismatches(
-                        expectedEvents: expectedEvents,
-                        notificationItems: notificationItems,
-                        alarmKitItems: alarmKitItems
-                    )
-                }
-            )
-        )
-
-        Logging.scheduler.info("Scheduling audit: expected=\(snapshot.expectedEvents.count) notifications=\(snapshot.notificationItems.count) alarms=\(snapshot.alarmKitItems.count) mismatches=\(snapshot.mismatches.count)")
-        EventTimelineLog.shared.record(category: "audit", message: "Audit expected=\(snapshot.expectedEvents.count) notifications=\(snapshot.notificationItems.count) alarms=\(snapshot.alarmKitItems.count) mismatches=\(snapshot.mismatches.count)")
-        return snapshot
     }
 
     private var isLocationAuthorized: Bool {
@@ -2535,72 +1869,6 @@ final class ScheduleManager: ObservableObject {
         }
     }
 
-    private func buildAuditMismatches(
-        expectedEvents: [ExpectedScheduledEvent],
-        notificationItems: [NotificationAuditItem],
-        alarmKitItems: [AlarmKitAuditItem]
-    ) -> [AuditMismatch] {
-        var mismatches: [AuditMismatch] = []
-        let notificationIDs = Set(notificationItems.map { $0.id })
-        let alarmIDs = Set(alarmKitItems.map { $0.id.uuidString })
-
-        let counts = expectedEvents.reduce(into: [String: Int]()) { partial, event in
-            partial[event.identifier, default: 0] += 1
-        }
-        let duplicateIDs = counts.filter { $0.value > 1 }.map { $0.key }
-        for duplicateID in duplicateIDs {
-            mismatches.append(AuditMismatch(severity: .error, message: "Identifier collision: \(duplicateID)"))
-        }
-
-        for expected in expectedEvents {
-            let isPresent = expected.channel == .notification
-                ? notificationIDs.contains(expected.identifier)
-                : alarmIDs.contains(expected.identifier)
-            if !isPresent {
-                mismatches.append(
-                    AuditMismatch(
-                        severity: .error,
-                        message: "Missing \(expected.kind.title) for \(expected.dayLabel) (id: \(expected.identifier))"
-                    )
-                )
-                continue
-            }
-
-            let scheduledDate: Date?
-            switch expected.channel {
-            case .notification:
-                scheduledDate = notificationItems.first { $0.id == expected.identifier }?.triggerDate
-            case .alarmKit:
-                scheduledDate = alarmKitItems.first { $0.id.uuidString == expected.identifier }?.nextTriggerDate
-            }
-
-            if let scheduledDate {
-                let delta = abs(scheduledDate.timeIntervalSince(expected.date))
-                if delta > 60 {
-                    mismatches.append(
-                        AuditMismatch(
-                            severity: .warning,
-                            message: "Time mismatch for \(expected.kind.title) (id: \(expected.identifier)) expected \(TimeFormatters.shortDateTime.string(from: expected.date)) got \(TimeFormatters.shortDateTime.string(from: scheduledDate))"
-                        )
-                    )
-                }
-            }
-        }
-
-        let expectedNotificationIDs = Set(expectedEvents.filter { $0.channel == .notification }.map { $0.identifier })
-        let expectedAlarmIDs = Set(expectedEvents.filter { $0.channel == .alarmKit }.map { $0.identifier })
-
-        for item in notificationItems where item.id.hasPrefix("suhoor.") && !expectedNotificationIDs.contains(item.id) {
-            mismatches.append(AuditMismatch(severity: .warning, message: "Extra notification scheduled: \(item.id)"))
-        }
-
-        for item in alarmKitItems where !expectedAlarmIDs.contains(item.id.uuidString) {
-            mismatches.append(AuditMismatch(severity: .warning, message: "Extra AlarmKit alarm scheduled: \(item.id.uuidString)"))
-        }
-
-        return mismatches
-    }
-
     private func retagActiveWindow(reason: String = "tag_selection_changed") {
         guard usesLegacyContexts else { return }
         guard !activeWindowSnapshot.visibleDays.isEmpty else { return }
@@ -2643,7 +1911,6 @@ final class ScheduleManager: ObservableObject {
                 wakeRuleSignature: ScheduleCacheStore.wakeRuleSignature(for: alarmConfigStore.defaults)
             )
         )
-        refreshCachedCompletionSurfaces(reason: reason)
     }
 
     private func buildActiveDayIfNeeded(
@@ -2854,8 +2121,6 @@ final class ScheduleManager: ObservableObject {
     private func cancelAll() async {
         await routineScheduler.cancelAllUpcoming(days: scheduledActiveDayLimit)
         alarmScheduler.resetReconciliationState()
-        alarmRecordStore.clearAll()
-        alarmStateStore.clear()
     }
 
     private func dayForCancellation(on date: Date) -> ActiveAlarmDay? {
@@ -2914,11 +2179,6 @@ enum AppBootstrapState: Equatable, Sendable {
     case welcome
     case permissions
     case home
-}
-
-enum DuplicateDateStatus {
-    case available
-    case active(provenances: [ResolvedScheduledDateProvenance], existingDay: ActiveAlarmDay)
 }
 
 struct NextWakeEventSummary: Equatable, Sendable {

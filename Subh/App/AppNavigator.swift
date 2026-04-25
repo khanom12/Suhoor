@@ -3,14 +3,9 @@ import Foundation
 
 enum AppNavigationIntent: Equatable, Sendable {
     case switchToWake
-    case switchToPlans
     case openSettings
     case openHijriCorrections
     case openAlarmBehavior
-    case openDefaultMorningPlan
-    case openQadaPlanner
-    case openShawwalPlanner
-    case openSunnahPlanner
 }
 
 struct AppNavigationRequest: Identifiable, Equatable, Sendable {
@@ -36,10 +31,6 @@ final class AppNavigator: ObservableObject {
         send(.switchToWake)
     }
 
-    func switchToPlans() {
-        send(.openSettings)
-    }
-
     func openSettings() {
         send(.openSettings)
     }
@@ -50,22 +41,6 @@ final class AppNavigator: ObservableObject {
 
     func openAlarmBehavior() {
         send(.openAlarmBehavior)
-    }
-
-    func openDefaultMorningPlan() {
-        send(.openSettings)
-    }
-
-    func openQadaPlanner() {
-        send(.openSettings)
-    }
-
-    func openShawwalPlanner() {
-        send(.openSettings)
-    }
-
-    func openSunnahPlanner() {
-        send(.openSettings)
     }
 
     private func bindLegacyNotifications(_ notificationCenter: NotificationCenter) {
@@ -83,10 +58,6 @@ final class AppNavigator: ObservableObject {
                 }
                 .store(in: &cancellables)
         }
-
-        notificationCenter.publisher(for: .openPlanHome)
-            .sink { [weak self] _ in self?.openSettings() }
-            .store(in: &cancellables)
     }
 }
 
@@ -98,21 +69,11 @@ enum AppNavigationBridge {
         switch intent {
         case .switchToWake:
             notificationCenter.post(name: .switchToWakeTab, object: nil)
-        case .switchToPlans:
-            notificationCenter.post(name: .switchToSettingsTab, object: nil)
         case .openSettings:
             notificationCenter.post(name: .switchToSettingsTab, object: nil)
         case .openHijriCorrections:
             notificationCenter.post(name: .switchToHijriCorrections, object: nil)
         case .openAlarmBehavior:
-            notificationCenter.post(name: .switchToSettingsTab, object: nil)
-        case .openDefaultMorningPlan:
-            notificationCenter.post(name: .switchToSettingsTab, object: nil)
-        case .openQadaPlanner:
-            notificationCenter.post(name: .switchToSettingsTab, object: nil)
-        case .openShawwalPlanner:
-            notificationCenter.post(name: .switchToSettingsTab, object: nil)
-        case .openSunnahPlanner:
             notificationCenter.post(name: .switchToSettingsTab, object: nil)
         }
     }

@@ -8,7 +8,6 @@ import UIKit
 final class OnboardingViewModel: ObservableObject {
     @Published private(set) var step: OnboardingStep = .valuePreview
     @Published private(set) var previousStep: OnboardingStep?
-    @Published private(set) var onboardingPath: OnboardingPath = .fajr
     @Published private(set) var permissionStates: [AppPermissionKind: AppPermissionState] = [:]
     @Published private(set) var isScheduleReady = false
     @Published private(set) var isWorking = false
@@ -17,7 +16,6 @@ final class OnboardingViewModel: ObservableObject {
     @Published private(set) var hasFixedLocation = false
     @Published private(set) var alarmKitRequestable = false
     @Published private(set) var isReviewingBack = false
-    @Published private(set) var activationState: OnboardingActivationState = .idle
 
     private weak var scheduleManager: ScheduleManager?
     private weak var locationService: LocationService?
@@ -27,7 +25,6 @@ final class OnboardingViewModel: ObservableObject {
     private var hasRequestedSchedule = false
     private var useShortFlow = false
     private var lastPermissionStates: [AppPermissionKind: AppPermissionState] = [:]
-    private var lastLoggedOffsetMinutes: Int?
 
     func bind(
         scheduleManager: ScheduleManager,
@@ -45,9 +42,7 @@ final class OnboardingViewModel: ObservableObject {
         guard !hasLoaded else { return }
         hasLoaded = true
         useShortFlow = settingsStore?.settings.isConfigured ?? false
-        resolveOnboardingPath()
         OnboardingAnalytics.log("onboarding_started")
-        OnboardingAnalytics.log("onboarding_path_selected", properties: ["path": onboardingPath.rawValue])
         await refreshPermissions()
         updateInitialStep()
     }
@@ -71,7 +66,6 @@ final class OnboardingViewModel: ObservableObject {
         alarmKitRequestable = scheduleManager.canRequestAlarmKitAuthorization
         syncSettings()
         updateScheduleReadiness()
-        activationAttemptIfNeeded()
         skipIfNeeded()
         isWorking = false
     }
@@ -84,7 +78,6 @@ final class OnboardingViewModel: ObservableObject {
         alarmKitRequestable = scheduleManager.canRequestAlarmKitAuthorization
         syncSettings()
         updateScheduleReadiness()
-        activationAttemptIfNeeded()
         skipIfNeeded()
     }
 
@@ -150,11 +143,8 @@ final class OnboardingViewModel: ObservableObject {
     }
 
     func startFlow(animation: Animation?) {
-        if isLocationReady {
-            goTo(.relationship, animation: animation)
-        } else {
-            goTo(.location, animation: animation)
-        }
+        let next: OnboardingStep = isLocationReady ? .permissions : .location
+        goTo(resolvedStep(startingAt: next) ?? .success, animation: animation)
     }
 
     func handleExplore(animation: Animation?) {
@@ -238,42 +228,6 @@ final class OnboardingViewModel: ObservableObject {
         refreshPermissionsInBackground()
     }
 
-    func handleOffsetChanged(_ minutes: Int) {
-        guard step == .relationship else { return }
-        if lastLoggedOffsetMinutes != minutes {
-            lastLoggedOffsetMinutes = minutes
-            OnboardingAnalytics.log("offset_selected", properties: ["minutes": "\(minutes)"])
-        }
-        activationAttempt()
-    }
-
-    func activationAttempt() {
-        guard activationState != .attempting else { return }
-        guard isLocationReady, isSchedulingReady else { return }
-        activationState = .attempting
-        Task {
-            guard let scheduleManager else {
-                activationState = .failed(message: "Wake preview unavailable.")
-                return
-            }
-            let result = await scheduleManager.scheduleTomorrowActivation()
-            if result.success, let schedule = result.schedule {
-                activationState = .succeeded(schedule: schedule)
-                OnboardingAnalytics.log("activation_scheduled_success")
-            } else {
-                activationState = .failed(message: result.message)
-                OnboardingAnalytics.log("activation_scheduled_fail", properties: ["reason": result.message])
-            }
-        }
-    }
-
-    private func activationAttemptIfNeeded() {
-        if case .succeeded = activationState { return }
-        guard step == .relationship || step == .permissions else { return }
-        guard isLocationReady, isSchedulingReady else { return }
-        activationAttempt()
-    }
-
     func markOnboardingComplete() {
         settingsStore?.update { draft in
             draft.isConfigured = true
@@ -281,10 +235,6 @@ final class OnboardingViewModel: ObservableObject {
         OnboardingAnalytics.log("onboarding_completed")
         scheduleManager?.requestRefresh(reason: .settingsChanged)
         refreshPermissionsInBackground()
-    }
-
-    func markOnboardingCompleteAndOpenPlans() {
-        markOnboardingComplete()
     }
 
     var progressIndex: Int {
@@ -307,36 +257,36 @@ final class OnboardingViewModel: ObservableObject {
         isReviewingBack && shouldSkip(step)
     }
 
-    var valueTitleText: String { onboardingPath.valueTitle }
-    var valueBodyText: String { onboardingPath.valueBody }
-    var previewWakeLabelText: String { onboardingPath.previewWakeLabel }
-    var locationTitleText: String { onboardingPath.locationTitle }
-    var locationBodyText: String { onboardingPath.locationBody }
-    var locationTrustBullets: [String] { onboardingPath.locationTrustBullets }
-    var showsCalculationMethodSummary: Bool { onboardingPath.showsCalculationMethodSummary }
-    var relationshipTitleText: String { onboardingPath.relationshipTitle }
-    var relationshipBodyText: String { onboardingPath.relationshipBody }
-    var relationshipPresetLabels: [Int: String] { onboardingPath.relationshipPresetLabels }
-    var supportBehaviorTitleText: String { onboardingPath.supportBehaviorTitle }
-    var supportBehaviorBodyText: String { onboardingPath.supportBehaviorBody }
-    var permissionsTitleText: String { onboardingPath.permissionsTitle }
-    var permissionsBodyText: String { onboardingPath.permissionsBody }
-    var showNotificationsRowInPermissions: Bool { onboardingPath.alwaysShowNotificationsRow || isNotificationsRequired }
-    var successTitleText: String { onboardingPath.successTitle }
-    var successBodyText: String { onboardingPath.successBody }
-    var successPrimaryActionTitle: String { onboardingPath.successPrimaryActionTitle }
-    var successSecondaryActionTitle: String? { onboardingPath.successSecondaryActionTitle }
+    var valueTitleText: String { "Wake for and around Fajr" }
+    var valueBodyText: String {
+        "Subh resolves your next morning from local Fajr times and keeps the main wake anchored to the supported Fajr end."
+    }
+    var previewWakeLabelText: String { "Next wake" }
+    var wakeRelationshipText: String { "30 min before supported Fajr end" }
+    var locationTitleText: String { "Trust your local prayer times" }
+    var locationBodyText: String {
+        "Your morning plan follows local Fajr times. Use your location or choose a city, and change the calculation method if needed."
+    }
+    var locationTrustBullets: [String] {
+        [
+            "Used to calculate accurate local prayer times",
+            "Change your city or method anytime"
+        ]
+    }
+    var showsCalculationMethodSummary: Bool { true }
+    var permissionsTitleText: String { "Keep your wake reliable" }
+    var permissionsBodyText: String {
+        "Alarm access helps your main wake ring reliably around Fajr. Notifications support reminders and fallback delivery where needed."
+    }
+    var showNotificationsRowInPermissions: Bool { true }
+    var successTitleText: String { "Your morning plan is ready" }
+    var successBodyText: String {
+        "Your next wake is set from the shared Subh resolver, 30 minutes before the supported Fajr end."
+    }
+    var successPrimaryActionTitle: String { "Go to Home" }
     var calculationMethodName: String {
         settingsStore?.settings.calculationMethod.displayName
             ?? CalculationMethod.defaultForTimeZone(.current).displayName
-    }
-    var relationshipSentenceText: (Int) -> String {
-        { [onboardingPath] minutes in
-            onboardingPath.relationshipSentence(minutes)
-        }
-    }
-    var wakeSupportSummaryText: String {
-        "\(selectedOffsetMinutes) min before Fajr"
     }
     var reminderMinutesOptions: [Int] { [5, 10, 15, 20, 30] }
 
@@ -401,35 +351,6 @@ final class OnboardingViewModel: ObservableObject {
         )
     }
 
-    var next5DaysSchedule: [SchedulePreviewRow] {
-        guard let scheduleManager else { return [] }
-        let calendar = Calendar.current
-        let startDate = nextAlarmStartDay
-        var rows: [SchedulePreviewRow] = []
-        var dayOffset = 0
-        while rows.count < 5 && dayOffset < 21 {
-            let day = calendar.date(byAdding: .day, value: dayOffset, to: startDate) ?? startDate
-            if let schedule = scheduleManager.schedule(for: day) {
-                let suhoor = schedule.wakeDate
-                rows.append(
-                    SchedulePreviewRow(
-                        id: DateHelpers.dayIdentifier(for: day, timeZone: .current),
-                        date: day,
-                        dayLabel: dayLabel(for: day),
-                        fajr: schedule.fajrDate,
-                        suhoor: suhoor
-                    )
-                )
-            }
-            dayOffset += 1
-        }
-        return rows
-    }
-
-    var selectedOffsetMinutes: Int {
-        settingsStore?.settings.baseWakeOffsetMinutes ?? 60
-    }
-
     var computedFajrTime: Date? {
         tomorrowPreview.fajrDate
     }
@@ -439,17 +360,7 @@ final class OnboardingViewModel: ObservableObject {
     }
 
     var valuePrimaryActionTitle: String {
-        onboardingPath.valuePrimaryActionTitle(for: nextAlarmDisplayLabel(for: nextAlarmStartDay))
-    }
-
-    var successSchedule: DaySchedule? {
-        switch activationState {
-        case .succeeded(let schedule):
-            return schedule
-        default:
-            let tomorrow = DateHelpers.startOfTomorrow(in: .current)
-            return scheduleManager?.schedule(for: tomorrow)
-        }
+        "Set my morning plan"
     }
 
     var flowSteps: [OnboardingStep] {
@@ -458,7 +369,7 @@ final class OnboardingViewModel: ObservableObject {
             return missing.isEmpty ? [.success] : (missing + [.success])
         }
 
-        return onboardingPath.flowSteps
+        return [.valuePreview, .location, .permissions, .success]
     }
 
     private var missingShortFlowSteps: [OnboardingStep] {
@@ -559,12 +470,6 @@ final class OnboardingViewModel: ObservableObject {
             return false
         case .location:
             return isLocationReady
-        case .relationship:
-            return useShortFlow
-        case .supportBehavior:
-            return useShortFlow
-        case .futureVisualization:
-            return useShortFlow
         case .permissions:
             return isSchedulingReady
         case .success:
@@ -646,22 +551,11 @@ final class OnboardingViewModel: ObservableObject {
             return "value"
         case .location:
             return "location"
-        case .relationship:
-            return "relationship"
-        case .supportBehavior:
-            return "support_behavior"
-        case .futureVisualization:
-            return "future_visualization"
         case .permissions:
             return "permissions"
         case .success:
             return "success"
         }
-    }
-
-    private func resolveOnboardingPath() {
-        let hijriMonth = scheduleManager?.currentHijriYearMonth(date: Date())?.month
-        onboardingPath = OnboardingPath.resolve(currentHijriMonth: hijriMonth)
     }
 
     private var nextAlarmStartDay: Date {

@@ -1,10 +1,5 @@
 import Foundation
 
-enum QadaPlanWizardStep: Hashable, Sendable {
-    case setup
-    case review
-}
-
 enum QadaPlanPace: String, CaseIterable, Identifiable, Codable, Sendable {
     case finishSooner
     case steady
@@ -44,17 +39,6 @@ enum QadaPlanPace: String, CaseIterable, Identifiable, Codable, Sendable {
             return "Good if you prefer a lighter pace."
         }
     }
-
-    var strategy: QadaPlanStrategy {
-        switch self {
-        case .finishSooner:
-            return .focused
-        case .steady:
-            return .balanced
-        case .gentle:
-            return .gentle
-        }
-    }
 }
 
 struct QadaPlanDraft: Equatable, Sendable {
@@ -71,13 +55,4 @@ struct QadaPlanDraft: Equatable, Sendable {
         avoidImportantSunnah: true,
         planBatchCount: 3
     )
-}
-
-struct QadaPlanSummary: Equatable, Sendable {
-    let plannedCount: Int
-    let targetCount: Int
-    let startDate: Date?
-    let finishDate: Date?
-    let paceTitle: String
-    let protectedSummary: String
 }

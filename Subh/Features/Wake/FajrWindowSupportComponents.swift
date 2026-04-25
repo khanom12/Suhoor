@@ -185,8 +185,6 @@ struct FajrWindowActionRows: View {
 
     private func accessibilityHint(for intent: FajrWindowActionIntent) -> String {
         switch intent {
-        case .openDefaultMorningPlan:
-            return "Opens the default morning plan."
         case .openSelectedMorning:
             return "Opens this morning in day detail."
         }

@@ -4,11 +4,6 @@ import os
 
 final class NotificationScheduler {
     private let center = UNUserNotificationCenter.current()
-    static let iftarCategoryIdentifier = "suhoor.iftar"
-
-    init() {
-        registerNotificationCategories()
-    }
 
     var authorizationStateText: String {
         get async {
@@ -157,64 +152,6 @@ final class NotificationScheduler {
         await center.pendingNotificationRequests()
     }
 
-    func scheduleTestNotification(kind: ScheduleEventKind, settings: AppSettings, delaySeconds: Int = 5) async -> Bool {
-        let content = UNMutableNotificationContent()
-        content.title = "Test \(kind.title)"
-        content.body = kind.body
-        let dummySchedule = DaySchedule(
-            date: Date(),
-            fajrDate: Date(),
-            maghribDate: Date(),
-            wakeDate: Date(),
-            reminderDate: nil,
-            boundaryDate: nil,
-            iftarDate: nil,
-            fajrSoundChoice: settings.atFajrSoundSelectionGlobal,
-            iftarSoundChoice: nil,
-            locationDescription: "",
-            offsetMinutes: 0,
-            calculationMethodName: "",
-            timeZone: .current
-        )
-        content.sound = notificationSound(for: kind, schedule: dummySchedule, settings: settings)
-
-        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: TimeInterval(max(1, delaySeconds)), repeats: false)
-        let request = UNNotificationRequest(identifier: testIdentifier(for: kind), content: content, trigger: trigger)
-        do {
-            try await center.add(request)
-            return true
-        } catch {
-            Logging.scheduler.error("Test notification error: \(error.localizedDescription)")
-            return false
-        }
-    }
-
-    func scheduleFajrAdhanTest(delaySeconds: Int = 60) async -> Bool {
-        let content = UNMutableNotificationContent()
-        content.title = "Test Fajr alarm"
-        content.body = ScheduleEventKind.boundary.body
-        if Bundle.main.url(forResource: "adhan_fajr", withExtension: "caf") != nil {
-            content.sound = UNNotificationSound(named: UNNotificationSoundName("adhan_fajr.caf"))
-        } else {
-            content.sound = .default
-        }
-
-        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: TimeInterval(max(1, delaySeconds)), repeats: false)
-        let request = UNNotificationRequest(identifier: fajrAdhanTestIdentifier, content: content, trigger: trigger)
-        do {
-            try await center.add(request)
-            return true
-        } catch {
-            Logging.scheduler.error("Fajr adhan test error: \(error.localizedDescription)")
-            return false
-        }
-    }
-
-    func cancelTestNotifications() async {
-        let identifiers = ScheduleEventKind.allCases.map { testIdentifier(for: $0) }
-        center.removePendingNotificationRequests(withIdentifiers: identifiers + [fajrAdhanTestIdentifier])
-    }
-
     private func addNotificationRequest(
         identifier: String,
         kind: ScheduleEventKind,
@@ -227,10 +164,6 @@ final class NotificationScheduler {
         content.title = notificationTitle(for: kind, settings: settings)
         content.body = notificationBody(for: kind)
         content.sound = notificationSound(for: soundRole, kind: kind, schedule: schedule, settings: settings)
-        if kind == .iftarNotification {
-            content.categoryIdentifier = Self.iftarCategoryIdentifier
-        }
-
         let calendar = Calendar.current
         let components = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: date)
         let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
@@ -241,14 +174,6 @@ final class NotificationScheduler {
 
     private func identifier(for schedule: DaySchedule, kind: ScheduleEventKind) -> String {
         SchedulingIdentifiers.dailyIdentifier(for: schedule, kind: kind)
-    }
-
-    private func testIdentifier(for kind: ScheduleEventKind) -> String {
-        SchedulingIdentifiers.testIdentifier(for: kind)
-    }
-
-    private var fajrAdhanTestIdentifier: String {
-        "suhoor.test.fajr-adhan"
     }
 
     private func upcomingIdentifiers(days: Int) -> [String] {
@@ -396,24 +321,4 @@ final class NotificationScheduler {
         }
     }
 
-    private func registerNotificationCategories() {
-        let iftarCategory = UNNotificationCategory(
-            identifier: Self.iftarCategoryIdentifier,
-            actions: [
-                UNNotificationAction(
-                    identifier: FastCompletionNotificationAction.completed,
-                    title: "Completed",
-                    options: []
-                ),
-                UNNotificationAction(
-                    identifier: FastCompletionNotificationAction.notCompleted,
-                    title: "Not completed",
-                    options: []
-                ),
-            ],
-            intentIdentifiers: [],
-            options: []
-        )
-        center.setNotificationCategories([iftarCategory])
-    }
 }

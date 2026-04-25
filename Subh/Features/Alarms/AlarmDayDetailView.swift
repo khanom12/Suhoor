@@ -86,10 +86,10 @@ struct AlarmDayDetailView: View {
         return "Wake is set from the currently resolved morning plan."
     }
 
-    private var reasonRows: [WakeReasonRow] {
+    private var reasonRows: [DetailReasonRow] {
         guard let activeDay else {
             return [
-                WakeReasonRow(
+                DetailReasonRow(
                     id: "wake",
                     title: "Wake",
                     detail: "Set for \(TimeFormatters.timeFormatter.string(from: currentSchedule.wakeDate))."
@@ -112,17 +112,17 @@ struct AlarmDayDetailView: View {
         }
 
         return [
-            WakeReasonRow(
+            DetailReasonRow(
                 id: "wake",
                 title: "Wake",
                 detail: "Set for \(TimeFormatters.timeFormatter.string(from: decisionLog.resolvedWakeTime))."
             ),
-            WakeReasonRow(
+            DetailReasonRow(
                 id: "anchor",
                 title: "Anchor",
                 detail: "Resolved from \(anchorText) with a \(decisionLog.resolvedDelta.minutes)-minute buffer."
             ),
-            WakeReasonRow(
+            DetailReasonRow(
                 id: "source",
                 title: "Source",
                 detail: activeDay.sourceSummaryText.isEmpty
@@ -166,57 +166,10 @@ struct AlarmDayDetailView: View {
     }
 }
 
-enum DayWakeRuleSelection: String, CaseIterable, Identifiable, Equatable {
-    case defaultPlan
-    case preFajr
-    case inFajr
-    case postFajr
-    case fixedWake
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .defaultPlan:
-            return "Use default"
-        case .preFajr:
-            return "Before Fajr"
-        case .inFajr:
-            return "During Fajr"
-        case .postFajr:
-            return "After Fajr"
-        case .fixedWake:
-            return "Fixed wake"
-        }
-    }
-
-    var subtitle: String? {
-        switch self {
-        case .defaultPlan:
-            return "Keep your usual morning plan."
-        case .preFajr:
-            return "Wake before Fajr begins."
-        case .inFajr:
-            return "Wake during the Fajr window."
-        case .postFajr:
-            return "Wake after the Fajr window."
-        case .fixedWake:
-            return "Set a specific wake time."
-        }
-    }
-
-    init(_ state: MorningWakeRuleState) {
-        switch state {
-        case .preFajr:
-            self = .preFajr
-        case .inFajr:
-            self = .inFajr
-        case .postFajr:
-            self = .postFajr
-        case .fixedWake:
-            self = .fixedWake
-        }
-    }
+private struct DetailReasonRow: Identifiable {
+    let id: String
+    let title: String
+    let detail: String
 }
 
 private struct MorningDetailSummaryHeader: View {

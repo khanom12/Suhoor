@@ -17,7 +17,6 @@ protocol AlarmKitScheduling {
         soundName: String?
     ) async throws
 
-    func cancelTestAlarms()
     func cancelAllUpcoming(days: Int) async
     func cancel(schedule: DaySchedule, kind: ScheduleEventKind)
 }

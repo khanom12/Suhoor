@@ -23,6 +23,11 @@ private enum SubhHomeDestination: Identifiable, Hashable {
     }
 }
 
+private enum SettingsRoute: Hashable {
+    case hijriCorrections
+    case alarmBehavior
+}
+
 struct SubhHomeView: View {
     @EnvironmentObject private var scheduleManager: ScheduleManager
     @EnvironmentObject private var appNavigator: AppNavigator
@@ -122,12 +127,6 @@ struct SubhHomeView: View {
             if let entry = snapshot.tomorrow {
                 destination = .day(entry.schedule)
             }
-        case .switchToPlans,
-             .openDefaultMorningPlan,
-             .openQadaPlanner,
-             .openShawwalPlanner,
-             .openSunnahPlanner:
-            presentSettings()
         }
     }
 

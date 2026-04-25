@@ -692,7 +692,6 @@ final class AlarmConfigStore: ObservableObject {
         } else {
             reminderTimeMode = defaults.defaultReminderTimeMode
         }
-        let suhoorOffset = ruleSummary.finalOffsetMinutes
         let suhoorTimeOverride: Int?
         let suhoorTimeMode: SuhoorTimeMode
         let effectiveSuhoorOffset: Int

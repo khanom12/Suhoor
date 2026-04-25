@@ -176,7 +176,6 @@ struct FajrWindowCompactSelectedDaySnapshot: Equatable, Sendable {
 
 enum FajrWindowActionIntent: Equatable, Sendable {
     case openSelectedMorning(dateKey: String)
-    case openDefaultMorningPlan
 }
 
 struct FajrWindowActionItem: Identifiable, Equatable, Sendable {

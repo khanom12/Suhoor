@@ -3,7 +3,6 @@ import UIKit
 
 struct FajrWindowDetailView: View {
     @EnvironmentObject private var scheduleManager: ScheduleManager
-    @EnvironmentObject private var appNavigator: AppNavigator
     @Environment(\.scenePhase) private var scenePhase
 
     let initialPeriod: FajrWindowPeriod
@@ -222,8 +221,6 @@ struct FajrWindowDetailView: View {
         snapshot: FajrWindowSurfaceSnapshot
     ) {
         switch intent {
-        case .openDefaultMorningPlan:
-            appNavigator.openDefaultMorningPlan()
         case .openSelectedMorning(let dateKey):
             guard let point = snapshot.points.first(where: { $0.dateKey == dateKey }) else { return }
             selectedMorningDate = point.date

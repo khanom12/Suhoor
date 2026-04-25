@@ -179,7 +179,7 @@ struct ScheduleManagerHijriTests {
         )
         #expect(initial.addedDates.count == 2)
 
-        let availability = manager.islamicQuickAddAvailability(
+        let availability = alarmConfigStore.islamicQuickAddAvailability(
             .nextMondayThursdayPair,
             startDate: startDate,
             timeZone: timeZone
@@ -1522,130 +1522,15 @@ struct ScheduleManagerHijriTests {
 
     @Test
     @MainActor
-    func appNavigatorRedirectsRetiredLegacyNotificationsAwayFromPrunedSurfaces() {
+    func appNavigatorRoutesLiveNotificationsToMvpSurfaces() {
         let notificationCenter = NotificationCenter()
         let navigator = AppNavigator(notificationCenter: notificationCenter)
 
         notificationCenter.post(name: .switchToAlarmTab, object: nil)
         #expect(navigator.latestRequest?.intent == .switchToWake)
 
-        AppNavigationBridge.send(.openQadaPlanner, notificationCenter: notificationCenter)
-        #expect(navigator.latestRequest?.intent == .openSettings)
-
-        notificationCenter.post(name: .openPlanHome, object: nil)
-        #expect(navigator.latestRequest?.intent == .openSettings)
-
         AppNavigationBridge.send(.openHijriCorrections, notificationCenter: notificationCenter)
         #expect(navigator.latestRequest?.intent == .openHijriCorrections)
-    }
-
-    @Test
-    @MainActor
-    func scheduleManagerSurfaceSnapshotsReflectCanonicalRuntimeState() async {
-        let suiteName = "ScheduleManagerHijriTests.SurfaceSnapshots"
-        let defaults = UserDefaults(suiteName: suiteName)!
-        defaults.removePersistentDomain(forName: suiteName)
-        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
-
-        let settingsStore = SuhoorSettingsStore(defaults: defaults)
-        settingsStore.update { draft in
-            draft.isConfigured = true
-            draft.locationMode = .fixed
-            draft.fixedLocation = FixedLocation(latitude: 43.6532, longitude: -79.3832)
-        }
-
-        let alarmConfigStore = AlarmConfigStore(defaultsStore: defaults)
-        let fastTagStore = FastTagStore(defaults: defaults)
-        let fastLogStore = FastLogStore(defaults: defaults)
-        let fajrLogStore = FajrLogStore(defaults: defaults)
-        let qadaBacklogStore = QadaBacklogStore(defaults: defaults)
-        let qadaBatchStore = QadaBatchStore(defaults: defaults)
-
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = timeZone
-        let now = Date()
-        let today = DateHelpers.startOfDay(now, in: timeZone)
-        guard let tomorrow = Self.firstDateMatching(
-            start: calendar.date(byAdding: .day, value: 1, to: today) ?? today,
-            timeZone: timeZone,
-            adjustedCalendar: AdjustedHijriCalendar.shared,
-            matcher: { components, _ in
-                components.month != .ramadan
-            }
-        ) else {
-            Issue.record("Expected a future non-Ramadan date.")
-            return
-        }
-        let todayKey = DateHelpers.dayIdentifier(for: today, timeZone: timeZone)
-        let tomorrowKey = DateHelpers.dayIdentifier(for: tomorrow, timeZone: timeZone)
-
-        alarmConfigStore.addSingleDaySource(tomorrow, timeZone: timeZone)
-        alarmConfigStore.updateOverride(for: tomorrow, timeZone: timeZone) { draft in
-            draft.suhoorOffsetOverrideMinutes = 25
-        }
-        fastTagStore.setSelection(
-            FastIntentSelection(primaryIntent: .qadaMakeup, secondaryTags: []),
-            for: tomorrow,
-            timeZone: timeZone
-        )
-        fastLogStore.setStatus(
-            .completed,
-            for: todayKey,
-            intentSnapshot: FastIntentSnapshot(primaryIntent: .qadaMakeup, secondaryTags: [])
-        )
-        fajrLogStore.setStatus(.completed, for: todayKey)
-        qadaBacklogStore.setBaseline(owed: 2, trackingStartDateKey: todayKey)
-        qadaBatchStore.saveBatch(
-            dateKeys: [tomorrowKey],
-            draft: .empty
-        )
-
-        let manager = ScheduleManager(
-            settingsStore: settingsStore,
-            locationService: LocationService(),
-            alarmConfigStore: alarmConfigStore,
-            fastTagStore: fastTagStore,
-            fastLogStore: fastLogStore,
-            fajrLogStore: fajrLogStore,
-            qadaBacklogStore: qadaBacklogStore,
-            qadaBatchStore: qadaBatchStore,
-            hijriAdjustmentStore: HijriMonthAdjustmentStore(defaults: defaults),
-            cacheStore: ScheduleCacheStore(defaults: defaults)
-        )
-
-        await manager.refreshSchedules(force: true)
-
-        let wakeSnapshot = manager.wakeSurfaceSnapshot
-        let homeNow = manager.activeWindowSnapshot.visibleDays.first?.schedule.maghribDate.addingTimeInterval(60 * 60) ?? now
-        let homeSnapshot = manager.homeSurfaceSnapshot(now: homeNow, dismissedWarnings: [])
-        let plansSnapshot = manager.plansSurfaceSnapshot
-        let progressSnapshot = manager.progressSurfaceSnapshot(
-            wakeProgressSource: FixedWakeProgressSource()
-        )
-        let fajrWindowSnapshot = manager.fajrWindowSurfaceSnapshot(
-            period: .sevenDays,
-            overlay: .compareSafe,
-            selectedDateKey: tomorrowKey,
-            timeZone: timeZone
-        )
-
-        #expect(wakeSnapshot.overrideDateKeys.contains(tomorrowKey))
-        #expect(wakeSnapshot.visibleDays.contains(where: { $0.dateKey == tomorrowKey }))
-        #expect(homeSnapshot.heroLabel?.isEmpty == false)
-        #expect(homeSnapshot.heroSubline?.contains("Fajr at") == false)
-        #expect(homeSnapshot.heroPresentation?.descriptorText.isEmpty == false)
-        #expect(homeSnapshot.heroPresentation?.explanationText.isEmpty == false)
-        #expect(plansSnapshot.configuredPlansSnapshot.upcomingSpecialMornings.isEmpty == false)
-        #expect(plansSnapshot.defaultMorningPlanSummary.wakeTiming.isEmpty == false)
-        #expect(progressSnapshot.fajrTodaySummary == "Fajr completed")
-        #expect(progressSnapshot.fastTodaySummary == "Qada completed")
-        #expect(progressSnapshot.fastSectionTitle.isEmpty == false)
-        #expect(progressSnapshot.qadaProgress.remaining == 1)
-        #expect(progressSnapshot.wakeProgress.summaryTitle == "Wake activity")
-        #expect(fajrWindowSnapshot.activeOverlay == .compareSafe)
-        #expect(fajrWindowSnapshot.selectedDateKey == tomorrowKey)
-        #expect(fajrWindowSnapshot.points.contains(where: { $0.dateKey == tomorrowKey && $0.isOverride }))
-        #expect(fajrWindowSnapshot.selectedDay?.comparisonItem?.label == "Safer option")
     }
 
     @Test
@@ -1792,150 +1677,6 @@ struct ScheduleManagerHijriTests {
             timeZone: london
         )
         #expect(manager.fajrWindowDatasetBuildCount == initialBuildCount + 1)
-    }
-
-    @Test
-    @MainActor
-    func quietPeriodSuppressesHomePrayerPrompt() async {
-        let suiteName = "ScheduleManagerHijriTests.QuietPeriodHomePrompt"
-        let defaults = UserDefaults(suiteName: suiteName)!
-        defaults.removePersistentDomain(forName: suiteName)
-        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
-
-        let settingsStore = SuhoorSettingsStore(defaults: defaults)
-        settingsStore.update { draft in
-            draft.isConfigured = true
-            draft.locationMode = .fixed
-            draft.fixedLocation = FixedLocation(latitude: 43.6532, longitude: -79.3832)
-        }
-
-        let alarmConfigStore = AlarmConfigStore(defaultsStore: defaults)
-        let manager = ScheduleManager(
-            settingsStore: settingsStore,
-            locationService: LocationService(),
-            alarmConfigStore: alarmConfigStore,
-            hijriAdjustmentStore: HijriMonthAdjustmentStore(defaults: defaults),
-            cacheStore: ScheduleCacheStore(defaults: defaults)
-        )
-
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = timeZone
-        let start = calendar.date(byAdding: .day, value: 1, to: DateHelpers.startOfDay(Date(), in: timeZone)) ?? Date()
-        let ordinaryDate = (0..<60).compactMap { offset -> Date? in
-            let candidate = calendar.date(byAdding: .day, value: offset, to: start)
-            guard let candidate else { return nil }
-            guard let components = AdjustedHijriCalendar.shared.adjustedComponents(for: candidate, timeZone: timeZone),
-                  components.month != .ramadan else {
-                return nil
-            }
-            guard FastIntentEngine.warnings(for: candidate, timeZone: timeZone).isEmpty else {
-                return nil
-            }
-            return candidate
-        }.first
-
-        guard let ordinaryDate else {
-            Issue.record("Expected a future ordinary date without warning state.")
-            return
-        }
-
-        alarmConfigStore.addSingleDaySource(ordinaryDate, timeZone: timeZone)
-        await manager.refreshSchedules(force: true)
-
-        guard let activeDay = manager.activeDay(for: ordinaryDate, timeZone: timeZone),
-              activeDay.resolvedDayContext.primaryContext == .standard,
-              activeDay.resolvedDayContext.supportingTags.contains(DayTag.qada) == false,
-              activeDay.resolvedDayContext.supportingTags.contains(DayTag.ramadan) == false else {
-            Issue.record("Expected an ordinary visible day.")
-            return
-        }
-
-        let afterFajr = activeDay.schedule.fajrDate.addingTimeInterval(60 * 60)
-        let baselineProjection = CompletionProjectionBuilder.buildHome(
-            now: afterFajr,
-            currentDay: activeDay,
-            todaySchedule: activeDay.schedule,
-            settings: settingsStore.settings,
-            permissionSnapshot: .empty,
-            hijriComponents: AdjustedHijriCalendar.shared.adjustedComponents(for: afterFajr, timeZone: timeZone),
-            dismissedWarnings: []
-        )
-        #expect(baselineProjection.supportDecision?.phase == .fajrCompletionPrompt)
-
-        settingsStore.update { draft in
-            draft.quietPeriodEnabled = true
-            draft.pausePrayerPrompts = true
-        }
-
-        let quietProjection = CompletionProjectionBuilder.buildHome(
-            now: afterFajr,
-            currentDay: activeDay,
-            todaySchedule: activeDay.schedule,
-            settings: settingsStore.settings,
-            permissionSnapshot: .empty,
-            hijriComponents: AdjustedHijriCalendar.shared.adjustedComponents(for: afterFajr, timeZone: timeZone),
-            dismissedWarnings: []
-        )
-        #expect(quietProjection.supportDecision == nil)
-    }
-
-    @Test
-    @MainActor
-    func historySurfaceSnapshotsResolveCompletedDayThroughManagerResolver() async {
-        let suiteName = "ScheduleManagerHijriTests.HistorySurfaceResolver"
-        let defaults = UserDefaults(suiteName: suiteName)!
-        defaults.removePersistentDomain(forName: suiteName)
-        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
-        let today = DateHelpers.startOfToday(in: timeZone)
-        let todayKey = DateHelpers.dayIdentifier(for: today, timeZone: timeZone)
-
-        let settingsStore = SuhoorSettingsStore(defaults: defaults)
-        settingsStore.update { draft in
-            draft.locationMode = .fixed
-            draft.fixedLocation = FixedLocation(latitude: 43.6532, longitude: -79.3832)
-        }
-
-        let alarmConfigStore = AlarmConfigStore(defaultsStore: defaults)
-        alarmConfigStore.addSingleDaySource(today, timeZone: timeZone)
-        let fastTagStore = FastTagStore(defaults: defaults)
-        fastTagStore.setSelection(
-            FastIntentSelection(primaryIntent: .qadaMakeup, secondaryTags: []),
-            for: today,
-            timeZone: timeZone
-        )
-        let fastLogStore = FastLogStore(defaults: defaults)
-        fastLogStore.setStatus(
-            .completed,
-            for: todayKey,
-            intentSnapshot: FastIntentSnapshot(primaryIntent: .qadaMakeup, secondaryTags: [])
-        )
-        let fajrLogStore = FajrLogStore(defaults: defaults)
-        fajrLogStore.setStatus(.completed, for: todayKey)
-
-        let manager = ScheduleManager(
-            settingsStore: settingsStore,
-            locationService: LocationService(),
-            alarmConfigStore: alarmConfigStore,
-            fastTagStore: fastTagStore,
-            fastLogStore: fastLogStore,
-            fajrLogStore: fajrLogStore,
-            hijriAdjustmentStore: HijriMonthAdjustmentStore(defaults: defaults),
-            cacheStore: ScheduleCacheStore(defaults: defaults)
-        )
-
-        await manager.refreshSchedules(force: true)
-
-        let now = today.addingTimeInterval(12 * 60 * 60)
-        let fajrSnapshot = manager.fajrHistorySurfaceSnapshot(days: 1, now: now)
-        let fastSnapshot = manager.fastHistorySurfaceSnapshot(days: 1, now: now)
-
-        #expect(fajrSnapshot.rows.count == 1)
-        #expect(fajrSnapshot.rows.first?.dateKey == todayKey)
-        #expect(fajrSnapshot.rows.first?.status == .completed)
-        #expect(fastSnapshot.rows.count == 1)
-        #expect(fastSnapshot.rows.first?.dateKey == todayKey)
-        #expect(fastSnapshot.rows.first?.status == .completed)
-        #expect(fastSnapshot.rows.first?.intentSnapshot?.primaryIntent == .qadaMakeup)
     }
 
     @Test
@@ -2138,15 +1879,4 @@ struct ScheduleManagerHijriTests {
         }
     }
 
-}
-
-private struct FixedWakeProgressSource: WakeProgressSource {
-    func snapshot(limit _: Int) -> WakeProgressSnapshot {
-        WakeProgressSnapshot(
-            summaryTitle: "Wake activity",
-            summaryDetail: "Recent support",
-            recentActivityLines: ["Wake fired"],
-            emptyStateText: nil
-        )
-    }
 }

@@ -29,27 +29,6 @@ final class WakeListDataProvider {
         self.dependencies = dependencies
     }
 
-    func wakeDependencies(timeZone: TimeZone) -> WakeSurfaceProvider.Dependencies {
-        WakeSurfaceProvider.Dependencies(
-            totalScheduledCount: { [weak self] key in
-                self?.totalScheduledCount(for: key, timeZone: timeZone) ?? 0
-            },
-            rollingHijriMonths: { [weak self] in
-                self?.rollingHijriMonths(count: 12, timeZone: timeZone) ?? []
-            },
-            monthPreview: { [weak self] yearMonth in
-                self?.hijriMonthStartPreview(
-                    for: yearMonth.month,
-                    hijriYear: yearMonth.hijriYear,
-                    timeZone: timeZone
-                )
-            },
-            cachedMonthEntries: { [weak self] key in
-                self?.cachedMonthEntries(for: key)
-            }
-        )
-    }
-
     func invalidate(reason: String? = nil) {
         expandedMonthInvalidationToken += 1
         expandedMonthSnapshots.removeAll()

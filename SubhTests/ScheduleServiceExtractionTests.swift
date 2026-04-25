@@ -67,28 +67,6 @@ struct ScheduleServiceExtractionTests {
     }
 
     @Test
-    func homeSurfaceAssemblerUsesScheduleFallbackWhenTodayIsNotCached() {
-        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
-        let now = Self.makeDate(year: 2026, month: 4, day: 10, hour: 6, minute: 0, timeZone: timeZone)
-        let schedule = Self.makeSchedule(for: now, timeZone: timeZone)
-
-        let input = HomeSurfaceAssembler().makeInput(
-            now: now,
-            dismissedWarnings: [],
-            activeWindowSnapshot: .empty,
-            nextWakeEventSummary: nil,
-            settings: .default,
-            permissionSnapshot: .empty,
-            adjustedHijriCalendar: AdjustedHijriCalendar.shared,
-            scheduleLookup: { _ in schedule },
-            timeZone: timeZone
-        )
-
-        #expect(input.currentDay == nil)
-        #expect(input.todaySchedule == schedule)
-    }
-
-    @Test
     func activeDayResolverEffectiveConfigHonorsDailyActivationDefaults() {
         let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
         let date = Self.makeDate(year: 2026, month: 4, day: 10, timeZone: timeZone)

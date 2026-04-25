@@ -38,14 +38,6 @@ struct SchedulingIdentifiers {
         DateHelpers.stableUUID(from: legacyDailyIdentifierV1(for: schedule, kind: kind))
     }
 
-    static func testIdentifier(for kind: ScheduleEventKind) -> String {
-        "suhoor.test.\(kind.rawValue)"
-    }
-
-    static func testAlarmID(for kind: ScheduleEventKind) -> UUID {
-        DateHelpers.stableUUID(from: testIdentifier(for: kind))
-    }
-
     static func identifier(
         for event: ScheduledEvent,
         deliveryKind: ScheduleEventKind

@@ -76,15 +76,6 @@ struct OnboardingView: View {
             .onChange(of: settingsStore.settings.fixedLocation) { _, _ in
                 viewModel.syncSettings()
             }
-            .onChange(of: settingsStore.settings.baseWakeOffsetMinutes) { _, newValue in
-                viewModel.handleOffsetChanged(newValue)
-                if alarmConfigStore.defaults.defaultReminderTimeMode != .fixedTime {
-                    alarmConfigStore.defaults.defaultReminderTimeMode = .beforeFajr
-                }
-                if alarmConfigStore.defaults.defaultReminderMinutesBeforeFajr > newValue {
-                    alarmConfigStore.defaults.defaultReminderMinutesBeforeFajr = max(5, newValue)
-                }
-            }
             .onChange(of: locationService.locationName) { _, _ in
                 viewModel.syncSettings()
             }
@@ -100,9 +91,6 @@ struct OnboardingView: View {
                 }
             }
             .onChange(of: viewModel.step) { _, newStep in
-                if newStep == .relationship {
-                    viewModel.activationAttempt()
-                }
                 if newStep != .location {
                     didAutoShowCityPicker = false
                 }
@@ -151,8 +139,7 @@ struct OnboardingView: View {
                 title: viewModel.valueTitleText,
                 descriptionText: viewModel.valueBodyText,
                 preview: viewModel.valueScreenPreview,
-                offsetMinutes: viewModel.selectedOffsetMinutes,
-                activationState: .idle,
+                relationshipText: viewModel.wakeRelationshipText,
                 primaryTitle: viewModel.valuePrimaryActionTitle,
                 wakeLabel: viewModel.previewWakeLabelText,
                 onPrimary: { viewModel.startFlow(animation: Motion.onboarding(reduceMotion: reduceMotion)) }
@@ -175,42 +162,6 @@ struct OnboardingView: View {
                 onChangeCalculationMethod: { showCalculationMethodSheet = true },
                 onNext: { viewModel.advance(animation: Motion.onboarding(reduceMotion: reduceMotion)) }
             ))
-        case .relationship:
-            AnyView(RelationshipStep(
-                title: viewModel.relationshipTitleText,
-                descriptionText: viewModel.relationshipBodyText,
-                baseMinutes: $settingsStore.settings.baseWakeOffsetMinutes,
-                preview: viewModel.tomorrowPreview,
-                offsetMinutes: viewModel.selectedOffsetMinutes,
-                activationState: viewModel.activationState,
-                wakeLabel: viewModel.previewWakeLabelText,
-                presetLabels: viewModel.relationshipPresetLabels,
-                sentenceText: viewModel.relationshipSentenceText,
-                onContinue: { viewModel.advance(animation: Motion.onboarding(reduceMotion: reduceMotion)) }
-            ))
-        case .supportBehavior:
-            AnyView(WakeSupportStep(
-                title: viewModel.supportBehaviorTitleText,
-                descriptionText: viewModel.supportBehaviorBodyText,
-                wakeSummary: viewModel.wakeSupportSummaryText,
-                reminderEnabled: reminderEnabledBinding,
-                reminderMinutes: reminderMinutesBinding,
-                reminderMinuteOptions: reminderMinuteOptions,
-                followUpEnabled: $settingsStore.settings.snoozeEnabled,
-                followUpMinutes: $settingsStore.settings.snoozeMinutes,
-                onContinue: { viewModel.advance(animation: Motion.onboarding(reduceMotion: reduceMotion)) }
-            ))
-        case .futureVisualization:
-            AnyView(FutureVisualizationStep(
-                title: viewModel.onboardingPath.futureVisualizationTitle,
-                cardTitle: viewModel.onboardingPath.futureVisualizationCardTitle,
-                rows: viewModel.next5DaysSchedule,
-                offsetMinutes: viewModel.selectedOffsetMinutes,
-                offsetLine: viewModel.onboardingPath.futureVisualizationOffsetLine(viewModel.selectedOffsetMinutes),
-                tableOffset: viewModel.onboardingPath.futureVisualizationTableOffset(viewModel.selectedOffsetMinutes),
-                wakeLabel: viewModel.previewWakeLabelText,
-                onContinue: { viewModel.advance(animation: Motion.onboarding(reduceMotion: reduceMotion)) }
-            ))
         case .permissions:
             AnyView(PermissionsStep(
                 title: viewModel.permissionsTitleText,
@@ -232,45 +183,12 @@ struct OnboardingView: View {
                 title: viewModel.successTitleText,
                 descriptionText: viewModel.successBodyText,
                 preview: viewModel.tomorrowPreview,
-                offsetMinutes: viewModel.selectedOffsetMinutes,
+                relationshipText: viewModel.wakeRelationshipText,
                 wakeLabel: viewModel.previewWakeLabelText,
                 primaryActionTitle: viewModel.successPrimaryActionTitle,
-                secondaryActionTitle: viewModel.successSecondaryActionTitle,
-                onPrimary: viewModel.markOnboardingComplete,
-                onSecondary: viewModel.markOnboardingCompleteAndOpenPlans
+                onPrimary: viewModel.markOnboardingComplete
             ))
         }
-    }
-
-    private var reminderEnabledBinding: Binding<Bool> {
-        Binding(
-            get: { alarmConfigStore.defaults.reminderEnabledDefault },
-            set: { newValue in
-                alarmConfigStore.defaults.reminderEnabledDefault = newValue
-                if alarmConfigStore.defaults.defaultReminderTimeMode != .fixedTime {
-                    alarmConfigStore.defaults.defaultReminderTimeMode = .beforeFajr
-                }
-            }
-        )
-    }
-
-    private var reminderMinutesBinding: Binding<Int> {
-        Binding(
-            get: { min(alarmConfigStore.defaults.defaultReminderMinutesBeforeFajr, max(5, settingsStore.settings.baseWakeOffsetMinutes)) },
-            set: { newValue in
-                alarmConfigStore.defaults.defaultReminderTimeMode = .beforeFajr
-                alarmConfigStore.defaults.defaultReminderMinutesBeforeFajr = min(newValue, max(5, settingsStore.settings.baseWakeOffsetMinutes))
-            }
-        )
-    }
-
-    private var reminderMinuteOptions: [Int] {
-        let limit = max(5, settingsStore.settings.baseWakeOffsetMinutes)
-        var options = [5, 10, 15, 20, 30, 45, 60, 75, 90].filter { $0 <= limit }
-        if !options.contains(limit) {
-            options.append(limit)
-        }
-        return options.sorted()
     }
 }
 
@@ -278,8 +196,7 @@ private struct ValuePreviewStep: View {
     let title: String
     let descriptionText: String
     let preview: OnboardingTomorrowPreview
-    let offsetMinutes: Int
-    let activationState: OnboardingActivationState
+    let relationshipText: String
     let primaryTitle: String
     let wakeLabel: String
     let onPrimary: () -> Void
@@ -297,8 +214,7 @@ private struct ValuePreviewStep: View {
 
             OnboardingTimeCard(
                 preview: preview,
-                offsetMinutes: offsetMinutes,
-                activationState: activationState,
+                relationshipText: relationshipText,
                 wakeLabel: wakeLabel,
                 previewTag: Strings.Onboarding.previewTag,
                 animateRelationshipOnAppear: true
@@ -466,238 +382,6 @@ private struct LocationStep: View {
                 return nil
             case .unavailable:
                 return Strings.LocationAccess.autoExplanation
-            }
-        }
-    }
-}
-
-private struct RelationshipStep: View {
-    let title: String
-    let descriptionText: String
-    @Binding var baseMinutes: Int
-    let preview: OnboardingTomorrowPreview
-    let offsetMinutes: Int
-    let activationState: OnboardingActivationState
-    let wakeLabel: String
-    let presetLabels: [Int: String]
-    let sentenceText: (Int) -> String
-    let onContinue: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: OnboardingSpacing.medium) {
-            VStack(alignment: .leading, spacing: OnboardingSpacing.titleToSubtitle) {
-                Text(title)
-                    .font(.title2.weight(.bold))
-                Text(descriptionText)
-                    .font(.body)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            OnboardingTimeCard(
-                preview: preview,
-                offsetMinutes: offsetMinutes,
-                activationState: activationState,
-                wakeLabel: wakeLabel,
-                pulseOnOffsetChange: true
-            )
-
-            OffsetPickerView(
-                baseMinutes: $baseMinutes,
-                presetMinutes: [30, 45, 60, 75, 90],
-                presetLabels: presetLabels,
-                sentenceText: sentenceText
-            )
-
-            Button(Strings.Onboarding.continueAction, action: onContinue)
-                .onboardingPrimaryButton()
-        }
-    }
-}
-
-private struct WakeSupportStep: View {
-    let title: String
-    let descriptionText: String
-    let wakeSummary: String
-    @Binding var reminderEnabled: Bool
-    @Binding var reminderMinutes: Int
-    let reminderMinuteOptions: [Int]
-    @Binding var followUpEnabled: Bool
-    @Binding var followUpMinutes: Int
-    let onContinue: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: OnboardingSpacing.medium) {
-            VStack(alignment: .leading, spacing: OnboardingSpacing.titleToSubtitle) {
-                Text(title)
-                    .font(.title2.weight(.bold))
-                Text(descriptionText)
-                    .font(.body)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
-                supportRow(
-                    title: "Main wake",
-                    subtitle: wakeSummary
-                )
-
-                Divider()
-
-                Toggle("Wake reminder", isOn: $reminderEnabled)
-
-                if reminderEnabled {
-                    Picker("Reminder timing", selection: $reminderMinutes) {
-                        ForEach(reminderMinuteOptions, id: \.self) { value in
-                            Text("\(value) min before Fajr").tag(value)
-                        }
-                    }
-                }
-
-                Divider()
-
-                Toggle("Wake follow-up", isOn: $followUpEnabled)
-
-                if followUpEnabled {
-                    Picker("Follow-up delay", selection: $followUpMinutes) {
-                        ForEach([5, 9, 10, 15], id: \.self) { value in
-                            Text("\(value) min after wake").tag(value)
-                        }
-                    }
-                }
-
-                Text("Special fasting days, Qada days, and other observances can add more support later in Plans.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-            .onboardingCardStyle()
-
-            Button(Strings.Onboarding.continueAction, action: onContinue)
-                .onboardingPrimaryButton()
-        }
-    }
-
-    private func supportRow(title: String, subtitle: String) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title)
-                .font(.headline.weight(.semibold))
-            Text(subtitle)
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-        }
-    }
-}
-
-private struct FutureVisualizationStep: View {
-    let title: String
-    let cardTitle: String
-    let rows: [SchedulePreviewRow]
-    let offsetMinutes: Int
-    let offsetLine: String
-    let tableOffset: String
-    let wakeLabel: String
-    let onContinue: () -> Void
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: OnboardingSpacing.medium) {
-            VStack(alignment: .leading, spacing: OnboardingSpacing.titleToSubtitle) {
-                Text(title)
-                    .font(.title2.weight(.bold))
-
-                Text(offsetLine)
-                    .font(.body)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            weekCard
-
-            Button(Strings.Onboarding.continueAction, action: onContinue)
-                .onboardingPrimaryButton()
-        }
-    }
-
-    private var weekCard: some View {
-        VStack(alignment: .leading, spacing: OnboardingSpacing.small) {
-            Text(cardTitle)
-                .font(DesignTokens.cardTitleFont)
-
-            Text(tableOffset)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-
-            if dynamicTypeSize >= .accessibility1 {
-                accessibilityRows
-            } else {
-                standardRows
-            }
-        }
-        .onboardingCardStyle()
-    }
-
-    private var standardRows: some View {
-        VStack(spacing: 8) {
-            HStack(spacing: 8) {
-                Color.clear
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                Text(Strings.Onboarding.previewFajrLabel)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                    .frame(width: 86, alignment: .trailing)
-                Text(wakeLabel)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                    .frame(width: 110, alignment: .trailing)
-            }
-
-            ForEach(rows) { row in
-                HStack(spacing: 8) {
-                    Text(row.dayLabel)
-                        .font(DesignTokens.cardMetaFont)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .fixedSize(horizontal: true, vertical: false)
-                        .layoutPriority(1)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    Text(TimeFormatters.timeFormatter.string(from: row.fajr))
-                        .font(DesignTokens.cardSubtitleFont.monospacedDigit())
-                        .frame(width: 86, alignment: .trailing)
-                    Text(TimeFormatters.timeFormatter.string(from: row.wake))
-                        .font(DesignTokens.cardSubtitleFont.monospacedDigit())
-                        .frame(width: 110, alignment: .trailing)
-                }
-            }
-        }
-    }
-
-    private var accessibilityRows: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            ForEach(rows) { row in
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(row.dayLabel)
-                        .font(DesignTokens.cardMetaFont)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                    HStack {
-                        Text(Strings.Onboarding.previewFajrLabel)
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                        Spacer()
-                        Text(TimeFormatters.timeFormatter.string(from: row.fajr))
-                            .font(DesignTokens.cardSubtitleFont.monospacedDigit())
-                    }
-                    HStack {
-                        Text(wakeLabel)
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                        Spacer()
-                        Text(TimeFormatters.timeFormatter.string(from: row.wake))
-                            .font(DesignTokens.cardSubtitleFont.monospacedDigit())
-                    }
-                }
-                .padding(.vertical, 2)
             }
         }
     }
@@ -891,12 +575,10 @@ private struct SuccessStep: View {
     let title: String
     let descriptionText: String
     let preview: OnboardingTomorrowPreview
-    let offsetMinutes: Int
+    let relationshipText: String
     let wakeLabel: String
     let primaryActionTitle: String
-    let secondaryActionTitle: String?
     let onPrimary: () -> Void
-    let onSecondary: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: OnboardingSpacing.medium) {
@@ -905,8 +587,7 @@ private struct SuccessStep: View {
 
             OnboardingTimeCard(
                 preview: preview,
-                offsetMinutes: offsetMinutes,
-                activationState: .idle,
+                relationshipText: relationshipText,
                 wakeLabel: wakeLabel
             )
 
@@ -916,28 +597,20 @@ private struct SuccessStep: View {
 
             Button(primaryActionTitle, action: onPrimary)
                 .onboardingPrimaryButton()
-
-            if let secondaryActionTitle {
-                Button(secondaryActionTitle, action: onSecondary)
-                    .onboardingSecondaryButton()
-            }
         }
     }
 }
 
 private struct OnboardingTimeCard: View {
     let preview: OnboardingTomorrowPreview
-    let offsetMinutes: Int
-    let activationState: OnboardingActivationState
+    let relationshipText: String
     let wakeLabel: String
     var previewTag: String? = nil
     var animateRelationshipOnAppear: Bool = false
-    var pulseOnOffsetChange: Bool = false
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var showRelationship: Bool = false
-    @State private var pulseConnector: Bool = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: OnboardingSpacing.small) {
@@ -963,15 +636,6 @@ private struct OnboardingTimeCard: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
-
-            switch activationState {
-            case .attempting:
-                ProgressView()
-            case .failed(let message):
-                InfoBanner(systemImage: "exclamationmark.triangle", text: message)
-            default:
-                EmptyView()
-            }
         }
         .onboardingCardStyle()
         .onAppear {
@@ -990,18 +654,6 @@ private struct OnboardingTimeCard: View {
                 }
             }
         }
-        .onChange(of: offsetMinutes) { _, _ in
-            guard pulseOnOffsetChange, !reduceMotion else { return }
-            pulseConnector = false
-            withAnimation(.easeInOut(duration: 0.18)) {
-                pulseConnector = true
-            }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.32) {
-                withAnimation(.easeOut(duration: 0.4)) {
-                    pulseConnector = false
-                }
-            }
-        }
     }
 
     private var connectorLine: some View {
@@ -1009,12 +661,11 @@ private struct OnboardingTimeCard: View {
             Image(systemName: "arrow.down")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
-            Text("\(offsetMinutes) min before Fajr")
+            Text(relationshipText)
                 .font(.footnote.weight(.semibold))
-                .foregroundStyle(pulseConnector ? DawnColor.accent : .primary)
+                .foregroundStyle(.primary)
         }
-        .scaleEffect(pulseConnector ? 1.08 : 1)
-        .accessibilityLabel("\(offsetMinutes) minutes before Fajr")
+        .accessibilityLabel(relationshipText)
     }
 
     @ViewBuilder
@@ -1196,47 +847,21 @@ private struct OnboardingHeaderView: View {
 @available(iOS 17.0, *)
 #Preview("Fajr Value") {
     ValuePreviewStep(
-        title: OnboardingPath.fajr.valueTitle,
-        descriptionText: OnboardingPath.fajr.valueBody,
+        title: "Wake for and around Fajr",
+        descriptionText: "Subh resolves your next morning from local Fajr times and keeps the main wake anchored to the supported Fajr end.",
         preview: OnboardingTomorrowPreview(
             dateText: "Today",
             targetDate: Date(),
             fajrDate: Date(),
-            suhoorDate: Date().addingTimeInterval(-45 * 60),
+            suhoorDate: Date().addingTimeInterval(-30 * 60),
             fajrTimeText: "5:27 AM",
-            suhoorTimeText: "4:42 AM",
+            suhoorTimeText: "4:57 AM",
             statusText: nil
         ),
-        offsetMinutes: 45,
-        activationState: .idle,
-        primaryTitle: OnboardingPath.fajr.valuePrimaryActionTitle(for: "Today"),
-        wakeLabel: OnboardingPath.fajr.previewWakeLabel,
+        relationshipText: "30 min before supported Fajr end",
+        primaryTitle: "Set my morning plan",
+        wakeLabel: "Next wake",
         onPrimary: {}
-    )
-    .padding(.horizontal, OnboardingSpacing.sidePadding)
-}
-
-@available(iOS 17.0, *)
-#Preview("Ramadan Relationship") {
-    RelationshipStep(
-        title: OnboardingPath.ramadan.relationshipTitle,
-        descriptionText: OnboardingPath.ramadan.relationshipBody,
-        baseMinutes: .constant(45),
-        preview: OnboardingTomorrowPreview(
-            dateText: "Tomorrow",
-            targetDate: Date(),
-            fajrDate: Date(),
-            suhoorDate: Date().addingTimeInterval(-45 * 60),
-            fajrTimeText: "5:27 AM",
-            suhoorTimeText: "4:42 AM",
-            statusText: nil
-        ),
-        offsetMinutes: 45,
-        activationState: .idle,
-        wakeLabel: OnboardingPath.ramadan.previewWakeLabel,
-        presetLabels: OnboardingPath.ramadan.relationshipPresetLabels,
-        sentenceText: OnboardingPath.ramadan.relationshipSentence,
-        onContinue: {}
     )
     .padding(.horizontal, OnboardingSpacing.sidePadding)
 }

@@ -220,7 +220,7 @@ struct FajrWindowSurfaceProvider {
 
         let saferWake = safeWake(for: day, lowerBoundaryDate: lowerBoundaryDate)
         let secondaryTitles = ProductSurfacePresentation.meaningfulSecondaryContextTitles(from: day.resolvedDayContext)
-        let primaryMeaning = ProductSurfacePresentation.dayMeaningText(for: day, style: .wakeRow)
+        let primaryMeaning = ProductSurfacePresentation.dayMeaningText(for: day)
         let tags = Array(
             NSOrderedSet(
                 array: ([primaryMeaning] + secondaryTitles + (overrideDateKeys.contains(day.dateKey) ? ["Changed"] : []))
@@ -844,9 +844,9 @@ struct FajrWindowSurfaceProvider {
 
             let title: String
             if selectedPoint.dateKey == tomorrowKey {
-                title = "Edit tomorrow"
+                title = "Open tomorrow"
             } else if selectedPoint.dateKey == todayKey {
-                title = "Edit this morning"
+                title = "Open this morning"
             } else {
                 title = "Open selected morning"
             }
@@ -855,20 +855,11 @@ struct FajrWindowSurfaceProvider {
                 FajrWindowActionItem(
                     id: "selected-day",
                     title: title,
-                    subtitle: "Review or adjust this morning's plan.",
+                    subtitle: "Review how this morning resolves.",
                     intent: .openSelectedMorning(dateKey: selectedPoint.dateKey)
                 )
             )
         }
-
-        items.append(
-            FajrWindowActionItem(
-                id: "default-plan",
-                title: period == .oneYear ? "Adjust default wake strategy" : "Adjust default morning plan",
-                subtitle: "Update the plan that shapes most mornings.",
-                intent: .openDefaultMorningPlan
-            )
-        )
 
         return items
     }
