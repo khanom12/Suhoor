@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleDisplayName</key>
-	<string>Suhoor</string>
+	<string>Subh</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -17,11 +17,11 @@
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>NSAlarmKitUsageDescription</key>
-	<string>Suhoor uses alarms to wake you before Fajr.</string>
+	<string>Subh uses alarms to wake you before Fajr.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Suhoor uses your location to calculate accurate Fajr times.</string>
+	<string>Subh uses your location to calculate accurate Fajr times.</string>
 	<key>NSUserNotificationUsageDescription</key>
-	<string>Suhoor sends reminders before Fajr and fallback alerts.</string>
+	<string>Subh sends reminders before Fajr and fallback alerts.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

@@ -1,0 +1,43 @@
+schema: spec-driven
+
+context: |
+  Project: Subh, a SwiftUI iOS Fajr-centered morning system for Muslims. The product resolves, explains, and executes the next meaningful morning around Fajr rather than asking the user to author arbitrary alarm times.
+
+  Platform and stack:
+  - iOS app written in Swift and SwiftUI.
+  - Xcode project: Subh.xcodeproj after the rename wave; legacy references may still exist while migration changes are active.
+  - Tests use XCTest under SubhTests after the rename wave; legacy SuhoorTests references may still exist while migration changes are active.
+  - Core app code is organized by App, Core, Services, and Features.
+
+  Product conventions:
+  - The product is a Fajr-centered morning system, not a generic alarm app and not a broad Islamic superapp.
+  - The primary product object is tomorrow morning: a resolved morning state produced from Fajr start/end, location, calculation method, user settings, reliability state, context flags, and temporary overrides.
+  - Fasting, Ramadan, holidays, Qada, special observances, travel, work constraints, and masjid alignment are layered contexts on one morning engine, not separate product areas.
+  - The first-wave MVP wake anchor is 30 minutes before the supported Fajr end boundary.
+  - Full product language should use Subh, while the first rename wave preserves the existing app bundle identifier and Suhoor.* storage namespaces to avoid accidental local data loss.
+  - Fajr-centered scheduling must avoid cancelling unrelated alarms when dismissing or changing one event.
+  - Hijri calendar, prayer-time calculation, reliability, and fasting/observance behavior must be covered with deterministic date/time tests when affected.
+  - Existing installs should preserve user-customized settings unless a proposal explicitly defines migration behavior.
+
+  Engineering conventions:
+  - Prefer small, focused changes with requirements expressed as observable behavior.
+  - Keep SwiftUI presentation logic separate from computation and persistence logic where the codebase already has engines, stores, or presentation models.
+  - Add or update XCTest coverage for scheduling, calendar, persistence, and presentation behavior when affected.
+  - Use fixed dates, calendars, time zones, and injected clocks/services in tests where possible.
+  - Keep calculation assumptions visible and auditable, especially where Fajr end currently uses a sunrise-derived supported boundary.
+  - Treat docs/FajrRefactorMigrationMatrix.md and TEST_PLAN.md as project context for alarm and Fajr refactor work.
+
+rules:
+  proposal:
+    - Include user-visible behavior and migration impact when alarm, calendar, persistence, onboarding, information architecture, or rename behavior changes.
+    - Call out whether existing scheduled alarms, cached schedules, or persisted settings are affected.
+  specs:
+    - Write requirements with GIVEN/WHEN/THEN scenarios.
+    - Include edge cases for time zones, DST, Hijri adjustment, disabled observances, missing location, calculation-method changes, or degraded reliability when relevant.
+  design:
+    - Name the affected Swift modules, views, services, stores, and test files.
+    - Prefer existing engines/stores/presentation-model patterns over introducing new global helpers.
+    - Keep the UI centered on one Subh home surface unless the proposal explicitly introduces a separate primary surface.
+  tasks:
+    - Include at least one verification task for XCTest or manual device/simulator behavior when implementation touches user-facing flows.
+    - Keep tasks small enough to map to one focused code review.
