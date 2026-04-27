@@ -30,11 +30,12 @@ struct SettingsSummaryFormatter {
     }
 
     static func prayerTimesSummary(settings: AppSettings) -> String {
-        [
-            settings.calculationMethod.displayName,
+        let method = "Calculation method: \(settings.calculationMethod.displayName)"
+        let offsets = [
             Strings.SettingsSummary.fajrAdjustment(adjustmentText(settings.fajrAdjustmentMinutes)),
             "Maghrib \(adjustmentText(settings.maghribAdjustmentMinutes))"
         ].joined(separator: " · ")
+        return "\(method)\nPrayer offsets: \(offsets)"
     }
 
     static func hijriCorrectionsSummary(scheduleManager: ScheduleManager) -> String {
@@ -238,7 +239,7 @@ enum SettingsDestination: String, CaseIterable, Identifiable {
         case .alarmBehavior:
             return "Wake Sounds & Reserve"
         case .permissionsReliability:
-            return Strings.Settings.permissionsReliabilityTitle
+            return "Wake delivery & reliability"
         case .quietPeriod:
             return Strings.QuietPeriod.title
         case .about:

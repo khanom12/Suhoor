@@ -249,8 +249,8 @@ enum Strings {
         static let locationBlockedMessage = "Allow location to keep Fajr times accurate automatically."
         static let notificationsBlockedTitle = "Notifications are required"
         static let notificationsBlockedMessage = "Without notifications, reminders and fallback alerts can’t be delivered."
-        static let fallbackTitle = "Wake-ups are using notifications"
-        static let fallbackMessage = "This device is using notification fallback instead of AlarmKit for wake-ups."
+        static let fallbackTitle = "Wake delivery is limited"
+        static let fallbackMessage = "This device is using notifications instead of AlarmKit."
         static let alarmPermissionTitle = "Alarm access would improve reliability"
         static let alarmPermissionMessage = "Allow alarms for the most reliable wake-ups when your device supports them."
     }

@@ -22,6 +22,10 @@ struct WeeklyFajrcastCard: View {
                     dividerLine
                         .padding(.horizontal, horizontalInset)
 
+                    chartContext
+                        .padding(.horizontal, horizontalInset)
+                        .padding(.top, chartContextTopPadding)
+
                     FajrWindowChartView(
                         chart: snapshot.chart,
                         layoutStyle: .compact,
@@ -82,6 +86,25 @@ struct WeeklyFajrcastCard: View {
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    private var chartContext: some View {
+        HStack(alignment: .firstTextBaseline, spacing: DesignTokens.spacingS) {
+            Text("Wake time")
+                .font(.system(size: chartContextPointSize, weight: .medium))
+                .foregroundStyle(WakeGlassTheme.primaryText.opacity(0.92))
+
+            Spacer(minLength: DesignTokens.spacingS)
+
+            Text("Earlier")
+                .font(.system(size: chartContextPointSize, weight: .regular))
+                .foregroundStyle(WakeGlassTheme.secondaryText)
+
+            Text("Later")
+                .font(.system(size: chartContextPointSize, weight: .regular))
+                .foregroundStyle(WakeGlassTheme.secondaryText)
+        }
+        .lineLimit(1)
+    }
+
     private var dividerLine: some View {
         Rectangle()
             .fill(WakeGlassTheme.divider)
@@ -133,6 +156,10 @@ struct WeeklyFajrcastCard: View {
         dynamicTypeSize.isAccessibilitySize ? 8 : 7
     }
 
+    private var chartContextTopPadding: CGFloat {
+        dynamicTypeSize.isAccessibilitySize ? 8 : 6
+    }
+
     private var chartHeight: CGFloat {
         if dynamicTypeSize.isAccessibilitySize {
             return 156
@@ -171,6 +198,10 @@ struct WeeklyFajrcastCard: View {
 
     private var footerPointSize: CGFloat {
         dynamicTypeSize.isAccessibilitySize ? 13 : 12
+    }
+
+    private var chartContextPointSize: CGFloat {
+        dynamicTypeSize.isAccessibilitySize ? 13 : 11
     }
 
     private var titleColor: Color {

@@ -65,8 +65,8 @@ struct SubhHomeView: View {
                         }
                     }
                     .padding(.horizontal, DesignTokens.spacingM)
-                    .padding(.top, DesignTokens.spacingXL)
-                    .padding(.bottom, DesignTokens.spacingXL)
+                    .padding(.top, DesignTokens.spacingXL + DesignTokens.spacingL)
+                    .padding(.bottom, 104)
                 }
             }
             .toolbar(.hidden, for: .navigationBar)

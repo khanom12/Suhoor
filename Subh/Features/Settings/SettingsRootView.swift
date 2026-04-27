@@ -138,11 +138,7 @@ struct SettingsRootView: View {
                 "Fajr start \(settingsStore.settings.fajrStartSoundSelectionGlobal.displayName)"
             ].joined(separator: " · ")
         case .permissionsReliability:
-            return SettingsSummaryFormatter.permissionsSummary(
-                settings: settingsStore.settings,
-                schedulingMode: scheduleManager.schedulingMode,
-                presentations: permissionPresentations
-            )
+            return reliabilitySummary
         case .quietPeriod:
             if !settingsStore.settings.quietPeriodEnabled {
                 return Strings.QuietPeriod.summaryOff
@@ -260,6 +256,37 @@ struct SettingsRootView: View {
         - Locale: \(locale)
         - Permissions: \(scheduleManager.permissionSummary)
         """
+    }
+
+    private var reliabilitySummary: String {
+        [
+            "Wake delivery: \(wakeDeliveryModeText)",
+            "Notifications: \(notificationPermissionText)",
+            "Next scheduled wake: \(nextScheduledWakeText)",
+            "Last schedule update: \(scheduleManager.lastUpdatedText)"
+        ].joined(separator: "\n")
+    }
+
+    private var wakeDeliveryModeText: String {
+        switch scheduleManager.schedulingMode {
+        case .alarmKit:
+            return "AlarmKit"
+        case .notifications:
+            return "Notification fallback"
+        case .none:
+            return "Not ready"
+        }
+    }
+
+    private var notificationPermissionText: String {
+        permissionPresentations[.notifications]?.statusText ?? "Checking"
+    }
+
+    private var nextScheduledWakeText: String {
+        guard let wakeDate = scheduleManager.nextUpcomingSchedule?.wakeDate else {
+            return "--"
+        }
+        return TimeFormatters.shortDateTime.string(from: wakeDate)
     }
 
     private func openFeedbackEmail() {

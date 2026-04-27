@@ -21,7 +21,7 @@ struct SettingsScrollPage<Content: View>: View {
             .padding(.top, topSpacing)
             .padding(.bottom, DesignTokens.spacingXL)
         }
-        .appScrollableChrome()
+        .appSettingsScrollableChrome()
     }
 }
 

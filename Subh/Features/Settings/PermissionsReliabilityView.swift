@@ -12,6 +12,24 @@ struct PermissionsReliabilityView: View {
                 systemImage: modeSystemImage
             )
 
+            SettingsGroup(title: "Reliability summary") {
+                reliabilityRow(title: "Wake delivery mode", value: wakeDeliveryModeText)
+                AppGroupDivider()
+                reliabilityRow(title: "Notification permission", value: notificationPermissionText)
+                AppGroupDivider()
+                reliabilityRow(title: "Next scheduled wake", value: nextScheduledWakeText)
+                AppGroupDivider()
+                reliabilityRow(title: "Last schedule update", value: scheduleManager.lastUpdatedText)
+            }
+
+            if scheduleManager.schedulingMode == .notifications {
+                SettingsInfoBanner(
+                    title: "Notification fallback",
+                    message: "Notifications may be affected by Focus, Silent Mode, and notification settings.",
+                    systemImage: "bell.badge"
+                )
+            }
+
             SettingsGroup(title: Strings.Settings.permissionsSection) {
                 ForEach(Array(presentations.enumerated()), id: \.element.id) { index, presentation in
                     PermissionStatusRow(
@@ -108,6 +126,35 @@ struct PermissionsReliabilityView: View {
 
     private var presentations: [PermissionPresentation] {
         AppPermissionKind.allCases.compactMap { scheduleManager.permissionSnapshot.presentations[$0] }
+    }
+
+    private var wakeDeliveryModeText: String {
+        switch scheduleManager.schedulingMode {
+        case .alarmKit:
+            return "AlarmKit"
+        case .notifications:
+            return "Notification fallback"
+        case .none:
+            return "Not ready"
+        }
+    }
+
+    private var notificationPermissionText: String {
+        scheduleManager.permissionSnapshot.presentations[.notifications]?.statusText ?? "Checking"
+    }
+
+    private var nextScheduledWakeText: String {
+        guard let wakeDate = scheduleManager.nextUpcomingSchedule?.wakeDate else {
+            return "--"
+        }
+        return TimeFormatters.shortDateTime.string(from: wakeDate)
+    }
+
+    @ViewBuilder
+    private func reliabilityRow(title: String, value: String) -> some View {
+        SettingsRow {
+            SettingsValueRow(title: title, value: value)
+        }
     }
 }
 

@@ -383,6 +383,30 @@ extension View {
     }
 
     @ViewBuilder
+    func appSettingsScrollableChrome() -> some View {
+        self
+            .background {
+                ZStack {
+                    AppPageBackground()
+                    LinearGradient(
+                        stops: [
+                            .init(color: Color.black.opacity(0.78), location: 0.00),
+                            .init(color: Color.black.opacity(0.64), location: 0.46),
+                            .init(color: Color.black.opacity(0.54), location: 1.00)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                }
+                .ignoresSafeArea()
+            }
+            .toolbarBackground(.clear, for: .navigationBar)
+            .toolbarBackgroundVisibility(.visible, for: .navigationBar)
+            .toolbarColorScheme(.dark, for: .navigationBar)
+            .preferredColorScheme(.dark)
+    }
+
+    @ViewBuilder
     func appPresentedChrome() -> some View {
         if #available(iOS 16.4, *) {
             self
@@ -397,10 +421,10 @@ extension View {
     func appSettingsPresentedChrome() -> some View {
         if #available(iOS 16.4, *) {
             self
-                .background(Color(.systemGroupedBackground).ignoresSafeArea())
-                .presentationBackground(Color(.systemGroupedBackground))
+                .presentationBackground(.clear)
+                .preferredColorScheme(.dark)
         } else {
-            self.background(Color(.systemGroupedBackground).ignoresSafeArea())
+            self.preferredColorScheme(.dark)
         }
     }
 

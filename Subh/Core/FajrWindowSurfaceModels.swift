@@ -78,7 +78,7 @@ enum FajrWindowOverlay: String, CaseIterable, Identifiable, Hashable, Sendable {
         case .myWake:
             return "Shows your planned wake across the selected mornings."
         case .compareSafe:
-            return "Compares your wake with a safer option that keeps the same lead before the current supported end."
+            return "Compares your wake with a safer option that keeps the same lead before the supported Fajr end."
         case .compareFasting:
             return "Compares your wake with the fasting wake when that plan differs."
         case .compareTahajjud:
@@ -97,20 +97,20 @@ enum FajrWindowBoundaryTruth: Equatable, Hashable, Sendable {
         case .canonicalEnd:
             return "Fajr ends"
         case .sunriseProxy:
-            return "Supported end (sunrise proxy)"
+            return "Supported Fajr end"
         case .supportedFallback:
-            return "Current supported end"
+            return "Supported Fajr boundary"
         }
     }
 
     var explanationText: String {
         switch self {
         case .canonicalEnd:
-            return "Subh is using the resolved Fajr end for this day."
+            return "Subh is using the supported Fajr end for this date."
         case .sunriseProxy:
-            return "Subh is using its current sunrise-based end marker for this day."
+            return "The supported Fajr end is based on sunrise for this date."
         case .supportedFallback:
-            return "Subh is using the closest supported end marker available in the current model."
+            return "Subh is using the closest supported Fajr boundary available for this date."
         }
     }
 }

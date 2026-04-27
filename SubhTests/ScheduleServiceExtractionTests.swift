@@ -322,6 +322,25 @@ struct ScheduleServiceExtractionTests {
     }
 
     @Test
+    func settingsPrayerSummarySplitsMethodAndOffsets() {
+        let summary = SettingsSummaryFormatter.prayerTimesSummary(settings: .default)
+
+        #expect(summary.contains("Calculation method:"))
+        #expect(summary.contains("\nPrayer offsets:"))
+        #expect(summary.contains("Fajr +0 min"))
+        #expect(summary.contains("Maghrib +0 min"))
+    }
+
+    @Test
+    func trustCopyUsesHumanFajrBoundaryLanguage() {
+        #expect(WakePagePresentation.ordinaryMeaningText == "Regular Fajr morning")
+        #expect(FajrWindowBoundaryTruth.sunriseProxy.boundaryLabel == "Supported Fajr end")
+        #expect(FajrWindowBoundaryTruth.sunriseProxy.explanationText == "The supported Fajr end is based on sunrise for this date.")
+        #expect(Strings.SettingsIssues.fallbackTitle == "Wake delivery is limited")
+        #expect(Strings.SettingsIssues.fallbackMessage == "This device is using notifications instead of AlarmKit.")
+    }
+
+    @Test
     func compactFajrcastHonorsTomorrowSelection() {
         let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
         let today = Self.makeDate(year: 2026, month: 4, day: 26, timeZone: timeZone)

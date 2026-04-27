@@ -258,7 +258,7 @@ struct FajrWindowChartView: View {
     }
 
     private var compactBoundaryColor: Color {
-        Color.white.opacity(0.10)
+        Color.white.opacity(0.16)
     }
 
     private var selectedAxisColor: Color {
@@ -283,11 +283,11 @@ struct FajrWindowChartView: View {
     }
 
     private var compactSecondaryTextColor: Color {
-        Color.white.opacity(0.70)
+        Color.white.opacity(0.82)
     }
 
     private var compactTertiaryTextColor: Color {
-        Color.white.opacity(0.70)
+        Color.white.opacity(0.78)
     }
 
     private var compactBandFill: Color {
@@ -307,7 +307,7 @@ struct FajrWindowChartView: View {
     }
 
     private var compactInactiveMarkerColor: Color {
-        Color.white.opacity(0.50)
+        Color.white.opacity(0.58)
     }
 
     private var compactInactiveMarkerSize: CGFloat {
@@ -498,6 +498,15 @@ struct FajrWindowChartView: View {
             Image(systemName: point.isSkipped ? "bell.slash.fill" : "alarm.fill")
                 .font(.system(size: compactMarkerPointSize, weight: .semibold))
                 .foregroundStyle(compactPlotMarkerColor)
+                .padding(6)
+                .background {
+                    Circle()
+                        .fill(Color.white.opacity(0.18))
+                        .overlay {
+                            Circle().stroke(Color.white.opacity(0.42), lineWidth: 1)
+                        }
+                }
+                .shadow(color: Color.black.opacity(0.18), radius: 8, x: 0, y: 3)
         } else {
             Image(systemName: point.isSkipped ? "bell.slash.fill" : "alarm.fill")
                 .font(.system(size: 12, weight: .semibold))

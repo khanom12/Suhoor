@@ -661,14 +661,14 @@ struct FajrWindowSurfaceProvider {
         case .sevenDays:
             if let tightest = rows.min(by: { $0.bufferBeforeBoundaryMinutes < $1.bufferBeforeBoundaryMinutes }),
                tightest.bufferBeforeBoundaryMinutes <= 20 {
-                return "\(tightest.mediumLabel) is your tightest morning, with \(bufferText(minutes: tightest.bufferBeforeBoundaryMinutes)) before the current supported end."
+                return "\(tightest.mediumLabel) is your tightest morning, with \(bufferText(minutes: tightest.bufferBeforeBoundaryMinutes)) before the supported Fajr end."
             }
-            return "Your next week keeps about \(bufferText(minutes: averageBuffer)) between your wake and the current supported end."
+            return "Your next week keeps about \(bufferText(minutes: averageBuffer)) between your wake and the supported Fajr end."
         case .thirtyDays:
             if overrideCount > 0 {
                 return "\(overrideCount) morning\(overrideCount == 1 ? "" : "s") in this view are adjusted away from your usual plan."
             }
-            return "Across this month, your wake keeps roughly \(bufferText(minutes: averageBuffer)) before the current supported end."
+            return "Across this month, your wake keeps roughly \(bufferText(minutes: averageBuffer)) before the supported Fajr end."
         case .oneYear:
             if fastingCount > 0 {
                 return "\(fastingCount) mornings across the year carry a fasting context, while your main wake pattern stays centered on Fajr."
@@ -692,7 +692,7 @@ struct FajrWindowSurfaceProvider {
         let body: String
         switch period {
         case .sevenDays:
-            body = "Your next mornings stay centered on Fajr, with the selected day showing exactly how your wake sits inside the supported window."
+            body = "Your next mornings stay centered on Fajr, with the selected day showing exactly how your wake sits inside the supported Fajr wake window."
         case .thirtyDays:
             body = "This view shows how your usual wake holds up as Fajr moves through the month, without turning your mornings into a dashboard."
         case .oneYear:
@@ -750,7 +750,7 @@ struct FajrWindowSurfaceProvider {
                 id: "stability-summary",
                 title: period == .oneYear ? "Across the year" : "Wake steadiness",
                 body: period == .oneYear
-                    ? "The supported end moves through the year, which is why a wake that feels roomy in one season can feel much tighter in another."
+                    ? "The supported Fajr end moves through the year, which is why a wake that feels roomy in one season can feel much tighter in another."
                     : "This keeps the month grounded in real timing, so the pattern stays readable without turning your mornings into a dashboard.",
                 metrics: [
                     FajrWindowMetric(id: "adjusted-count", label: "Changed mornings", value: "\(adjustedCount)"),
@@ -800,7 +800,7 @@ struct FajrWindowSurfaceProvider {
                 FajrWindowInsightItem(
                     id: "tightest-day",
                     title: "Tightest morning",
-                    detail: "\(tightest.mediumLabel) leaves \(bufferText(minutes: tightest.bufferBeforeBoundaryMinutes)) before the current supported end."
+                    detail: "\(tightest.mediumLabel) leaves \(bufferText(minutes: tightest.bufferBeforeBoundaryMinutes)) before the supported Fajr end."
                 )
             )
         }

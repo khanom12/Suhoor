@@ -16,7 +16,6 @@ struct AlarmDayDetailView: View {
                     hijriText: HijriDateFormatter.shared.string(from: currentSchedule.date),
                     title: titleText,
                     wakeDate: currentSchedule.wakeDate,
-                    fajrText: Strings.AlarmsTab.fajrTime(TimeFormatters.timeFormatter.string(from: currentSchedule.fajrDate)),
                     summaryText: summaryText,
                     accessibilitySummary: accessibilitySummary
                 )
@@ -28,18 +27,25 @@ struct AlarmDayDetailView: View {
 
             Section {
                 VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
-                    ForEach(reasonRows) { row in
+                    ForEach(fajrSupportRows) { row in
                         detailInfoRow(title: row.title, detail: row.detail)
                     }
                 }
             } header: {
-                Text("Why this wake")
+                Text("Fajr support window")
+                    .textCase(nil)
+            }
+
+            Section {
+                detailInfoRow(title: deliveryTitle, detail: deliveryDetail)
+            } header: {
+                Text("Wake delivery")
                     .textCase(nil)
             }
 
             if let trustNote {
                 Section {
-                    detailInfoRow(title: "Boundary", detail: trustNote)
+                    detailInfoRow(title: "Supported Fajr end", detail: trustNote)
                 } header: {
                     Text("Trust")
                         .textCase(nil)
@@ -76,58 +82,63 @@ struct AlarmDayDetailView: View {
 
     private var summaryText: String {
         guard let activeDay else {
-            return "Subh resolved this morning from the current Fajr window."
+            return "Daily Fajr morning plan."
         }
 
         let anchor = activeDay.decisionLog.resolvedAnchor
         if anchor.type == .fajrEnd {
-            return "Wake is set 30 minutes before the supported Fajr end."
+            return "Wake is set inside the supported Fajr wake window."
         }
-        return "Wake is set from the currently resolved morning plan."
+        return "Wake is set from the daily Fajr morning plan."
     }
 
-    private var reasonRows: [DetailReasonRow] {
+    private var fajrSupportRows: [DetailReasonRow] {
         guard let activeDay else {
             return [
                 DetailReasonRow(
+                    id: "fajr-start",
+                    title: "Fajr starts",
+                    detail: TimeFormatters.timeFormatter.string(from: currentSchedule.fajrDate)
+                ),
+                DetailReasonRow(
                     id: "wake",
                     title: "Wake",
-                    detail: "Set for \(TimeFormatters.timeFormatter.string(from: currentSchedule.wakeDate))."
+                    detail: TimeFormatters.timeFormatter.string(from: currentSchedule.wakeDate)
+                ),
+                DetailReasonRow(
+                    id: "supported-end",
+                    title: "Supported Fajr end",
+                    detail: currentSchedule.boundaryDate.map(TimeFormatters.timeFormatter.string(from:)) ?? "Not available for this date"
                 )
             ]
         }
 
         let decisionLog = activeDay.decisionLog
         let anchor = decisionLog.resolvedAnchor
-        let anchorText: String
-        switch anchor.type {
-        case .fajrEnd:
-            anchorText = "supported Fajr end"
-        case .fajrStart:
-            anchorText = "Fajr start"
-        case .masjidFajr:
-            anchorText = "masjid Fajr"
-        case .clockTime:
-            anchorText = "fixed clock time"
-        }
+        let supportedEnd = decisionLog.prayerWindow.fajrEnd ?? anchor.date
 
         return [
             DetailReasonRow(
+                id: "fajr-start",
+                title: "Fajr starts",
+                detail: TimeFormatters.timeFormatter.string(from: decisionLog.prayerWindow.fajrStart)
+            ),
+            DetailReasonRow(
                 id: "wake",
                 title: "Wake",
-                detail: "Set for \(TimeFormatters.timeFormatter.string(from: decisionLog.resolvedWakeTime))."
+                detail: activeDay.effectiveConfig.skipDay
+                    ? "Off for this date"
+                    : TimeFormatters.timeFormatter.string(from: decisionLog.resolvedWakeTime)
             ),
             DetailReasonRow(
-                id: "anchor",
-                title: "Anchor",
-                detail: "Resolved from \(anchorText) with a \(decisionLog.resolvedDelta.minutes)-minute buffer."
+                id: "supported-end",
+                title: supportedEndTitle(for: anchor.providerNotes),
+                detail: TimeFormatters.timeFormatter.string(from: supportedEnd)
             ),
             DetailReasonRow(
-                id: "source",
-                title: "Source",
-                detail: activeDay.sourceSummaryText.isEmpty
-                    ? "Default Subh morning plan."
-                    : activeDay.sourceSummaryText
+                id: "rule",
+                title: "Rule",
+                detail: ruleText(for: decisionLog)
             )
         ]
     }
@@ -136,11 +147,62 @@ struct AlarmDayDetailView: View {
         guard let note = activeDay?.decisionLog.resolvedAnchor.providerNotes else { return nil }
         switch note {
         case "provider:solar_sunrise_proxy":
-            return "Subh is using its current sunrise-derived supported end marker for this date."
+            return "The supported Fajr end is based on sunrise for this date."
         case "fallback:missing_fajr_end":
-            return "Subh could not resolve a separate Fajr end marker, so it used the supported fallback."
+            return "Subh could not resolve a separate supported Fajr end, so it used the closest supported fallback."
         default:
             return nil
+        }
+    }
+
+    private var deliveryTitle: String {
+        switch scheduleManager.schedulingMode {
+        case .alarmKit:
+            return "Using AlarmKit"
+        case .notifications:
+            return "Using notification fallback"
+        case .none:
+            return "Wake delivery not ready"
+        }
+    }
+
+    private var deliveryDetail: String {
+        switch scheduleManager.schedulingMode {
+        case .alarmKit:
+            return "Subh is using the most reliable wake delivery available on this device."
+        case .notifications:
+            return "Notifications may be affected by Focus, Silent Mode, or notification settings."
+        case .none:
+            return "Open Reliability in Settings to finish wake delivery setup."
+        }
+    }
+
+    private func supportedEndTitle(for providerNotes: String?) -> String {
+        providerNotes == "provider:solar_sunrise_proxy"
+            ? "Supported Fajr end"
+            : "Supported Fajr boundary"
+    }
+
+    private func ruleText(for decisionLog: RuleDecisionLog) -> String {
+        let minutes = decisionLog.resolvedDelta.minutes
+        let unit = minutes == 1 ? "min" : "min"
+        let relation: String
+        switch decisionLog.resolvedDelta.relation {
+        case .before:
+            relation = "\(minutes) \(unit) before"
+        case .after:
+            relation = "\(minutes) \(unit) after"
+        }
+
+        switch decisionLog.resolvedAnchor.type {
+        case .fajrEnd:
+            return "Wake \(relation) supported Fajr end"
+        case .fajrStart:
+            return "Wake \(relation) Fajr starts"
+        case .masjidFajr:
+            return "Wake \(relation) masjid Fajr"
+        case .clockTime:
+            return "Fixed wake"
         }
     }
 
@@ -162,7 +224,7 @@ struct AlarmDayDetailView: View {
     }
 
     private var accessibilitySummary: String {
-        "\(fullGregorianDate). Wake at \(TimeFormatters.timeFormatter.string(from: currentSchedule.wakeDate)). \(summaryText)"
+        "\(fullGregorianDate). Wake at \(TimeFormatters.timeFormatter.string(from: currentSchedule.wakeDate)). \(summaryText) \(deliveryTitle)."
     }
 }
 
@@ -177,7 +239,6 @@ private struct MorningDetailSummaryHeader: View {
     let hijriText: String
     let title: String
     let wakeDate: Date
-    let fajrText: String
     let summaryText: String
     let accessibilitySummary: String
 
@@ -236,11 +297,6 @@ private struct MorningDetailSummaryHeader: View {
                     .foregroundStyle(.primary)
                     .fixedSize(horizontal: false, vertical: true)
             }
-
-            Text(fajrText)
-                .font(AppTypography.rowBody)
-                .foregroundStyle(.secondary)
-                .monospacedDigit()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .ignore)

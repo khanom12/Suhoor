@@ -1,6 +1,8 @@
 import SwiftUI
 
 struct SettingsSummaryRow: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     let title: String
     let subtitle: String
     let systemImage: String
@@ -9,30 +11,37 @@ struct SettingsSummaryRow: View {
     var showsDisclosureIndicator: Bool = false
 
     var body: some View {
-        HStack(spacing: DesignTokens.spacingM) {
+        HStack(alignment: .top, spacing: DesignTokens.spacingM) {
             Image(systemName: systemImage)
                 .font(AppTypography.controlIcon)
                 .foregroundStyle(.primary)
                 .frame(width: DesignTokens.regularControlFrame, height: DesignTokens.regularControlFrame)
                 .background(iconBackground)
+                .padding(.top, 1)
 
-            VStack(alignment: .leading, spacing: DesignTokens.textSpacingMicro) {
-                Text(title)
-                    .font(AppTypography.rowTitle)
-                    .foregroundStyle(.primary)
+            VStack(alignment: .leading, spacing: DesignTokens.textSpacingCompact) {
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .firstTextBaseline, spacing: DesignTokens.spacingS) {
+                        titleText
+                        Spacer(minLength: DesignTokens.spacingS)
+                        badge
+                    }
+
+                    VStack(alignment: .leading, spacing: DesignTokens.textSpacingTight) {
+                        titleText
+                        badge
+                    }
+                }
 
                 Text(subtitle)
                     .font(AppTypography.rowBody)
                     .foregroundStyle(.secondary)
-                    .lineLimit(3)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? 6 : 4)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            .layoutPriority(1)
 
             Spacer(minLength: DesignTokens.spacingS)
-
-            if let badgeText {
-                SettingsStatusBadge(text: badgeText, tone: badgeTone)
-            }
 
             if showsDisclosureIndicator {
                 Image(systemName: "chevron.right")
@@ -43,6 +52,22 @@ struct SettingsSummaryRow: View {
         .frame(minHeight: DesignTokens.settingsSummaryMinHeight)
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
+    }
+
+    private var titleText: some View {
+        Text(title)
+            .font(AppTypography.rowTitle)
+            .foregroundStyle(.primary)
+            .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 2)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    @ViewBuilder
+    private var badge: some View {
+        if let badgeText {
+            SettingsStatusBadge(text: badgeText, tone: badgeTone)
+                .fixedSize(horizontal: true, vertical: false)
+        }
     }
 
     private var iconBackground: some View {

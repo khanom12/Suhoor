@@ -22,7 +22,7 @@ struct WakePageCardDisplay: Equatable {
 enum WakePagePresentation {
     static let nextWakeOverline = "NEXT WAKE"
     static let adjustedLabel = "Adjusted"
-    static let ordinaryMeaningText = "Ordinary Fajr day"
+    static let ordinaryMeaningText = "Regular Fajr morning"
     static let noWakeSetText = "No wake set"
     static let skippedForDateText = "Skipped for this date"
     static let noWakeTrailingText = "No wake"
