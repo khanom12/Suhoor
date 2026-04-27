@@ -13,6 +13,8 @@ struct MorningHomeContextFlag: Identifiable, Equatable, Sendable {
 
 struct MorningHomeSnapshot {
     static let maximumMorningcastCount = 10
+    static let forecastTitle = "10-Day Wake Forecast"
+    static let forecastSubtitle = "Next 10 mornings"
     static let mvpCardKinds: [MorningHomeCardKind] = [
         .tomorrowMorning,
         .weeklyFajrcast,
@@ -53,8 +55,7 @@ struct MorningHomeSnapshot {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = timeZone
         let today = calendar.startOfDay(for: currentDate)
-        let tomorrow = calendar.date(byAdding: .day, value: 1, to: today) ?? today
-        return entry.schedule.date > tomorrow
+        return entry.schedule.date > today
     }
 }
 

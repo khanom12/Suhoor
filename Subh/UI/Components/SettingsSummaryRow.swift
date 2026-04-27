@@ -66,7 +66,7 @@ enum SettingsBadgeTone {
         case .neutral:
             return .secondary
         case .warning:
-            return .orange
+            return .secondary
         case .critical:
             return .red
         case .success:
@@ -79,7 +79,7 @@ enum SettingsBadgeTone {
         case .neutral:
             return Color.secondary.opacity(0.12)
         case .warning:
-            return Color.orange.opacity(0.12)
+            return Color.secondary.opacity(0.16)
         case .critical:
             return Color.red.opacity(0.12)
         case .success:

@@ -71,14 +71,9 @@ struct SubhHomeView: View {
             }
             .toolbar(.hidden, for: .navigationBar)
             .safeAreaInset(edge: .bottom) {
-                HomeFloatingControls(
-                    onOpenFajrcast: {
-                        destination = .fajrcast(selectedDateKey: snapshot.weeklyFajrcast.selectedDay.dateKey)
-                    },
-                    onOpenSettings: {
-                        presentSettings()
-                    }
-                )
+                HomeSettingsFloatingControl {
+                    presentSettings()
+                }
             }
             .navigationDestination(item: $destination) { destination in
                 switch destination {
@@ -104,7 +99,7 @@ struct SubhHomeView: View {
                         }
                     }
             }
-            .appPresentedChrome()
+            .appSettingsPresentedChrome()
         }
         .onReceive(appNavigator.$latestRequest.compactMap { $0 }) { request in
             handle(request.intent)
@@ -225,19 +220,12 @@ private struct TomorrowMorningHero: View {
     }
 }
 
-private struct HomeFloatingControls: View {
-    let onOpenFajrcast: () -> Void
+private struct HomeSettingsFloatingControl: View {
     let onOpenSettings: () -> Void
 
     var body: some View {
         HStack {
-            HomeFloatingIconButton(
-                systemName: "calendar",
-                accessibilityLabel: "Weekly Fajrcast",
-                action: onOpenFajrcast
-            )
-
-            Spacer(minLength: DesignTokens.spacingXL)
+            Spacer()
 
             HomeFloatingIconButton(
                 systemName: "gearshape",
@@ -245,7 +233,7 @@ private struct HomeFloatingControls: View {
                 action: onOpenSettings
             )
         }
-        .padding(.horizontal, DesignTokens.spacingXL)
+        .padding(.horizontal, DesignTokens.spacingL)
         .padding(.top, DesignTokens.spacingS)
         .padding(.bottom, DesignTokens.spacingS)
     }
@@ -266,13 +254,13 @@ private struct HomeFloatingIconButton: View {
                     Circle()
                         .fill(.thinMaterial)
                         .overlay {
-                            Circle().fill(Color.black.opacity(0.16))
+                            Circle().fill(Color.white.opacity(0.20))
                         }
                         .overlay {
-                            Circle().stroke(Color.white.opacity(0.14), lineWidth: 1)
+                            Circle().stroke(Color.white.opacity(0.36), lineWidth: 1)
                         }
                 }
-                .shadow(color: Color.black.opacity(0.16), radius: 12, x: 0, y: 6)
+                .shadow(color: Color.black.opacity(0.14), radius: 14, x: 0, y: 6)
         }
         .buttonStyle(.plain)
         .accessibilityLabel(accessibilityLabel)
@@ -284,21 +272,30 @@ private struct MorningcastCard: View {
     let onSelect: (WakeRowEntry) -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
-            AppSectionHeader(
-                "Morningcast",
-                subtitle: entries.isEmpty ? nil : "Next \(entries.count) resolved mornings"
-            )
+        AppGlassSurface(
+            variant: .grouped,
+            contentPadding: 0
+        ) {
+            VStack(spacing: 0) {
+                AppSectionHeader(
+                    MorningHomeSnapshot.forecastTitle,
+                    subtitle: MorningHomeSnapshot.forecastSubtitle
+                )
+                .padding(.horizontal, DesignTokens.spacingL)
+                .padding(.top, DesignTokens.spacingM)
+                .padding(.bottom, DesignTokens.spacingS)
 
-            if entries.isEmpty {
-                WakeGlassCard(padding: 14) {
+                AppGroupDivider(inset: DesignTokens.spacingL)
+
+                if entries.isEmpty {
                     Text("Upcoming mornings will appear once Subh has resolved schedule data.")
                         .font(AppTypography.rowBody)
                         .foregroundStyle(WakeGlassTheme.secondaryText)
                         .fixedSize(horizontal: false, vertical: true)
-                }
-            } else {
-                AppInsetGroup {
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, DesignTokens.spacingL)
+                        .padding(.vertical, DesignTokens.spacingM)
+                } else {
                     ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
                         MorningcastCompactRow(entry: entry) {
                             onSelect(entry)

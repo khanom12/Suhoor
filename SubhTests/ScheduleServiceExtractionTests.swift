@@ -294,7 +294,7 @@ struct ScheduleServiceExtractionTests {
     }
 
     @Test
-    func morningcastEntriesStartAfterTomorrow() {
+    func morningcastEntriesStartWithTomorrow() {
         let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
         let today = Self.makeDate(year: 2026, month: 4, day: 26, timeZone: timeZone)
         var calendar = Calendar(identifier: .gregorian)
@@ -312,7 +312,13 @@ struct ScheduleServiceExtractionTests {
             timeZone: timeZone
         )
 
-        #expect(visible.map(\.schedule.date) == Array(entries.dropFirst(2)).map(\.schedule.date))
+        #expect(visible.map(\.schedule.date) == Array(entries.dropFirst(1)).map(\.schedule.date))
+    }
+
+    @Test
+    func morningcastForecastNamingIsStable() {
+        #expect(MorningHomeSnapshot.forecastTitle == "10-Day Wake Forecast")
+        #expect(MorningHomeSnapshot.forecastSubtitle == "Next 10 mornings")
     }
 
     @Test
@@ -345,6 +351,38 @@ struct ScheduleServiceExtractionTests {
 
         #expect(snapshot.selectedDay.dateKey == tomorrowKey)
         #expect(snapshot.summary.primaryText == "Usual plan this week.")
+    }
+
+    @Test
+    func compactFajrcastHomeWindowStartsWithTomorrow() {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let today = Self.makeDate(year: 2026, month: 4, day: 26, hour: 22, minute: 34, timeZone: timeZone)
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let tomorrow = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: today)) ?? today
+        let activeDays = (0..<7).map { offset in
+            Self.makeWakeEntry(
+                date: calendar.date(byAdding: .day, value: offset, to: tomorrow) ?? tomorrow,
+                timeZone: timeZone
+            ).activeDay
+        }
+        let provider = FajrWindowSurfaceProvider()
+        let dataset = provider.buildDataset(
+            period: .sevenDays,
+            activeDays: activeDays,
+            overrideDateKeys: [],
+            timeZone: timeZone
+        )
+        let snapshot = provider.compactSnapshot(
+            dataset: dataset,
+            selectedDateKey: activeDays.first?.dateKey,
+            now: today,
+            timeZone: timeZone
+        )
+
+        #expect(snapshot.points.first?.dateKey == activeDays.first?.dateKey)
+        #expect(snapshot.selectedDay.dateKey == activeDays.first?.dateKey)
+        #expect(snapshot.points.map(\.dateKey) == activeDays.map(\.dateKey))
     }
 
     private static func makeDate(

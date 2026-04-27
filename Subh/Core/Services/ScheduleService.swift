@@ -743,16 +743,17 @@ final class ScheduleManager: ObservableObject {
         calendar.timeZone = timeZone
 
         let today = DateHelpers.startOfToday(in: timeZone)
-        let weekday = calendar.component(.weekday, from: today)
-        let mondayOffset = (weekday + 5) % 7
-        let startOfWeek = calendar.date(byAdding: .day, value: -mondayOffset, to: today) ?? today
+        let tomorrow = calendar.date(byAdding: .day, value: 1, to: today) ?? today
 
         guard let coordinate = currentCoordinate() else {
-            return activeDaysForFajrWindow(period: .sevenDays, timeZone: timeZone)
+            return activeWindowSnapshot.visibleDays
+                .filter { $0.schedule.date >= tomorrow }
+                .prefix(7)
+                .map { $0 }
         }
 
         let resolvedEntries = activeDayResolver.resolvedEntriesForActiveWindow(
-            from: startOfWeek,
+            from: tomorrow,
             limit: 7,
             timeZone: timeZone
         )

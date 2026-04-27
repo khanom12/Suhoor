@@ -394,6 +394,17 @@ extension View {
     }
 
     @ViewBuilder
+    func appSettingsPresentedChrome() -> some View {
+        if #available(iOS 16.4, *) {
+            self
+                .background(Color(.systemGroupedBackground).ignoresSafeArea())
+                .presentationBackground(Color(.systemGroupedBackground))
+        } else {
+            self.background(Color(.systemGroupedBackground).ignoresSafeArea())
+        }
+    }
+
+    @ViewBuilder
     func appControlStyle(
         _ prominence: AppControlProminence,
         tint: Color? = nil
