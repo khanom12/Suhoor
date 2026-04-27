@@ -1,7 +1,7 @@
 # morning-resolution Specification
 
 ## Purpose
-TBD - created by archiving change define-subh-morning-system. Update Purpose after archive.
+Define the core contract for resolving a Subh morning from prayer times, location, settings, context, reliability state, and overrides. This spec keeps calculation and explanation rules auditable outside SwiftUI so tomorrow morning can be trusted before any alarm is scheduled.
 ## Requirements
 ### Requirement: Morning resolution inputs
 The system SHALL resolve a morning from Fajr start, supported Fajr end, location, timezone, calculation method, reliability state, user settings, context flags, temporary overrides, and available institution or masjid context.
@@ -33,4 +33,3 @@ The system SHALL store or expose enough derived state to explain why a morning r
 - **GIVEN** a resolved morning has a wake time based on supported Fajr end
 - **WHEN** the user opens detail
 - **THEN** the system SHALL explain the relevant anchor, buffer, calculation method, provider or approximation state, and any applied context flags
-

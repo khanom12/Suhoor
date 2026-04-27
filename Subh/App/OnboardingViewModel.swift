@@ -301,23 +301,23 @@ final class OnboardingViewModel: ObservableObject {
                 dateText: dateText,
                 targetDate: nil,
                 fajrDate: nil,
-                suhoorDate: nil,
+                wakeDate: nil,
                 fajrTimeText: nil,
-                suhoorTimeText: nil,
+                wakeTimeText: nil,
                 statusText: statusText
             )
         }
 
         let wakeDate = schedule.wakeDate
         let fajrTime = TimeFormatters.timeFormatter.string(from: schedule.fajrDate)
-        let suhoorTime = TimeFormatters.timeFormatter.string(from: wakeDate)
+        let wakeTime = TimeFormatters.timeFormatter.string(from: wakeDate)
         return OnboardingTomorrowPreview(
             dateText: dateText,
             targetDate: targetDay,
             fajrDate: schedule.fajrDate,
-            suhoorDate: wakeDate,
+            wakeDate: wakeDate,
             fajrTimeText: fajrTime,
-            suhoorTimeText: suhoorTime,
+            wakeTimeText: wakeTime,
             statusText: nil
         )
     }
@@ -328,14 +328,14 @@ final class OnboardingViewModel: ObservableObject {
         if isLocationReady, let schedule = scheduleManager?.schedule(for: targetDay) {
             let wakeDate = schedule.wakeDate
             let fajrTime = TimeFormatters.timeFormatter.string(from: schedule.fajrDate)
-            let suhoorTime = TimeFormatters.timeFormatter.string(from: wakeDate)
+            let wakeTime = TimeFormatters.timeFormatter.string(from: wakeDate)
             return OnboardingTomorrowPreview(
                 dateText: label,
                 targetDate: targetDay,
                 fajrDate: schedule.fajrDate,
-                suhoorDate: wakeDate,
+                wakeDate: wakeDate,
                 fajrTimeText: fajrTime,
-                suhoorTimeText: suhoorTime,
+                wakeTimeText: wakeTime,
                 statusText: nil
             )
         }
@@ -344,9 +344,9 @@ final class OnboardingViewModel: ObservableObject {
             dateText: label,
             targetDate: targetDay,
             fajrDate: nil,
-            suhoorDate: nil,
+            wakeDate: nil,
             fajrTimeText: "5:27 AM",
-            suhoorTimeText: "4:57 AM",
+            wakeTimeText: "4:57 AM",
             statusText: nil
         )
     }
@@ -355,8 +355,8 @@ final class OnboardingViewModel: ObservableObject {
         tomorrowPreview.fajrDate
     }
 
-    var computedSuhoorAlarmTime: Date? {
-        tomorrowPreview.suhoorDate
+    var computedWakeAlarmTime: Date? {
+        tomorrowPreview.wakeDate
     }
 
     var valuePrimaryActionTitle: String {
@@ -565,8 +565,8 @@ final class OnboardingViewModel: ObservableObject {
         let tomorrow = calendar.date(byAdding: .day, value: 1, to: startOfToday) ?? startOfToday
         guard let scheduleManager else { return tomorrow }
         guard let todaySchedule = scheduleManager.schedule(for: startOfToday) else { return tomorrow }
-        let todaySuhoor = todaySchedule.wakeDate
-        return now < todaySuhoor ? startOfToday : tomorrow
+        let todayWake = todaySchedule.wakeDate
+        return now < todayWake ? startOfToday : tomorrow
     }
 
     private func dayLabel(for date: Date) -> String {

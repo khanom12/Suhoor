@@ -1,7 +1,7 @@
 # fajr-end-mvp-wake Specification
 
 ## Purpose
-TBD - created by archiving change define-subh-morning-system. Update Purpose after archive.
+Define the first-wave default wake model for Subh: wake 30 minutes before the supported Fajr end boundary, preserve user customizations, migrate inherited defaults safely, and keep trust language transparent about provider-derived boundaries.
 ## Requirements
 ### Requirement: Fresh install default wake uses Fajr end
 The system SHALL set the first-wave default wake to 30 minutes before the supported Fajr end boundary.

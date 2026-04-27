@@ -566,7 +566,7 @@ struct ScheduleManagerHijriTests {
         }
 
         guard let targetDate = Self.firstGregorianDate(
-            onOrAfter: Self.makeDate(year: 2026, month: 4, day: 1, timeZone: timeZone),
+            onOrAfter: DateHelpers.startOfToday(in: timeZone),
             timeZone: timeZone,
             matcher: { weekday in weekday == 2 || weekday == 5 }
         ) else {
@@ -638,7 +638,7 @@ struct ScheduleManagerHijriTests {
         }
 
         guard let targetDate = Self.firstGregorianDate(
-            onOrAfter: Self.makeDate(year: 2026, month: 4, day: 1, timeZone: timeZone),
+            onOrAfter: DateHelpers.startOfToday(in: timeZone),
             timeZone: timeZone,
             matcher: { weekday in weekday == 2 || weekday == 5 }
         ) else {

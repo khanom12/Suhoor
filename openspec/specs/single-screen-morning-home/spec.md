@@ -1,7 +1,7 @@
 # single-screen-morning-home Specification
 
 ## Purpose
-TBD - created by archiving change define-subh-morning-system. Update Purpose after archive.
+Define the primary post-onboarding Subh home: one focused surface that answers what tomorrow morning requires, keeps Fajrcast and Morningcast as supporting context, and avoids returning to tab-first legacy information architecture.
 ## Requirements
 ### Requirement: Single primary home surface
 The system SHALL use a single Subh home surface as the primary post-onboarding experience.
@@ -38,4 +38,3 @@ The system SHALL remove Plans, Progress, and Wake from primary tab navigation wh
 - **GIVEN** the app is in the first-wave Subh home experience
 - **WHEN** the user looks for primary navigation
 - **THEN** the app SHALL NOT show a bottom tab bar with Wake, Plans, and Progress as product areas
-

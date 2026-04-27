@@ -1,195 +1,164 @@
-# Suhoor Test Plan
+# Subh MVP Test Plan
 
-Purpose
-- Provide comprehensive coverage of core alarm scheduling, settings, and Ramadan logic while preserving current behavior.
-- Validate the 3-alarm workflow (Suhoor wake, Fajr reminder, Fajr adhan) and ensure independence of each alarm.
-- Ensure scheduling reliability across permissions, location, and edge-case date/time scenarios.
+## Purpose
 
-Scope
-- Included: scheduling, notifications, AlarmKit routing, settings persistence, rule engine, Ramadan profile, offsets, and audit/logging.
-- Excluded: new features, UI redesigns, third-party services not present in project.
+- Prove the ordinary Fajr morning loop end to end: resolve, explain, schedule, wake, complete, and reflect.
+- Validate alarm reliability and degraded-state clarity before claiming wake support is ready.
+- Keep Subh framed as a Fajr-centered morning system; Suhoor-era names remain only where required for documented compatibility.
 
-Environments
-- iOS 26+ device with AlarmKit available.
-- iOS 16.1+ device for Live Activities (countdown).
-- Simulator (AlarmKit unavailable) for notification fallback testing.
-- Time zone coverage: at least 2 time zones; include DST transitions.
+## MVP Readiness Gates
 
-Feature Flags (default OFF)
-- enableCountdown
-- enableSnooze
-- enableAlarmKitTestMode
-- useAlarmCoordinatorForScheduling (derived)
+Subh is not MVP-ready until each gate has either passing evidence or a tracked exception:
 
-Test Data Setup
-- Fixed location with known coordinates and time zone.
-- Auto location with mock/real location updates.
-- Settings variations: enabled/disabled, reminder enabled/disabled, at-Fajr enabled/disabled, sound selection, offsets.
-- Ramadan profile variations: base, weekend boost, last 10 nights, Laylatul Qadr overrides, per-day exceptions.
+| Area | Requirement | Evidence |
+| --- | --- | --- |
+| Build | Clean simulator build from repo root | `xcodebuild -project Subh.xcodeproj -scheme Subh -destination 'platform=iOS Simulator,name=iPhone 16' build` |
+| Tests | Configured unit test plan passes | `xcodebuild -project Subh.xcodeproj -scheme Subh -testPlan Subh -destination 'platform=iOS Simulator,name=iPhone 16' test` |
+| Onboarding | User can configure location, calculation method, permissions, and reach Home | Simulator/manual UI pass |
+| Home | Home answers tomorrow morning first and shows Fajrcast/Morningcast support | UI/manual and snapshot tests |
+| Resolver | Wake plan, explanation, context flags, trust notes, and reliability state resolve deterministically | Unit tests with fixed dates/time zones |
+| Alarm | Wake support schedules reliably or honestly degrades | Simulator fallback plus physical-device AlarmKit pass |
+| Refresh | Launch, foreground, settings, location, and time-sensitive changes refresh schedules | Integration tests |
+| Fasting/Qada | Fasting and Qada modify the same morning engine | Resolver and presentation tests |
+| Override | Tomorrow can be adjusted without mutating default plan | Integration/manual pass |
+| Completion | User can log Fajr and relevant fast completion | Domain tests and UI/manual pass |
+| Reflection | Home/detail can reflect completion calmly without shame or engagement traps | UI/manual pass |
+| Naming | Visible product language is Subh; Suhoor remains documented compatibility only | Search/audit pass |
+| Edge Cases | DST, timezone, stale cache, permission loss, and location loss are covered | Unit/integration/manual pass |
 
+## Primary MVP Path: Ordinary Fajr Morning
 
-1) Unit Tests
+This is the first path to make boringly reliable before expanding advanced observance work.
 
-1.1 AppSettings
-- Encode/decode symmetry using JSONEncoder/JSONDecoder.
-- Default values stable; toggling settings results in expected property changes.
+1. Fresh install or reset local data.
+2. Complete onboarding.
+3. Choose or grant location.
+4. Confirm calculation method.
+5. Grant AlarmKit when available; grant notifications for fallback/reminders.
+6. Land on Home.
+7. Verify tomorrow hero shows date, wake time, meaningful status, and concise wake relationship.
+8. Open tomorrow detail and verify the wake explanation, trust notes, and calculation settings are understandable.
+9. Verify wake/reminder/Fajr notice events are scheduled or clearly degraded.
+10. Simulate or reach the next morning wake path.
+11. Log Fajr completion.
+12. Verify Home/detail reflects completion calmly.
 
-1.2 DateHelpers
-- startOfToday/startOfTomorrow in specified time zones.
-- dayIdentifier stable across time zones.
-- dates(startingFrom/count) and dates(from/to) inclusive range behavior.
+## Test Environments
 
-1.3 SchedulingIdentifiers
-- dailyIdentifier format; legacy format; test identifier format.
-- alarmID/testAlarmID stable UUID mapping.
-- No collisions between dailyIdentifier and legacyIdentifier for same day/kind.
+- iOS simulator for build, unit tests, notification fallback, and most UI flows.
+- Physical iOS 26+ device for AlarmKit authorization and real wake scheduling.
+- Simulator or device locations covering at least two time zones.
+- Fixed dates around DST start/end.
+- Permission states: ready, denied, revoked, unavailable.
 
-1.4 ScheduleEventKind
-- Titles and bodies correct.
-- Codable conformance round-trip with JSON.
+## Unit Tests
 
-1.5 RuleEngine / RamadanProfileEngine
-- Ramadan range computed for current and next year; day count >= 29.
-- Adjustments shift range start/end.
-- Precedence rules: per-day override > LQ > last10 > weekend > base.
-- Disabled day yields disabled summary.
-- Sound overrides propagate.
+### Morning Resolution
 
-1.6 ScheduleEventCalculator
-- wake/reminder date computation based on offsets; verify with known inputs.
-- Boundary date equals fajr date when enabled.
+- Fresh install resolves default wake to 30 minutes before supported Fajr end.
+- Legacy inherited Fajr-start defaults migrate to Fajr-end minus 30.
+- Custom wake settings are preserved.
+- Missing supported Fajr end falls back with a trust note.
+- Sunrise-derived supported Fajr end emits provider/trust metadata.
+- Fasting context modifies the resolved morning without creating a separate engine.
+- Qada context produces the expected context and completion effect.
+- One-day override takes precedence over default plan.
+- Location and timezone changes alter resolved schedules deterministically.
+- DST transitions do not duplicate or skip wake events.
+- Cache invalidates when wake-rule signature changes.
 
-1.7 AlarmRecordStore
-- Upsert/replace by ID.
-- remove(id), clearAllTests, clearAll.
-- Codable persistence round-trip via UserDefaults.
+### Schedule And Refresh
 
-1.8 AlarmStateStore
-- Update state, clear state, entries order and lookup.
+- `DateHelpers` produces stable day keys across time zones.
+- Schedule generation excludes fully past events but keeps future same-day events.
+- Schedule refresh reacts to launch, foreground, settings changes, alarm config changes, location updates, and authorization changes.
+- Schedule cache decode failures recover by recomputing.
+- Stale schedule cache does not preserve old wake defaults.
 
-1.9 CountdownSessionStore
-- Store/load session and activityId round-trips.
+### Alarm Reliability
 
+- Scheduling mode selects AlarmKit when authorized and notifications when unavailable/denied.
+- Wake, reminder, and Fajr notice use independent identifiers.
+- Dismissing or canceling one event does not cancel unrelated events.
+- Legacy identifiers are canceled during rebuild to avoid duplicates.
+- Record and state stores preserve unrelated alarms.
+- Permission loss produces degraded state instead of implying reliable wake support.
 
-2) Integration Tests (Logic-Only)
+### Completion
 
-2.1 ScheduleManager Refresh
-- Disabled settings: cancels all; schedules empty; mode .none; status "Off".
-- Location missing with auto mode: status "Locating…"; no schedule.
-- Fixed location missing: status "Fixed location required."; no schedule.
+- Fajr completion can be completed, missed, or not tracked.
+- Fast completion can be completed, not completed, or still in progress when relevant.
+- Qada effects are derived from the completion state.
+- Completion snapshots are deterministic with fixed dates/time zones.
+- Reflection copy is operational and non-shaming.
 
-2.2 Scheduling Mode Selection
-- AlarmKit authorized: schedulingMode == .alarmKit.
-- AlarmKit denied/unavailable: schedulingMode == .notifications.
+### Presentation
 
-2.3 Schedule Generation
-- Dates generated match rule engine range rules.
-- Upcoming filter: schedule excluded if all events <= now.
-- Per-day exceptions remove disabled days.
+- Home hero suppresses ordinary/default labels and diagnostic provider text.
+- Fasting, Qada, Tahajjud, changed, skipped, and fixed wake states produce short meaningful hero copy.
+- Weekly Fajrcast selects tomorrow by default.
+- Morningcast excludes today and tomorrow and respects the maximum count.
+- Degraded reliability copy is short, visible, and actionable.
 
-2.4 Schedule All Enabled Events
-- Each schedule triggers wake/reminder/adhan when enabled and in future.
-- Cancel All Upcoming removes both current and legacy identifiers.
+## Integration Tests
 
-2.5 AlarmCoordinator / AlarmEventRouter
-- AlarmCoordinator schedule stores AlarmRecord and state.
-- Dismiss one alarm does not remove others.
-- AlarmEventRouter: alerting -> fired event; missing alarm -> dismissed event.
+### Onboarding
 
-2.6 NotificationScheduler
-- Schedule/cancel by identifier; legacy cancellation included.
-- Test notifications schedule for correct kind and delay.
+- Missing location blocks precise schedule preview and gives clear guidance.
+- Fixed city selection produces a schedule preview.
+- AlarmKit denial falls back with accurate messaging.
+- Notification denial explains reminder/fallback impact.
+- Completed onboarding lands on `SubhHomeView`.
 
+### Home And Details
 
-3) AlarmKit & Notifications (Device/Simulator)
+- Tapping the tomorrow hero opens tomorrow detail when resolved.
+- Weekly Fajrcast opens the Fajr-window detail for the selected date.
+- Morningcast rows open the relevant day detail.
+- Settings remains reachable.
+- Large Dynamic Type keeps hero text readable and bottom controls clear of content.
 
-3.1 AlarmKit Authorization
-- Authorized -> schedules AlarmKit alarms.
-- Denied -> uses notifications fallback.
-- Simulator -> AlarmKit path disabled; notifications used.
+### Scheduling Reconciliation
 
-3.2 AlarmKit Scheduling
-- Wake/reminder/adhan scheduled independently.
-- Dismissal of one does not cancel others.
-- Legacy AlarmKit IDs canceled to avoid duplicates.
+- App launch rebuilds or reuses schedule state appropriately.
+- Foreground refresh catches stale schedules.
+- Location changes regenerate active window and scheduled events.
+- Timezone changes regenerate day keys and event times.
+- Settings and overrides reconcile without duplicate alarms.
 
-3.3 Notification Scheduling
-- Wake/reminder/adhan scheduled with distinct identifiers.
-- Cancel only cancels specified identifiers.
-- Legacy identifiers canceled during cleanup.
+## Device And Manual QA
 
-3.4 AlarmKit Test Mode (feature flag)
-- Disabled flag: no test alarms scheduled.
-- Enabled flag: three-event test creates records and state.
-- Cancel test alarms clears stores and logs.
+These cannot be fully proven by simulator-only CI and remain MVP gates until manually signed off.
 
+- Physical-device AlarmKit authorization: allowed, denied, revoked.
+- AlarmKit wake fires at expected time.
+- Notification fallback fires on simulator and device when AlarmKit is unavailable.
+- Silent mode, Focus, and notification settings are documented with honest degraded-state copy.
+- Device reboot or app kill does not leave stale scheduled state unexplained.
+- DST start and DST end windows are manually checked with fixed test dates.
+- Location permission loss and stale location are surfaced clearly.
 
-4) Countdown / Live Activities (Feature Flag)
+## Naming And Compatibility Audit
 
-4.1 Countdown Disabled
-- enableCountdown OFF: no countdown state changes.
+- Visible product name is Subh in primary app surfaces, docs, and test plan.
+- Use wake, Fajr morning, supported Fajr end, and morning plan language for new copy.
+- Retain `khanomar.Suhoor`, `Suhoor.*` storage keys, and compatibility-bound model names until an explicit migration proposal changes them.
+- Any retained Suhoor-era symbol should be either compatibility-bound or filed as a cleanup follow-up.
 
-4.2 Countdown Enabled (device only)
-- Fajr reminder triggers countdown start.
-- Fajr adhan triggers countdown end.
-- Reconcile ends when time >= fajrDateTime.
-- CleanupLiveActivities ends orphan activities.
+## Out Of Scope Before MVP
 
+- Advanced Ramadan mode.
+- Full fasting calendar.
+- Rich Qada management.
+- Education or content library.
+- Community, social, streak, or engagement mechanics.
+- Masjid/jama'ah integration.
+- Advanced analytics.
+- Broad multi-prayer expansion.
 
-5) UI & Settings Behavior (Manual)
+## Execution Notes
 
-5.1 Onboarding / Enable Flow
-- Enable with missing location prompts; shows error message.
-- Notification denial shows guidance text.
-- AlarmKit denial fallback messaging.
-
-5.2 Settings Toggles
-- Wake enabled/disabled reflects schedule generation.
-- Reminder enabled toggles reminder schedule.
-- At-Fajr enabled toggles adhan schedule and sound selection.
-- Snooze toggle has no effect when enableSnooze OFF.
-
-5.3 Schedule Screens
-- Schedule list shows correct day labels: Today/Tomorrow/weekday.
-- Day detail shows offsets, badges, and overrides.
-
-
-6) Edge Cases
-
-6.1 Time & Calendar
-- DST start/end within scheduled window: no skipped or duplicated alarms.
-- Time zone change after schedules created: refresh creates new schedules.
-- Daylight boundary where fajr occurs near midnight.
-
-6.2 Past Events
-- Scheduling skips events in the past but keeps future events same day.
-- Schedule generation for day with reminder earlier than wake.
-
-6.3 Data Persistence
-- App relaunch with cached schedules: data displayed without crash.
-- Cache cleared on reset.
-
-6.4 Location
-- Auto location updates trigger refresh and schedule regeneration.
-- Fixed location parsing and bounds checks.
-
-6.5 Alarm Reliability
-- Cancel wake does not cancel reminder or adhan.
-- Dismiss reminder does not cancel adhan.
-- Record store retains unrelated alarms.
-
-
-7) Logging & Diagnostics
-- Scheduling audit reports expected vs scheduled.
-- DebugEventLog records fired/dismissed/scheduled events.
-- No noisy logging in release configurations.
-
-
-Execution Notes
-- Prioritize unit tests for RuleEngine, SchedulingIdentifiers, DateHelpers, AlarmRecordStore, ScheduleEventCalculator.
-- Use device runs for AlarmKit and Live Activities.
-- Use simulator for notification fallback logic.
-
-Deliverables
-- Implement test cases in `Suhoor/SuhoorTests/SuhoorTests.swift` using Testing framework.
-- Add UI tests with XCUIAutomation for enable/disable flows and schedule list states if needed.
+- Prefer fixed dates, fixed calendars, injected clocks, and explicit time zones.
+- Run narrow tests after focused changes, then the full configured test plan before commits that claim MVP confidence.
+- Record physical-device alarm results separately from simulator test results.
+- Do not weaken privacy, reliability language, or compatibility storage behavior while cleaning naming drift.

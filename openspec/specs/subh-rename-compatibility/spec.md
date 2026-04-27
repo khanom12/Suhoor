@@ -1,7 +1,7 @@
 # subh-rename-compatibility Specification
 
 ## Purpose
-TBD - created by archiving change define-subh-morning-system. Update Purpose after archive.
+Define the rename boundary between Subh as the visible product and Suhoor-era compatibility surfaces that remain intentionally preserved for bundle identity, persisted storage, migration, and backwards-compatible reads.
 ## Requirements
 ### Requirement: Visible identity is Subh
 The system SHALL use Subh as the canonical visible product name across app display name, primary navigation, onboarding, settings copy, and project/test surfaces changed in this wave.
@@ -36,4 +36,3 @@ The system SHALL document legacy storage namespaces as compatibility surfaces un
 - **GIVEN** an engineer reads OpenSpec or implementation notes
 - **WHEN** they encounter `Suhoor.*` storage or bundle identifiers after the rename
 - **THEN** the documentation SHALL identify them as intentional compatibility names
-

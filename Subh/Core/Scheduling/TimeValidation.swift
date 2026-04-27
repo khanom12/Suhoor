@@ -2,14 +2,14 @@ import Foundation
 
 struct TimeValidationResult {
     let reminderTime: Date
-    let wasClampedToSuhoor: Bool
+    let wasClampedToWake: Bool
 }
 
 enum TimeValidation {
-    static func validateDailyTimes(suhoorTime: Date, reminderTime: Date) -> TimeValidationResult {
-        if reminderTime < suhoorTime {
-            return TimeValidationResult(reminderTime: suhoorTime, wasClampedToSuhoor: true)
+    static func validateDailyTimes(wakeTime: Date, reminderTime: Date) -> TimeValidationResult {
+        if reminderTime < wakeTime {
+            return TimeValidationResult(reminderTime: wakeTime, wasClampedToWake: true)
         }
-        return TimeValidationResult(reminderTime: reminderTime, wasClampedToSuhoor: false)
+        return TimeValidationResult(reminderTime: reminderTime, wasClampedToWake: false)
     }
 }

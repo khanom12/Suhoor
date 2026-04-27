@@ -79,7 +79,7 @@ final class DayScheduleBuilder {
         let wake = wakeResolution.finalWakeTime
         let offsetMinutes = Int(round(fajr.timeIntervalSince(wake) / 60))
         let reminder = effectiveConfig.reminderEnabled
-            ? resolvedReminderDate(for: day, suhoor: wake, fajr: fajr, config: effectiveConfig, calendar: calendar)
+            ? resolvedReminderDate(for: day, wake: wake, fajr: fajr, config: effectiveConfig, calendar: calendar)
             : nil
         let boundary = effectiveConfig.fajrEnabled && wake < fajr ? fajr : nil
         let iftar = effectiveConfig.iftarEnabled ? maghrib : nil
@@ -103,19 +103,19 @@ final class DayScheduleBuilder {
 
     private func resolvedReminderDate(
         for day: Date,
-        suhoor: Date,
+        wake: Date,
         fajr: Date,
         config: EffectiveDailyConfig,
         calendar: Calendar
     ) -> Date? {
         let result = computedReminderTime(
             for: day,
-            suhoor: suhoor,
+            wake: wake,
             fajr: fajr,
             config: config,
             calendar: calendar
         )
-        if result.wasClampedToSuhoor {
+        if result.wasClampedToWake {
             Logging.scheduler.info("Reminder clamped to main wake for \(DateHelpers.dayIdentifier(for: day, timeZone: calendar.timeZone)).")
         }
         return result.reminderTime
@@ -123,7 +123,7 @@ final class DayScheduleBuilder {
 
     private func computedReminderTime(
         for day: Date,
-        suhoor: Date,
+        wake: Date,
         fajr: Date,
         config: EffectiveDailyConfig,
         calendar: Calendar
@@ -140,7 +140,7 @@ final class DayScheduleBuilder {
                 calendar: calendar
             )
         }
-        return TimeValidation.validateDailyTimes(suhoorTime: suhoor, reminderTime: reminderDate)
+        return TimeValidation.validateDailyTimes(wakeTime: wake, reminderTime: reminderDate)
     }
 
     private func dateFromMidnight(for day: Date, minutes: Int, calendar: Calendar) -> Date {

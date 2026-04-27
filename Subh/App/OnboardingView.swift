@@ -681,7 +681,7 @@ private struct OnboardingTimeCard: View {
                     .offset(y: showRelationship ? 0 : 4)
                 stackedRow(
                     label: wakeLabel,
-                    value: preview.wakeTimeText ?? Strings.Onboarding.previewSuhoorPlaceholder
+                    value: preview.wakeTimeText ?? Strings.Onboarding.previewWakePlaceholder
                 )
                 .opacity(showRelationship ? 1 : 0)
                 .offset(y: showRelationship ? 0 : 4)
@@ -706,7 +706,7 @@ private struct OnboardingTimeCard: View {
                 GridRow {
                     connectedRow(
                         label: wakeLabel,
-                        value: preview.wakeTimeText ?? Strings.Onboarding.previewSuhoorPlaceholder
+                        value: preview.wakeTimeText ?? Strings.Onboarding.previewWakePlaceholder
                     )
                     .gridCellColumns(2)
                 }
@@ -853,9 +853,9 @@ private struct OnboardingHeaderView: View {
             dateText: "Today",
             targetDate: Date(),
             fajrDate: Date(),
-            suhoorDate: Date().addingTimeInterval(-30 * 60),
+            wakeDate: Date().addingTimeInterval(-30 * 60),
             fajrTimeText: "5:27 AM",
-            suhoorTimeText: "4:57 AM",
+            wakeTimeText: "4:57 AM",
             statusText: nil
         ),
         relationshipText: "30 min before supported Fajr end",
