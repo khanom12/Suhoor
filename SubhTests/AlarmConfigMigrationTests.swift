@@ -7,6 +7,74 @@ import Testing
 @MainActor
 struct AlarmConfigMigrationTests {
     @Test
+    func debugInstallResetClearsStateOnFirstFingerprint() {
+        let suiteName = "SubhTests.DebugInstallReset.FirstFingerprint"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        defaults.set("stale", forKey: "Suhoor.DefaultAlarmConfig")
+        var resetCount = 0
+
+        let didReset = DeveloperInstallReset.resetIfNeeded(
+            defaults: defaults,
+            bundleIdentifier: suiteName,
+            fingerprint: "debug-build-a"
+        ) {
+            resetCount += 1
+        }
+
+        #expect(didReset)
+        #expect(resetCount == 1)
+        #expect(defaults.string(forKey: "Suhoor.DefaultAlarmConfig") == nil)
+        #expect(defaults.string(forKey: DeveloperInstallReset.fingerprintKey) == "debug-build-a")
+    }
+
+    @Test
+    func debugInstallResetSkipsMatchingFingerprint() {
+        let suiteName = "SubhTests.DebugInstallReset.MatchingFingerprint"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        defaults.set("debug-build-a", forKey: DeveloperInstallReset.fingerprintKey)
+        defaults.set("kept", forKey: "Suhoor.DefaultAlarmConfig")
+        var resetCount = 0
+
+        let didReset = DeveloperInstallReset.resetIfNeeded(
+            defaults: defaults,
+            bundleIdentifier: suiteName,
+            fingerprint: "debug-build-a"
+        ) {
+            resetCount += 1
+        }
+
+        #expect(didReset == false)
+        #expect(resetCount == 0)
+        #expect(defaults.string(forKey: "Suhoor.DefaultAlarmConfig") == "kept")
+        #expect(defaults.string(forKey: DeveloperInstallReset.fingerprintKey) == "debug-build-a")
+    }
+
+    @Test
+    func debugInstallResetClearsStateWhenFingerprintChanges() {
+        let suiteName = "SubhTests.DebugInstallReset.ChangedFingerprint"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        defaults.set("debug-build-a", forKey: DeveloperInstallReset.fingerprintKey)
+        defaults.set("stale", forKey: "Suhoor.DefaultAlarmConfig")
+        var resetCount = 0
+
+        let didReset = DeveloperInstallReset.resetIfNeeded(
+            defaults: defaults,
+            bundleIdentifier: suiteName,
+            fingerprint: "debug-build-b"
+        ) {
+            resetCount += 1
+        }
+
+        #expect(didReset)
+        #expect(resetCount == 1)
+        #expect(defaults.string(forKey: "Suhoor.DefaultAlarmConfig") == nil)
+        #expect(defaults.string(forKey: DeveloperInstallReset.fingerprintKey) == "debug-build-b")
+    }
+
+    @Test
     func freshDefaultsUseSubhFajrEndWake() {
         let suiteName = "SubhTests.AlarmConfig.FreshDefaults"
         let defaults = UserDefaults(suiteName: suiteName)!

@@ -13,6 +13,12 @@ struct SubhApp: App {
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
+        #if DEBUG
+        DeveloperInstallReset.resetIfNeeded {
+            UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
+        }
+        #endif
+
         let appNavigator = AppNavigator()
         let settingsStore = SuhoorSettingsStore()
         let alarmConfigStore = AlarmConfigStore(legacySettings: settingsStore.settings)
