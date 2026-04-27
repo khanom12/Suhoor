@@ -197,6 +197,156 @@ struct ScheduleServiceExtractionTests {
         #expect(snapshotResult.scheduledDays.first?.dateKey == DateHelpers.dayIdentifier(for: date, timeZone: timeZone))
     }
 
+    @Test
+    func tomorrowHeroSuppressesOrdinaryAndDiagnosticCopy() {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let entry = Self.makeWakeEntry(
+            date: Self.makeDate(year: 2026, month: 4, day: 27, timeZone: timeZone),
+            timeZone: timeZone,
+            providerNotes: "provider:solar_sunrise_proxy"
+        )
+
+        let display = MorningHomePresentation.heroDisplay(
+            entry: entry,
+            permissionSummary: "",
+            currentDate: Self.makeDate(year: 2026, month: 4, day: 26, timeZone: timeZone),
+            timeZone: timeZone
+        )
+
+        #expect(display.title == "Tomorrow")
+        #expect(display.statusText == "Wake alarm")
+        #expect(display.detailText == "30 min before Fajr ends")
+        #expect(display.chipTitles.isEmpty)
+        #expect(display.accessibilityLabel.contains("sunrise-derived") == false)
+        #expect(display.accessibilityLabel.contains("Ordinary") == false)
+    }
+
+    @Test
+    func tomorrowHeroNamesMeaningfulMorningStates() {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let date = Self.makeDate(year: 2026, month: 4, day: 27, timeZone: timeZone)
+
+        let fasting = MorningHomePresentation.heroDisplay(
+            entry: Self.makeWakeEntry(
+                date: date,
+                timeZone: timeZone,
+                context: ResolvedDayContext(
+                    primaryContext: .fasting,
+                    secondaryContexts: [],
+                    supportingTags: [.ramadan],
+                    explanation: .empty
+                )
+            ),
+            permissionSummary: "",
+            timeZone: timeZone
+        )
+        let qada = MorningHomePresentation.heroDisplay(
+            entry: Self.makeWakeEntry(
+                date: date,
+                timeZone: timeZone,
+                context: ResolvedDayContext(
+                    primaryContext: .qadaFast,
+                    secondaryContexts: [],
+                    supportingTags: [.qada],
+                    explanation: .empty
+                )
+            ),
+            permissionSummary: "",
+            timeZone: timeZone
+        )
+        let tahajjud = MorningHomePresentation.heroDisplay(
+            entry: Self.makeWakeEntry(
+                date: date,
+                timeZone: timeZone,
+                context: ResolvedDayContext(
+                    primaryContext: .tahajjud,
+                    secondaryContexts: [],
+                    supportingTags: [],
+                    explanation: .empty
+                )
+            ),
+            permissionSummary: "",
+            timeZone: timeZone
+        )
+        let changed = MorningHomePresentation.heroDisplay(
+            entry: Self.makeWakeEntry(date: date, timeZone: timeZone, hasDayOverride: true),
+            permissionSummary: "",
+            timeZone: timeZone
+        )
+        let skipped = MorningHomePresentation.heroDisplay(
+            entry: Self.makeWakeEntry(date: date, timeZone: timeZone, skipDay: true),
+            permissionSummary: "",
+            timeZone: timeZone
+        )
+        let fixed = MorningHomePresentation.heroDisplay(
+            entry: Self.makeWakeEntry(date: date, timeZone: timeZone, plannedWakeState: .fixedWake),
+            permissionSummary: "",
+            timeZone: timeZone
+        )
+
+        #expect(fasting.statusText == "Fasting morning")
+        #expect(qada.statusText == "Qada planned")
+        #expect(tahajjud.statusText == "Tahajjud planned")
+        #expect(changed.statusText == "Changed wake")
+        #expect(skipped.statusText == "No wake scheduled")
+        #expect(skipped.detailText == "No wake for this date")
+        #expect(fixed.detailText == "Fixed wake")
+    }
+
+    @Test
+    func morningcastEntriesStartAfterTomorrow() {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let today = Self.makeDate(year: 2026, month: 4, day: 26, timeZone: timeZone)
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let entries = (0..<4).map { offset in
+            Self.makeWakeEntry(
+                date: calendar.date(byAdding: .day, value: offset, to: today) ?? today,
+                timeZone: timeZone
+            )
+        }
+
+        let visible = MorningHomeSnapshot.morningcastEntries(
+            from: entries,
+            currentDate: today,
+            timeZone: timeZone
+        )
+
+        #expect(visible.map(\.schedule.date) == Array(entries.dropFirst(2)).map(\.schedule.date))
+    }
+
+    @Test
+    func compactFajrcastHonorsTomorrowSelection() {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let today = Self.makeDate(year: 2026, month: 4, day: 26, timeZone: timeZone)
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let activeDays = (0..<3).map { offset in
+            Self.makeWakeEntry(
+                date: calendar.date(byAdding: .day, value: offset, to: today) ?? today,
+                timeZone: timeZone
+            ).activeDay
+        }
+        let tomorrowKey = activeDays[1].dateKey
+        let provider = FajrWindowSurfaceProvider()
+        let dataset = provider.buildDataset(
+            period: .sevenDays,
+            activeDays: activeDays,
+            overrideDateKeys: [],
+            timeZone: timeZone
+        )
+
+        let snapshot = provider.compactSnapshot(
+            dataset: dataset,
+            selectedDateKey: tomorrowKey,
+            now: today,
+            timeZone: timeZone
+        )
+
+        #expect(snapshot.selectedDay.dateKey == tomorrowKey)
+        #expect(snapshot.summary.primaryText == "Usual plan this week.")
+    }
+
     private static func makeDate(
         year: Int,
         month: Int,
@@ -235,6 +385,166 @@ struct ScheduleServiceExtractionTests {
             offsetMinutes: 45,
             calculationMethodName: "Test",
             timeZone: timeZone
+        )
+    }
+
+    private static func makeWakeEntry(
+        date: Date,
+        timeZone: TimeZone,
+        context: ResolvedDayContext = .standard,
+        skipDay: Bool = false,
+        hasDayOverride: Bool = false,
+        plannedWakeState: MorningWakeRuleState = .inFajr,
+        providerNotes: String? = nil
+    ) -> WakeRowEntry {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let start = calendar.startOfDay(for: date)
+        let fajrStart = calendar.date(byAdding: .hour, value: 5, to: start) ?? start
+        let fajrEnd = calendar.date(byAdding: .minute, value: 76, to: fajrStart) ?? fajrStart
+        let wake = plannedWakeState == .fixedWake
+            ? (calendar.date(byAdding: .minute, value: 45, to: fajrStart) ?? fajrStart)
+            : (calendar.date(byAdding: .minute, value: -30, to: fajrEnd) ?? fajrStart)
+        let schedule = DaySchedule(
+            date: start,
+            fajrDate: fajrStart,
+            maghribDate: calendar.date(byAdding: .hour, value: 14, to: fajrStart) ?? fajrStart,
+            wakeDate: wake,
+            reminderDate: nil,
+            boundaryDate: fajrEnd,
+            iftarDate: nil,
+            locationDescription: "Toronto",
+            offsetMinutes: 30,
+            calculationMethodName: "Test",
+            timeZone: timeZone
+        )
+        let dateKey = DateHelpers.dayIdentifier(for: start, timeZone: timeZone)
+        let wakeRule = MorningWakeRule(
+            state: plannedWakeState,
+            anchorType: plannedWakeState == .fixedWake ? .clockTime : .fajrEnd,
+            deltaMinutes: 30,
+            fixedWakeTimeMinutesFromMidnight: plannedWakeState == .fixedWake
+                ? DateHelpers.minutesFromMidnight(for: wake, timeZone: timeZone)
+                : nil
+        )
+        let config = EffectiveDailyConfig(
+            date: start,
+            defaultsActive: true,
+            skipDay: skipDay,
+            suhoorEnabled: !skipDay,
+            reminderEnabled: false,
+            fajrEnabled: true,
+            iftarEnabled: false,
+            defaultWakeRule: wakeRule,
+            resolvedWakeRule: wakeRule,
+            wakeRuleWasOverridden: hasDayOverride,
+            tahajjudRefinement: context.primaryContext == .tahajjud,
+            suhoorTimeMode: plannedWakeState == .fixedWake ? .fixedTime : .relativeToFajrMinusMinutes,
+            suhoorOffsetMinutes: 30,
+            reminderTimeMode: .beforeFajr,
+            reminderMinutesBeforeFajr: 10,
+            reminderFixedTimeMinutes: 0,
+            suhoorTimeOverrideMinutesFromMidnight: nil,
+            reminderTimeOverrideMinutesFromMidnight: nil,
+            fajrSoundChoice: .adhanSoft,
+            iftarDelivery: .off,
+            iftarSoundChoice: .adhanSoft,
+            hasOverrides: hasDayOverride || skipDay
+        )
+        let decisionLog = makeDecisionLog(
+            dateKey: dateKey,
+            schedule: schedule,
+            context: context,
+            plannedWakeState: plannedWakeState,
+            providerNotes: providerNotes
+        )
+        let activeDay = ActiveAlarmDay(
+            date: start,
+            dateKey: dateKey,
+            schedule: schedule,
+            effectiveConfig: config,
+            provenances: [defaultDailyPlanProvenance()],
+            isImplicitRamadan: context.supportingTags.contains(.ramadan),
+            isExplicitOneOff: hasDayOverride,
+            tagResult: .empty,
+            primaryDisplay: config.primaryDisplay(schedule: schedule),
+            sourceSummaryText: "Default Subh morning plan.",
+            resolvedDayContext: context,
+            decisionLog: decisionLog
+        )
+
+        return WakeRowEntry(
+            activeDay: activeDay,
+            secondaryTags: [],
+            deleteCapability: .series,
+            stoppableProvenances: [],
+            excludableProvenances: [],
+            hasExplicitOneOff: hasDayOverride,
+            hasDayOverride: hasDayOverride,
+            rowPresentation: ProductSurfacePresentation.scheduleRowPresentation(
+                for: activeDay,
+                hasDayOverride: hasDayOverride
+            )
+        )
+    }
+
+    private static func makeDecisionLog(
+        dateKey: String,
+        schedule: DaySchedule,
+        context: ResolvedDayContext,
+        plannedWakeState: MorningWakeRuleState,
+        providerNotes: String?
+    ) -> RuleDecisionLog {
+        let anchorType: WakeAnchorType = plannedWakeState == .fixedWake ? .clockTime : .fajrEnd
+        let anchorDate = plannedWakeState == .fixedWake
+            ? schedule.wakeDate
+            : (schedule.boundaryDate ?? schedule.fajrDate)
+        let delta = WakeDelta(relation: .before, minutes: plannedWakeState == .fixedWake ? 0 : 30)
+
+        return RuleDecisionLog(
+            dateKey: dateKey,
+            resolverVersion: 1,
+            decisionHash: "\(dateKey).test",
+            prayerWindow: DailyPrayerWindow(
+                date: schedule.date,
+                fajrStart: schedule.fajrDate,
+                fajrEnd: schedule.boundaryDate,
+                maghrib: schedule.maghribDate
+            ),
+            candidateContexts: [context.primaryContext],
+            resolvedDayContext: context,
+            candidatePlans: [
+                RulePlanCandidate(id: "test", title: "Test", kind: .defaultDaily)
+            ],
+            selectedPlanID: "test",
+            precedenceReason: "Test fixture.",
+            resolvedBehaviorProfile: MorningBehaviorProfile(
+                wakeAnchorType: anchorType,
+                wakeDelta: delta,
+                fixedWakeTimeCompatibilityMinutesFromMidnight: plannedWakeState == .fixedWake
+                    ? DateHelpers.minutesFromMidnight(for: schedule.wakeDate, timeZone: .current)
+                    : nil,
+                reminderEnabled: false,
+                wakeAlarmEnabled: true,
+                wakeFollowUpEnabled: false,
+                fajrBoundaryNoticeEnabled: true,
+                iftarReminderEnabled: false,
+                resolvedWakeState: .inFajr,
+                plannedWakeState: plannedWakeState
+            ),
+            resolvedAnchor: WakeAnchor(type: anchorType, date: anchorDate, providerNotes: providerNotes),
+            resolvedDelta: delta,
+            candidateWakeTime: schedule.wakeDate,
+            resolvedWakeTime: schedule.wakeDate,
+            resolvedWakeState: .inFajr,
+            plannedWakeState: plannedWakeState,
+            resolvedSequenceTemplate: WakeSequenceTemplate(
+                id: "\(dateKey).test-sequence",
+                name: "Test sequence",
+                steps: []
+            ),
+            materializedEvents: [],
+            compatibilityNotes: []
         )
     }
 

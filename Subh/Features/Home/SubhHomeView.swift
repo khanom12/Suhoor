@@ -42,12 +42,14 @@ struct SubhHomeView: View {
                 AppPageBackground()
                     .ignoresSafeArea()
 
+                AppHomeContrastOverlay()
+                    .ignoresSafeArea()
+
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: DesignTokens.spacingL) {
-                        TomorrowMorningCard(
+                        TomorrowMorningHero(
                             entry: snapshot.tomorrow,
-                            permissionSummary: snapshot.permissionState.summaryText,
-                            contextFlags: snapshot.contextFlags
+                            permissionSummary: snapshot.permissionState.summaryText
                         ) {
                             if let entry = snapshot.tomorrow {
                                 destination = .day(entry.schedule)
@@ -63,22 +65,20 @@ struct SubhHomeView: View {
                         }
                     }
                     .padding(.horizontal, DesignTokens.spacingM)
-                    .padding(.top, DesignTokens.spacingS)
+                    .padding(.top, DesignTokens.spacingXL)
                     .padding(.bottom, DesignTokens.spacingXL)
                 }
-                .appScrollableChrome()
             }
-            .navigationTitle("Subh")
-            .navigationBarTitleDisplayMode(.large)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
+            .toolbar(.hidden, for: .navigationBar)
+            .safeAreaInset(edge: .bottom) {
+                HomeFloatingControls(
+                    onOpenFajrcast: {
+                        destination = .fajrcast(selectedDateKey: snapshot.weeklyFajrcast.selectedDay.dateKey)
+                    },
+                    onOpenSettings: {
                         presentSettings()
-                    } label: {
-                        Image(systemName: "gearshape")
                     }
-                    .accessibilityLabel("Settings")
-                }
+                )
             }
             .navigationDestination(item: $destination) { destination in
                 switch destination {
@@ -139,123 +139,143 @@ struct SubhHomeView: View {
     }
 }
 
-private struct TomorrowMorningCard: View {
+private struct TomorrowMorningHero: View {
     let entry: WakeRowEntry?
     let permissionSummary: String
-    let contextFlags: [MorningHomeContextFlag]
     let onOpen: () -> Void
 
     var body: some View {
+        let display = MorningHomePresentation.heroDisplay(
+            entry: entry,
+            permissionSummary: permissionSummary
+        )
+
         Button(action: onOpen) {
-            AppGlassSurface(
-                variant: .hero,
-                prominence: .high,
-                contentPadding: 18
-            ) {
-                VStack(alignment: .leading, spacing: DesignTokens.spacingM) {
-                    HStack(alignment: .top, spacing: DesignTokens.spacingS) {
-                        Text("TOMORROW MORNING")
-                            .appTextRole(.eyebrow)
-                            .foregroundStyle(WakeGlassTheme.tertiaryText)
+            VStack(alignment: .center, spacing: DesignTokens.textSpacingRegular) {
+                VStack(spacing: DesignTokens.textSpacingMicro) {
+                    Text(display.title)
+                        .font(.title3.weight(.regular))
+                        .foregroundStyle(WakeGlassTheme.primaryText)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.84)
 
-                        Spacer(minLength: DesignTokens.spacingS)
-
-                        if let dateText {
-                            Text(dateText)
-                                .font(AppTypography.badge)
-                                .foregroundStyle(WakeGlassTheme.secondaryText)
-                                .lineLimit(1)
-                        }
-                    }
-
-                    if let entry {
-                        SubhHomeTimeLockup(date: entry.schedule.wakeDate, isDisabled: !entry.isEnabled)
-
-                        VStack(alignment: .leading, spacing: DesignTokens.textSpacingCompact) {
-                            Text(heroTitle(for: entry))
-                                .font(AppTypography.rowTitle)
-                                .foregroundStyle(WakeGlassTheme.primaryText)
-                                .fixedSize(horizontal: false, vertical: true)
-
-                            Text(heroDetail(for: entry))
-                                .font(AppTypography.cardBody)
-                                .foregroundStyle(WakeGlassTheme.secondaryText)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-
-                        if !contextFlags.isEmpty {
-                            FlowLayout(spacing: DesignTokens.spacingS) {
-                                ForEach(contextFlags) { flag in
-                                    WakeContextChip(title: flag.title, isDisabled: false, compact: true)
-                                }
-                            }
-                        }
-                    } else {
-                        VStack(alignment: .leading, spacing: DesignTokens.textSpacingCompact) {
-                            Text("Morning not resolved yet")
-                                .font(AppTypography.rowTitle)
-                                .foregroundStyle(WakeGlassTheme.primaryText)
-
-                            Text(unresolvedDetail)
-                                .font(AppTypography.cardBody)
-                                .foregroundStyle(WakeGlassTheme.secondaryText)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
+                    if let dateLine = display.dateLine {
+                        Text(dateLine)
+                            .font(AppTypography.cardBody)
+                            .foregroundStyle(WakeGlassTheme.secondaryText)
+                            .lineLimit(1)
                     }
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
+
+                if let entry {
+                    SubhHomeTimeLockup(date: entry.schedule.wakeDate, isDisabled: !entry.isEnabled)
+
+                    VStack(spacing: DesignTokens.textSpacingTight) {
+                        Text(display.statusText)
+                            .font(.title3.weight(.regular))
+                            .foregroundStyle(WakeGlassTheme.primaryText)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.78)
+
+                        Text(display.detailText)
+                            .font(AppTypography.cardBody)
+                            .foregroundStyle(WakeGlassTheme.secondaryText)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.78)
+                    }
+
+                    if !display.chipTitles.isEmpty {
+                        FlowLayout(spacing: DesignTokens.spacingS) {
+                            ForEach(display.chipTitles, id: \.self) { title in
+                                WakeContextChip(title: title, isDisabled: false, compact: true)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .padding(.top, DesignTokens.textSpacingTight)
+                    }
+                } else {
+                    VStack(spacing: DesignTokens.textSpacingCompact) {
+                        Text(display.statusText)
+                            .font(.title3.weight(.regular))
+                            .foregroundStyle(WakeGlassTheme.primaryText)
+                            .lineLimit(2)
+                            .multilineTextAlignment(.center)
+
+                        Text(display.detailText)
+                            .font(AppTypography.cardBody)
+                            .foregroundStyle(WakeGlassTheme.secondaryText)
+                            .multilineTextAlignment(.center)
+                            .lineLimit(3)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(.top, DesignTokens.spacingS)
+                }
             }
+            .padding(.horizontal, DesignTokens.spacingS)
+            .padding(.top, DesignTokens.spacingXL)
+            .padding(.bottom, DesignTokens.spacingXL)
+            .frame(maxWidth: .infinity, minHeight: 268, alignment: .top)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .disabled(entry == nil)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(accessibilityLabel)
+        .accessibilityLabel(display.accessibilityLabel)
         .accessibilityHint(entry == nil ? "" : "Double-tap for details.")
     }
+}
 
-    private var dateText: String? {
-        guard let entry else { return nil }
-        return WakeRowPresentation.dateLabel(for: entry.schedule.date)
+private struct HomeFloatingControls: View {
+    let onOpenFajrcast: () -> Void
+    let onOpenSettings: () -> Void
+
+    var body: some View {
+        HStack {
+            HomeFloatingIconButton(
+                systemName: "calendar",
+                accessibilityLabel: "Weekly Fajrcast",
+                action: onOpenFajrcast
+            )
+
+            Spacer(minLength: DesignTokens.spacingXL)
+
+            HomeFloatingIconButton(
+                systemName: "gearshape",
+                accessibilityLabel: "Settings",
+                action: onOpenSettings
+            )
+        }
+        .padding(.horizontal, DesignTokens.spacingXL)
+        .padding(.top, DesignTokens.spacingS)
+        .padding(.bottom, DesignTokens.spacingS)
     }
+}
 
-    private var unresolvedDetail: String {
-        if permissionSummary.isEmpty {
-            return "Subh will show the next resolved Fajr morning after schedule data is available."
+private struct HomeFloatingIconButton: View {
+    let systemName: String
+    let accessibilityLabel: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(AppTypography.toolbarIcon.weight(.medium))
+                .foregroundStyle(WakeGlassTheme.primaryText)
+                .frame(width: 48, height: 48)
+                .background {
+                    Circle()
+                        .fill(.thinMaterial)
+                        .overlay {
+                            Circle().fill(Color.black.opacity(0.16))
+                        }
+                        .overlay {
+                            Circle().stroke(Color.white.opacity(0.14), lineWidth: 1)
+                        }
+                }
+                .shadow(color: Color.black.opacity(0.16), radius: 12, x: 0, y: 6)
         }
-        return permissionSummary
-    }
-
-    private var accessibilityLabel: String {
-        guard let entry else {
-            return "Tomorrow Morning. \(unresolvedDetail)"
-        }
-        return "Tomorrow Morning. Wake at \(TimeFormatters.timeFormatter.string(from: entry.schedule.wakeDate)). \(heroDetail(for: entry))"
-    }
-
-    private func heroTitle(for entry: WakeRowEntry) -> String {
-        if !entry.isEnabled {
-            return "No wake scheduled"
-        }
-        return WakePagePresentation.card(for: entry).title
-    }
-
-    private func heroDetail(for entry: WakeRowEntry) -> String {
-        let anchor = entry.activeDay.decisionLog.resolvedAnchor
-        var parts: [String] = []
-
-        if anchor.type == .fajrEnd {
-            parts.append("30 min before supported Fajr end")
-        } else {
-            parts.append(WakePagePresentation.card(for: entry).subtitle)
-        }
-
-        if anchor.providerNotes == "provider:solar_sunrise_proxy" {
-            parts.append("sunrise-derived boundary")
-        } else if anchor.providerNotes == "fallback:missing_fajr_end" {
-            parts.append("using Fajr start fallback")
-        }
-
-        return parts.joined(separator: " • ")
+        .buttonStyle(.plain)
+        .accessibilityLabel(accessibilityLabel)
     }
 }
 
@@ -280,7 +300,7 @@ private struct MorningcastCard: View {
             } else {
                 AppInsetGroup {
                     ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
-                        WakeRowView(entry: entry) {
+                        MorningcastCompactRow(entry: entry) {
                             onSelect(entry)
                         }
                         .padding(.horizontal, DesignTokens.spacingM)
@@ -292,6 +312,54 @@ private struct MorningcastCard: View {
                 }
             }
         }
+    }
+}
+
+private struct MorningcastCompactRow: View {
+    let entry: WakeRowEntry
+    let onSelect: () -> Void
+
+    var body: some View {
+        let display = MorningHomePresentation.morningcastRowDisplay(for: entry)
+
+        Button(action: onSelect) {
+            HStack(alignment: .firstTextBaseline, spacing: DesignTokens.spacingM) {
+                VStack(alignment: .leading, spacing: DesignTokens.textSpacingCompact) {
+                    Text(display.title)
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(display.isInactive ? WakeGlassTheme.primaryText.opacity(0.62) : WakeGlassTheme.primaryText.opacity(0.92))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+
+                    if let subtitle = display.subtitle {
+                        Text(subtitle)
+                            .font(AppTypography.rowBody)
+                            .foregroundStyle(WakeGlassTheme.secondaryText)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                    }
+                }
+
+                Spacer(minLength: DesignTokens.spacingS)
+
+                if let trailingTime = display.trailingTime {
+                    MorningcastTimeLockup(date: trailingTime, isDisabled: display.isInactive)
+                        .fixedSize(horizontal: true, vertical: false)
+                } else if let trailingStatusText = display.trailingStatusText {
+                    Text(trailingStatusText)
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(WakeGlassTheme.secondaryText)
+                        .multilineTextAlignment(.trailing)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(display.accessibilityLabel)
+        }
+        .buttonStyle(.plain)
+        .padding(.vertical, DesignTokens.space8)
     }
 }
 
@@ -311,6 +379,47 @@ private struct SubhHomeTimeLockup: View {
 
             Text(Self.timeSuffixFormatter.string(from: date))
                 .font(AppTypography.timeDisplayFont(size: pointSize * 0.46, weight: .regular))
+                .foregroundStyle(isDisabled ? WakeGlassTheme.tertiaryText : WakeGlassTheme.secondaryText)
+                .monospacedDigit()
+                .baselineOffset(2)
+        }
+        .lineLimit(1)
+        .accessibilityHidden(true)
+    }
+
+    private static let timeMainFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "h:mm"
+        formatter.timeZone = .current
+        formatter.locale = .current
+        return formatter
+    }()
+
+    private static let timeSuffixFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "a"
+        formatter.timeZone = .current
+        formatter.locale = .current
+        return formatter
+    }()
+}
+
+private struct MorningcastTimeLockup: View {
+    let date: Date
+    let isDisabled: Bool
+
+    @ScaledMetric(relativeTo: .title3) private var pointSize: CGFloat = 30
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 3) {
+            Text(Self.timeMainFormatter.string(from: date))
+                .font(AppTypography.timeDisplayFont(size: pointSize, weight: .regular))
+                .foregroundStyle(isDisabled ? WakeGlassTheme.secondaryText : WakeGlassTheme.primaryText)
+                .monospacedDigit()
+                .minimumScaleFactor(DesignTokens.timeDisplayMinScaleFactor)
+
+            Text(Self.timeSuffixFormatter.string(from: date))
+                .font(AppTypography.timeDisplayFont(size: pointSize * 0.42, weight: .regular))
                 .foregroundStyle(isDisabled ? WakeGlassTheme.tertiaryText : WakeGlassTheme.secondaryText)
                 .monospacedDigit()
                 .baselineOffset(2)

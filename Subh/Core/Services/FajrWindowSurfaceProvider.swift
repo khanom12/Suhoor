@@ -535,12 +535,11 @@ struct FajrWindowSurfaceProvider {
             )
         }
 
-        let subject = compactSubject(for: selectedPoint, now: now, timeZone: timeZone)
-        let primaryText = "\(possessive(subject)) alarm is \(compactRelationClause(for: selectedPoint))."
+        let meaningfulSummary = compactSecondarySummaryLine(rows: rows, timeZone: timeZone)
 
         return FajrWindowCompactSummarySnapshot(
-            primaryText: primaryText,
-            secondaryText: compactSecondarySummaryLine(rows: rows, timeZone: timeZone)
+            primaryText: meaningfulSummary ?? "Usual plan this week.",
+            secondaryText: nil
         )
     }
 

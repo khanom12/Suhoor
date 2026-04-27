@@ -36,6 +36,26 @@ struct MorningHomeSnapshot {
     var cardKinds: [MorningHomeCardKind] {
         Self.mvpCardKinds
     }
+
+    static func morningcastEntries(
+        from entries: [WakeRowEntry],
+        currentDate: Date = Date(),
+        timeZone: TimeZone = .current
+    ) -> [WakeRowEntry] {
+        entries.filter { shouldShowInMorningcast($0, currentDate: currentDate, timeZone: timeZone) }
+    }
+
+    static func shouldShowInMorningcast(
+        _ entry: WakeRowEntry,
+        currentDate: Date = Date(),
+        timeZone: TimeZone = .current
+    ) -> Bool {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let today = calendar.startOfDay(for: currentDate)
+        let tomorrow = calendar.date(byAdding: .day, value: 1, to: today) ?? today
+        return entry.schedule.date > tomorrow
+    }
 }
 
 extension MorningHomeContextFlag {

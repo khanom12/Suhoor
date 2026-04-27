@@ -310,7 +310,10 @@ final class ScheduleManager: ObservableObject {
         )
     }
 
-    func fajrWindowCompactSnapshot(timeZone: TimeZone = .current) -> FajrWindowCompactSnapshot {
+    func fajrWindowCompactSnapshot(
+        selectedDateKey: String? = nil,
+        timeZone: TimeZone = .current
+    ) -> FajrWindowCompactSnapshot {
         PerformanceTrace.measure("fajrcast.compact.build") {
             let dataset = fajrWindowSurfaceProvider.buildDataset(
                 period: .sevenDays,
@@ -320,6 +323,7 @@ final class ScheduleManager: ObservableObject {
             )
             return fajrWindowSurfaceProvider.compactSnapshot(
                 dataset: dataset,
+                selectedDateKey: selectedDateKey,
                 now: Date(),
                 timeZone: timeZone
             )
@@ -418,9 +422,6 @@ final class ScheduleManager: ObservableObject {
 
     private func buildMorningHomeSnapshot(timeZone: TimeZone = .current) -> MorningHomeSnapshot {
         let overrideDateKeys = Set(alarmConfigStore.overridesByDay.keys)
-        let morningcast = activeWindowSnapshot.visibleDays
-            .prefix(MorningHomeSnapshot.maximumMorningcastCount)
-            .map { WakeRowActionResolver.makeEntry(activeDay: $0, overrideDateKeys: overrideDateKeys) }
         let tomorrow = DateHelpers.startOfTomorrow(in: timeZone)
         let tomorrowKey = DateHelpers.dayIdentifier(for: tomorrow, timeZone: timeZone)
         let tomorrowDay = activeWindowSnapshot.byDateKey[tomorrowKey]
@@ -428,10 +429,22 @@ final class ScheduleManager: ObservableObject {
         let tomorrowEntry = tomorrowDay.map {
             WakeRowActionResolver.makeEntry(activeDay: $0, overrideDateKeys: overrideDateKeys)
         }
+        let allMorningEntries = activeWindowSnapshot.visibleDays
+            .map { WakeRowActionResolver.makeEntry(activeDay: $0, overrideDateKeys: overrideDateKeys) }
+        let morningcast = Array(
+            MorningHomeSnapshot.morningcastEntries(
+                from: allMorningEntries,
+                timeZone: timeZone
+            )
+            .prefix(MorningHomeSnapshot.maximumMorningcastCount)
+        )
 
         return MorningHomeSnapshot(
             tomorrow: tomorrowEntry,
-            weeklyFajrcast: fajrWindowCompactSnapshot(timeZone: timeZone),
+            weeklyFajrcast: fajrWindowCompactSnapshot(
+                selectedDateKey: activeWindowSnapshot.byDateKey[tomorrowKey]?.dateKey,
+                timeZone: timeZone
+            ),
             morningcast: morningcast,
             permissionState: permissionSnapshot,
             contextFlags: MorningHomeContextFlag.flags(for: tomorrowDay?.resolvedDayContext ?? .standard)
