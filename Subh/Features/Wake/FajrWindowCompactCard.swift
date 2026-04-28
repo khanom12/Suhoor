@@ -4,6 +4,7 @@ import UIKit
 struct WeeklyFajrcastCard: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var suppressNextOpen = false
+    @State private var isInspectingDatePill = false
 
     let snapshot: FajrWindowCompactSnapshot
     var onSelectDateKey: ((String) -> Void)? = nil
@@ -81,7 +82,7 @@ struct WeeklyFajrcastCard: View {
 
             Spacer(minLength: 0)
 
-            Text(monthTagText)
+            Text(headerDatePillText)
                 .font(.system(size: monthTagPointSize, weight: .regular))
                 .foregroundStyle(monthTagColor)
                 .lineLimit(1)
@@ -209,6 +210,15 @@ struct WeeklyFajrcastCard: View {
         WakeGlassTheme.primaryText
     }
 
+    private var headerDatePillText: String {
+        if isInspectingDatePill,
+           let selectedPoint = snapshot.points.first(where: { $0.dateKey == snapshot.selectedDay.dateKey }) {
+            return singleDatePillText(for: selectedPoint.date)
+        }
+
+        return monthTagText
+    }
+
     private var monthTagText: String {
         let dates = snapshot.points.map(\.date).sorted()
         guard let firstDate = dates.first, let lastDate = dates.last else {
@@ -242,16 +252,19 @@ struct WeeklyFajrcastCard: View {
     }
 
     private func selectDateFromChart(_ dateKey: String) {
+        isInspectingDatePill = true
         suppressOpenBriefly()
         onSelectDateKey?(dateKey)
     }
 
     private func endSelectionFromChart() {
+        isInspectingDatePill = false
         suppressOpenBriefly()
         onEndSelection?()
     }
 
     private func moveSelectionFromChart(_ offset: Int) {
+        isInspectingDatePill = true
         suppressOpenBriefly()
         onMoveSelection?(offset)
     }
@@ -315,6 +328,42 @@ struct WeeklyFajrcastCard: View {
         }
 
         return "\(startToken) \(startComponents.day)–\(endToken) \(endComponents.day)"
+    }
+
+    private func singleDatePillText(for date: Date) -> String {
+        let gregorian = gregorianSingleDate(date)
+        guard let preferredHijri = hijriSingleDate(date, style: .preferred) else {
+            return gregorian
+        }
+
+        let preferred = "\(gregorian) | \(preferredHijri)"
+        if weekTagFitsComfortably(preferred) {
+            return preferred
+        }
+
+        guard let compactHijri = hijriSingleDate(date, style: .compact) else {
+            return preferred
+        }
+
+        return "\(gregorian) | \(compactHijri)"
+    }
+
+    private func gregorianSingleDate(_ date: Date) -> String {
+        let components = gregorianCalendar.dateComponents([.month, .day], from: date)
+        guard let month = components.month, let day = components.day else {
+            return "This day"
+        }
+
+        return "\(gregorianMonthToken(for: month)) \(day)"
+    }
+
+    private func hijriSingleDate(_ date: Date, style: WeekTagHijriTokenStyle) -> String? {
+        let timeZone = TimeZone.current
+        guard let components = AdjustedHijriCalendar.shared.adjustedComponents(for: date, timeZone: timeZone) else {
+            return nil
+        }
+
+        return "\(hijriToken(for: components.month, style: style)) \(components.day)"
     }
 
     private func hijriToken(for month: HijriMonth, style: WeekTagHijriTokenStyle) -> String {
@@ -387,31 +436,31 @@ private struct WeeklyFajrcastCardLayoutProfile {
     init(dynamicTypeSize: DynamicTypeSize) {
         switch dynamicTypeSize {
         case .xSmall:
-            self.init(textScale: 0.88, minimumCardHeight: 282)
+            self.init(textScale: 0.88, minimumCardHeight: 260)
         case .small:
-            self.init(textScale: 0.94, minimumCardHeight: 284)
+            self.init(textScale: 0.94, minimumCardHeight: 262)
         case .medium:
-            self.init(textScale: 0.98, minimumCardHeight: 286)
+            self.init(textScale: 0.98, minimumCardHeight: 264)
         case .large:
-            self.init(textScale: 1.0, minimumCardHeight: 288)
+            self.init(textScale: 1.0, minimumCardHeight: 266)
         case .xLarge:
-            self.init(textScale: 1.08, minimumCardHeight: 302)
+            self.init(textScale: 1.08, minimumCardHeight: 278)
         case .xxLarge:
-            self.init(textScale: 1.17, minimumCardHeight: 314)
+            self.init(textScale: 1.17, minimumCardHeight: 290)
         case .xxxLarge:
-            self.init(textScale: 1.28, minimumCardHeight: 328)
+            self.init(textScale: 1.28, minimumCardHeight: 304)
         case .accessibility1:
-            self.init(textScale: 1.38, minimumCardHeight: 350)
+            self.init(textScale: 1.38, minimumCardHeight: 328)
         case .accessibility2:
-            self.init(textScale: 1.48, minimumCardHeight: 376)
+            self.init(textScale: 1.48, minimumCardHeight: 354)
         case .accessibility3:
-            self.init(textScale: 1.60, minimumCardHeight: 404)
+            self.init(textScale: 1.60, minimumCardHeight: 382)
         case .accessibility4:
-            self.init(textScale: 1.72, minimumCardHeight: 432)
+            self.init(textScale: 1.72, minimumCardHeight: 410)
         case .accessibility5:
-            self.init(textScale: 1.84, minimumCardHeight: 462)
+            self.init(textScale: 1.84, minimumCardHeight: 440)
         @unknown default:
-            self.init(textScale: 1.0, minimumCardHeight: 288)
+            self.init(textScale: 1.0, minimumCardHeight: 266)
         }
     }
 
