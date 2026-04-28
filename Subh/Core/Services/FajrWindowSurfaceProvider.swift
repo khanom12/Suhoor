@@ -145,6 +145,7 @@ struct FajrWindowSurfaceProvider {
 
     func compactSnapshot(
         dataset: FajrWindowDataset,
+        anchorDateKey: String? = nil,
         selectedDateKey: String? = nil,
         now: Date = Date(),
         timeZone: TimeZone = .current
@@ -165,11 +166,12 @@ struct FajrWindowSurfaceProvider {
             xAxisLabels: dataset.xAxisLabels
         )
         let summary = buildCompactSummary(
-            rows: dataset.rows,
             selectedPoint: selectedPoint,
             now: now,
             timeZone: timeZone
         )
+        let compactInsight = compactSecondarySummaryLine(rows: dataset.rows, timeZone: timeZone)
+            ?? dataset.compactInsight
         let selectedDay = selectedPoint.map {
             buildCompactSelectedDaySnapshot(
                 point: $0,
@@ -189,11 +191,17 @@ struct FajrWindowSurfaceProvider {
 
         return FajrWindowCompactSnapshot(
             period: dataset.period,
+            anchorDateKey: anchorDateKey ?? compactAnchorPoint(from: points)?.dateKey ?? selectedPoint?.dateKey,
             chart: chart,
-            compactInsight: summary.primaryText,
+            compactInsight: compactInsight,
             summary: summary,
             selectedDay: selectedDay
         )
+    }
+
+    private func compactAnchorPoint(from points: [FajrWindowPoint]) -> FajrWindowPoint? {
+        guard !points.isEmpty else { return nil }
+        return points[min(points.count / 2, points.count - 1)]
     }
 
     private func buildDatasetRow(
@@ -523,24 +531,41 @@ struct FajrWindowSurfaceProvider {
     }
 
     private func buildCompactSummary(
-        rows: [FajrWindowDatasetRow],
         selectedPoint: FajrWindowPoint?,
         now: Date,
         timeZone: TimeZone
     ) -> FajrWindowCompactSummarySnapshot {
         guard let selectedPoint else {
             return FajrWindowCompactSummarySnapshot(
-                primaryText: "This week's mornings will appear once Subh has upcoming resolved mornings.",
+                primaryText: "Fajr times will appear once Subh has resolved mornings.",
                 secondaryText: nil
             )
         }
 
-        let meaningfulSummary = compactSecondarySummaryLine(rows: rows, timeZone: timeZone)
-
         return FajrWindowCompactSummarySnapshot(
-            primaryText: meaningfulSummary ?? "Usual plan this week.",
-            secondaryText: nil
+            primaryText: compactFajrBoundaryLine(for: selectedPoint),
+            secondaryText: compactWakeSummaryLine(
+                for: selectedPoint,
+                now: now,
+                timeZone: timeZone
+            )
         )
+    }
+
+    private func compactFajrBoundaryLine(for point: FajrWindowPoint) -> String {
+        let beginTime = TimeFormatters.timeFormatter.string(from: point.fajrStart)
+        let endTime = TimeFormatters.timeFormatter.string(from: point.fajrEndOrBoundary)
+        return "Fajr begins at \(beginTime) • Fajr ends at \(endTime)"
+    }
+
+    private func compactWakeSummaryLine(
+        for point: FajrWindowPoint,
+        now: Date,
+        timeZone: TimeZone
+    ) -> String {
+        let subject = compactSubject(for: point, now: now, timeZone: timeZone)
+        let relationClause = compactRelationClause(for: point)
+        return "\(possessive(subject)) alarm is \(relationClause)."
     }
 
     private func buildCompactSelectedDaySnapshot(
@@ -903,7 +928,7 @@ struct FajrWindowSurfaceProvider {
             return CompactChartScale(domain: 270...360, ticks: ticks)
         }
 
-        for step in stride(from: 10, through: 120, by: 10) {
+        for step in [15, 30, 45, 60, 75, 90, 105, 120, 10, 20, 40, 50, 70, 80, 100, 110] {
             if let scale = compactChartScale(minimum: minimum, maximum: maximum, step: step) {
                 return scale
             }

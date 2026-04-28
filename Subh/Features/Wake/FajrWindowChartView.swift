@@ -118,7 +118,6 @@ struct FajrWindowChartView: View {
                 compactFrameChrome(in: metrics)
                 horizontalGrid(in: metrics.plotFrame)
                 verticalGrid(in: metrics.dayColumnFrame)
-                compactSelectedDayGuide(in: metrics)
                 boundaryBand(in: metrics.plotFrame)
                 boundaryLine(
                     for: \.fajrStartMinutes,
@@ -134,10 +133,12 @@ struct FajrWindowChartView: View {
                     dash: [],
                     in: metrics.plotFrame
                 )
+                compactSelectedDayGuide(in: metrics)
                 markerLayer(in: metrics.plotFrame)
                 compactYAxis(in: metrics)
-                compactSelectedDayCallout(in: metrics)
                 compactXAxis(in: metrics)
+                compactSelectedDayCallout(in: metrics)
+                touchOverlay(in: metrics.dayColumnFrame)
             }
         }
         .frame(height: compactTotalHeight)
@@ -258,7 +259,7 @@ struct FajrWindowChartView: View {
     }
 
     private var compactBoundaryColor: Color {
-        Color.white.opacity(0.16)
+        Color.white.opacity(0.10)
     }
 
     private var selectedAxisColor: Color {
@@ -283,11 +284,11 @@ struct FajrWindowChartView: View {
     }
 
     private var compactSecondaryTextColor: Color {
-        Color.white.opacity(0.82)
+        Color.white.opacity(0.70)
     }
 
     private var compactTertiaryTextColor: Color {
-        Color.white.opacity(0.78)
+        Color.white.opacity(0.70)
     }
 
     private var compactBandFill: Color {
@@ -307,7 +308,7 @@ struct FajrWindowChartView: View {
     }
 
     private var compactInactiveMarkerColor: Color {
-        Color.white.opacity(0.58)
+        Color.white.opacity(0.50)
     }
 
     private var compactInactiveMarkerSize: CGFloat {
@@ -371,7 +372,7 @@ struct FajrWindowChartView: View {
                 .overlay(
                     path.stroke(
                         layoutStyle == .compact
-                        ? compactBoundaryColor.opacity(0.12)
+                        ? Color.white.opacity(0.12)
                         : (layoutStyle == .detail ? Color.white.opacity(0.10) : (colorScheme == .dark ? Color.white.opacity(0.10) : Color.black.opacity(0.08))),
                         lineWidth: 1
                     )
@@ -457,15 +458,11 @@ struct FajrWindowChartView: View {
 
     @ViewBuilder
     private func markerLayer(in frame: CGRect) -> some View {
-        ForEach(markerPoints) { point in
-            let isSelected = point.dateKey == chart.selectedDateKey
+        ForEach(markerPoints.filter { $0.dateKey != chart.selectedDateKey }) { point in
             let x = xPosition(for: point, in: frame)
             let y = yPosition(for: point.primaryWakeMinutes, in: frame)
 
-            if isSelected {
-                selectedMarker(point: point)
-                    .position(x: x, y: y)
-            } else if point.isSkipped {
+            if point.isSkipped {
                 skippedMarker
                     .position(x: x, y: y)
             } else {
@@ -483,6 +480,14 @@ struct FajrWindowChartView: View {
                 }
             }
         }
+
+        ForEach(markerPoints.filter { $0.dateKey == chart.selectedDateKey }) { point in
+            let x = xPosition(for: point, in: frame)
+            let y = yPosition(for: point.primaryWakeMinutes, in: frame)
+
+            selectedMarker(point: point)
+                .position(x: x, y: y)
+        }
     }
 
     private var regularMarkerColor: Color {
@@ -498,15 +503,6 @@ struct FajrWindowChartView: View {
             Image(systemName: point.isSkipped ? "bell.slash.fill" : "alarm.fill")
                 .font(.system(size: compactMarkerPointSize, weight: .semibold))
                 .foregroundStyle(compactPlotMarkerColor)
-                .padding(6)
-                .background {
-                    Circle()
-                        .fill(Color.white.opacity(0.18))
-                        .overlay {
-                            Circle().stroke(Color.white.opacity(0.42), lineWidth: 1)
-                        }
-                }
-                .shadow(color: Color.black.opacity(0.18), radius: 8, x: 0, y: 3)
         } else {
             Image(systemName: point.isSkipped ? "bell.slash.fill" : "alarm.fill")
                 .font(.system(size: 12, weight: .semibold))
@@ -558,36 +554,8 @@ struct FajrWindowChartView: View {
     }
 
     @ViewBuilder
-    private func inlineIntervalLabels(in frame: CGRect) -> some View {
-        if layoutStyle == .compact,
-           dynamicTypeSize < .accessibility1,
-           chart.renderPoints.count >= 3 {
-            let anchor = chart.renderPoints[min(chart.renderPoints.count / 2, chart.renderPoints.count - 1)]
-            let labelX = frame.midX
-
-            Text("FAJR BEGINS")
-                .font(.system(size: 6, weight: .light))
-                .foregroundStyle(compactTertiaryTextColor)
-                .rotationEffect(.degrees(-4.5))
-                .position(
-                    x: labelX,
-                    y: yPosition(for: anchor.fajrStartMinutes, in: frame) - 7
-                )
-
-            Text("FAJR ENDS")
-                .font(.system(size: 6, weight: .light))
-                .foregroundStyle(compactTertiaryTextColor)
-                .rotationEffect(.degrees(-4.5))
-                .position(
-                    x: labelX + 1,
-                    y: yPosition(for: anchor.fajrEndOrBoundaryMinutes, in: frame) + 8
-                )
-        }
-    }
-
-    @ViewBuilder
     private func touchOverlay(in frame: CGRect) -> some View {
-        if let onSelectDateKey, layoutStyle == .detail {
+        if let onSelectDateKey, (layoutStyle == .detail || layoutStyle == .compact) {
             Color.clear
                 .contentShape(Rectangle())
                 .gesture(
@@ -681,19 +649,19 @@ struct FajrWindowChartView: View {
     }
 
     private var compactMarkerPointSize: CGFloat {
-        dynamicTypeSize.isAccessibilitySize ? 13 : 12
+        dynamicTypeSize.isAccessibilitySize ? 15 : 13
     }
 
     private var compactSkippedMarkerPointSize: CGFloat {
-        dynamicTypeSize.isAccessibilitySize ? 11 : 10
+        dynamicTypeSize.isAccessibilitySize ? 12 : 10
     }
 
     private var compactYAxisValuePointSize: CGFloat {
-        dynamicTypeSize.isAccessibilitySize ? 14 : 12
+        dynamicTypeSize.isAccessibilitySize ? 16 : 13
     }
 
     private var compactYAxisLabelHeight: CGFloat {
-        dynamicTypeSize.isAccessibilitySize ? 16 : 14
+        dynamicTypeSize.isAccessibilitySize ? 20 : 16
     }
 
     private var compactYAxisLabelTopInset: CGFloat {
@@ -701,27 +669,27 @@ struct FajrWindowChartView: View {
     }
 
     private var compactAxisPointSize: CGFloat {
-        dynamicTypeSize.isAccessibilitySize ? 13 : 12
+        dynamicTypeSize.isAccessibilitySize ? 16 : 13
     }
 
     private var compactCalloutLabelPointSize: CGFloat {
-        dynamicTypeSize.isAccessibilitySize ? 13 : 12
+        dynamicTypeSize.isAccessibilitySize ? 16 : 13
     }
 
     private var compactCalloutTimePointSize: CGFloat {
-        dynamicTypeSize.isAccessibilitySize ? 18 : 16
+        dynamicTypeSize.isAccessibilitySize ? 22 : 18
     }
 
     private var compactCalloutSuffixPointSize: CGFloat {
-        dynamicTypeSize.isAccessibilitySize ? 11 : 10
+        dynamicTypeSize.isAccessibilitySize ? 13 : 11
     }
 
     private var compactCalloutStackSpacing: CGFloat {
-        dynamicTypeSize.isAccessibilitySize ? -1 : -2
+        dynamicTypeSize.isAccessibilitySize ? 0 : -1
     }
 
     private var compactSelectedGuideHalfHeight: CGFloat {
-        dynamicTypeSize.isAccessibilitySize ? 7.5 : 6.5
+        dynamicTypeSize.isAccessibilitySize ? 8.5 : 7
     }
 
     private var compactSelectedCalloutYOffset: CGFloat {
@@ -729,27 +697,27 @@ struct FajrWindowChartView: View {
     }
 
     private var compactSelectedCalloutWidth: CGFloat {
-        dynamicTypeSize.isAccessibilitySize ? 82 : 74
+        dynamicTypeSize.isAccessibilitySize ? 110 : 86
     }
 
     private var compactXAxisLabelFrameWidth: CGFloat {
-        dynamicTypeSize.isAccessibilitySize ? 16 : 14
+        dynamicTypeSize.isAccessibilitySize ? 20 : 16
     }
 
     private var compactXAxisLabelCenterOffset: CGFloat {
-        dynamicTypeSize.isAccessibilitySize ? 9 : 8
+        dynamicTypeSize.isAccessibilitySize ? 10 : 8
     }
 
     private func compactLayoutMetrics(in size: CGSize) -> CompactLayoutMetrics {
-        let plotTop = dynamicTypeSize.isAccessibilitySize ? 38.0 : 34.0
-        let plotHeight = dynamicTypeSize.isAccessibilitySize ? 94.0 : 89.0
-        let rightRailWidth = dynamicTypeSize.isAccessibilitySize ? 40.0 : 35.0
+        let plotTop = dynamicTypeSize.isAccessibilitySize ? 46.0 : 39.0
+        let plotHeight = dynamicTypeSize.isAccessibilitySize ? 90.0 : 84.0
+        let rightRailWidth = dynamicTypeSize.isAccessibilitySize ? 48.0 : 39.0
         let plotMinX = 1.0
         let dayColumnWidth = max(1, size.width - rightRailWidth - plotMinX)
         let plotWidth = max(1, dayColumnWidth - 1)
-        let weekdayRowY = plotTop + plotHeight + (dynamicTypeSize.isAccessibilitySize ? 14 : 12.5)
-        let yAxisLabelWidth = dynamicTypeSize.isAccessibilitySize ? 32.0 : 28.0
-        let yAxisLabelMinX = size.width - (dynamicTypeSize.isAccessibilitySize ? 35.0 : 31.0)
+        let weekdayRowY = plotTop + plotHeight + (dynamicTypeSize.isAccessibilitySize ? 13 : 12)
+        let yAxisLabelWidth = dynamicTypeSize.isAccessibilitySize ? 40.0 : 32.0
+        let yAxisLabelMinX = size.width - (dynamicTypeSize.isAccessibilitySize ? 43.0 : 35.0)
         let rightRailMinX = size.width - rightRailWidth
 
         let chartFrame = CGRect(

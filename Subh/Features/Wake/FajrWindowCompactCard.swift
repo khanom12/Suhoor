@@ -3,14 +3,19 @@ import UIKit
 
 struct WeeklyFajrcastCard: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @State private var suppressNextOpen = false
 
     let snapshot: FajrWindowCompactSnapshot
+    var onSelectDateKey: ((String) -> Void)? = nil
+    var onMoveSelection: ((Int) -> Void)? = nil
     let onOpen: () -> Void
 
     var body: some View {
-        Button(action: onOpen) {
+        Button(action: openIfChartIsIdle) {
             AppGlassSurface(
                 variant: .grouped,
+                tint: .black,
+                tintOpacityMultiplier: 4.5,
                 contentPadding: 0
             ) {
                 VStack(spacing: 0) {
@@ -22,14 +27,15 @@ struct WeeklyFajrcastCard: View {
                     dividerLine
                         .padding(.horizontal, horizontalInset)
 
-                    chartContext
-                        .padding(.horizontal, horizontalInset)
-                        .padding(.top, chartContextTopPadding)
-
                     FajrWindowChartView(
                         chart: snapshot.chart,
                         layoutStyle: .compact,
-                        compactSelectedDay: snapshot.selectedDay
+                        compactSelectedDay: snapshot.selectedDay,
+                        onSelectDateKey: selectDateFromChart,
+                        onMoveSelection: moveSelectionFromChart,
+                        accessibilityLabel: "Weekly Fajrcast chart",
+                        accessibilityValue: accessibilitySummary,
+                        accessibilityHint: "Adjust to focus another visible morning."
                     )
                     .frame(height: chartHeight)
                     .padding(.horizontal, horizontalInset)
@@ -52,6 +58,16 @@ struct WeeklyFajrcastCard: View {
         .accessibilityLabel("Weekly Fajrcast")
         .accessibilityValue(accessibilitySummary)
         .accessibilityHint("Double-tap for details.")
+        .accessibilityAdjustableAction { direction in
+            switch direction {
+            case .increment:
+                moveSelectionFromChart(1)
+            case .decrement:
+                moveSelectionFromChart(-1)
+            @unknown default:
+                break
+            }
+        }
     }
 
     private var header: some View {
@@ -77,32 +93,24 @@ struct WeeklyFajrcastCard: View {
     }
 
     private var footer: some View {
-        Text(snapshot.summary.primaryText)
-            .font(.system(size: footerPointSize, weight: .regular))
-            .foregroundStyle(footerColor)
-            .lineLimit(2)
-            .multilineTextAlignment(.leading)
-            .fixedSize(horizontal: false, vertical: true)
-            .frame(maxWidth: .infinity, alignment: .leading)
-    }
+        VStack(alignment: .leading, spacing: 2) {
+            Text(snapshot.summary.primaryText)
+                .font(.system(size: footerPointSize, weight: .medium))
+                .foregroundStyle(footerColor)
+                .lineLimit(2)
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
 
-    private var chartContext: some View {
-        HStack(alignment: .firstTextBaseline, spacing: DesignTokens.spacingS) {
-            Text("Wake time")
-                .font(.system(size: chartContextPointSize, weight: .medium))
-                .foregroundStyle(WakeGlassTheme.primaryText.opacity(0.92))
-
-            Spacer(minLength: DesignTokens.spacingS)
-
-            Text("Earlier")
-                .font(.system(size: chartContextPointSize, weight: .regular))
-                .foregroundStyle(WakeGlassTheme.secondaryText)
-
-            Text("Later")
-                .font(.system(size: chartContextPointSize, weight: .regular))
-                .foregroundStyle(WakeGlassTheme.secondaryText)
+            if let secondaryText = snapshot.summary.secondaryText, !secondaryText.isEmpty {
+                Text(secondaryText)
+                    .font(.system(size: footerSecondaryPointSize, weight: .regular))
+                    .foregroundStyle(footerColor.opacity(0.76))
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
-        .lineLimit(1)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var dividerLine: some View {
@@ -115,8 +123,11 @@ struct WeeklyFajrcastCard: View {
         [
             snapshot.summary.primaryText,
             snapshot.summary.secondaryText,
+            snapshot.compactInsight == snapshot.summary.primaryText || snapshot.compactInsight == snapshot.summary.secondaryText
+                ? nil
+                : snapshot.compactInsight,
             snapshot.selectedDay.accessibilityValue,
-            selectedWeekdayAccessibilityValue
+            focusedWeekdayAccessibilityValue
         ]
         .compactMap { value in
             guard let value, !value.isEmpty else { return nil }
@@ -125,9 +136,9 @@ struct WeeklyFajrcastCard: View {
         .joined(separator: " ")
     }
 
-    private var selectedWeekdayAccessibilityValue: String? {
+    private var focusedWeekdayAccessibilityValue: String? {
         if let selectedPoint = snapshot.points.first(where: { $0.dateKey == snapshot.selectedDay.dateKey }) {
-            return "Selected day \(selectedPoint.longLabel)."
+            return "Focused day \(selectedPoint.longLabel)."
         }
         return nil
     }
@@ -154,10 +165,6 @@ struct WeeklyFajrcastCard: View {
 
     private var chartVerticalPadding: CGFloat {
         dynamicTypeSize.isAccessibilitySize ? 8 : 7
-    }
-
-    private var chartContextTopPadding: CGFloat {
-        dynamicTypeSize.isAccessibilitySize ? 8 : 6
     }
 
     private var chartHeight: CGFloat {
@@ -197,11 +204,11 @@ struct WeeklyFajrcastCard: View {
     }
 
     private var footerPointSize: CGFloat {
-        dynamicTypeSize.isAccessibilitySize ? 13 : 12
+        dynamicTypeSize.isAccessibilitySize ? 16 : 13
     }
 
-    private var chartContextPointSize: CGFloat {
-        dynamicTypeSize.isAccessibilitySize ? 13 : 11
+    private var footerSecondaryPointSize: CGFloat {
+        dynamicTypeSize.isAccessibilitySize ? 15 : 13
     }
 
     private var titleColor: Color {
@@ -237,6 +244,32 @@ struct WeeklyFajrcastCard: View {
         }
 
         return "\(gregorian) | \(compactHijri)"
+    }
+
+    private func openIfChartIsIdle() {
+        if suppressNextOpen {
+            suppressNextOpen = false
+            return
+        }
+
+        onOpen()
+    }
+
+    private func selectDateFromChart(_ dateKey: String) {
+        suppressOpenBriefly()
+        onSelectDateKey?(dateKey)
+    }
+
+    private func moveSelectionFromChart(_ offset: Int) {
+        suppressOpenBriefly()
+        onMoveSelection?(offset)
+    }
+
+    private func suppressOpenBriefly() {
+        suppressNextOpen = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+            suppressNextOpen = false
+        }
     }
 
     private func gregorianWeekRange(start: Date, end: Date) -> String {

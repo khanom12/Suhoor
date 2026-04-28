@@ -17,7 +17,8 @@ struct AlarmConfigMigrationTests {
         let didReset = DeveloperInstallReset.resetIfNeeded(
             defaults: defaults,
             bundleIdentifier: suiteName,
-            fingerprint: "debug-build-a"
+            fingerprint: "debug-build-a",
+            mode: .onInstallChange
         ) {
             resetCount += 1
         }
@@ -40,7 +41,8 @@ struct AlarmConfigMigrationTests {
         let didReset = DeveloperInstallReset.resetIfNeeded(
             defaults: defaults,
             bundleIdentifier: suiteName,
-            fingerprint: "debug-build-a"
+            fingerprint: "debug-build-a",
+            mode: .onInstallChange
         ) {
             resetCount += 1
         }
@@ -63,7 +65,8 @@ struct AlarmConfigMigrationTests {
         let didReset = DeveloperInstallReset.resetIfNeeded(
             defaults: defaults,
             bundleIdentifier: suiteName,
-            fingerprint: "debug-build-b"
+            fingerprint: "debug-build-b",
+            mode: .onInstallChange
         ) {
             resetCount += 1
         }
@@ -86,6 +89,52 @@ struct AlarmConfigMigrationTests {
         #expect(store.defaults.defaultWakeAnchorType == .fajrEnd)
         #expect(store.defaults.defaultWakeDeltaMinutes == 30)
         #expect(store.defaults.defaultWakeRule.anchorType == .fajrEnd)
+    }
+
+    @Test
+    func debugInstallResetIsDisabledByDefault() {
+        let suiteName = "SubhTests.DebugInstallReset.DisabledByDefault"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        defaults.set("kept", forKey: "Suhoor.DefaultAlarmConfig")
+
+        let didReset = DeveloperInstallReset.resetIfNeeded(
+            defaults: defaults,
+            bundleIdentifier: suiteName,
+            fingerprint: "debug-build-a"
+        )
+
+        #expect(didReset == false)
+        #expect(defaults.string(forKey: "Suhoor.DefaultAlarmConfig") == "kept")
+    }
+
+    @Test
+    func debugInstallResetModeCanBeSetFromEnvironment() {
+        let suiteName = "SubhTests.DebugInstallReset.ModeEnvironment"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+
+        let mode = DeveloperInstallReset.configuredMode(
+            defaults: defaults,
+            environment: [DeveloperInstallReset.modeEnvironmentKey: "onInstallChange"]
+        )
+
+        #expect(mode == .onInstallChange)
+    }
+
+    @Test
+    func debugInstallResetModeCanBeSetFromDefaults() {
+        let suiteName = "SubhTests.DebugInstallReset.ModeDefaults"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        defaults.set("on-install-change", forKey: DeveloperInstallReset.modeDefaultsKey)
+
+        let mode = DeveloperInstallReset.configuredMode(
+            defaults: defaults,
+            environment: [:]
+        )
+
+        #expect(mode == .onInstallChange)
     }
 
     @Test

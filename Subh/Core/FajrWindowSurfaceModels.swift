@@ -326,6 +326,7 @@ struct FajrWindowDataset: Equatable, Sendable {
 
 struct FajrWindowCompactSnapshot: Equatable, Sendable {
     let period: FajrWindowPeriod
+    let anchorDateKey: String?
     let chart: FajrWindowChartSnapshot
     let compactInsight: String
     let summary: FajrWindowCompactSummarySnapshot
@@ -342,6 +343,7 @@ struct FajrWindowCompactSnapshot: Equatable, Sendable {
 
     static let empty = FajrWindowCompactSnapshot(
         period: .sevenDays,
+        anchorDateKey: nil,
         chart: FajrWindowChartSnapshot(
             period: .sevenDays,
             activeOverlay: .myWake,

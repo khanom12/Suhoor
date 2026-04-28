@@ -3,6 +3,7 @@ import CoreLocation
 import Combine
 import UserNotifications
 import os
+import AlarmKit
 
 @MainActor
 final class ScheduleManager: ObservableObject {
@@ -311,19 +312,33 @@ final class ScheduleManager: ObservableObject {
     }
 
     func fajrWindowCompactSnapshot(
-        selectedDateKey: String? = nil,
+        anchorDateKey: String? = nil,
+        focusedDateKey: String? = nil,
         timeZone: TimeZone = .current
     ) -> FajrWindowCompactSnapshot {
         PerformanceTrace.measure("fajrcast.compact.build") {
+            let anchorDate = weeklyFajrcastAnchorDate(
+                anchorDateKey: anchorDateKey,
+                timeZone: timeZone
+            )
+            let resolvedAnchorDateKey = DateHelpers.dayIdentifier(for: anchorDate, timeZone: timeZone)
+            let activeDays = activeDaysForWeeklyFajrcast(
+                centeredOn: anchorDate,
+                timeZone: timeZone
+            )
+            let visibleDateKeys = Set(activeDays.map(\.dateKey))
+            let resolvedFocusedDateKey = focusedDateKey.flatMap { visibleDateKeys.contains($0) ? $0 : nil }
+                ?? resolvedAnchorDateKey
             let dataset = fajrWindowSurfaceProvider.buildDataset(
                 period: .sevenDays,
-                activeDays: activeDaysForWeeklyFajrcast(timeZone: timeZone),
+                activeDays: activeDays,
                 overrideDateKeys: Set(alarmConfigStore.overridesByDay.keys),
                 timeZone: timeZone
             )
             return fajrWindowSurfaceProvider.compactSnapshot(
                 dataset: dataset,
-                selectedDateKey: selectedDateKey,
+                anchorDateKey: resolvedAnchorDateKey,
+                selectedDateKey: resolvedFocusedDateKey,
                 now: Date(),
                 timeZone: timeZone
             )
@@ -442,7 +457,6 @@ final class ScheduleManager: ObservableObject {
         return MorningHomeSnapshot(
             tomorrow: tomorrowEntry,
             weeklyFajrcast: fajrWindowCompactSnapshot(
-                selectedDateKey: activeWindowSnapshot.byDateKey[tomorrowKey]?.dateKey,
                 timeZone: timeZone
             ),
             morningcast: morningcast,
@@ -736,24 +750,53 @@ final class ScheduleManager: ObservableObject {
         ).visibleDays
     }
 
+    private func weeklyFajrcastAnchorDate(
+        anchorDateKey: String?,
+        timeZone: TimeZone
+    ) -> Date {
+        if let anchorDateKey,
+           let anchorDate = DateHelpers.date(fromDayIdentifier: anchorDateKey, timeZone: timeZone) {
+            return DateHelpers.startOfDay(anchorDate, in: timeZone)
+        }
+
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+
+        let now = Date()
+        let today = DateHelpers.startOfDay(now, in: timeZone)
+        let todayKey = DateHelpers.dayIdentifier(for: today, timeZone: timeZone)
+        if let todayDay = activeWindowSnapshot.byDateKey[todayKey],
+           now <= todayDay.schedule.wakeDate {
+            return today
+        }
+
+        return calendar.date(byAdding: .day, value: 1, to: today) ?? today
+    }
+
     private func activeDaysForWeeklyFajrcast(
+        centeredOn selectedDate: Date,
         timeZone: TimeZone
     ) -> [ActiveAlarmDay] {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = timeZone
 
-        let today = DateHelpers.startOfToday(in: timeZone)
-        let tomorrow = calendar.date(byAdding: .day, value: 1, to: today) ?? today
+        let selectedStart = DateHelpers.startOfDay(selectedDate, in: timeZone)
+        let windowStart = calendar.date(byAdding: .day, value: -3, to: selectedStart) ?? selectedStart
 
         guard let coordinate = currentCoordinate() else {
+            let windowDates = DateHelpers.dates(
+                startingFrom: windowStart,
+                count: 7,
+                calendar: calendar
+            )
+            let windowKeys = Set(windowDates.map { DateHelpers.dayIdentifier(for: $0, timeZone: timeZone) })
             return activeWindowSnapshot.visibleDays
-                .filter { $0.schedule.date >= tomorrow }
-                .prefix(7)
-                .map { $0 }
+                .filter { windowKeys.contains($0.dateKey) }
+                .sorted { $0.date < $1.date }
         }
 
         let resolvedEntries = activeDayResolver.resolvedEntriesForActiveWindow(
-            from: tomorrow,
+            from: windowStart,
             limit: 7,
             timeZone: timeZone
         )
@@ -1219,9 +1262,10 @@ final class ScheduleManager: ObservableObject {
         }
         debugValidateActiveWindow(adjustedSnapshot, resolvedEntries: resolvedEntries)
 
+        let refreshCompletedAt = Date()
         activeWindowSnapshot = adjustedSnapshot
         schedules = adjustedSnapshot.visibleDays.map(\.schedule)
-        lastUpdated = Date()
+        lastUpdated = refreshCompletedAt
         Logging.diagnostics.debug("[perf] active-window.visible-count \(result.visibleDays.count, privacy: .public)")
         Logging.diagnostics.debug("[perf] active-window.scheduled-count \(result.scheduledDays.count, privacy: .public)")
 
@@ -1239,6 +1283,13 @@ final class ScheduleManager: ObservableObject {
         )
         schedulingMode = reconciliation.schedulingMode
         statusText = reconciliation.statusText
+        await runAlarmPipelineDiagnostics(
+            snapshot: adjustedSnapshot,
+            settings: settings,
+            mode: schedulingMode,
+            schedulingStatus: reconciliation.statusText,
+            now: refreshCompletedAt
+        )
 
         settingsStore.update { draft in
             draft.lastScheduledDate = Date()
@@ -2056,6 +2107,45 @@ final class ScheduleManager: ObservableObject {
         )
     }
 
+    private func runAlarmPipelineDiagnostics(
+        snapshot: ActiveAlarmWindowSnapshot,
+        settings: AppSettings,
+        mode: SchedulingMode,
+        schedulingStatus: String,
+        now: Date
+    ) async {
+        let report = AlarmPipelineDiagnostics.report(
+            snapshot: snapshot,
+            settings: settings,
+            mode: mode,
+            now: now
+        )
+
+        EventTimelineLog.shared.record(
+            category: "schedule-diagnostics",
+            message: "status=\(schedulingStatus) mode=\(mode.rawValue) expectedDeliveries=\(report.expectedDeliveryCount) futureVisibleEvents=\(report.futureVisibleEventCount)"
+        )
+
+        guard report.shouldWarn else { return }
+
+        Logging.scheduler.error("Alarm pipeline warning: no deliverable future events while scheduling remains enabled.")
+        EventTimelineLog.shared.record(
+            category: "schedule-diagnostics",
+            message: "warning=no_deliverable_future_events"
+        )
+
+        guard mode == .notifications else { return }
+        let pendingIDs = Set(await notificationScheduler.pendingRequests().map(\.identifier))
+        let expectedIDs = report.expectedNotificationIdentifiers
+        let missingIDs = expectedIDs.filter { pendingIDs.contains($0) == false }
+        if !missingIDs.isEmpty {
+            EventTimelineLog.shared.record(
+                category: "schedule-diagnostics",
+                message: "warning=missing_pending_notifications count=\(missingIDs.count)"
+            )
+        }
+    }
+
     static func resolveBootstrapState(
         settings: AppSettings,
         permissionStates: [AppPermissionKind: AppPermissionState],
@@ -2361,6 +2451,60 @@ struct ActiveAlarmDay: Codable, Equatable, Identifiable, Sendable {
             date: date,
             dateKey: dateKey,
             defaultPrimaryIntent: provenances.defaultFastPrimaryIntent()
+        )
+    }
+}
+
+struct AlarmPipelineDiagnosticsReport: Equatable {
+    let expectedDeliveryCount: Int
+    let futureVisibleEventCount: Int
+    let expectedNotificationIdentifiers: [String]
+
+    var shouldWarn: Bool {
+        expectedDeliveryCount == 0 && futureVisibleEventCount > 0
+    }
+}
+
+enum AlarmPipelineDiagnostics {
+    static func report(
+        snapshot: ActiveAlarmWindowSnapshot,
+        settings: AppSettings,
+        mode: SchedulingMode,
+        now: Date
+    ) -> AlarmPipelineDiagnosticsReport {
+        guard settings.isEnabled, mode != .none else {
+            return AlarmPipelineDiagnosticsReport(
+                expectedDeliveryCount: 0,
+                futureVisibleEventCount: 0,
+                expectedNotificationIdentifiers: []
+            )
+        }
+
+        let futureVisibleEvents = snapshot.visibleDays
+            .flatMap(\.scheduledEvents)
+            .filter { $0.fireDate > now }
+
+        let deliverableEvents = snapshot.scheduledDays
+            .flatMap { day in
+                day.scheduledEvents.compactMap { event -> (ScheduledEvent, DaySchedule)? in
+                    event.fireDate > now ? (event, day.schedule) : nil
+                }
+            }
+
+        let expectedNotificationIdentifiers = mode == .notifications
+            ? deliverableEvents.flatMap { event, schedule in
+                event.deliveryKinds.map { kind in
+                    SchedulingIdentifiers.identifier(for: event, deliveryKind: kind)
+                } + event.deliveryKinds.map { kind in
+                    SchedulingIdentifiers.dailyIdentifier(for: schedule, kind: kind)
+                }
+            }
+            : []
+
+        return AlarmPipelineDiagnosticsReport(
+            expectedDeliveryCount: deliverableEvents.reduce(0) { $0 + $1.0.deliveryKinds.count },
+            futureVisibleEventCount: futureVisibleEvents.count,
+            expectedNotificationIdentifiers: Array(Set(expectedNotificationIdentifiers)).sorted()
         )
     }
 }

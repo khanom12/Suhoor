@@ -15,7 +15,11 @@ final class MorningPlanStore {
         self.defaults = defaults
         if let data = defaults.data(forKey: storageKey),
            let decoded = try? JSONDecoder().decode(MorningPlanState.self, from: data) {
-            self.state = decoded
+            let normalized = MorningPlanStore.normalizedForCurrentProductModel(decoded)
+            self.state = normalized.state
+            if normalized.didChange {
+                persist()
+            }
         } else {
             self.state = MorningPlanStore.makeInitialState(
                 defaults: defaults,
@@ -109,5 +113,16 @@ final class MorningPlanStore {
             fajrBoundaryNoticeEnabled: defaultConfig.fajrEnabledDefault,
             iftarReminderEnabled: defaultConfig.iftarEnabledDefault
         )
+    }
+
+    private static func normalizedForCurrentProductModel(_ state: MorningPlanState) -> (state: MorningPlanState, didChange: Bool) {
+        guard state.activationMode == .legacyCompat else {
+            return (state, false)
+        }
+
+        var migrated = state
+        migrated.activationMode = .dailyActive
+        migrated.lastMigrationAt = Date()
+        return (migrated, true)
     }
 }

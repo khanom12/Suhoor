@@ -35,8 +35,11 @@ struct SubhHomeView: View {
     @State private var destination: SubhHomeDestination?
     @State private var settingsPath = NavigationPath()
     @State private var isShowingSettings = false
+    @State private var weeklyFajrcastFocusedDateKey: String?
 
     var body: some View {
+        let weeklyFajrcast = weeklyFajrcastSnapshot
+
         NavigationStack {
             ZStack {
                 AppPageBackground()
@@ -56,8 +59,12 @@ struct SubhHomeView: View {
                             }
                         }
 
-                        WeeklyFajrcastCard(snapshot: snapshot.weeklyFajrcast) {
-                            destination = .fajrcast(selectedDateKey: snapshot.weeklyFajrcast.selectedDay.dateKey)
+                        WeeklyFajrcastCard(
+                            snapshot: weeklyFajrcast,
+                            onSelectDateKey: selectWeeklyFajrcastDate,
+                            onMoveSelection: moveWeeklyFajrcastSelection
+                        ) {
+                            destination = .fajrcast(selectedDateKey: weeklyFajrcast.selectedDay.dateKey)
                         }
 
                         MorningcastCard(entries: snapshot.morningcast) { entry in
@@ -108,6 +115,38 @@ struct SubhHomeView: View {
 
     private var snapshot: MorningHomeSnapshot {
         scheduleManager.currentMorningHomeSnapshot
+    }
+
+    private var weeklyFajrcastSnapshot: FajrWindowCompactSnapshot {
+        guard let weeklyFajrcastFocusedDateKey else {
+            return snapshot.weeklyFajrcast
+        }
+
+        return scheduleManager.fajrWindowCompactSnapshot(
+            anchorDateKey: snapshot.weeklyFajrcast.anchorDateKey,
+            focusedDateKey: weeklyFajrcastFocusedDateKey
+        )
+    }
+
+    private func selectWeeklyFajrcastDate(_ dateKey: String) {
+        withAnimation(.easeInOut(duration: 0.18)) {
+            weeklyFajrcastFocusedDateKey = dateKey
+        }
+    }
+
+    private func moveWeeklyFajrcastSelection(by offset: Int) {
+        let compactSnapshot = weeklyFajrcastSnapshot
+        guard
+            let selectedDateKey = compactSnapshot.selectedDateKey,
+            let selectedIndex = compactSnapshot.points.firstIndex(where: { $0.dateKey == selectedDateKey })
+        else {
+            return
+        }
+
+        let nextIndex = min(max(selectedIndex + offset, 0), compactSnapshot.points.count - 1)
+        guard nextIndex != selectedIndex else { return }
+
+        selectWeeklyFajrcastDate(compactSnapshot.points[nextIndex].dateKey)
     }
 
     private func handle(_ intent: AppNavigationIntent) {

@@ -369,19 +369,118 @@ struct ScheduleServiceExtractionTests {
         )
 
         #expect(snapshot.selectedDay.dateKey == tomorrowKey)
-        #expect(snapshot.summary.primaryText == "Usual plan this week.")
+        #expect(snapshot.selectedDay.relativeLabel == "TOMORROW")
+        #expect(Self.normalizedTimeSpaces(snapshot.summary.primaryText) == "Fajr begins at 5:00 AM • Fajr ends at 6:16 AM")
+        #expect(snapshot.summary.secondaryText == "Tomorrow's alarm is 30 minutes before Fajr ends.")
     }
 
     @Test
-    func compactFajrcastHomeWindowStartsWithTomorrow() {
+    func compactFajrcastUsesTodayCalloutForTodaySelection() {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let today = Self.makeDate(year: 2026, month: 4, day: 26, timeZone: timeZone)
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let activeDays = (0..<3).map { offset in
+            Self.makeWakeEntry(
+                date: calendar.date(byAdding: .day, value: offset, to: today) ?? today,
+                timeZone: timeZone
+            ).activeDay
+        }
+        let provider = FajrWindowSurfaceProvider()
+        let dataset = provider.buildDataset(
+            period: .sevenDays,
+            activeDays: activeDays,
+            overrideDateKeys: [],
+            timeZone: timeZone
+        )
+
+        let snapshot = provider.compactSnapshot(
+            dataset: dataset,
+            selectedDateKey: activeDays[0].dateKey,
+            now: today,
+            timeZone: timeZone
+        )
+
+        #expect(snapshot.selectedDay.relativeLabel == "TODAY")
+        #expect(Self.normalizedTimeSpaces(snapshot.summary.primaryText) == "Fajr begins at 5:00 AM • Fajr ends at 6:16 AM")
+        #expect(snapshot.summary.secondaryText == "Today's alarm is 30 minutes before Fajr ends.")
+    }
+
+    @Test
+    func compactFajrcastUsesSkippedSelectedDaySummary() {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let today = Self.makeDate(year: 2026, month: 4, day: 26, timeZone: timeZone)
+        let activeDay = Self.makeWakeEntry(
+            date: today,
+            timeZone: timeZone,
+            skipDay: true
+        ).activeDay
+        let provider = FajrWindowSurfaceProvider()
+        let dataset = provider.buildDataset(
+            period: .sevenDays,
+            activeDays: [activeDay],
+            overrideDateKeys: [],
+            timeZone: timeZone
+        )
+
+        let snapshot = provider.compactSnapshot(
+            dataset: dataset,
+            selectedDateKey: activeDay.dateKey,
+            now: today,
+            timeZone: timeZone
+        )
+
+        #expect(Self.normalizedTimeSpaces(snapshot.summary.primaryText) == "Fajr begins at 5:00 AM • Fajr ends at 6:16 AM")
+        #expect(snapshot.summary.secondaryText == "Today's alarm is off for this date.")
+        #expect(snapshot.selectedDay.iconName == "bell.slash.fill")
+        #expect(snapshot.selectedDay.timeMain == "Off")
+        #expect(snapshot.selectedDay.timeSuffix == nil)
+    }
+
+    @Test
+    func compactFajrcastPreservesAdjustedSecondarySummary() {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let monday = Self.makeDate(year: 2026, month: 4, day: 27, timeZone: timeZone)
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let activeDays = (0..<7).map { offset in
+            Self.makeWakeEntry(
+                date: calendar.date(byAdding: .day, value: offset, to: monday) ?? monday,
+                timeZone: timeZone
+            ).activeDay
+        }
+        let adjustedKey = activeDays[2].dateKey
+        let provider = FajrWindowSurfaceProvider()
+        let dataset = provider.buildDataset(
+            period: .sevenDays,
+            activeDays: activeDays,
+            overrideDateKeys: [adjustedKey],
+            timeZone: timeZone
+        )
+
+        let snapshot = provider.compactSnapshot(
+            dataset: dataset,
+            selectedDateKey: activeDays[0].dateKey,
+            now: monday,
+            timeZone: timeZone
+        )
+
+        #expect(Self.normalizedTimeSpaces(snapshot.summary.primaryText) == "Fajr begins at 5:00 AM • Fajr ends at 6:16 AM")
+        #expect(snapshot.summary.secondaryText == "Today's alarm is 30 minutes before Fajr ends.")
+        #expect(snapshot.compactInsight == "1 morning is adjusted this week.")
+    }
+
+    @Test
+    func compactFajrcastUsesCenteredVisibleWindow() {
         let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
         let today = Self.makeDate(year: 2026, month: 4, day: 26, hour: 22, minute: 34, timeZone: timeZone)
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = timeZone
-        let tomorrow = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: today)) ?? today
+        let selected = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: today)) ?? today
+        let windowStart = calendar.date(byAdding: .day, value: -3, to: selected) ?? selected
         let activeDays = (0..<7).map { offset in
             Self.makeWakeEntry(
-                date: calendar.date(byAdding: .day, value: offset, to: tomorrow) ?? tomorrow,
+                date: calendar.date(byAdding: .day, value: offset, to: windowStart) ?? windowStart,
                 timeZone: timeZone
             ).activeDay
         }
@@ -394,14 +493,37 @@ struct ScheduleServiceExtractionTests {
         )
         let snapshot = provider.compactSnapshot(
             dataset: dataset,
-            selectedDateKey: activeDays.first?.dateKey,
+            selectedDateKey: activeDays[3].dateKey,
             now: today,
             timeZone: timeZone
         )
 
+        let anchorKey = activeDays[3].dateKey
+        let visibleDateKeys = activeDays.map { $0.dateKey }
+        let snapshotDateKeys = snapshot.points.map { $0.dateKey }
+
         #expect(snapshot.points.first?.dateKey == activeDays.first?.dateKey)
-        #expect(snapshot.selectedDay.dateKey == activeDays.first?.dateKey)
-        #expect(snapshot.points.map(\.dateKey) == activeDays.map(\.dateKey))
+        #expect(snapshot.selectedDay.dateKey == anchorKey)
+        #expect(snapshot.chart.points.firstIndex(where: { $0.dateKey == snapshot.selectedDay.dateKey }) == 3)
+        #expect(snapshotDateKeys == visibleDateKeys)
+        #expect(snapshot.chart.points.count == 7)
+        #expect(snapshot.chart.compactYTicks.count == 4)
+        #expect(snapshot.chart.points.map { Self.weekdayInitial(for: $0.date, timeZone: timeZone) } == ["F", "S", "S", "M", "T", "W", "T"])
+
+        let focusedSnapshot = provider.compactSnapshot(
+            dataset: dataset,
+            selectedDateKey: activeDays[0].dateKey,
+            now: today,
+            timeZone: timeZone
+        )
+        let focusedDateKeys = focusedSnapshot.points.map { $0.dateKey }
+
+        #expect(focusedSnapshot.selectedDay.dateKey == activeDays[0].dateKey)
+        #expect(focusedSnapshot.chart.points.firstIndex(where: { $0.dateKey == anchorKey }) == 3)
+        #expect(focusedSnapshot.chart.points.firstIndex(where: { $0.dateKey == focusedSnapshot.selectedDay.dateKey }) == 0)
+        #expect(focusedDateKeys == visibleDateKeys)
+        #expect(focusedSnapshot.selectedDay.relativeLabel == "FRIDAY")
+        #expect(focusedSnapshot.summary.secondaryText == "Friday's alarm is 30 minutes before Fajr ends.")
     }
 
     private static func makeDate(
@@ -425,6 +547,10 @@ struct ScheduleServiceExtractionTests {
         return calendar.date(from: components) ?? .distantPast
     }
 
+    private static func normalizedTimeSpaces(_ value: String) -> String {
+        value.replacingOccurrences(of: "\u{202F}", with: " ")
+    }
+
     private static func makeSchedule(for date: Date, timeZone: TimeZone) -> DaySchedule {
         let dayStart = DateHelpers.startOfDay(date, in: timeZone)
         let fajr = dayStart.addingTimeInterval(5 * 60 * 60)
@@ -443,6 +569,28 @@ struct ScheduleServiceExtractionTests {
             calculationMethodName: "Test",
             timeZone: timeZone
         )
+    }
+
+    private static func weekdayInitial(for date: Date, timeZone: TimeZone) -> String {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+
+        switch calendar.component(.weekday, from: date) {
+        case 2:
+            return "M"
+        case 3:
+            return "T"
+        case 4:
+            return "W"
+        case 5:
+            return "T"
+        case 6:
+            return "F"
+        case 7:
+            return "S"
+        default:
+            return "S"
+        }
     }
 
     private static func makeWakeEntry(

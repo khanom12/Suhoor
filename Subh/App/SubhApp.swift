@@ -14,9 +14,16 @@ struct SubhApp: App {
 
     init() {
         #if DEBUG
-        DeveloperInstallReset.resetIfNeeded {
+        let resetMode = DeveloperInstallReset.configuredMode()
+        let didReset = DeveloperInstallReset.resetIfNeeded(mode: resetMode) {
             UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
         }
+        EventTimelineLog.shared.record(
+            category: "startup",
+            message: didReset
+                ? "Debug install reset applied (mode=\(resetMode.rawValue))."
+                : "Debug install reset skipped (mode=\(resetMode.rawValue))."
+        )
         #endif
 
         let appNavigator = AppNavigator()
