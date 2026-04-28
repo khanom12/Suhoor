@@ -637,31 +637,27 @@ struct FajrWindowChartView: View {
     }
 
     private var compactTotalHeight: CGFloat {
-        if dynamicTypeSize.isAccessibilitySize {
-            return 156
-        }
+        compactLayoutProfile.minimumChartHeight
+    }
 
-        if dynamicTypeSize >= .xxxLarge {
-            return 148
-        }
-
-        return 143
+    private var compactLayoutProfile: CompactFajrcastChartLayoutProfile {
+        CompactFajrcastChartLayoutProfile(dynamicTypeSize: dynamicTypeSize)
     }
 
     private var compactMarkerPointSize: CGFloat {
-        dynamicTypeSize.isAccessibilitySize ? 15 : 13
+        compactLayoutProfile.scaled(base: 13)
     }
 
     private var compactSkippedMarkerPointSize: CGFloat {
-        dynamicTypeSize.isAccessibilitySize ? 12 : 10
+        compactLayoutProfile.scaled(base: 10)
     }
 
     private var compactYAxisValuePointSize: CGFloat {
-        dynamicTypeSize.isAccessibilitySize ? 16 : 13
+        compactLayoutProfile.scaled(base: 13)
     }
 
     private var compactYAxisLabelHeight: CGFloat {
-        dynamicTypeSize.isAccessibilitySize ? 20 : 16
+        compactLayoutProfile.scaled(base: 16)
     }
 
     private var compactYAxisLabelTopInset: CGFloat {
@@ -669,19 +665,19 @@ struct FajrWindowChartView: View {
     }
 
     private var compactAxisPointSize: CGFloat {
-        dynamicTypeSize.isAccessibilitySize ? 16 : 13
+        compactLayoutProfile.scaled(base: 13)
     }
 
     private var compactCalloutLabelPointSize: CGFloat {
-        dynamicTypeSize.isAccessibilitySize ? 16 : 13
+        compactLayoutProfile.scaled(base: 13)
     }
 
     private var compactCalloutTimePointSize: CGFloat {
-        dynamicTypeSize.isAccessibilitySize ? 22 : 18
+        compactLayoutProfile.scaled(base: 18)
     }
 
     private var compactCalloutSuffixPointSize: CGFloat {
-        dynamicTypeSize.isAccessibilitySize ? 13 : 11
+        compactLayoutProfile.scaled(base: 11)
     }
 
     private var compactCalloutStackSpacing: CGFloat {
@@ -697,11 +693,11 @@ struct FajrWindowChartView: View {
     }
 
     private var compactSelectedCalloutWidth: CGFloat {
-        dynamicTypeSize.isAccessibilitySize ? 110 : 86
+        compactLayoutProfile.calloutWidth
     }
 
     private var compactXAxisLabelFrameWidth: CGFloat {
-        dynamicTypeSize.isAccessibilitySize ? 20 : 16
+        compactLayoutProfile.scaled(base: 16)
     }
 
     private var compactXAxisLabelCenterOffset: CGFloat {
@@ -709,16 +705,19 @@ struct FajrWindowChartView: View {
     }
 
     private func compactLayoutMetrics(in size: CGSize) -> CompactLayoutMetrics {
-        let plotTop = dynamicTypeSize.isAccessibilitySize ? 46.0 : 39.0
-        let plotHeight = dynamicTypeSize.isAccessibilitySize ? 90.0 : 84.0
-        let rightRailWidth = dynamicTypeSize.isAccessibilitySize ? 48.0 : 39.0
+        let layoutProfile = compactLayoutProfile
+        let plotTop = max(39.0, 30.0 + (9.0 * layoutProfile.textScale))
+        let xAxisClearance = max(24.0, 20.0 * layoutProfile.textScale)
+        let bottomPadding = max(8.0, 6.0 * layoutProfile.textScale)
+        let plotHeight = max(72.0, size.height - plotTop - xAxisClearance - bottomPadding)
+        let rightRailWidth = layoutProfile.minimumRailWidth
         let plotMinX = 1.0
         let dayColumnWidth = max(1, size.width - rightRailWidth - plotMinX)
         let plotWidth = max(1, dayColumnWidth - 1)
-        let weekdayRowY = plotTop + plotHeight + (dynamicTypeSize.isAccessibilitySize ? 13 : 12)
-        let yAxisLabelWidth = dynamicTypeSize.isAccessibilitySize ? 40.0 : 32.0
-        let yAxisLabelMinX = size.width - (dynamicTypeSize.isAccessibilitySize ? 43.0 : 35.0)
+        let weekdayRowY = plotTop + plotHeight + max(12.0, 10.0 * layoutProfile.textScale)
+        let yAxisLabelWidth = max(32.0, rightRailWidth - 7.0)
         let rightRailMinX = size.width - rightRailWidth
+        let yAxisLabelMinX = rightRailMinX + 4.0
 
         let chartFrame = CGRect(
             x: 0,
@@ -1061,4 +1060,59 @@ struct FajrWindowChartView: View {
         return (tokens.dropLast().joined(separator: " "), tokens.last)
     }
 
+}
+
+private struct CompactFajrcastChartLayoutProfile {
+    let textScale: CGFloat
+    let minimumChartHeight: CGFloat
+    let minimumRailWidth: CGFloat
+
+    init(dynamicTypeSize: DynamicTypeSize) {
+        switch dynamicTypeSize {
+        case .xSmall:
+            self.init(textScale: 0.88, minimumChartHeight: 136, minimumRailWidth: 40)
+        case .small:
+            self.init(textScale: 0.94, minimumChartHeight: 140, minimumRailWidth: 42)
+        case .medium:
+            self.init(textScale: 0.98, minimumChartHeight: 142, minimumRailWidth: 44)
+        case .large:
+            self.init(textScale: 1.0, minimumChartHeight: 143, minimumRailWidth: 46)
+        case .xLarge:
+            self.init(textScale: 1.08, minimumChartHeight: 150, minimumRailWidth: 52)
+        case .xxLarge:
+            self.init(textScale: 1.17, minimumChartHeight: 158, minimumRailWidth: 58)
+        case .xxxLarge:
+            self.init(textScale: 1.28, minimumChartHeight: 168, minimumRailWidth: 64)
+        case .accessibility1:
+            self.init(textScale: 1.38, minimumChartHeight: 180, minimumRailWidth: 72)
+        case .accessibility2:
+            self.init(textScale: 1.48, minimumChartHeight: 192, minimumRailWidth: 80)
+        case .accessibility3:
+            self.init(textScale: 1.60, minimumChartHeight: 206, minimumRailWidth: 88)
+        case .accessibility4:
+            self.init(textScale: 1.72, minimumChartHeight: 222, minimumRailWidth: 96)
+        case .accessibility5:
+            self.init(textScale: 1.84, minimumChartHeight: 238, minimumRailWidth: 104)
+        @unknown default:
+            self.init(textScale: 1.0, minimumChartHeight: 143, minimumRailWidth: 46)
+        }
+    }
+
+    private init(
+        textScale: CGFloat,
+        minimumChartHeight: CGFloat,
+        minimumRailWidth: CGFloat
+    ) {
+        self.textScale = textScale
+        self.minimumChartHeight = minimumChartHeight
+        self.minimumRailWidth = minimumRailWidth
+    }
+
+    var calloutWidth: CGFloat {
+        max(86, 86 + ((textScale - 1) * 72))
+    }
+
+    func scaled(base: CGFloat) -> CGFloat {
+        max(base * 0.88, (base * textScale).rounded(.toNearestOrAwayFromZero))
+    }
 }

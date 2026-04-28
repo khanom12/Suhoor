@@ -143,16 +143,12 @@ struct WeeklyFajrcastCard: View {
         return nil
     }
 
+    private var layoutProfile: WeeklyFajrcastCardLayoutProfile {
+        WeeklyFajrcastCardLayoutProfile(dynamicTypeSize: dynamicTypeSize)
+    }
+
     private var minimumHeight: CGFloat {
-        if dynamicTypeSize.isAccessibilitySize {
-            return 252
-        }
-
-        if dynamicTypeSize >= .xxxLarge {
-            return 229
-        }
-
-        return 224
+        layoutProfile.minimumCardHeight
     }
 
     private var horizontalInset: CGFloat {
@@ -168,15 +164,7 @@ struct WeeklyFajrcastCard: View {
     }
 
     private var chartHeight: CGFloat {
-        if dynamicTypeSize.isAccessibilitySize {
-            return 156
-        }
-
-        if dynamicTypeSize >= .xxxLarge {
-            return 148
-        }
-
-        return 143
+        layoutProfile.minimumChartHeight
     }
 
     private var footerVerticalPadding: CGFloat {
@@ -188,27 +176,27 @@ struct WeeklyFajrcastCard: View {
     }
 
     private var monthTagWidth: CGFloat {
-        196
+        layoutProfile.monthTagWidth
     }
 
     private var monthTagHeight: CGFloat {
-        dynamicTypeSize.isAccessibilitySize ? 28 : 24
+        layoutProfile.monthTagHeight
     }
 
     private var titlePointSize: CGFloat {
-        dynamicTypeSize.isAccessibilitySize ? 13 : 12
+        layoutProfile.scaled(base: 12)
     }
 
     private var monthTagPointSize: CGFloat {
-        dynamicTypeSize.isAccessibilitySize ? 13 : 12
+        layoutProfile.scaled(base: 12)
     }
 
     private var footerPointSize: CGFloat {
-        dynamicTypeSize.isAccessibilitySize ? 16 : 13
+        layoutProfile.scaled(base: 13)
     }
 
     private var footerSecondaryPointSize: CGFloat {
-        dynamicTypeSize.isAccessibilitySize ? 15 : 13
+        layoutProfile.scaled(base: 13)
     }
 
     private var titleColor: Color {
@@ -387,6 +375,68 @@ struct WeeklyFajrcastCard: View {
 private enum WeekTagHijriTokenStyle {
     case preferred
     case compact
+}
+
+private struct WeeklyFajrcastCardLayoutProfile {
+    let textScale: CGFloat
+    let minimumCardHeight: CGFloat
+    let minimumChartHeight: CGFloat
+    let minimumRailWidth: CGFloat
+
+    init(dynamicTypeSize: DynamicTypeSize) {
+        switch dynamicTypeSize {
+        case .xSmall:
+            self.init(textScale: 0.88, minimumCardHeight: 216, minimumChartHeight: 136, minimumRailWidth: 40)
+        case .small:
+            self.init(textScale: 0.94, minimumCardHeight: 220, minimumChartHeight: 140, minimumRailWidth: 42)
+        case .medium:
+            self.init(textScale: 0.98, minimumCardHeight: 222, minimumChartHeight: 142, minimumRailWidth: 44)
+        case .large:
+            self.init(textScale: 1.0, minimumCardHeight: 224, minimumChartHeight: 143, minimumRailWidth: 46)
+        case .xLarge:
+            self.init(textScale: 1.08, minimumCardHeight: 236, minimumChartHeight: 150, minimumRailWidth: 52)
+        case .xxLarge:
+            self.init(textScale: 1.17, minimumCardHeight: 248, minimumChartHeight: 158, minimumRailWidth: 58)
+        case .xxxLarge:
+            self.init(textScale: 1.28, minimumCardHeight: 264, minimumChartHeight: 168, minimumRailWidth: 64)
+        case .accessibility1:
+            self.init(textScale: 1.38, minimumCardHeight: 282, minimumChartHeight: 180, minimumRailWidth: 72)
+        case .accessibility2:
+            self.init(textScale: 1.48, minimumCardHeight: 304, minimumChartHeight: 192, minimumRailWidth: 80)
+        case .accessibility3:
+            self.init(textScale: 1.60, minimumCardHeight: 328, minimumChartHeight: 206, minimumRailWidth: 88)
+        case .accessibility4:
+            self.init(textScale: 1.72, minimumCardHeight: 352, minimumChartHeight: 222, minimumRailWidth: 96)
+        case .accessibility5:
+            self.init(textScale: 1.84, minimumCardHeight: 378, minimumChartHeight: 238, minimumRailWidth: 104)
+        @unknown default:
+            self.init(textScale: 1.0, minimumCardHeight: 224, minimumChartHeight: 143, minimumRailWidth: 46)
+        }
+    }
+
+    private init(
+        textScale: CGFloat,
+        minimumCardHeight: CGFloat,
+        minimumChartHeight: CGFloat,
+        minimumRailWidth: CGFloat
+    ) {
+        self.textScale = textScale
+        self.minimumCardHeight = minimumCardHeight
+        self.minimumChartHeight = minimumChartHeight
+        self.minimumRailWidth = minimumRailWidth
+    }
+
+    var monthTagWidth: CGFloat {
+        max(196, 196 + ((textScale - 1) * 84))
+    }
+
+    var monthTagHeight: CGFloat {
+        max(24, ceil((12 * textScale * 1.2) + 8))
+    }
+
+    func scaled(base: CGFloat) -> CGFloat {
+        max(base * 0.88, (base * textScale).rounded(.toNearestOrAwayFromZero))
+    }
 }
 
 typealias FajrWindowCompactCard = WeeklyFajrcastCard
