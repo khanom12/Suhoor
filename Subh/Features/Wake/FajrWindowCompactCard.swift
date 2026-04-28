@@ -40,7 +40,6 @@ struct WeeklyFajrcastCard: View {
                         accessibilityValue: accessibilitySummary,
                         accessibilityHint: "Adjust to focus another visible morning."
                     )
-                    .frame(height: chartHeight)
                     .padding(.horizontal, horizontalInset)
                     .padding(.vertical, chartVerticalPadding)
 
@@ -164,10 +163,6 @@ struct WeeklyFajrcastCard: View {
 
     private var chartVerticalPadding: CGFloat {
         dynamicTypeSize.isAccessibilitySize ? 8 : 7
-    }
-
-    private var chartHeight: CGFloat {
-        layoutProfile.minimumChartHeight
     }
 
     private var footerVerticalPadding: CGFloat {
@@ -388,50 +383,44 @@ private enum WeekTagHijriTokenStyle {
 private struct WeeklyFajrcastCardLayoutProfile {
     let textScale: CGFloat
     let minimumCardHeight: CGFloat
-    let minimumChartHeight: CGFloat
-    let minimumRailWidth: CGFloat
 
     init(dynamicTypeSize: DynamicTypeSize) {
         switch dynamicTypeSize {
         case .xSmall:
-            self.init(textScale: 0.88, minimumCardHeight: 282, minimumChartHeight: 206, minimumRailWidth: 40)
+            self.init(textScale: 0.88, minimumCardHeight: 282)
         case .small:
-            self.init(textScale: 0.94, minimumCardHeight: 284, minimumChartHeight: 206, minimumRailWidth: 42)
+            self.init(textScale: 0.94, minimumCardHeight: 284)
         case .medium:
-            self.init(textScale: 0.98, minimumCardHeight: 286, minimumChartHeight: 208, minimumRailWidth: 44)
+            self.init(textScale: 0.98, minimumCardHeight: 286)
         case .large:
-            self.init(textScale: 1.0, minimumCardHeight: 288, minimumChartHeight: 210, minimumRailWidth: 46)
+            self.init(textScale: 1.0, minimumCardHeight: 288)
         case .xLarge:
-            self.init(textScale: 1.08, minimumCardHeight: 302, minimumChartHeight: 216, minimumRailWidth: 52)
+            self.init(textScale: 1.08, minimumCardHeight: 302)
         case .xxLarge:
-            self.init(textScale: 1.17, minimumCardHeight: 314, minimumChartHeight: 224, minimumRailWidth: 58)
+            self.init(textScale: 1.17, minimumCardHeight: 314)
         case .xxxLarge:
-            self.init(textScale: 1.28, minimumCardHeight: 328, minimumChartHeight: 232, minimumRailWidth: 64)
+            self.init(textScale: 1.28, minimumCardHeight: 328)
         case .accessibility1:
-            self.init(textScale: 1.38, minimumCardHeight: 350, minimumChartHeight: 246, minimumRailWidth: 72)
+            self.init(textScale: 1.38, minimumCardHeight: 350)
         case .accessibility2:
-            self.init(textScale: 1.48, minimumCardHeight: 376, minimumChartHeight: 262, minimumRailWidth: 80)
+            self.init(textScale: 1.48, minimumCardHeight: 376)
         case .accessibility3:
-            self.init(textScale: 1.60, minimumCardHeight: 404, minimumChartHeight: 280, minimumRailWidth: 88)
+            self.init(textScale: 1.60, minimumCardHeight: 404)
         case .accessibility4:
-            self.init(textScale: 1.72, minimumCardHeight: 432, minimumChartHeight: 298, minimumRailWidth: 96)
+            self.init(textScale: 1.72, minimumCardHeight: 432)
         case .accessibility5:
-            self.init(textScale: 1.84, minimumCardHeight: 462, minimumChartHeight: 316, minimumRailWidth: 104)
+            self.init(textScale: 1.84, minimumCardHeight: 462)
         @unknown default:
-            self.init(textScale: 1.0, minimumCardHeight: 288, minimumChartHeight: 210, minimumRailWidth: 46)
+            self.init(textScale: 1.0, minimumCardHeight: 288)
         }
     }
 
     private init(
         textScale: CGFloat,
-        minimumCardHeight: CGFloat,
-        minimumChartHeight: CGFloat,
-        minimumRailWidth: CGFloat
+        minimumCardHeight: CGFloat
     ) {
         self.textScale = textScale
         self.minimumCardHeight = minimumCardHeight
-        self.minimumChartHeight = minimumChartHeight
-        self.minimumRailWidth = minimumRailWidth
     }
 
     var monthTagWidth: CGFloat {

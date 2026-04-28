@@ -552,6 +552,72 @@ struct ScheduleServiceExtractionTests {
     }
 
     @Test
+    func compactFajrcastUsesFocusedAdjustedFooterContext() {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let monday = Self.makeDate(year: 2026, month: 4, day: 27, timeZone: timeZone)
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let activeDays = (0..<7).map { offset in
+            Self.makeWakeEntry(
+                date: calendar.date(byAdding: .day, value: offset, to: monday) ?? monday,
+                timeZone: timeZone
+            ).activeDay
+        }
+        let adjustedKey = activeDays[2].dateKey
+        let provider = FajrWindowSurfaceProvider()
+        let dataset = provider.buildDataset(
+            period: .sevenDays,
+            activeDays: activeDays,
+            overrideDateKeys: [adjustedKey],
+            timeZone: timeZone
+        )
+
+        let snapshot = provider.compactSnapshot(
+            dataset: dataset,
+            selectedDateKey: adjustedKey,
+            now: monday,
+            timeZone: timeZone
+        )
+
+        #expect(snapshot.selectedDay.dateKey == adjustedKey)
+        #expect(snapshot.selectedDay.relativeLabel == "WEDNESDAY")
+        #expect(snapshot.summary.secondaryText == "Adjusted: Wednesday's alarm is 30 minutes before Fajr ends.")
+    }
+
+    @Test
+    func compactFajrcastUsesFocusedFastingFooterContext() {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let tomorrow = Self.makeDate(year: 2026, month: 4, day: 27, timeZone: timeZone)
+        let activeDay = Self.makeWakeEntry(
+            date: tomorrow,
+            timeZone: timeZone,
+            context: ResolvedDayContext(
+                primaryContext: .fasting,
+                secondaryContexts: [],
+                supportingTags: [],
+                explanation: .empty
+            )
+        ).activeDay
+        let provider = FajrWindowSurfaceProvider()
+        let dataset = provider.buildDataset(
+            period: .sevenDays,
+            activeDays: [activeDay],
+            overrideDateKeys: [],
+            timeZone: timeZone
+        )
+
+        let snapshot = provider.compactSnapshot(
+            dataset: dataset,
+            selectedDateKey: activeDay.dateKey,
+            now: Self.makeDate(year: 2026, month: 4, day: 26, timeZone: timeZone),
+            timeZone: timeZone
+        )
+
+        #expect(snapshot.selectedDay.relativeLabel == "TOMORROW")
+        #expect(snapshot.summary.secondaryText == "Fasting day: Tomorrow's alarm is 30 minutes before Fajr ends.")
+    }
+
+    @Test
     func compactFajrcastUsesCenteredVisibleWindow() {
         let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
         let today = Self.makeDate(year: 2026, month: 4, day: 26, hour: 22, minute: 34, timeZone: timeZone)
