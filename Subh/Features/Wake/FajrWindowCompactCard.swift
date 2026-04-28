@@ -7,6 +7,7 @@ struct WeeklyFajrcastCard: View {
 
     let snapshot: FajrWindowCompactSnapshot
     var onSelectDateKey: ((String) -> Void)? = nil
+    var onEndSelection: (() -> Void)? = nil
     var onMoveSelection: ((Int) -> Void)? = nil
     let onOpen: () -> Void
 
@@ -31,7 +32,9 @@ struct WeeklyFajrcastCard: View {
                         chart: snapshot.chart,
                         layoutStyle: .compact,
                         compactSelectedDay: snapshot.selectedDay,
+                        compactStaticBackdropDateKey: snapshot.anchorDateKey,
                         onSelectDateKey: selectDateFromChart,
+                        onEndSelection: endSelectionFromChart,
                         onMoveSelection: moveSelectionFromChart,
                         accessibilityLabel: "Weekly Fajrcast chart",
                         accessibilityValue: accessibilitySummary,
@@ -248,6 +251,11 @@ struct WeeklyFajrcastCard: View {
         onSelectDateKey?(dateKey)
     }
 
+    private func endSelectionFromChart() {
+        suppressOpenBriefly()
+        onEndSelection?()
+    }
+
     private func moveSelectionFromChart(_ offset: Int) {
         suppressOpenBriefly()
         onMoveSelection?(offset)
@@ -386,31 +394,31 @@ private struct WeeklyFajrcastCardLayoutProfile {
     init(dynamicTypeSize: DynamicTypeSize) {
         switch dynamicTypeSize {
         case .xSmall:
-            self.init(textScale: 0.88, minimumCardHeight: 216, minimumChartHeight: 136, minimumRailWidth: 40)
+            self.init(textScale: 0.88, minimumCardHeight: 286, minimumChartHeight: 212, minimumRailWidth: 40)
         case .small:
-            self.init(textScale: 0.94, minimumCardHeight: 220, minimumChartHeight: 140, minimumRailWidth: 42)
+            self.init(textScale: 0.94, minimumCardHeight: 288, minimumChartHeight: 212, minimumRailWidth: 42)
         case .medium:
-            self.init(textScale: 0.98, minimumCardHeight: 222, minimumChartHeight: 142, minimumRailWidth: 44)
+            self.init(textScale: 0.98, minimumCardHeight: 290, minimumChartHeight: 214, minimumRailWidth: 44)
         case .large:
-            self.init(textScale: 1.0, minimumCardHeight: 224, minimumChartHeight: 143, minimumRailWidth: 46)
+            self.init(textScale: 1.0, minimumCardHeight: 292, minimumChartHeight: 214, minimumRailWidth: 46)
         case .xLarge:
-            self.init(textScale: 1.08, minimumCardHeight: 236, minimumChartHeight: 150, minimumRailWidth: 52)
+            self.init(textScale: 1.08, minimumCardHeight: 306, minimumChartHeight: 220, minimumRailWidth: 52)
         case .xxLarge:
-            self.init(textScale: 1.17, minimumCardHeight: 248, minimumChartHeight: 158, minimumRailWidth: 58)
+            self.init(textScale: 1.17, minimumCardHeight: 318, minimumChartHeight: 228, minimumRailWidth: 58)
         case .xxxLarge:
-            self.init(textScale: 1.28, minimumCardHeight: 264, minimumChartHeight: 168, minimumRailWidth: 64)
+            self.init(textScale: 1.28, minimumCardHeight: 332, minimumChartHeight: 236, minimumRailWidth: 64)
         case .accessibility1:
-            self.init(textScale: 1.38, minimumCardHeight: 282, minimumChartHeight: 180, minimumRailWidth: 72)
+            self.init(textScale: 1.38, minimumCardHeight: 356, minimumChartHeight: 252, minimumRailWidth: 72)
         case .accessibility2:
-            self.init(textScale: 1.48, minimumCardHeight: 304, minimumChartHeight: 192, minimumRailWidth: 80)
+            self.init(textScale: 1.48, minimumCardHeight: 382, minimumChartHeight: 268, minimumRailWidth: 80)
         case .accessibility3:
-            self.init(textScale: 1.60, minimumCardHeight: 328, minimumChartHeight: 206, minimumRailWidth: 88)
+            self.init(textScale: 1.60, minimumCardHeight: 410, minimumChartHeight: 286, minimumRailWidth: 88)
         case .accessibility4:
-            self.init(textScale: 1.72, minimumCardHeight: 352, minimumChartHeight: 222, minimumRailWidth: 96)
+            self.init(textScale: 1.72, minimumCardHeight: 438, minimumChartHeight: 304, minimumRailWidth: 96)
         case .accessibility5:
-            self.init(textScale: 1.84, minimumCardHeight: 378, minimumChartHeight: 238, minimumRailWidth: 104)
+            self.init(textScale: 1.84, minimumCardHeight: 468, minimumChartHeight: 322, minimumRailWidth: 104)
         @unknown default:
-            self.init(textScale: 1.0, minimumCardHeight: 224, minimumChartHeight: 143, minimumRailWidth: 46)
+            self.init(textScale: 1.0, minimumCardHeight: 292, minimumChartHeight: 214, minimumRailWidth: 46)
         }
     }
 

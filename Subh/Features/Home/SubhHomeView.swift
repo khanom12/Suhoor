@@ -62,6 +62,7 @@ struct SubhHomeView: View {
                         WeeklyFajrcastCard(
                             snapshot: weeklyFajrcast,
                             onSelectDateKey: selectWeeklyFajrcastDate,
+                            onEndSelection: resetWeeklyFajrcastFocus,
                             onMoveSelection: moveWeeklyFajrcastSelection
                         ) {
                             destination = .fajrcast(selectedDateKey: weeklyFajrcast.selectedDay.dateKey)
@@ -131,6 +132,14 @@ struct SubhHomeView: View {
     private func selectWeeklyFajrcastDate(_ dateKey: String) {
         withAnimation(.easeInOut(duration: 0.18)) {
             weeklyFajrcastFocusedDateKey = dateKey
+        }
+    }
+
+    private func resetWeeklyFajrcastFocus() {
+        guard weeklyFajrcastFocusedDateKey != nil else { return }
+
+        withAnimation(.easeInOut(duration: 0.22)) {
+            weeklyFajrcastFocusedDateKey = nil
         }
     }
 

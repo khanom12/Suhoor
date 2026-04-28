@@ -605,6 +605,20 @@ struct ScheduleServiceExtractionTests {
         #expect(focusedDateKeys == visibleDateKeys)
         #expect(focusedSnapshot.selectedDay.relativeLabel == "FRIDAY")
         #expect(focusedSnapshot.summary.secondaryText == "Friday's alarm was 30 minutes before Fajr ended.")
+
+        let snapBackSnapshot = provider.compactSnapshot(
+            dataset: dataset,
+            anchorDateKey: anchorKey,
+            selectedDateKey: nil,
+            now: today,
+            timeZone: timeZone
+        )
+        let snapBackDateKeys = snapBackSnapshot.points.map { $0.dateKey }
+
+        #expect(snapBackSnapshot.selectedDay.dateKey == anchorKey)
+        #expect(snapBackSnapshot.chart.points.firstIndex(where: { $0.dateKey == snapBackSnapshot.selectedDay.dateKey }) == 3)
+        #expect(snapBackDateKeys == visibleDateKeys)
+        #expect(snapBackSnapshot.summary.secondaryText == "Tomorrow's alarm is 30 minutes before Fajr ends.")
     }
 
     private static func makeDate(

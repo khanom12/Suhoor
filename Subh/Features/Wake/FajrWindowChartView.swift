@@ -61,7 +61,9 @@ struct FajrWindowChartView: View {
     let chart: FajrWindowChartSnapshot
     let layoutStyle: LayoutStyle
     var compactSelectedDay: FajrWindowCompactSelectedDaySnapshot? = nil
+    var compactStaticBackdropDateKey: String? = nil
     var onSelectDateKey: ((String) -> Void)? = nil
+    var onEndSelection: (() -> Void)? = nil
     var onMoveSelection: ((Int) -> Void)? = nil
     var accessibilityLabel: String? = nil
     var accessibilityValue: String? = nil
@@ -545,7 +547,7 @@ struct FajrWindowChartView: View {
                 .font(.system(size: compactYAxisValuePointSize, weight: .medium))
                 .foregroundStyle(compactSecondaryTextColor)
                 .monospacedDigit()
-                .frame(width: metrics.yAxisLabelWidth, height: compactYAxisLabelHeight, alignment: .topLeading)
+                .frame(width: metrics.yAxisLabelWidth, height: compactYAxisLabelHeight, alignment: .topTrailing)
                 .offset(
                     x: metrics.yAxisLabelMinX,
                     y: yPosition(for: tick.minutes, in: metrics.plotFrame) + compactYAxisLabelTopInset
@@ -563,6 +565,9 @@ struct FajrWindowChartView: View {
                         .onChanged { value in
                             guard let point = nearestPoint(to: value.location.x, in: frame) else { return }
                             onSelectDateKey(point.dateKey)
+                        }
+                        .onEnded { _ in
+                            onEndSelection?()
                         }
                 )
         }
@@ -706,15 +711,16 @@ struct FajrWindowChartView: View {
 
     private func compactLayoutMetrics(in size: CGSize) -> CompactLayoutMetrics {
         let layoutProfile = compactLayoutProfile
-        let plotTop = max(39.0, 30.0 + (9.0 * layoutProfile.textScale))
-        let xAxisClearance = max(24.0, 20.0 * layoutProfile.textScale)
-        let bottomPadding = max(8.0, 6.0 * layoutProfile.textScale)
-        let plotHeight = max(72.0, size.height - plotTop - xAxisClearance - bottomPadding)
+        let plotTop = max(38.0, 30.0 + (9.0 * layoutProfile.textScale))
+        let plotHeight = max(
+            layoutProfile.staticPlotScaleHeight,
+            size.height - plotTop - max(16.0, 13.0 * layoutProfile.textScale)
+        )
         let rightRailWidth = layoutProfile.minimumRailWidth
         let plotMinX = 1.0
         let dayColumnWidth = max(1, size.width - rightRailWidth - plotMinX)
         let plotWidth = max(1, dayColumnWidth - 1)
-        let weekdayRowY = plotTop + plotHeight + max(12.0, 10.0 * layoutProfile.textScale)
+        let weekdayRowY = plotTop + plotHeight + max(11.0, 9.0 * layoutProfile.textScale)
         let yAxisLabelWidth = max(32.0, rightRailWidth - 7.0)
         let rightRailMinX = size.width - rightRailWidth
         let yAxisLabelMinX = rightRailMinX + 4.0
@@ -770,9 +776,10 @@ struct FajrWindowChartView: View {
 
     @ViewBuilder
     private func compactSelectedRangeBackdrop(in metrics: CompactLayoutMetrics) -> some View {
-        if let selectedPoint = chart.points.first(where: { $0.dateKey == chart.selectedDateKey }) {
-            let placement = compactSelectedDayPlacement(for: selectedPoint)
-            let selectedX = xPosition(for: selectedPoint, in: metrics.dayColumnFrame)
+        let backdropDateKey = compactStaticBackdropDateKey ?? chart.selectedDateKey
+        if let backdropPoint = chart.points.first(where: { $0.dateKey == backdropDateKey }) {
+            let placement = compactSelectedDayPlacement(for: backdropPoint)
+            let backdropX = xPosition(for: backdropPoint, in: metrics.dayColumnFrame)
 
             if placement != .leading {
                 Rectangle()
@@ -782,11 +789,11 @@ struct FajrWindowChartView: View {
                             .stroke(Color.white.opacity(0.05), lineWidth: 1)
                     )
                     .frame(
-                        width: max(0, selectedX),
+                        width: max(0, backdropX),
                         height: metrics.plotFrame.height
                     )
                     .position(
-                        x: max(0, selectedX) / 2,
+                        x: max(0, backdropX) / 2,
                         y: metrics.plotFrame.midY
                     )
             }
@@ -1066,46 +1073,49 @@ private struct CompactFajrcastChartLayoutProfile {
     let textScale: CGFloat
     let minimumChartHeight: CGFloat
     let minimumRailWidth: CGFloat
+    let staticPlotScaleHeight: CGFloat
 
     init(dynamicTypeSize: DynamicTypeSize) {
         switch dynamicTypeSize {
         case .xSmall:
-            self.init(textScale: 0.88, minimumChartHeight: 136, minimumRailWidth: 40)
+            self.init(textScale: 0.88, minimumChartHeight: 212, minimumRailWidth: 40, staticPlotScaleHeight: 160)
         case .small:
-            self.init(textScale: 0.94, minimumChartHeight: 140, minimumRailWidth: 42)
+            self.init(textScale: 0.94, minimumChartHeight: 212, minimumRailWidth: 42, staticPlotScaleHeight: 160)
         case .medium:
-            self.init(textScale: 0.98, minimumChartHeight: 142, minimumRailWidth: 44)
+            self.init(textScale: 0.98, minimumChartHeight: 214, minimumRailWidth: 44, staticPlotScaleHeight: 160)
         case .large:
-            self.init(textScale: 1.0, minimumChartHeight: 143, minimumRailWidth: 46)
+            self.init(textScale: 1.0, minimumChartHeight: 214, minimumRailWidth: 46, staticPlotScaleHeight: 160)
         case .xLarge:
-            self.init(textScale: 1.08, minimumChartHeight: 150, minimumRailWidth: 52)
+            self.init(textScale: 1.08, minimumChartHeight: 220, minimumRailWidth: 52, staticPlotScaleHeight: 160)
         case .xxLarge:
-            self.init(textScale: 1.17, minimumChartHeight: 158, minimumRailWidth: 58)
+            self.init(textScale: 1.17, minimumChartHeight: 228, minimumRailWidth: 58, staticPlotScaleHeight: 160)
         case .xxxLarge:
-            self.init(textScale: 1.28, minimumChartHeight: 168, minimumRailWidth: 64)
+            self.init(textScale: 1.28, minimumChartHeight: 236, minimumRailWidth: 64, staticPlotScaleHeight: 160)
         case .accessibility1:
-            self.init(textScale: 1.38, minimumChartHeight: 180, minimumRailWidth: 72)
+            self.init(textScale: 1.38, minimumChartHeight: 252, minimumRailWidth: 72, staticPlotScaleHeight: 168)
         case .accessibility2:
-            self.init(textScale: 1.48, minimumChartHeight: 192, minimumRailWidth: 80)
+            self.init(textScale: 1.48, minimumChartHeight: 268, minimumRailWidth: 80, staticPlotScaleHeight: 176)
         case .accessibility3:
-            self.init(textScale: 1.60, minimumChartHeight: 206, minimumRailWidth: 88)
+            self.init(textScale: 1.60, minimumChartHeight: 286, minimumRailWidth: 88, staticPlotScaleHeight: 184)
         case .accessibility4:
-            self.init(textScale: 1.72, minimumChartHeight: 222, minimumRailWidth: 96)
+            self.init(textScale: 1.72, minimumChartHeight: 304, minimumRailWidth: 96, staticPlotScaleHeight: 192)
         case .accessibility5:
-            self.init(textScale: 1.84, minimumChartHeight: 238, minimumRailWidth: 104)
+            self.init(textScale: 1.84, minimumChartHeight: 322, minimumRailWidth: 104, staticPlotScaleHeight: 200)
         @unknown default:
-            self.init(textScale: 1.0, minimumChartHeight: 143, minimumRailWidth: 46)
+            self.init(textScale: 1.0, minimumChartHeight: 214, minimumRailWidth: 46, staticPlotScaleHeight: 160)
         }
     }
 
     private init(
         textScale: CGFloat,
         minimumChartHeight: CGFloat,
-        minimumRailWidth: CGFloat
+        minimumRailWidth: CGFloat,
+        staticPlotScaleHeight: CGFloat
     ) {
         self.textScale = textScale
         self.minimumChartHeight = minimumChartHeight
         self.minimumRailWidth = minimumRailWidth
+        self.staticPlotScaleHeight = staticPlotScaleHeight
     }
 
     var calloutWidth: CGFloat {
