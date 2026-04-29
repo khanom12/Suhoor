@@ -12,6 +12,13 @@ final class MorningHeroFajrAdjusterUITests: XCTestCase {
         ]
         app.launch()
 
+        let location = app.descendants(matching: .any)["morningHero.location"]
+        XCTAssertTrue(location.waitForExistence(timeout: 12))
+        XCTAssertEqual(location.label, "Toronto")
+
+        let relativeDay = app.descendants(matching: .any)["morningHero.relativeDay"]
+        XCTAssertTrue(relativeDay.waitForExistence(timeout: 4))
+
         let primaryWakeTime = app.descendants(matching: .any)["morningHero.primaryWakeTime"]
         XCTAssertTrue(primaryWakeTime.waitForExistence(timeout: 12))
 
@@ -33,6 +40,8 @@ final class MorningHeroFajrAdjusterUITests: XCTestCase {
         XCTAssertTrue(track.exists)
         XCTAssertTrue(marker.exists)
         XCTAssertTrue(endTime.exists)
+        XCTAssertLessThan(location.frame.maxY, relativeDay.frame.minY)
+        XCTAssertLessThan(fajrWindow.frame.maxY, relation.frame.minY)
 
         let markerStart = marker.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
         let trackEnd = track.coordinate(withNormalizedOffset: CGVector(dx: 0.92, dy: 0.5))

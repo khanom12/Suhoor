@@ -33,6 +33,8 @@ enum MorningHeroFajrWindowVisualMode: String, Equatable {
 }
 
 struct MorningHomeHeroDisplay: Equatable {
+    let locationText: String
+    let locationIconName: String?
     let title: String
     let dateLine: String?
     let wakeState: MorningHeroWakeState
@@ -72,16 +74,21 @@ enum MorningHomePresentation {
     static func heroDisplay(
         entry: WakeRowEntry?,
         permissionSummary: String,
+        locationDisplayText: String? = nil,
+        locationIconName: String? = nil,
         currentDate: Date = Date(),
         timeZone: TimeZone = .current,
         hijriDateTextProvider: ((Date, TimeZone) -> String?)? = nil,
         accessibleHijriDateTextProvider: ((Date, TimeZone) -> String?)? = nil
     ) -> MorningHomeHeroDisplay {
+        let fallbackLocation = locationDisplayText.flatMap(Self.nonEmptyLocationText) ?? "Location unavailable"
         guard let entry else {
             let detail = permissionSummary.isEmpty
                 ? "Subh will show tomorrow once schedule data is available."
                 : permissionSummary
             return MorningHomeHeroDisplay(
+                locationText: fallbackLocation,
+                locationIconName: locationIconName,
                 title: "Tomorrow",
                 dateLine: nil,
                 wakeState: .unavailable,
@@ -105,10 +112,13 @@ enum MorningHomePresentation {
                 wakeAdjustmentRelationAnchor: nil,
                 wakeAdjustmentAccessibilityValue: nil,
                 chipTitles: [],
-                accessibilityLabel: "Tomorrow. Wake time unavailable. \(detail). Fajr times are not available yet."
+                accessibilityLabel: "\(fallbackLocation). Tomorrow. Wake time unavailable. \(detail). Fajr times are not available yet."
             )
         }
 
+        let locationText = locationDisplayText.flatMap(Self.nonEmptyLocationText)
+            ?? nonEmptyLocationText(entry.schedule.locationDescription)
+            ?? "Location unavailable"
         let title = relativeDayLabel(
             targetDate: entry.schedule.date,
             wakeDate: entry.schedule.wakeDate,
@@ -128,6 +138,7 @@ enum MorningHomePresentation {
         let primaryTime = wakeState == .active ? entry.schedule.wakeDate : nil
         let primaryText = primaryDisplayText(for: entry, wakeState: wakeState, timeZone: timeZone)
         let accessibilityLabel = heroAccessibilityLabel(
+            locationText: locationText,
             title: title,
             entry: entry,
             dateLine: dateLine,
@@ -140,6 +151,8 @@ enum MorningHomePresentation {
         )
 
         return MorningHomeHeroDisplay(
+            locationText: locationText,
+            locationIconName: locationIconName,
             title: title,
             dateLine: dateLine,
             wakeState: wakeState,
@@ -201,6 +214,8 @@ enum MorningHomePresentation {
         )
 
         return MorningHomeHeroDisplay(
+            locationText: display.locationText,
+            locationIconName: display.locationIconName,
             title: display.title,
             dateLine: display.dateLine,
             wakeState: display.wakeState,
@@ -553,24 +568,17 @@ enum MorningHomePresentation {
     }
 
     private static func heroAccessibilityLabel(
+        locationText: String,
         title: String,
         entry: WakeRowEntry,
-        dateLine: String?,
+        dateLine _: String?,
         wakeState: MorningHeroWakeState,
         primaryText: String,
         detailText: String,
         fajrWindowAccessibilityText: String,
         timeZone: TimeZone,
-        accessibleHijriDateTextProvider: ((Date, TimeZone) -> String?)?
+        accessibleHijriDateTextProvider _: ((Date, TimeZone) -> String?)?
     ) -> String {
-        let fullDate = compactGregorianDateText(for: entry.schedule.date, timeZone: timeZone)
-        let hijri: String?
-        if let accessibleHijriDateTextProvider {
-            hijri = accessibleHijriDateTextProvider(entry.schedule.date, timeZone)
-        } else {
-            hijri = accessibleHijriDateText(for: entry.schedule.date, timeZone: timeZone)
-        }
-        let dateText = [fullDate, hijri].compactMap { $0 }.joined(separator: ", ")
         let wakeText: String
         if wakeState == .active {
             wakeText = "Wake alarm at \(timeFormatter(timeZone: timeZone).string(from: entry.schedule.wakeDate))"
@@ -579,17 +587,21 @@ enum MorningHomePresentation {
         }
 
         return [
-            dateText.isEmpty ? dateLine : dateText,
+            locationText,
             title,
             wakeText,
             detailText,
             fajrWindowAccessibilityText.replacingOccurrences(of: " • ", with: ". ")
         ]
-            .compactMap { value in
-                guard let value, !value.isEmpty else { return nil }
-                return value
-            }
+            .filter { !$0.isEmpty }
             .joined(separator: ". ")
+    }
+
+    private static func nonEmptyLocationText(_ text: String?) -> String? {
+        guard let trimmed = text?.trimmingCharacters(in: .whitespacesAndNewlines), !trimmed.isEmpty else {
+            return nil
+        }
+        return trimmed
     }
 
     private static func relativeDayLabel(

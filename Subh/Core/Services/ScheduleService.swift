@@ -303,6 +303,14 @@ final class ScheduleManager: ObservableObject {
         timeProvider.now()
     }
 
+    var currentPrayerLocationDisplayText: String {
+        prayerLocationDisplayText()
+    }
+
+    var currentPrayerLocationIconName: String? {
+        settingsStore.settings.locationMode == .auto ? "location.fill" : nil
+    }
+
     var nextWakeEventSummary: NextWakeEventSummary? {
         nextWakeEventResolver.resolve(
             activeWindowSnapshot: activeWindowSnapshot,
@@ -2013,6 +2021,25 @@ final class ScheduleManager: ObservableObject {
         return nil
     }
 
+    private func prayerLocationDisplayText() -> String {
+        switch settingsStore.settings.locationMode {
+        case .auto:
+            if !locationService.locationName.isEmpty {
+                return locationService.locationName
+            }
+            if locationService.lastLocation != nil {
+                return "Current location"
+            }
+            return "Location unavailable"
+        case .fixed:
+            return fixedLocationDisplayName() ?? (
+                settingsStore.settings.fixedLocation == nil
+                    ? "Choose location"
+                    : Strings.Settings.locationCustom
+            )
+        }
+    }
+
     private func alarmMessage(for state: AppPermissionState) -> String {
         switch state {
         case .authorized, .notDetermined, .needsFollowUp:
@@ -2119,7 +2146,7 @@ final class ScheduleManager: ObservableObject {
             settings: settingsStore.settings,
             coordinate: coordinate,
             timeZone: timeZone,
-            locationDescription: "Based on your location",
+            locationDescription: prayerLocationDisplayText(),
             provenancesByDateKey: provenancesByDateKey
         )
         return ActiveWindowBuildInput(

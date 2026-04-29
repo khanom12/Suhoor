@@ -53,6 +53,8 @@ struct SubhHomeView: View {
                         TomorrowMorningHero(
                             entry: snapshot.tomorrow,
                             permissionSummary: snapshot.permissionState.summaryText,
+                            locationDisplayText: scheduleManager.currentPrayerLocationDisplayText,
+                            locationIconName: scheduleManager.currentPrayerLocationIconName,
                             currentDate: scheduleManager.currentDate,
                             onCommitWakeAdjustment: { date, wakeTime in
                                 await scheduleManager.commitHeroWakeAdjustment(for: date, wakeTime: wakeTime)
@@ -191,6 +193,8 @@ private struct TomorrowMorningHero: View {
 
     let entry: WakeRowEntry?
     let permissionSummary: String
+    let locationDisplayText: String
+    let locationIconName: String?
     let currentDate: Date
     let onCommitWakeAdjustment: (Date, Date) async -> Bool
     let onOpen: () -> Void
@@ -202,6 +206,8 @@ private struct TomorrowMorningHero: View {
         let baseDisplay = MorningHomePresentation.heroDisplay(
             entry: entry,
             permissionSummary: permissionSummary,
+            locationDisplayText: locationDisplayText,
+            locationIconName: locationIconName,
             currentDate: currentDate
         )
         let display = tentativeWakeTime.map {
@@ -210,14 +216,7 @@ private struct TomorrowMorningHero: View {
         let metrics = MorningHeroMetrics(dynamicTypeSize: dynamicTypeSize)
 
         VStack(alignment: .center, spacing: 0) {
-            if let dateLine = display.dateLine {
-                Text(dateLine)
-                    .font(.system(size: metrics.dateLineSize, weight: .regular))
-                    .foregroundStyle(WakeGlassTheme.secondaryText.opacity(0.92))
-                    .multilineTextAlignment(.center)
-                    .lineLimit(nil)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+            locationLine(display: display, metrics: metrics)
 
             Text(display.title)
                 .font(.system(size: metrics.relativeLabelSize, weight: .regular))
@@ -225,18 +224,10 @@ private struct TomorrowMorningHero: View {
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.top, metrics.dateToRelativeGap)
+                .accessibilityIdentifier(MorningHeroUIIdentifier.relativeDay)
 
             primaryWakeRow(display: display, metrics: metrics)
                 .padding(.top, metrics.relativeToPrimaryGap)
-
-            Text(display.detailText)
-                .font(.system(size: metrics.dateLineSize, weight: .regular))
-                .foregroundStyle(WakeGlassTheme.secondaryText.opacity(0.92))
-                .multilineTextAlignment(.center)
-                .lineLimit(nil)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.top, metrics.primaryToRelationGap)
-                .accessibilityIdentifier(MorningHeroUIIdentifier.relation)
 
             if display.fajrWindowVisualMode.rendersRange {
                 FajrWindowRangeVisual(display: display, metrics: metrics)
@@ -249,8 +240,17 @@ private struct TomorrowMorningHero: View {
                     .heroWakeAdjustmentAccessibility(display: display) { direction in
                         adjustWakeAccessibility(display: display, direction: direction)
                     }
-                    .padding(.top, metrics.relationToWindowGap)
+                    .padding(.top, metrics.primaryToWindowGap)
             }
+
+            Text(display.detailText)
+                .font(.system(size: metrics.dateLineSize, weight: .regular))
+                .foregroundStyle(WakeGlassTheme.secondaryText.opacity(0.92))
+                .multilineTextAlignment(.center)
+                .lineLimit(nil)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, display.fajrWindowVisualMode.rendersRange ? metrics.windowToRelationGap : metrics.primaryToRelationGap)
+                .accessibilityIdentifier(MorningHeroUIIdentifier.relation)
         }
         .frame(maxWidth: metrics.maxContentWidth)
         .padding(.horizontal, DesignTokens.spacingS)
@@ -275,6 +275,32 @@ private struct TomorrowMorningHero: View {
         .accessibilityAddTraits(entry == nil ? [] : .isButton)
         .accessibilityLabel(display.accessibilityLabel)
         .accessibilityHint(entry == nil ? "" : "Double-tap for details.")
+    }
+
+    @ViewBuilder
+    private func locationLine(
+        display: MorningHomeHeroDisplay,
+        metrics: MorningHeroMetrics
+    ) -> some View {
+        HStack(alignment: .center, spacing: max(5, 5 * metrics.scale)) {
+            if let iconName = display.locationIconName {
+                Image(systemName: iconName)
+                    .font(.system(size: metrics.dateLineSize, weight: .regular))
+                    .foregroundStyle(WakeGlassTheme.secondaryText.opacity(0.92))
+                    .accessibilityHidden(true)
+            }
+
+            Text(display.locationText)
+                .font(.system(size: metrics.dateLineSize, weight: .regular))
+                .foregroundStyle(WakeGlassTheme.secondaryText.opacity(0.92))
+                .multilineTextAlignment(.center)
+                .lineLimit(nil)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .center)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(display.locationText)
+        .accessibilityIdentifier(MorningHeroUIIdentifier.location)
     }
 
     @ViewBuilder
@@ -452,7 +478,8 @@ private struct MorningHeroMetrics {
     var relativeToDateGap: CGFloat { dateToRelativeGap }
     var relativeToPrimaryGap: CGFloat { max(9, 11 * min(scale, 1.18)) }
     var primaryToRelationGap: CGFloat { 8 * min(scale, 1.2) }
-    var relationToWindowGap: CGFloat { 12 * min(scale, 1.2) }
+    var primaryToWindowGap: CGFloat { 12 * min(scale, 1.2) }
+    var windowToRelationGap: CGFloat { 8 * min(scale, 1.2) }
     var primaryRowSpacing: CGFloat { max(7, 8 * scale) }
     var iconVerticalOffset: CGFloat { -1 * scale }
     var verticalBreathing: CGFloat { max(18, (minHeroRegionHeight - minTextStackHeight) / 2) }

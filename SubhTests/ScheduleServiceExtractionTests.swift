@@ -464,10 +464,13 @@ struct ScheduleServiceExtractionTests {
         let display = MorningHomePresentation.heroDisplay(
             entry: entry,
             permissionSummary: "",
+            locationDisplayText: "Toronto",
             currentDate: Self.makeDate(year: 2026, month: 4, day: 26, timeZone: timeZone),
             timeZone: timeZone
         )
 
+        #expect(display.locationText == "Toronto")
+        #expect(display.locationIconName == nil)
         #expect(display.title == "Tomorrow")
         #expect(display.dateLine == "April 27 • Dhul Qadah 10")
         #expect(display.dateLine?.contains("Mon") == false)
@@ -491,6 +494,7 @@ struct ScheduleServiceExtractionTests {
         #expect(display.wakeAdjustmentAccessibilityValue?.contains("Adjustable between Fajr begin") == true)
         #expect(Self.normalizedTimeSpaces(display.fajrWindowAccessibilityText ?? "") == "Fajr begins: 5:00 AM. Fajr ends: 6:16 AM")
         #expect(display.chipTitles.isEmpty)
+        #expect(display.accessibilityLabel.hasPrefix("Toronto. Tomorrow."))
         #expect(display.accessibilityLabel.contains("Wake alarm at"))
         #expect(Self.normalizedTimeSpaces(display.accessibilityLabel).contains("Fajr begins: 5:00 AM"))
         #expect(display.accessibilityLabel.contains("sunrise-derived") == false)
@@ -506,6 +510,29 @@ struct ScheduleServiceExtractionTests {
         #expect(adjusted.primaryTime == adjustedWake)
         #expect(adjusted.detailText == "28 min before Fajr ends")
         #expect(abs((adjusted.wakeWindowPositionRatio ?? -1) - (48.0 / 76.0)) < 0.0001)
+    }
+
+    @Test
+    func tomorrowHeroShowsAutomaticLocationIconWhenProvided() {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let entry = Self.makeWakeEntry(
+            date: Self.makeDate(year: 2026, month: 4, day: 27, timeZone: timeZone),
+            timeZone: timeZone
+        )
+
+        let display = MorningHomePresentation.heroDisplay(
+            entry: entry,
+            permissionSummary: "",
+            locationDisplayText: "East York",
+            locationIconName: "location.fill",
+            currentDate: Self.makeDate(year: 2026, month: 4, day: 26, timeZone: timeZone),
+            timeZone: timeZone
+        )
+
+        #expect(display.locationText == "East York")
+        #expect(display.locationIconName == "location.fill")
+        #expect(display.dateLine == "April 27 • Dhul Qadah 10")
+        #expect(display.accessibilityLabel.hasPrefix("East York. Tomorrow."))
     }
 
     @Test
