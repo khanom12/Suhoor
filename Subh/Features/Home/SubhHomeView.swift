@@ -245,7 +245,7 @@ private struct TomorrowMorningHero: View {
 
             Text(display.detailText)
                 .font(.system(size: metrics.dateLineSize, weight: .regular))
-                .foregroundStyle(WakeGlassTheme.secondaryText.opacity(0.92))
+                .foregroundStyle(relationForegroundStyle(for: display.relationTone))
                 .multilineTextAlignment(.center)
                 .lineLimit(nil)
                 .fixedSize(horizontal: false, vertical: true)
@@ -275,6 +275,15 @@ private struct TomorrowMorningHero: View {
         .accessibilityAddTraits(entry == nil ? [] : .isButton)
         .accessibilityLabel(display.accessibilityLabel)
         .accessibilityHint(entry == nil ? "" : "Double-tap for details.")
+    }
+
+    private func relationForegroundStyle(for tone: MorningHeroRelationTone) -> Color {
+        switch tone {
+        case .normal:
+            return WakeGlassTheme.secondaryText.opacity(0.92)
+        case .endpointRed:
+            return Color.red
+        }
     }
 
     @ViewBuilder

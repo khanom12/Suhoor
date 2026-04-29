@@ -1857,6 +1857,8 @@ struct ScheduleManagerHijriTests {
         let startWake = manager.activeDay(for: target.date, timeZone: timeZone)?.schedule.wakeDate
         #expect(startWake ?? .distantPast >= fajrStart)
         #expect(startWake ?? .distantFuture <= fajrEnd)
+        #expect(startDisplay.detailText == "Wake up as Fajr begins")
+        #expect(startDisplay.relationTone == .endpointRed)
         #expect(startDisplay.fajrWindowVisualMode == .interactiveWithinFajrWindow)
         #expect(startDisplay.wakeAdjustmentEnabled)
 
@@ -1874,6 +1876,8 @@ struct ScheduleManagerHijriTests {
         let endWake = manager.activeDay(for: target.date, timeZone: timeZone)?.schedule.wakeDate
         #expect(endWake ?? .distantPast >= fajrStart)
         #expect(endWake ?? .distantFuture <= fajrEnd)
+        #expect(endDisplay.detailText == "Wake up as Fajr ends")
+        #expect(endDisplay.relationTone == .endpointRed)
         #expect(endDisplay.fajrWindowVisualMode == .interactiveWithinFajrWindow)
         #expect(endDisplay.wakeAdjustmentEnabled)
     }

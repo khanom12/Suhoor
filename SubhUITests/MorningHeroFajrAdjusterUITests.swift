@@ -69,6 +69,7 @@ final class MorningHeroFajrAdjusterUITests: XCTestCase {
         expectation(for: wakeChangedAtBegin, evaluatedWith: primaryWakeTime)
         waitForExpectations(timeout: 6)
 
+        XCTAssertEqual(relation.label, "Wake up as Fajr begins")
         XCTAssertTrue(fajrWindow.waitForExistence(timeout: 4))
         XCTAssertTrue(beginTime.exists)
         XCTAssertTrue(track.exists)

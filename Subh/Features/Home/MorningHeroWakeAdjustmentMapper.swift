@@ -13,10 +13,22 @@ enum MorningHeroWakeAdjustmentMapper {
             return roundedWakeTime(minTime, minTime: minTime, maxTime: maxTime, stepMinutes: stepMinutes)
         }
 
+        let endpointSnapDistance = endpointSnapDistance(for: width)
+        if x <= endpointSnapDistance {
+            return minTime
+        }
+        if x >= width - endpointSnapDistance {
+            return maxTime
+        }
+
         let ratio = min(max(x / width, 0), 1)
         let duration = maxTime.timeIntervalSince(minTime)
         let rawTime = minTime.addingTimeInterval(duration * Double(ratio))
         return roundedWakeTime(rawTime, minTime: minTime, maxTime: maxTime, stepMinutes: stepMinutes)
+    }
+
+    private static func endpointSnapDistance(for width: CGFloat) -> CGFloat {
+        min(max(6, width * 0.02), width * 0.10)
     }
 
     static func roundedWakeTime(
@@ -33,4 +45,3 @@ enum MorningHeroWakeAdjustmentMapper {
         return min(max(rounded, minTime), maxTime)
     }
 }
-

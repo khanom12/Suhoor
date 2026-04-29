@@ -32,6 +32,11 @@ enum MorningHeroFajrWindowVisualMode: String, Equatable {
     }
 }
 
+enum MorningHeroRelationTone: String, Equatable {
+    case normal
+    case endpointRed
+}
+
 struct MorningHomeHeroDisplay: Equatable {
     let locationText: String
     let locationIconName: String?
@@ -43,6 +48,7 @@ struct MorningHomeHeroDisplay: Equatable {
     let wakeIconName: String?
     let statusText: String
     let detailText: String
+    let relationTone: MorningHeroRelationTone
     let fajrWindowLine: String
     let fajrBeginDisplayText: String?
     let fajrEndDisplayText: String?
@@ -97,6 +103,7 @@ enum MorningHomePresentation {
                 wakeIconName: nil,
                 statusText: "Wake time unavailable",
                 detailText: detail,
+                relationTone: .normal,
                 fajrWindowLine: "Fajr times are not available yet",
                 fajrBeginDisplayText: nil,
                 fajrEndDisplayText: nil,
@@ -132,7 +139,7 @@ enum MorningHomePresentation {
         )
         let wakeState = heroWakeState(for: entry)
         let statusText = heroStatusText(for: entry)
-        let detailText = conciseWakeRelation(for: entry)
+        let relation = conciseWakeRelation(for: entry)
         let chipTitles = actionableChipTitles(for: entry)
         let fajrWindow = fajrWindowDisplay(for: entry, currentDate: currentDate, timeZone: timeZone)
         let primaryTime = wakeState == .active ? entry.schedule.wakeDate : nil
@@ -144,7 +151,7 @@ enum MorningHomePresentation {
             dateLine: dateLine,
             wakeState: wakeState,
             primaryText: primaryText,
-            detailText: detailText,
+            detailText: relation.text,
             fajrWindowAccessibilityText: fajrWindow.accessibilityText ?? fajrWindow.fallbackText,
             timeZone: timeZone,
             accessibleHijriDateTextProvider: accessibleHijriDateTextProvider
@@ -160,7 +167,8 @@ enum MorningHomePresentation {
             primaryText: primaryText,
             wakeIconName: wakeIconName(for: wakeState),
             statusText: statusText,
-            detailText: detailText,
+            detailText: relation.text,
+            relationTone: relation.tone,
             fajrWindowLine: fajrWindow.fallbackText,
             fajrBeginDisplayText: fajrWindow.beginText,
             fajrEndDisplayText: fajrWindow.endText,
@@ -193,10 +201,12 @@ enum MorningHomePresentation {
         }
 
         let clampedWake = clamped(tentativeWakeTime, min: minTime, max: maxTime)
-        let detailText = adjustedWakeRelationText(
+        let relation = adjustedWakeRelation(
             wakeTime: clampedWake,
+            fajrStart: minTime,
             fajrEnd: maxTime
         )
+        let detailText = relation.text
         let ratio = wakeWindowPositionRatio(
             wakeDate: clampedWake,
             fajrStart: minTime,
@@ -222,6 +232,7 @@ enum MorningHomePresentation {
             wakeIconName: display.wakeIconName,
             statusText: display.statusText,
             detailText: detailText,
+            relationTone: relation.tone,
             fajrWindowLine: display.fajrWindowLine,
             fajrBeginDisplayText: display.fajrBeginDisplayText,
             fajrEndDisplayText: display.fajrEndDisplayText,
@@ -314,21 +325,35 @@ enum MorningHomePresentation {
         return "Wake alarm"
     }
 
-    private static func conciseWakeRelation(for entry: WakeRowEntry) -> String {
+    private struct RelationDisplay {
+        let text: String
+        let tone: MorningHeroRelationTone
+    }
+
+    private static func conciseWakeRelation(for entry: WakeRowEntry) -> RelationDisplay {
         if !entry.isEnabled {
             if entry.activeDay.effectiveConfig.skipDay,
                let fajrEnd = entry.activeDay.decisionLog.prayerWindow.fajrEnd {
-                return "Planned wake was \(fajrEndOffsetText(wakeTime: entry.schedule.wakeDate, fajrEnd: fajrEnd))"
+                return RelationDisplay(
+                    text: "Planned wake was \(fajrEndOffsetText(wakeTime: entry.schedule.wakeDate, fajrEnd: fajrEnd))",
+                    tone: .normal
+                )
             }
-            return entry.activeDay.effectiveConfig.skipDay
+            let text = entry.activeDay.effectiveConfig.skipDay
                 ? "Alarm is off for this date"
                 : "No wake alarm is set for this date"
+            return RelationDisplay(text: text, tone: .normal)
         }
 
-        guard let fajrEnd = entry.activeDay.decisionLog.prayerWindow.fajrEnd else {
-            return "Fajr times are not available yet"
+        let prayerWindow = entry.activeDay.decisionLog.prayerWindow
+        guard let fajrEnd = prayerWindow.fajrEnd else {
+            return RelationDisplay(text: "Fajr times are not available yet", tone: .normal)
         }
-        return activeHeroWakeRelationText(wakeTime: entry.schedule.wakeDate, fajrEnd: fajrEnd)
+        return activeHeroWakeRelation(
+            wakeTime: entry.schedule.wakeDate,
+            fajrStart: prayerWindow.fajrStart,
+            fajrEnd: fajrEnd
+        )
     }
 
     private static func actionableChipTitles(for entry: WakeRowEntry) -> [String] {
@@ -453,8 +478,21 @@ enum MorningHomePresentation {
         return "\(minutes) min before Fajr ends"
     }
 
-    private static func activeHeroWakeRelationText(wakeTime: Date, fajrEnd: Date) -> String {
-        "Wake up \(fajrEndOffsetText(wakeTime: wakeTime, fajrEnd: fajrEnd))"
+    private static func activeHeroWakeRelation(wakeTime: Date, fajrStart: Date, fajrEnd: Date) -> RelationDisplay {
+        if isEndpoint(wakeTime, fajrStart) {
+            return RelationDisplay(text: "Wake up as Fajr begins", tone: .endpointRed)
+        }
+        if isEndpoint(wakeTime, fajrEnd) {
+            return RelationDisplay(text: "Wake up as Fajr ends", tone: .endpointRed)
+        }
+        return RelationDisplay(
+            text: "Wake up \(fajrEndOffsetText(wakeTime: wakeTime, fajrEnd: fajrEnd))",
+            tone: .normal
+        )
+    }
+
+    private static func isEndpoint(_ lhs: Date, _ rhs: Date) -> Bool {
+        abs(lhs.timeIntervalSince(rhs)) < 60
     }
 
     private struct FajrWindowDisplay {
@@ -524,7 +562,7 @@ enum MorningHomePresentation {
         if adjustmentEnabled {
             adjustmentAccessibilityValue = wakeAdjustmentAccessibilityValue(
                 wakeTime: entry.schedule.wakeDate,
-                relationText: conciseWakeRelation(for: entry),
+                relationText: conciseWakeRelation(for: entry).text,
                 minTime: window.fajrStart,
                 maxTime: fajrEnd,
                 timeZone: timeZone
@@ -743,11 +781,12 @@ enum MorningHomePresentation {
         return date
     }
 
-    private static func adjustedWakeRelationText(
+    private static func adjustedWakeRelation(
         wakeTime: Date,
+        fajrStart: Date,
         fajrEnd: Date
-    ) -> String {
-        activeHeroWakeRelationText(wakeTime: wakeTime, fajrEnd: fajrEnd)
+    ) -> RelationDisplay {
+        activeHeroWakeRelation(wakeTime: wakeTime, fajrStart: fajrStart, fajrEnd: fajrEnd)
     }
 
     private static func wakeAdjustmentAccessibilityValue(
