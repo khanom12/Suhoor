@@ -1744,6 +1744,72 @@ struct ScheduleManagerHijriTests {
         #expect(presentation.chipTitles.contains("Changed"))
     }
 
+    @Test
+    @MainActor
+    func heroWakeAdjustmentPersistsDateOverrideAndReresolves() async {
+        let suiteName = "ScheduleManagerHijriTests.HeroWakeAdjustment"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        let timeZone = TimeZone.current
+
+        let settingsStore = SuhoorSettingsStore(defaults: defaults)
+        settingsStore.update { draft in
+            draft.isConfigured = true
+            draft.locationMode = .fixed
+            draft.fixedLocation = FixedLocation(latitude: 43.6532, longitude: -79.3832)
+        }
+
+        let alarmConfigStore = AlarmConfigStore(defaultsStore: defaults)
+        let manager = ScheduleManager(
+            settingsStore: settingsStore,
+            locationService: LocationService(),
+            alarmConfigStore: alarmConfigStore,
+            hijriAdjustmentStore: HijriMonthAdjustmentStore(defaults: defaults),
+            cacheStore: ScheduleCacheStore(defaults: defaults)
+        )
+
+        await manager.refreshSchedules(force: true)
+
+        guard let target = manager.currentMorningHomeSnapshot.tomorrow?.activeDay,
+              let fajrEnd = target.decisionLog.prayerWindow.fajrEnd else {
+            Issue.record("Expected a resolved target morning with Fajr end.")
+            return
+        }
+
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let nextDate = calendar.date(byAdding: .day, value: 1, to: target.date) ?? target.date
+        let nextWakeBefore = manager.activeDay(for: nextDate, timeZone: timeZone)?.schedule.wakeDate
+        let defaultWakeRule = alarmConfigStore.defaults.defaultWakeRule
+        let adjustedWake = target.decisionLog.prayerWindow.fajrStart.addingTimeInterval(22 * 60)
+        let committed = await manager.commitHeroWakeAdjustment(
+            for: target.date,
+            wakeTime: adjustedWake,
+            timeZone: timeZone
+        )
+
+        #expect(committed)
+        #expect(alarmConfigStore.defaults.defaultWakeRule == defaultWakeRule)
+
+        guard let override = alarmConfigStore.override(for: target.date, timeZone: timeZone) else {
+            Issue.record("Expected a date-specific wake override.")
+            return
+        }
+
+        let expectedMinutes = DateHelpers.minutesFromMidnight(for: adjustedWake, timeZone: timeZone)
+        let expectedWake = DateHelpers.dateFromMidnight(for: target.date, minutes: expectedMinutes, timeZone: timeZone)
+        let updated = manager.activeDay(for: target.date, timeZone: timeZone)
+
+        #expect(override.wakeStateOverride == .fixedWake)
+        #expect(override.fixedWakeTimeOverrideMinutesFromMidnight == expectedMinutes)
+        #expect(override.bypassLatestWakeCap == true)
+        #expect(updated?.effectiveConfig.wakeRuleWasOverridden == true)
+        #expect(abs((updated?.schedule.wakeDate.timeIntervalSince(expectedWake) ?? 999)) < 1)
+        #expect(manager.activeDay(for: nextDate, timeZone: timeZone)?.schedule.wakeDate == nextWakeBefore)
+        #expect(adjustedWake >= target.decisionLog.prayerWindow.fajrStart)
+        #expect(adjustedWake <= fajrEnd)
+    }
+
     private static func makeDate(
         year: Int,
         month: Int,

@@ -214,8 +214,9 @@ struct ScheduleServiceExtractionTests {
         )
 
         #expect(display.title == "Tomorrow")
-        #expect(display.dateLine == "April 27th • ZQ10")
+        #expect(display.dateLine == "April 27 • Dhul Qadah 10")
         #expect(display.dateLine?.contains("Mon") == false)
+        #expect(display.dateLine?.contains("ZQ") == false)
         #expect(display.wakeState == .active)
         #expect(display.primaryTime == entry.schedule.wakeDate)
         #expect(display.primaryText.contains(":"))
@@ -227,12 +228,29 @@ struct ScheduleServiceExtractionTests {
         #expect(Self.normalizedTimeSpaces(display.fajrEndDisplayText ?? "") == "6:16 AM")
         #expect(abs((display.wakeWindowPositionRatio ?? -1) - (46.0 / 76.0)) < 0.0001)
         #expect(display.wakeWindowIndicatorState == .active)
+        #expect(display.wakeWindowIndicatorIconName == "alarm.fill")
+        #expect(display.fajrWindowVisualMode == .interactiveWithinFajrWindow)
+        #expect(display.wakeAdjustmentEnabled)
+        #expect(display.wakeAdjustmentMinTime == entry.activeDay.decisionLog.prayerWindow.fajrStart)
+        #expect(display.wakeAdjustmentMaxTime == entry.activeDay.decisionLog.prayerWindow.fajrEnd)
+        #expect(display.wakeAdjustmentAccessibilityValue?.contains("Adjustable between Fajr begin") == true)
         #expect(Self.normalizedTimeSpaces(display.fajrWindowAccessibilityText ?? "") == "Fajr begins: 5:00 AM. Fajr ends: 6:16 AM")
         #expect(display.chipTitles.isEmpty)
         #expect(display.accessibilityLabel.contains("Wake alarm at"))
         #expect(Self.normalizedTimeSpaces(display.accessibilityLabel).contains("Fajr begins: 5:00 AM"))
         #expect(display.accessibilityLabel.contains("sunrise-derived") == false)
         #expect(display.accessibilityLabel.contains("Ordinary") == false)
+
+        let adjustedWake = entry.activeDay.decisionLog.prayerWindow.fajrEnd?.addingTimeInterval(-28 * 60)
+            ?? entry.schedule.wakeDate
+        let adjusted = MorningHomePresentation.heroDisplay(
+            adjusting: display,
+            tentativeWakeTime: adjustedWake,
+            timeZone: timeZone
+        )
+        #expect(adjusted.primaryTime == adjustedWake)
+        #expect(adjusted.detailText == "28 min before Fajr ends")
+        #expect(abs((adjusted.wakeWindowPositionRatio ?? -1) - (48.0 / 76.0)) < 0.0001)
     }
 
     @Test
@@ -252,7 +270,7 @@ struct ScheduleServiceExtractionTests {
             accessibleHijriDateTextProvider: { _, _ in nil }
         )
 
-        #expect(display.dateLine == "April 27th")
+        #expect(display.dateLine == "April 27")
         #expect(display.dateLine?.contains("•") == false)
         #expect(display.dateLine?.contains("Mon") == false)
     }
@@ -280,8 +298,46 @@ struct ScheduleServiceExtractionTests {
         #expect(display.fajrEndDisplayText == nil)
         #expect(display.wakeWindowPositionRatio == nil)
         #expect(display.wakeWindowIndicatorState == .unavailable)
+        #expect(display.fajrWindowVisualMode == .hiddenUnavailable)
+        #expect(display.wakeAdjustmentEnabled == false)
         #expect(display.fajrWindowAccessibilityText == nil)
         #expect(display.accessibilityLabel.contains("Fajr ends:") == false)
+    }
+
+    @Test
+    func tomorrowHeroHidesV3RangeWhenFastingOrOutOfWindow() {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let date = Self.makeDate(year: 2026, month: 4, day: 27, timeZone: timeZone)
+        let fasting = MorningHomePresentation.heroDisplay(
+            entry: Self.makeWakeEntry(
+                date: date,
+                timeZone: timeZone,
+                context: ResolvedDayContext(
+                    primaryContext: .fasting,
+                    secondaryContexts: [],
+                    supportingTags: [.ramadan],
+                    explanation: .empty
+                )
+            ),
+            permissionSummary: "",
+            timeZone: timeZone
+        )
+        let outOfWindow = MorningHomePresentation.heroDisplay(
+            entry: Self.makeWakeEntry(
+                date: date,
+                timeZone: timeZone,
+                wakeOffsetMinutesFromFajrStart: -15
+            ),
+            permissionSummary: "",
+            timeZone: timeZone
+        )
+
+        #expect(fasting.fajrWindowVisualMode == .hiddenFasting)
+        #expect(fasting.wakeAdjustmentEnabled == false)
+        #expect(outOfWindow.fajrWindowVisualMode == .hiddenOutOfWindow)
+        #expect(outOfWindow.wakeAdjustmentEnabled == false)
+        #expect(outOfWindow.fajrBeginDisplayText != nil)
+        #expect(outOfWindow.fajrEndDisplayText != nil)
     }
 
     @Test
@@ -358,7 +414,10 @@ struct ScheduleServiceExtractionTests {
         #expect(skipped.statusText == "Alarm off")
         #expect(skipped.detailText == "Planned wake was 30 min before Fajr ends")
         #expect(skipped.wakeWindowIndicatorState == .offAnchor)
+        #expect(skipped.wakeWindowIndicatorIconName == "bell.slash.fill")
         #expect(skipped.wakeWindowPositionRatio != nil)
+        #expect(skipped.fajrWindowVisualMode == .staticWithinFajrWindow)
+        #expect(skipped.wakeAdjustmentEnabled == false)
         #expect(fixed.detailText == "Set for a custom wake time")
     }
 
@@ -831,16 +890,22 @@ struct ScheduleServiceExtractionTests {
         hasDayOverride: Bool = false,
         plannedWakeState: MorningWakeRuleState = .inFajr,
         providerNotes: String? = nil,
-        includeFajrEnd: Bool = true
+        includeFajrEnd: Bool = true,
+        wakeOffsetMinutesFromFajrStart: Int? = nil
     ) -> WakeRowEntry {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = timeZone
         let start = calendar.startOfDay(for: date)
         let fajrStart = calendar.date(byAdding: .hour, value: 5, to: start) ?? start
         let fajrEnd = calendar.date(byAdding: .minute, value: 76, to: fajrStart) ?? fajrStart
-        let wake = plannedWakeState == .fixedWake
-            ? (calendar.date(byAdding: .minute, value: 45, to: fajrStart) ?? fajrStart)
-            : (calendar.date(byAdding: .minute, value: -30, to: fajrEnd) ?? fajrStart)
+        let wake: Date
+        if let wakeOffsetMinutesFromFajrStart {
+            wake = calendar.date(byAdding: .minute, value: wakeOffsetMinutesFromFajrStart, to: fajrStart) ?? fajrStart
+        } else if plannedWakeState == .fixedWake {
+            wake = calendar.date(byAdding: .minute, value: 45, to: fajrStart) ?? fajrStart
+        } else {
+            wake = calendar.date(byAdding: .minute, value: -30, to: fajrEnd) ?? fajrStart
+        }
         let schedule = DaySchedule(
             date: start,
             fajrDate: fajrStart,

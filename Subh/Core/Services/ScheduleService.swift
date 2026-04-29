@@ -1321,7 +1321,7 @@ final class ScheduleManager: ObservableObject {
         await refreshPermissionSummary()
     }
 
-    func rescheduleDay(_ date: Date) async {
+    func rescheduleDay(_ date: Date, preferCached: Bool = true) async {
         let timeZone = TimeZone.current
         let normalizedDate = DateHelpers.startOfDay(date, in: timeZone)
         let key = DateHelpers.dayIdentifier(for: normalizedDate, timeZone: timeZone)
@@ -1349,7 +1349,11 @@ final class ScheduleManager: ObservableObject {
             return
         }
 
-        guard let updatedDay = activeDayResolver.buildActiveDayIfNeeded(for: normalizedDate, timeZone: timeZone) else {
+        guard let updatedDay = activeDayResolver.buildActiveDayIfNeeded(
+            for: normalizedDate,
+            timeZone: timeZone,
+            preferCached: preferCached
+        ) else {
             await refreshSchedules(force: true)
             return
         }
@@ -1392,6 +1396,40 @@ final class ScheduleManager: ObservableObject {
             )
         )
         updateBootstrapState()
+    }
+
+    @discardableResult
+    func commitHeroWakeAdjustment(for date: Date, wakeTime: Date, timeZone: TimeZone = .current) async -> Bool {
+        let normalizedDate = DateHelpers.startOfDay(date, in: timeZone)
+        guard let currentDay = activeDay(for: normalizedDate, timeZone: timeZone) else {
+            return false
+        }
+
+        let window = currentDay.decisionLog.prayerWindow
+        guard let fajrEnd = window.fajrEnd else {
+            return false
+        }
+
+        let clampedWakeTime = min(max(wakeTime, window.fajrStart), fajrEnd)
+        guard clampedWakeTime >= window.fajrStart, clampedWakeTime <= fajrEnd else {
+            return false
+        }
+
+        let minutesFromMidnight = DateHelpers.minutesFromMidnight(for: clampedWakeTime, timeZone: timeZone)
+        alarmConfigStore.updateOverride(for: normalizedDate, timeZone: timeZone) { override in
+            override.skipDay = false
+            override.suhoorEnabled = true
+            override.wakeStateOverride = .fixedWake
+            override.wakeAnchorTypeOverride = nil
+            override.wakeDeltaOverrideMinutes = nil
+            override.fixedWakeTimeOverrideMinutesFromMidnight = minutesFromMidnight
+            override.suhoorOffsetOverrideMinutes = nil
+            override.suhoorTimeOverrideMinutesFromMidnight = nil
+            override.bypassLatestWakeCap = true
+        }
+
+        await rescheduleDay(normalizedDate, preferCached: false)
+        return true
     }
 
     func schedule(for date: Date) -> DaySchedule? {
