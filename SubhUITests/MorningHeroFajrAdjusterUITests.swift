@@ -29,7 +29,7 @@ final class MorningHeroFajrAdjusterUITests: XCTestCase {
         XCTAssertTrue(relation.waitForExistence(timeout: 4))
         let initialRelationLabel = relation.label
         XCTAssertTrue(initialRelationLabel.hasPrefix("Wake up "))
-        XCTAssertTrue(initialRelationLabel.contains("minutes"))
+        XCTAssertTrue(initialRelationLabel.contains(" min before Fajr ends"))
 
         let fajrWindow = app.descendants(matching: .any)["morningHero.fajrWindow"]
         let beginTime = app.descendants(matching: .any)["morningHero.fajrWindow.beginTime"]
@@ -55,6 +55,7 @@ final class MorningHeroFajrAdjusterUITests: XCTestCase {
 
         XCTAssertNotEqual(relation.label, initialRelationLabel)
         XCTAssertTrue(relation.label.hasPrefix("Wake up "))
+        XCTAssertTrue(relation.label.contains(" min before Fajr ends"))
         XCTAssertTrue(fajrWindow.waitForExistence(timeout: 4))
         XCTAssertTrue(marker.exists)
 

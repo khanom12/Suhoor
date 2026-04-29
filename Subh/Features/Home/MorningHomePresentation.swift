@@ -195,9 +195,7 @@ enum MorningHomePresentation {
         let clampedWake = clamped(tentativeWakeTime, min: minTime, max: maxTime)
         let detailText = adjustedWakeRelationText(
             wakeTime: clampedWake,
-            minTime: minTime,
-            maxTime: maxTime,
-            anchor: display.wakeAdjustmentRelationAnchor
+            fajrEnd: maxTime
         )
         let ratio = wakeWindowPositionRatio(
             wakeDate: clampedWake,
@@ -319,22 +317,18 @@ enum MorningHomePresentation {
     private static func conciseWakeRelation(for entry: WakeRowEntry) -> String {
         if !entry.isEnabled {
             if entry.activeDay.effectiveConfig.skipDay,
-               entry.activeDay.decisionLog.prayerWindow.fajrEnd != nil {
-                return "Planned wake was \(heroWakeOffsetText(for: entry.activeDay))"
+               let fajrEnd = entry.activeDay.decisionLog.prayerWindow.fajrEnd {
+                return "Planned wake was \(fajrEndOffsetText(wakeTime: entry.schedule.wakeDate, fajrEnd: fajrEnd))"
             }
             return entry.activeDay.effectiveConfig.skipDay
                 ? "Alarm is off for this date"
                 : "No wake alarm is set for this date"
         }
-        if entry.activeDay.decisionLog.plannedWakeState != .fixedWake,
-           entry.activeDay.decisionLog.resolvedAnchor.type == .fajrEnd,
-           entry.activeDay.decisionLog.prayerWindow.fajrEnd == nil {
+
+        guard let fajrEnd = entry.activeDay.decisionLog.prayerWindow.fajrEnd else {
             return "Fajr times are not available yet"
         }
-        if entry.activeDay.decisionLog.plannedWakeState == .fixedWake {
-            return activeHeroWakeRelationText(for: entry.activeDay)
-        }
-        return activeHeroWakeRelationText(for: entry.activeDay)
+        return activeHeroWakeRelationText(wakeTime: entry.schedule.wakeDate, fajrEnd: fajrEnd)
     }
 
     private static func actionableChipTitles(for entry: WakeRowEntry) -> [String] {
@@ -454,48 +448,13 @@ enum MorningHomePresentation {
         }
     }
 
-    private static func heroWakeOffsetText(for day: ActiveAlarmDay) -> String {
-        let decision = day.decisionLog
-        switch decision.plannedWakeState {
-        case .preFajr:
-            let unit = minuteUnit(for: decision.resolvedDelta.minutes)
-            return "\(decision.resolvedDelta.minutes) \(unit) before Fajr begins"
-        case .inFajr:
-            if decision.resolvedAnchor.type == .fajrEnd {
-                let unit = minuteUnit(for: decision.resolvedDelta.minutes)
-                return "\(decision.resolvedDelta.minutes) \(unit) before Fajr ends"
-            }
-            let unit = minuteUnit(for: decision.resolvedDelta.minutes)
-            return "\(decision.resolvedDelta.minutes) \(unit) after Fajr begins"
-        case .postFajr:
-            let unit = minuteUnit(for: decision.resolvedDelta.minutes)
-            return "\(decision.resolvedDelta.minutes) \(unit) after Fajr ends"
-        case .fixedWake:
-            return "at the custom wake time"
-        }
+    private static func fajrEndOffsetText(wakeTime: Date, fajrEnd: Date) -> String {
+        let minutes = Int(round(fajrEnd.timeIntervalSince(wakeTime) / 60))
+        return "\(minutes) min before Fajr ends"
     }
 
-    private static func activeHeroWakeRelationText(for day: ActiveAlarmDay) -> String {
-        let decision = day.decisionLog
-        if decision.resolvedDelta.minutes == 0 {
-            switch decision.plannedWakeState {
-            case .preFajr:
-                return "Wake up at the start of Fajr"
-            case .inFajr:
-                return decision.resolvedAnchor.type == .fajrEnd
-                    ? "Wake up at the end of Fajr"
-                    : "Wake up at the start of Fajr"
-            case .postFajr:
-                return "Wake up at the end of Fajr"
-            case .fixedWake:
-                break
-            }
-        }
-        return "Wake up \(heroWakeOffsetText(for: day))"
-    }
-
-    private static func minuteUnit(for minutes: Int) -> String {
-        minutes == 1 ? "minute" : "minutes"
+    private static func activeHeroWakeRelationText(wakeTime: Date, fajrEnd: Date) -> String {
+        "Wake up \(fajrEndOffsetText(wakeTime: wakeTime, fajrEnd: fajrEnd))"
     }
 
     private struct FajrWindowDisplay {
@@ -786,39 +745,9 @@ enum MorningHomePresentation {
 
     private static func adjustedWakeRelationText(
         wakeTime: Date,
-        minTime: Date,
-        maxTime: Date,
-        anchor: WakeAnchorType?
+        fajrEnd: Date
     ) -> String {
-        if abs(wakeTime.timeIntervalSince(minTime)) < 0.5 {
-            return "Wake up at the start of Fajr"
-        }
-        if abs(wakeTime.timeIntervalSince(maxTime)) < 0.5 {
-            return "Wake up at the end of Fajr"
-        }
-
-        switch anchor {
-        case .fajrStart:
-            let minutes = Int(round(wakeTime.timeIntervalSince(minTime) / 60))
-            if minutes == 0 {
-                return "Wake up at the start of Fajr"
-            }
-            if minutes > 0 {
-                return "Wake up \(minutes) \(minuteUnit(for: minutes)) after Fajr begins"
-            }
-            let absoluteMinutes = abs(minutes)
-            return "Wake up \(absoluteMinutes) \(minuteUnit(for: absoluteMinutes)) before Fajr begins"
-        case .fajrEnd, .masjidFajr, .clockTime, .none:
-            let minutes = Int(round(maxTime.timeIntervalSince(wakeTime) / 60))
-            if minutes == 0 {
-                return "Wake up at the end of Fajr"
-            }
-            if minutes > 0 {
-                return "Wake up \(minutes) \(minuteUnit(for: minutes)) before Fajr ends"
-            }
-            let absoluteMinutes = abs(minutes)
-            return "Wake up \(absoluteMinutes) \(minuteUnit(for: absoluteMinutes)) after Fajr ends"
-        }
+        activeHeroWakeRelationText(wakeTime: wakeTime, fajrEnd: fajrEnd)
     }
 
     private static func wakeAdjustmentAccessibilityValue(
