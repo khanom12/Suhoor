@@ -281,8 +281,8 @@ private struct TomorrowMorningHero: View {
         switch tone {
         case .normal:
             return WakeGlassTheme.secondaryText.opacity(0.92)
-        case .endpointRed:
-            return Color.red
+        case .urgentRed:
+            return DawnColor.danger
         }
     }
 

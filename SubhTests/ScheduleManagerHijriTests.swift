@@ -1858,7 +1858,7 @@ struct ScheduleManagerHijriTests {
         #expect(startWake ?? .distantPast >= fajrStart)
         #expect(startWake ?? .distantFuture <= fajrEnd)
         #expect(startDisplay.detailText == "Wake up as Fajr begins")
-        #expect(startDisplay.relationTone == .endpointRed)
+        #expect(startDisplay.relationTone == .normal)
         #expect(startDisplay.fajrWindowVisualMode == .interactiveWithinFajrWindow)
         #expect(startDisplay.wakeAdjustmentEnabled)
 
@@ -1877,7 +1877,7 @@ struct ScheduleManagerHijriTests {
         #expect(endWake ?? .distantPast >= fajrStart)
         #expect(endWake ?? .distantFuture <= fajrEnd)
         #expect(endDisplay.detailText == "Wake up as Fajr ends")
-        #expect(endDisplay.relationTone == .endpointRed)
+        #expect(endDisplay.relationTone == .urgentRed)
         #expect(endDisplay.fajrWindowVisualMode == .interactiveWithinFajrWindow)
         #expect(endDisplay.wakeAdjustmentEnabled)
     }

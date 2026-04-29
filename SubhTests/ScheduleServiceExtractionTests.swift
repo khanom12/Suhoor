@@ -655,7 +655,7 @@ struct ScheduleServiceExtractionTests {
             timeZone: timeZone
         )
         #expect(adjustedToStart.detailText == "Wake up as Fajr begins")
-        #expect(adjustedToStart.relationTone == .endpointRed)
+        #expect(adjustedToStart.relationTone == .normal)
 
         let adjustedWithinStartGranularity = MorningHomePresentation.heroDisplay(
             adjusting: display,
@@ -663,7 +663,23 @@ struct ScheduleServiceExtractionTests {
             timeZone: timeZone
         )
         #expect(adjustedWithinStartGranularity.detailText == "Wake up as Fajr begins")
-        #expect(adjustedWithinStartGranularity.relationTone == .endpointRed)
+        #expect(adjustedWithinStartGranularity.relationTone == .normal)
+
+        let adjustedToElevenBeforeEnd = MorningHomePresentation.heroDisplay(
+            adjusting: display,
+            tentativeWakeTime: (entry.activeDay.decisionLog.prayerWindow.fajrEnd ?? adjustedWake).addingTimeInterval(-11 * 60),
+            timeZone: timeZone
+        )
+        #expect(adjustedToElevenBeforeEnd.detailText == "Wake up 11 min before Fajr ends")
+        #expect(adjustedToElevenBeforeEnd.relationTone == .normal)
+
+        let adjustedToTenBeforeEnd = MorningHomePresentation.heroDisplay(
+            adjusting: display,
+            tentativeWakeTime: (entry.activeDay.decisionLog.prayerWindow.fajrEnd ?? adjustedWake).addingTimeInterval(-10 * 60),
+            timeZone: timeZone
+        )
+        #expect(adjustedToTenBeforeEnd.detailText == "Wake up 10 min before Fajr ends")
+        #expect(adjustedToTenBeforeEnd.relationTone == .urgentRed)
 
         let adjustedToEnd = MorningHomePresentation.heroDisplay(
             adjusting: display,
@@ -671,7 +687,7 @@ struct ScheduleServiceExtractionTests {
             timeZone: timeZone
         )
         #expect(adjustedToEnd.detailText == "Wake up as Fajr ends")
-        #expect(adjustedToEnd.relationTone == .endpointRed)
+        #expect(adjustedToEnd.relationTone == .urgentRed)
 
         let adjustedWithinEndGranularity = MorningHomePresentation.heroDisplay(
             adjusting: display,
@@ -679,7 +695,7 @@ struct ScheduleServiceExtractionTests {
             timeZone: timeZone
         )
         #expect(adjustedWithinEndGranularity.detailText == "Wake up as Fajr ends")
-        #expect(adjustedWithinEndGranularity.relationTone == .endpointRed)
+        #expect(adjustedWithinEndGranularity.relationTone == .urgentRed)
     }
 
     @Test

@@ -34,7 +34,7 @@ enum MorningHeroFajrWindowVisualMode: String, Equatable {
 
 enum MorningHeroRelationTone: String, Equatable {
     case normal
-    case endpointRed
+    case urgentRed
 }
 
 struct MorningHomeHeroDisplay: Equatable {
@@ -479,20 +479,26 @@ enum MorningHomePresentation {
     }
 
     private static func activeHeroWakeRelation(wakeTime: Date, fajrStart: Date, fajrEnd: Date) -> RelationDisplay {
+        let tone = urgentRelationTone(wakeTime: wakeTime, fajrEnd: fajrEnd)
         if isEndpoint(wakeTime, fajrStart) {
-            return RelationDisplay(text: "Wake up as Fajr begins", tone: .endpointRed)
+            return RelationDisplay(text: "Wake up as Fajr begins", tone: tone)
         }
         if isEndpoint(wakeTime, fajrEnd) {
-            return RelationDisplay(text: "Wake up as Fajr ends", tone: .endpointRed)
+            return RelationDisplay(text: "Wake up as Fajr ends", tone: tone)
         }
         return RelationDisplay(
             text: "Wake up \(fajrEndOffsetText(wakeTime: wakeTime, fajrEnd: fajrEnd))",
-            tone: .normal
+            tone: tone
         )
     }
 
     private static func isEndpoint(_ lhs: Date, _ rhs: Date) -> Bool {
         abs(lhs.timeIntervalSince(rhs)) < 60
+    }
+
+    private static func urgentRelationTone(wakeTime: Date, fajrEnd: Date) -> MorningHeroRelationTone {
+        let minutesBeforeFajrEnd = Int(round(fajrEnd.timeIntervalSince(wakeTime) / 60))
+        return minutesBeforeFajrEnd <= 10 ? .urgentRed : .normal
     }
 
     private struct FajrWindowDisplay {
