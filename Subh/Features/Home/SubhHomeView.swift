@@ -183,6 +183,8 @@ struct SubhHomeView: View {
 }
 
 private struct TomorrowMorningHero: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     let entry: WakeRowEntry?
     let permissionSummary: String
     let onOpen: () -> Void
@@ -192,72 +194,51 @@ private struct TomorrowMorningHero: View {
             entry: entry,
             permissionSummary: permissionSummary
         )
+        let metrics = MorningHeroMetrics(dynamicTypeSize: dynamicTypeSize)
 
         Button(action: onOpen) {
-            VStack(alignment: .center, spacing: DesignTokens.textSpacingRegular) {
-                VStack(spacing: DesignTokens.textSpacingMicro) {
-                    Text(display.title)
-                        .font(.title3.weight(.regular))
-                        .foregroundStyle(WakeGlassTheme.primaryText)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.84)
+            VStack(alignment: .center, spacing: 0) {
+                Text(display.title)
+                    .font(.system(size: metrics.relativeLabelSize, weight: .regular))
+                    .foregroundStyle(WakeGlassTheme.primaryText)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
 
-                    if let dateLine = display.dateLine {
-                        Text(dateLine)
-                            .font(AppTypography.cardBody)
-                            .foregroundStyle(WakeGlassTheme.secondaryText)
-                            .lineLimit(1)
-                    }
+                if let dateLine = display.dateLine {
+                    Text(dateLine)
+                        .font(.system(size: metrics.dateLineSize, weight: .regular))
+                        .foregroundStyle(WakeGlassTheme.secondaryText.opacity(0.92))
+                        .multilineTextAlignment(.center)
+                        .lineLimit(nil)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, metrics.relativeToDateGap)
                 }
 
-                if let entry {
-                    SubhHomeTimeLockup(date: entry.schedule.wakeDate, isDisabled: !entry.isEnabled)
+                primaryWakeRow(display: display, metrics: metrics)
+                    .padding(.top, metrics.dateToPrimaryGap)
 
-                    VStack(spacing: DesignTokens.textSpacingTight) {
-                        Text(display.statusText)
-                            .font(.title3.weight(.regular))
-                            .foregroundStyle(WakeGlassTheme.primaryText)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.78)
+                Text(display.detailText)
+                    .font(.system(size: metrics.relationSize, weight: .regular))
+                    .foregroundStyle(WakeGlassTheme.primaryText.opacity(0.94))
+                    .multilineTextAlignment(.center)
+                    .lineLimit(nil)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, metrics.primaryToRelationGap)
 
-                        Text(display.detailText)
-                            .font(AppTypography.cardBody)
-                            .foregroundStyle(WakeGlassTheme.secondaryText)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.78)
-                    }
-
-                    if !display.chipTitles.isEmpty {
-                        FlowLayout(spacing: DesignTokens.spacingS) {
-                            ForEach(display.chipTitles, id: \.self) { title in
-                                WakeContextChip(title: title, isDisabled: false, compact: true)
-                            }
-                        }
-                        .frame(maxWidth: .infinity, alignment: .center)
-                        .padding(.top, DesignTokens.textSpacingTight)
-                    }
-                } else {
-                    VStack(spacing: DesignTokens.textSpacingCompact) {
-                        Text(display.statusText)
-                            .font(.title3.weight(.regular))
-                            .foregroundStyle(WakeGlassTheme.primaryText)
-                            .lineLimit(2)
-                            .multilineTextAlignment(.center)
-
-                        Text(display.detailText)
-                            .font(AppTypography.cardBody)
-                            .foregroundStyle(WakeGlassTheme.secondaryText)
-                            .multilineTextAlignment(.center)
-                            .lineLimit(3)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    .padding(.top, DesignTokens.spacingS)
-                }
+                Text(display.fajrWindowLine)
+                    .font(.system(size: metrics.fajrWindowSize, weight: .regular))
+                    .foregroundStyle(WakeGlassTheme.primaryText.opacity(0.88))
+                    .monospacedDigit()
+                    .multilineTextAlignment(.center)
+                    .lineLimit(nil)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, metrics.relationToWindowGap)
             }
+            .frame(maxWidth: metrics.maxContentWidth)
             .padding(.horizontal, DesignTokens.spacingS)
-            .padding(.top, DesignTokens.spacingXL)
-            .padding(.bottom, DesignTokens.spacingXL)
-            .frame(maxWidth: .infinity, minHeight: 268, alignment: .top)
+            .padding(.top, metrics.verticalBreathing)
+            .padding(.bottom, metrics.verticalBreathing + metrics.bottomGapBeforeNextCard - DesignTokens.spacingL)
+            .frame(maxWidth: .infinity, minHeight: metrics.minHeroRegionHeight, alignment: .center)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -266,6 +247,176 @@ private struct TomorrowMorningHero: View {
         .accessibilityLabel(display.accessibilityLabel)
         .accessibilityHint(entry == nil ? "" : "Double-tap for details.")
     }
+
+    @ViewBuilder
+    private func primaryWakeRow(
+        display: MorningHomeHeroDisplay,
+        metrics: MorningHeroMetrics
+    ) -> some View {
+        if let primaryTime = display.primaryTime {
+            HStack(alignment: .firstTextBaseline, spacing: metrics.primaryRowSpacing) {
+                if let iconName = display.wakeIconName {
+                    Image(systemName: iconName)
+                        .font(.system(size: metrics.iconSize, weight: .regular))
+                        .foregroundStyle(WakeGlassTheme.primaryText.opacity(0.92))
+                        .baselineOffset(metrics.iconBaselineOffset)
+                }
+
+                SubhHomeHeroTimeLockup(date: primaryTime, pointSize: metrics.wakeTimeSize)
+            }
+            .frame(maxWidth: .infinity, alignment: .center)
+            .lineLimit(1)
+            .minimumScaleFactor(0.84)
+        } else {
+            HStack(alignment: .firstTextBaseline, spacing: metrics.primaryRowSpacing) {
+                if let iconName = display.wakeIconName {
+                    Image(systemName: iconName)
+                        .font(.system(size: metrics.iconSize, weight: .regular))
+                        .foregroundStyle(WakeGlassTheme.primaryText.opacity(0.86))
+                        .baselineOffset(metrics.iconBaselineOffset)
+                }
+
+                Text(display.primaryText)
+                    .font(.system(size: metrics.wakeStateSize, weight: .regular))
+                    .foregroundStyle(WakeGlassTheme.primaryText)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(nil)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .center)
+        }
+    }
+}
+
+private struct MorningHeroMetrics {
+    let scale: CGFloat
+    let minHeroRegionHeight: CGFloat
+    let minTextStackHeight: CGFloat
+    let bottomGapBeforeNextCard: CGFloat
+
+    init(dynamicTypeSize: DynamicTypeSize) {
+        switch dynamicTypeSize {
+        case .xSmall:
+            scale = 0.88
+            minHeroRegionHeight = 236
+            minTextStackHeight = 150
+            bottomGapBeforeNextCard = 28
+        case .small:
+            scale = 0.94
+            minHeroRegionHeight = 242
+            minTextStackHeight = 158
+            bottomGapBeforeNextCard = 30
+        case .medium:
+            scale = 0.98
+            minHeroRegionHeight = 248
+            minTextStackHeight = 164
+            bottomGapBeforeNextCard = 32
+        case .large:
+            scale = 1.00
+            minHeroRegionHeight = 256
+            minTextStackHeight = 172
+            bottomGapBeforeNextCard = 36
+        case .xLarge:
+            scale = 1.08
+            minHeroRegionHeight = 276
+            minTextStackHeight = 190
+            bottomGapBeforeNextCard = 38
+        case .xxLarge:
+            scale = 1.17
+            minHeroRegionHeight = 304
+            minTextStackHeight = 214
+            bottomGapBeforeNextCard = 42
+        case .xxxLarge:
+            scale = 1.28
+            minHeroRegionHeight = 334
+            minTextStackHeight = 242
+            bottomGapBeforeNextCard = 46
+        case .accessibility1:
+            scale = 1.38
+            minHeroRegionHeight = 366
+            minTextStackHeight = 266
+            bottomGapBeforeNextCard = 50
+        case .accessibility2:
+            scale = 1.50
+            minHeroRegionHeight = 404
+            minTextStackHeight = 300
+            bottomGapBeforeNextCard = 54
+        case .accessibility3:
+            scale = 1.64
+            minHeroRegionHeight = 452
+            minTextStackHeight = 344
+            bottomGapBeforeNextCard = 58
+        case .accessibility4:
+            scale = 1.80
+            minHeroRegionHeight = 510
+            minTextStackHeight = 398
+            bottomGapBeforeNextCard = 62
+        case .accessibility5:
+            scale = 1.96
+            minHeroRegionHeight = 574
+            minTextStackHeight = 460
+            bottomGapBeforeNextCard = 66
+        @unknown default:
+            scale = 1.28
+            minHeroRegionHeight = 334
+            minTextStackHeight = 242
+            bottomGapBeforeNextCard = 46
+        }
+    }
+
+    var relativeLabelSize: CGFloat { 28 * scale }
+    var dateLineSize: CGFloat { 17 * scale }
+    var iconSize: CGFloat { 22 * scale }
+    var wakeTimeSize: CGFloat { 68 * scale }
+    var wakeStateSize: CGFloat { 44 * scale }
+    var relationSize: CGFloat { 20 * scale }
+    var fajrWindowSize: CGFloat { 15 * scale }
+    var relativeToDateGap: CGFloat { max(4, 4 * scale) }
+    var dateToPrimaryGap: CGFloat { 22 * min(scale, 1.2) }
+    var primaryToRelationGap: CGFloat { 8 * min(scale, 1.2) }
+    var relationToWindowGap: CGFloat { 12 * min(scale, 1.2) }
+    var primaryRowSpacing: CGFloat { max(7, 8 * scale) }
+    var iconBaselineOffset: CGFloat { 4 * scale }
+    var verticalBreathing: CGFloat { max(18, (minHeroRegionHeight - minTextStackHeight) / 2) }
+    var maxContentWidth: CGFloat { 390 }
+}
+
+private struct SubhHomeHeroTimeLockup: View {
+    let date: Date
+    let pointSize: CGFloat
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 5) {
+            Text(Self.timeMainFormatter.string(from: date))
+                .font(AppTypography.timeDisplayFont(size: pointSize, weight: .light))
+                .foregroundStyle(WakeGlassTheme.primaryText)
+                .monospacedDigit()
+                .minimumScaleFactor(DesignTokens.timeDisplayMinScaleFactor)
+
+            Text(Self.timeSuffixFormatter.string(from: date))
+                .font(AppTypography.timeDisplayFont(size: pointSize * 0.41, weight: .regular))
+                .foregroundStyle(WakeGlassTheme.primaryText.opacity(0.78))
+                .monospacedDigit()
+                .baselineOffset(3 * min(pointSize / 68, 1.4))
+        }
+        .accessibilityHidden(true)
+    }
+
+    private static let timeMainFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "h:mm"
+        formatter.timeZone = .current
+        formatter.locale = .current
+        return formatter
+    }()
+
+    private static let timeSuffixFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "a"
+        formatter.timeZone = .current
+        formatter.locale = .current
+        return formatter
+    }()
 }
 
 private struct HomeSettingsFloatingControl: View {

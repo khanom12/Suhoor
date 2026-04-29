@@ -1,10 +1,23 @@
 import Foundation
 
+enum MorningHeroWakeState: String, Equatable {
+    case active
+    case offWithAnchor
+    case noAlarm
+    case quietHours
+    case unavailable
+}
+
 struct MorningHomeHeroDisplay: Equatable {
     let title: String
     let dateLine: String?
+    let wakeState: MorningHeroWakeState
+    let primaryTime: Date?
+    let primaryText: String
+    let wakeIconName: String?
     let statusText: String
     let detailText: String
+    let fajrWindowLine: String
     let chipTitles: [String]
     let accessibilityLabel: String
 }
@@ -23,7 +36,9 @@ enum MorningHomePresentation {
         entry: WakeRowEntry?,
         permissionSummary: String,
         currentDate: Date = Date(),
-        timeZone: TimeZone = .current
+        timeZone: TimeZone = .current,
+        hijriDateTextProvider: ((Date, TimeZone) -> String?)? = nil,
+        accessibleHijriDateTextProvider: ((Date, TimeZone) -> String?)? = nil
     ) -> MorningHomeHeroDisplay {
         guard let entry else {
             let detail = permissionSummary.isEmpty
@@ -32,36 +47,60 @@ enum MorningHomePresentation {
             return MorningHomeHeroDisplay(
                 title: "Tomorrow",
                 dateLine: nil,
-                statusText: "Morning not resolved yet",
+                wakeState: .unavailable,
+                primaryTime: nil,
+                primaryText: "Wake time unavailable",
+                wakeIconName: nil,
+                statusText: "Wake time unavailable",
                 detailText: detail,
+                fajrWindowLine: "Fajr times are not available yet",
                 chipTitles: [],
-                accessibilityLabel: "Tomorrow. Morning not resolved yet. \(detail)"
+                accessibilityLabel: "Tomorrow. Wake time unavailable. \(detail). Fajr times are not available yet."
             )
         }
 
-        let dateLine = compactDateFormatter(timeZone: timeZone).string(from: entry.schedule.date)
+        let title = relativeDayLabel(
+            targetDate: entry.schedule.date,
+            wakeDate: entry.schedule.wakeDate,
+            currentDate: currentDate,
+            timeZone: timeZone
+        )
+        let dateLine = heroDateLine(
+            for: entry.schedule.date,
+            timeZone: timeZone,
+            hijriDateTextProvider: hijriDateTextProvider
+        )
+        let wakeState = heroWakeState(for: entry)
         let statusText = heroStatusText(for: entry)
         let detailText = conciseWakeRelation(for: entry)
         let chipTitles = actionableChipTitles(for: entry)
-        let wakeText = entry.isEnabled
-            ? "Wake at \(TimeFormatters.timeFormatter.string(from: entry.schedule.wakeDate))"
-            : "No wake scheduled"
+        let fajrWindowLine = fajrWindowLine(for: entry, currentDate: currentDate, timeZone: timeZone)
+        let primaryTime = wakeState == .active ? entry.schedule.wakeDate : nil
+        let primaryText = primaryDisplayText(for: entry, wakeState: wakeState, timeZone: timeZone)
+        let accessibilityLabel = heroAccessibilityLabel(
+            title: title,
+            entry: entry,
+            dateLine: dateLine,
+            wakeState: wakeState,
+            primaryText: primaryText,
+            detailText: detailText,
+            fajrWindowLine: fajrWindowLine,
+            timeZone: timeZone,
+            accessibleHijriDateTextProvider: accessibleHijriDateTextProvider
+        )
 
         return MorningHomeHeroDisplay(
-            title: "Tomorrow",
+            title: title,
             dateLine: dateLine,
+            wakeState: wakeState,
+            primaryTime: primaryTime,
+            primaryText: primaryText,
+            wakeIconName: wakeIconName(for: wakeState),
             statusText: statusText,
             detailText: detailText,
+            fajrWindowLine: fajrWindowLine,
             chipTitles: chipTitles,
-            accessibilityLabel: [
-                "Tomorrow",
-                dateLine,
-                wakeText,
-                statusText,
-                detailText
-            ]
-                .compactMap { $0 }
-                .joined(separator: ". ")
+            accessibilityLabel: accessibilityLabel
         )
     }
 
@@ -108,7 +147,7 @@ enum MorningHomePresentation {
 
     private static func heroStatusText(for entry: WakeRowEntry) -> String {
         if !entry.isEnabled {
-            return "No wake scheduled"
+            return entry.activeDay.effectiveConfig.skipDay ? "Alarm off" : "No alarm set"
         }
         if entry.rowPresentation.availability.state == .activeOverride {
             return "Changed wake"
@@ -135,12 +174,19 @@ enum MorningHomePresentation {
 
     private static func conciseWakeRelation(for entry: WakeRowEntry) -> String {
         if !entry.isEnabled {
-            return entry.activeDay.effectiveConfig.skipDay ? "No wake for this date" : "No wake scheduled"
+            return entry.activeDay.effectiveConfig.skipDay
+                ? "Alarm is off for this date"
+                : "No wake alarm is set for this date"
+        }
+        if entry.activeDay.decisionLog.plannedWakeState != .fixedWake,
+           entry.activeDay.decisionLog.resolvedAnchor.type == .fajrEnd,
+           entry.activeDay.decisionLog.prayerWindow.fajrEnd == nil {
+            return "Fajr times are not available yet"
         }
         if entry.activeDay.decisionLog.plannedWakeState == .fixedWake {
-            return "Fixed wake"
+            return "Set for a custom wake time"
         }
-        return ProductSurfacePresentation.wakeOffsetText(for: entry.activeDay)
+        return heroWakeOffsetText(for: entry.activeDay)
     }
 
     private static func actionableChipTitles(for entry: WakeRowEntry) -> [String] {
@@ -184,6 +230,213 @@ enum MorningHomePresentation {
     private static func compactDateFormatter(timeZone: TimeZone) -> DateFormatter {
         let formatter = DateFormatter()
         formatter.dateFormat = "EEE, MMM d"
+        formatter.timeZone = timeZone
+        formatter.locale = .current
+        return formatter
+    }
+
+    private static func heroDateLine(
+        for date: Date,
+        timeZone: TimeZone,
+        hijriDateTextProvider: ((Date, TimeZone) -> String?)?
+    ) -> String {
+        let gregorian = compactDateFormatter(timeZone: timeZone).string(from: date)
+        let hijri: String?
+        if let hijriDateTextProvider {
+            hijri = hijriDateTextProvider(date, timeZone)
+        } else {
+            hijri = compactHijriDateText(for: date, timeZone: timeZone)
+        }
+        guard let hijri else {
+            return gregorian
+        }
+        return "\(gregorian) • \(hijri)"
+    }
+
+    private static func compactHijriDateText(for date: Date, timeZone: TimeZone) -> String? {
+        guard let components = AdjustedHijriCalendar.shared.adjustedComponents(for: date, timeZone: timeZone) else {
+            return nil
+        }
+        return "\(components.month.weeklyTagPreferredToken) \(components.day)"
+    }
+
+    private static func accessibleHijriDateText(for date: Date, timeZone: TimeZone) -> String? {
+        guard let components = AdjustedHijriCalendar.shared.adjustedComponents(for: date, timeZone: timeZone) else {
+            return nil
+        }
+        return "\(components.month.displayName) \(components.day)"
+    }
+
+    private static func heroWakeState(for entry: WakeRowEntry) -> MorningHeroWakeState {
+        guard entry.isEnabled else {
+            return entry.activeDay.effectiveConfig.skipDay ? .offWithAnchor : .noAlarm
+        }
+        return .active
+    }
+
+    private static func primaryDisplayText(
+        for entry: WakeRowEntry,
+        wakeState: MorningHeroWakeState,
+        timeZone: TimeZone
+    ) -> String {
+        switch wakeState {
+        case .active:
+            return timeFormatter(timeZone: timeZone).string(from: entry.schedule.wakeDate)
+        case .offWithAnchor:
+            return "Alarm off"
+        case .noAlarm:
+            return "No alarm set"
+        case .quietHours:
+            return "Quiet morning"
+        case .unavailable:
+            return "Wake time unavailable"
+        }
+    }
+
+    private static func wakeIconName(for wakeState: MorningHeroWakeState) -> String? {
+        switch wakeState {
+        case .active:
+            return "alarm.fill"
+        case .offWithAnchor:
+            return "bell.slash.fill"
+        case .quietHours:
+            return "moon.fill"
+        case .noAlarm, .unavailable:
+            return nil
+        }
+    }
+
+    private static func heroWakeOffsetText(for day: ActiveAlarmDay) -> String {
+        let decision = day.decisionLog
+        switch decision.plannedWakeState {
+        case .preFajr:
+            let unit = decision.resolvedDelta.minutes == 1 ? "min" : "min"
+            return "\(decision.resolvedDelta.minutes) \(unit) before Fajr begins"
+        case .inFajr:
+            if decision.resolvedAnchor.type == .fajrEnd {
+                let unit = decision.resolvedDelta.minutes == 1 ? "min" : "min"
+                return "\(decision.resolvedDelta.minutes) \(unit) before Fajr ends"
+            }
+            let unit = decision.resolvedDelta.minutes == 1 ? "min" : "min"
+            return "\(decision.resolvedDelta.minutes) \(unit) after Fajr begins"
+        case .postFajr:
+            let unit = decision.resolvedDelta.minutes == 1 ? "min" : "min"
+            return "\(decision.resolvedDelta.minutes) \(unit) after Fajr ends"
+        case .fixedWake:
+            return "Set for a custom wake time"
+        }
+    }
+
+    private static func fajrWindowLine(
+        for entry: WakeRowEntry,
+        currentDate: Date,
+        timeZone: TimeZone
+    ) -> String {
+        let window = entry.activeDay.decisionLog.prayerWindow
+        guard let fajrEnd = window.fajrEnd else {
+            return "Fajr times are not available yet"
+        }
+
+        let beginVerb: String
+        let endVerb: String
+        if entry.schedule.date <= currentDate, currentDate >= fajrEnd {
+            beginVerb = "began"
+            endVerb = "ended"
+        } else if currentDate >= window.fajrStart, currentDate < fajrEnd {
+            beginVerb = "began"
+            endVerb = "ends"
+        } else {
+            beginVerb = "begins"
+            endVerb = "ends"
+        }
+
+        let formatter = timeFormatter(timeZone: timeZone)
+        return "Fajr \(beginVerb): \(formatter.string(from: window.fajrStart)) • Fajr \(endVerb): \(formatter.string(from: fajrEnd))"
+    }
+
+    private static func heroAccessibilityLabel(
+        title: String,
+        entry: WakeRowEntry,
+        dateLine: String?,
+        wakeState: MorningHeroWakeState,
+        primaryText: String,
+        detailText: String,
+        fajrWindowLine: String,
+        timeZone: TimeZone,
+        accessibleHijriDateTextProvider: ((Date, TimeZone) -> String?)?
+    ) -> String {
+        let fullDate = accessibilityDateFormatter(timeZone: timeZone).string(from: entry.schedule.date)
+        let hijri: String?
+        if let accessibleHijriDateTextProvider {
+            hijri = accessibleHijriDateTextProvider(entry.schedule.date, timeZone)
+        } else {
+            hijri = accessibleHijriDateText(for: entry.schedule.date, timeZone: timeZone)
+        }
+        let dateText = [fullDate, hijri].compactMap { $0 }.joined(separator: ", ")
+        let wakeText: String
+        if wakeState == .active {
+            wakeText = "Wake alarm at \(timeFormatter(timeZone: timeZone).string(from: entry.schedule.wakeDate))"
+        } else {
+            wakeText = primaryText
+        }
+
+        return [
+            title,
+            dateText.isEmpty ? dateLine : dateText,
+            wakeText,
+            detailText,
+            fajrWindowLine.replacingOccurrences(of: " • ", with: ". ")
+        ]
+            .compactMap { value in
+                guard let value, !value.isEmpty else { return nil }
+                return value
+            }
+            .joined(separator: ". ")
+    }
+
+    private static func relativeDayLabel(
+        targetDate: Date,
+        wakeDate: Date,
+        currentDate: Date,
+        timeZone: TimeZone
+    ) -> String {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let targetStart = calendar.startOfDay(for: targetDate)
+        let today = calendar.startOfDay(for: currentDate)
+
+        if targetStart == today, wakeDate >= currentDate {
+            return "Today"
+        }
+
+        if let tomorrow = calendar.date(byAdding: .day, value: 1, to: today),
+           targetStart == tomorrow {
+            return "Tomorrow"
+        }
+
+        return weekdayFormatter(timeZone: timeZone).string(from: targetDate)
+    }
+
+    private static func timeFormatter(timeZone: TimeZone) -> DateFormatter {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .none
+        formatter.timeStyle = .short
+        formatter.timeZone = timeZone
+        formatter.locale = .current
+        return formatter
+    }
+
+    private static func weekdayFormatter(timeZone: TimeZone) -> DateFormatter {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "EEEE"
+        formatter.timeZone = timeZone
+        formatter.locale = .current
+        return formatter
+    }
+
+    private static func accessibilityDateFormatter(timeZone: TimeZone) -> DateFormatter {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "EEEE, MMMM d"
         formatter.timeZone = timeZone
         formatter.locale = .current
         return formatter

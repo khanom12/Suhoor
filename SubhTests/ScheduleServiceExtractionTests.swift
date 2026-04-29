@@ -214,11 +214,62 @@ struct ScheduleServiceExtractionTests {
         )
 
         #expect(display.title == "Tomorrow")
+        #expect(display.dateLine?.contains(" • ") == true)
+        #expect(display.wakeState == .active)
+        #expect(display.primaryTime == entry.schedule.wakeDate)
+        #expect(display.primaryText.contains(":"))
+        #expect(display.wakeIconName == "alarm.fill")
         #expect(display.statusText == "Wake alarm")
         #expect(display.detailText == "30 min before Fajr ends")
+        #expect(Self.normalizedTimeSpaces(display.fajrWindowLine) == "Fajr begins: 5:00 AM • Fajr ends: 6:16 AM")
         #expect(display.chipTitles.isEmpty)
+        #expect(display.accessibilityLabel.contains("Wake alarm at"))
+        #expect(Self.normalizedTimeSpaces(display.accessibilityLabel).contains("Fajr begins: 5:00 AM"))
         #expect(display.accessibilityLabel.contains("sunrise-derived") == false)
         #expect(display.accessibilityLabel.contains("Ordinary") == false)
+    }
+
+    @Test
+    func tomorrowHeroFallsBackToGregorianDateWithoutHijriDelimiter() {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let entry = Self.makeWakeEntry(
+            date: Self.makeDate(year: 2026, month: 4, day: 27, timeZone: timeZone),
+            timeZone: timeZone
+        )
+
+        let display = MorningHomePresentation.heroDisplay(
+            entry: entry,
+            permissionSummary: "",
+            currentDate: Self.makeDate(year: 2026, month: 4, day: 26, timeZone: timeZone),
+            timeZone: timeZone,
+            hijriDateTextProvider: { _, _ in nil },
+            accessibleHijriDateTextProvider: { _, _ in nil }
+        )
+
+        #expect(display.dateLine == "Mon, Apr 27")
+        #expect(display.dateLine?.contains("•") == false)
+    }
+
+    @Test
+    func tomorrowHeroUsesMissingFajrFallbackWithoutInventingWindow() {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let entry = Self.makeWakeEntry(
+            date: Self.makeDate(year: 2026, month: 4, day: 27, timeZone: timeZone),
+            timeZone: timeZone,
+            includeFajrEnd: false
+        )
+
+        let display = MorningHomePresentation.heroDisplay(
+            entry: entry,
+            permissionSummary: "",
+            currentDate: Self.makeDate(year: 2026, month: 4, day: 26, timeZone: timeZone),
+            timeZone: timeZone
+        )
+
+        #expect(display.primaryTime == entry.schedule.wakeDate)
+        #expect(display.detailText == "Fajr times are not available yet")
+        #expect(display.fajrWindowLine == "Fajr times are not available yet")
+        #expect(display.accessibilityLabel.contains("Fajr ends:") == false)
     }
 
     @Test
@@ -288,9 +339,13 @@ struct ScheduleServiceExtractionTests {
         #expect(qada.statusText == "Qada planned")
         #expect(tahajjud.statusText == "Tahajjud planned")
         #expect(changed.statusText == "Changed wake")
-        #expect(skipped.statusText == "No wake scheduled")
-        #expect(skipped.detailText == "No wake for this date")
-        #expect(fixed.detailText == "Fixed wake")
+        #expect(skipped.wakeState == .offWithAnchor)
+        #expect(skipped.primaryTime == nil)
+        #expect(skipped.primaryText == "Alarm off")
+        #expect(skipped.wakeIconName == "bell.slash.fill")
+        #expect(skipped.statusText == "Alarm off")
+        #expect(skipped.detailText == "Alarm is off for this date")
+        #expect(fixed.detailText == "Set for a custom wake time")
     }
 
     @Test
@@ -761,7 +816,8 @@ struct ScheduleServiceExtractionTests {
         skipDay: Bool = false,
         hasDayOverride: Bool = false,
         plannedWakeState: MorningWakeRuleState = .inFajr,
-        providerNotes: String? = nil
+        providerNotes: String? = nil,
+        includeFajrEnd: Bool = true
     ) -> WakeRowEntry {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = timeZone
@@ -777,7 +833,7 @@ struct ScheduleServiceExtractionTests {
             maghribDate: calendar.date(byAdding: .hour, value: 14, to: fajrStart) ?? fajrStart,
             wakeDate: wake,
             reminderDate: nil,
-            boundaryDate: fajrEnd,
+            boundaryDate: includeFajrEnd ? fajrEnd : nil,
             iftarDate: nil,
             locationDescription: "Toronto",
             offsetMinutes: 30,

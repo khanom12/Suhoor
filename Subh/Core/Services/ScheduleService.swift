@@ -437,9 +437,18 @@ final class ScheduleManager: ObservableObject {
 
     private func buildMorningHomeSnapshot(timeZone: TimeZone = .current) -> MorningHomeSnapshot {
         let overrideDateKeys = Set(alarmConfigStore.overridesByDay.keys)
+        let today = DateHelpers.startOfToday(in: timeZone)
+        let todayKey = DateHelpers.dayIdentifier(for: today, timeZone: timeZone)
+        let todayDay = activeWindowSnapshot.byDateKey[todayKey]
         let tomorrow = DateHelpers.startOfTomorrow(in: timeZone)
         let tomorrowKey = DateHelpers.dayIdentifier(for: tomorrow, timeZone: timeZone)
-        let tomorrowDay = activeWindowSnapshot.byDateKey[tomorrowKey]
+        let targetMorning: ActiveAlarmDay?
+        if let todayDay, Date() <= todayDay.schedule.wakeDate {
+            targetMorning = todayDay
+        } else {
+            targetMorning = activeWindowSnapshot.byDateKey[tomorrowKey]
+        }
+        let tomorrowDay = targetMorning
             ?? activeWindowSnapshot.visibleDays.first
         let tomorrowEntry = tomorrowDay.map {
             WakeRowActionResolver.makeEntry(activeDay: $0, overrideDateKeys: overrideDateKeys)
