@@ -1,5 +1,6 @@
-import Foundation
 import CoreLocation
+import CoreGraphics
+import Foundation
 import Testing
 @testable import Subh
 
@@ -198,6 +199,260 @@ struct ScheduleServiceExtractionTests {
     }
 
     @Test
+    func scheduleWindowReuseAcceptsCurrentDailyWindow() {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let now = Self.makeDate(year: 2026, month: 4, day: 29, hour: 12, timeZone: timeZone)
+        let today = DateHelpers.startOfDay(now, in: timeZone)
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let tomorrow = calendar.date(byAdding: .day, value: 1, to: today) ?? today
+        let snapshot = ActiveAlarmWindowSnapshot(
+            generatedAt: now,
+            visibleDays: [
+                Self.makeWakeEntry(date: today, timeZone: timeZone).activeDay,
+                Self.makeWakeEntry(date: tomorrow, timeZone: timeZone).activeDay
+            ],
+            scheduledDays: [],
+            visibleHorizonDays: 60,
+            scheduledHorizonDays: 30
+        )
+
+        #expect(ScheduleManager.shouldReuseScheduleWindow(
+            reason: .appLaunch,
+            lastScheduledDate: now,
+            snapshot: snapshot,
+            now: now,
+            timeZone: timeZone,
+            requiresDailyWindow: true
+        ))
+    }
+
+    @Test
+    func scheduleWindowReuseRejectsStaleGeneratedDate() {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let now = Self.makeDate(year: 2026, month: 4, day: 29, hour: 12, timeZone: timeZone)
+        let yesterday = Self.makeDate(year: 2026, month: 4, day: 28, hour: 12, timeZone: timeZone)
+        let today = DateHelpers.startOfDay(now, in: timeZone)
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let tomorrow = calendar.date(byAdding: .day, value: 1, to: today) ?? today
+        let snapshot = ActiveAlarmWindowSnapshot(
+            generatedAt: yesterday,
+            visibleDays: [
+                Self.makeWakeEntry(date: today, timeZone: timeZone).activeDay,
+                Self.makeWakeEntry(date: tomorrow, timeZone: timeZone).activeDay
+            ],
+            scheduledDays: [],
+            visibleHorizonDays: 60,
+            scheduledHorizonDays: 30
+        )
+
+        #expect(ScheduleManager.shouldReuseScheduleWindow(
+            reason: .foreground,
+            lastScheduledDate: now,
+            snapshot: snapshot,
+            now: now,
+            timeZone: timeZone,
+            requiresDailyWindow: true
+        ) == false)
+    }
+
+    @Test
+    func scheduleWindowReuseRejectsDailyWindowMissingTomorrow() {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let now = Self.makeDate(year: 2026, month: 4, day: 29, hour: 12, timeZone: timeZone)
+        let today = DateHelpers.startOfDay(now, in: timeZone)
+        let snapshot = ActiveAlarmWindowSnapshot(
+            generatedAt: now,
+            visibleDays: [Self.makeWakeEntry(date: today, timeZone: timeZone).activeDay],
+            scheduledDays: [],
+            visibleHorizonDays: 60,
+            scheduledHorizonDays: 30
+        )
+
+        #expect(ScheduleManager.shouldReuseScheduleWindow(
+            reason: .appLaunch,
+            lastScheduledDate: now,
+            snapshot: snapshot,
+            now: now,
+            timeZone: timeZone,
+            requiresDailyWindow: true
+        ) == false)
+    }
+
+    @Test
+    func scheduleWindowReuseRejectsFutureRamadanOnlyWindow() {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let now = Self.makeDate(year: 2026, month: 4, day: 29, hour: 12, timeZone: timeZone)
+        let ramadan1448Start = Self.makeDate(year: 2027, month: 2, day: 8, timeZone: timeZone)
+        let snapshot = ActiveAlarmWindowSnapshot(
+            generatedAt: now,
+            visibleDays: [Self.makeWakeEntry(date: ramadan1448Start, timeZone: timeZone).activeDay],
+            scheduledDays: [],
+            visibleHorizonDays: 60,
+            scheduledHorizonDays: 30
+        )
+
+        #expect(ScheduleManager.shouldReuseScheduleWindow(
+            reason: .appLaunch,
+            lastScheduledDate: now,
+            snapshot: snapshot,
+            now: now,
+            timeZone: timeZone,
+            requiresDailyWindow: true
+        ) == false)
+    }
+
+    @Test
+    func scheduleWindowReuseUsesLocalDayAcrossUtcBoundary() {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let now = Self.makeDate(year: 2026, month: 4, day: 29, hour: 0, minute: 30, timeZone: timeZone)
+        let today = DateHelpers.startOfDay(now, in: timeZone)
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let tomorrow = calendar.date(byAdding: .day, value: 1, to: today) ?? today
+        let snapshot = ActiveAlarmWindowSnapshot(
+            generatedAt: now,
+            visibleDays: [
+                Self.makeWakeEntry(date: today, timeZone: timeZone).activeDay,
+                Self.makeWakeEntry(date: tomorrow, timeZone: timeZone).activeDay
+            ],
+            scheduledDays: [],
+            visibleHorizonDays: 60,
+            scheduledHorizonDays: 30
+        )
+
+        #expect(ScheduleManager.shouldReuseScheduleWindow(
+            reason: .foreground,
+            lastScheduledDate: now,
+            snapshot: snapshot,
+            now: now,
+            timeZone: timeZone,
+            requiresDailyWindow: true
+        ))
+    }
+
+    @Test
+    @MainActor
+    func scheduleManagerRejectsCachedFebruaryRamadanWindowOnInitialization() throws {
+        let suiteName = "ScheduleServiceExtractionTests.StaleRamadanCache"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        let timeZone = TimeZone.current
+        let now = Self.makeDate(year: 2026, month: 4, day: 29, hour: 12, timeZone: timeZone)
+        var settings = AppSettings.default
+        settings.locationMode = .fixed
+        settings.fixedLocation = FixedLocation(latitude: 43.6532, longitude: -79.3832)
+        defaults.set(try JSONEncoder().encode(settings), forKey: "Suhoor.AppSettings")
+        defaults.set(try JSONEncoder().encode(DefaultAlarmConfig.default), forKey: "Suhoor.DefaultAlarmConfig")
+
+        let ramadan1448Start = Self.makeDate(year: 2027, month: 2, day: 8, timeZone: timeZone)
+        let staleDay = Self.makeWakeEntry(date: ramadan1448Start, timeZone: timeZone).activeDay
+        let staleSnapshot = ActiveAlarmWindowSnapshot(
+            generatedAt: now,
+            visibleDays: [staleDay],
+            scheduledDays: [staleDay],
+            visibleHorizonDays: 60,
+            scheduledHorizonDays: 30
+        )
+        let staleCache = ScheduleCacheStore.Cache(
+            lastScheduledDate: now,
+            lastUpdated: now,
+            schedulingMode: .notifications,
+            schedules: [staleDay.schedule],
+            activeWindowSnapshot: staleSnapshot,
+            tagSelectionRevision: nil,
+            wakeRuleSignature: ScheduleCacheStore.wakeRuleSignature(for: .default)
+        )
+        defaults.set(try JSONEncoder().encode(staleCache), forKey: "Suhoor.ScheduleCache")
+
+        let settingsStore = SuhoorSettingsStore(defaults: defaults)
+        let alarmConfigStore = AlarmConfigStore(defaultsStore: defaults)
+        let manager = ScheduleManager(
+            settingsStore: settingsStore,
+            locationService: LocationService(),
+            alarmConfigStore: alarmConfigStore,
+            usesLegacyContexts: false,
+            cacheStore: ScheduleCacheStore(defaults: defaults),
+            timeProvider: FixedTimeProvider(fixedNow: now)
+        )
+
+        #expect(manager.activeWindowSnapshot.visibleDays.isEmpty)
+        #expect(manager.schedules.isEmpty)
+    }
+
+    @Test
+    @MainActor
+    func legacySettingsWithoutMorningPlanStateRefreshesFromCurrentDay() async throws {
+        let suiteName = "ScheduleServiceExtractionTests.LegacySettingsDailyRefresh"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        let timeZone = TimeZone.current
+        let now = Self.makeDate(year: 2026, month: 4, day: 29, hour: 12, timeZone: timeZone)
+        var settings = AppSettings.default
+        settings.locationMode = .fixed
+        settings.fixedLocation = FixedLocation(latitude: 43.6532, longitude: -79.3832)
+        defaults.set(try JSONEncoder().encode(settings), forKey: "Suhoor.AppSettings")
+        defaults.set(try JSONEncoder().encode(DefaultAlarmConfig.default), forKey: "Suhoor.DefaultAlarmConfig")
+
+        let settingsStore = SuhoorSettingsStore(defaults: defaults)
+        let alarmConfigStore = AlarmConfigStore(defaultsStore: defaults)
+        let manager = ScheduleManager(
+            settingsStore: settingsStore,
+            locationService: LocationService(),
+            alarmConfigStore: alarmConfigStore,
+            usesLegacyContexts: false,
+            cacheStore: ScheduleCacheStore(defaults: defaults),
+            timeProvider: FixedTimeProvider(fixedNow: now)
+        )
+
+        await manager.refreshSchedules(force: true)
+
+        let todayKey = DateHelpers.dayIdentifier(for: now, timeZone: timeZone)
+        let tomorrowKey = DateHelpers.dayIdentifier(
+            for: DateHelpers.startOfTomorrow(in: timeZone, now: now),
+            timeZone: timeZone
+        )
+        #expect(manager.activeWindowSnapshot.byDateKey[todayKey] != nil)
+        #expect(manager.activeWindowSnapshot.byDateKey[tomorrowKey] != nil)
+        #expect(manager.activeWindowSnapshot.visibleDays.first?.dateKey == todayKey)
+        #expect(manager.activeWindowSnapshot.visibleDays.first?.dateKey != "2027-02-08")
+    }
+
+    @Test
+    @MainActor
+    func morningHomeSnapshotUsesInjectedCurrentDate() async throws {
+        let suiteName = "ScheduleServiceExtractionTests.HomeUsesInjectedCurrentDate"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        let timeZone = TimeZone.current
+        let now = Self.makeDate(year: 2026, month: 4, day: 29, hour: 12, timeZone: timeZone)
+        var settings = AppSettings.default
+        settings.locationMode = .fixed
+        settings.fixedLocation = FixedLocation(latitude: 43.6532, longitude: -79.3832)
+        defaults.set(try JSONEncoder().encode(settings), forKey: "Suhoor.AppSettings")
+
+        let settingsStore = SuhoorSettingsStore(defaults: defaults)
+        let alarmConfigStore = AlarmConfigStore(defaultsStore: defaults)
+        let manager = ScheduleManager(
+            settingsStore: settingsStore,
+            locationService: LocationService(),
+            alarmConfigStore: alarmConfigStore,
+            usesLegacyContexts: false,
+            cacheStore: ScheduleCacheStore(defaults: defaults),
+            timeProvider: FixedTimeProvider(fixedNow: now)
+        )
+
+        await manager.refreshSchedules(force: true)
+        let snapshot = manager.morningHomeSnapshot(timeZone: timeZone)
+
+        let tomorrow = DateHelpers.startOfTomorrow(in: timeZone, now: now)
+        let tomorrowKey = DateHelpers.dayIdentifier(for: tomorrow, timeZone: timeZone)
+        #expect(snapshot.tomorrow?.schedule.date == tomorrow)
+        #expect(snapshot.weeklyFajrcast.selectedDay.dateKey == tomorrowKey)
+    }
+
+    @Test
     func tomorrowHeroSuppressesOrdinaryAndDiagnosticCopy() {
         let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
         let entry = Self.makeWakeEntry(
@@ -308,6 +563,20 @@ struct ScheduleServiceExtractionTests {
     func tomorrowHeroHidesV3RangeWhenFastingOrOutOfWindow() {
         let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
         let date = Self.makeDate(year: 2026, month: 4, day: 27, timeZone: timeZone)
+        let ordinarySuhoor = MorningHomePresentation.heroDisplay(
+            entry: Self.makeWakeEntry(
+                date: date,
+                timeZone: timeZone,
+                context: ResolvedDayContext(
+                    primaryContext: .standard,
+                    secondaryContexts: [.suhoor],
+                    supportingTags: [],
+                    explanation: .empty
+                )
+            ),
+            permissionSummary: "",
+            timeZone: timeZone
+        )
         let fasting = MorningHomePresentation.heroDisplay(
             entry: Self.makeWakeEntry(
                 date: date,
@@ -331,13 +600,82 @@ struct ScheduleServiceExtractionTests {
             permissionSummary: "",
             timeZone: timeZone
         )
+        let atFajrBegin = MorningHomePresentation.heroDisplay(
+            entry: Self.makeWakeEntry(
+                date: date,
+                timeZone: timeZone,
+                wakeOffsetMinutesFromFajrStart: 0
+            ),
+            permissionSummary: "",
+            timeZone: timeZone
+        )
+        let atFajrEnd = MorningHomePresentation.heroDisplay(
+            entry: Self.makeWakeEntry(
+                date: date,
+                timeZone: timeZone,
+                wakeOffsetMinutesFromFajrStart: 76
+            ),
+            permissionSummary: "",
+            timeZone: timeZone
+        )
 
+        #expect(ordinarySuhoor.fajrWindowVisualMode == .interactiveWithinFajrWindow)
+        #expect(ordinarySuhoor.wakeAdjustmentEnabled)
+        #expect(ordinarySuhoor.fajrBeginDisplayText != nil)
+        #expect(ordinarySuhoor.fajrEndDisplayText != nil)
+        #expect(atFajrBegin.fajrWindowVisualMode == .interactiveWithinFajrWindow)
+        #expect(atFajrBegin.wakeAdjustmentEnabled)
+        #expect(atFajrBegin.wakeWindowPositionRatio == 0)
+        #expect(atFajrEnd.fajrWindowVisualMode == .interactiveWithinFajrWindow)
+        #expect(atFajrEnd.wakeAdjustmentEnabled)
+        #expect(atFajrEnd.wakeWindowPositionRatio == 1)
         #expect(fasting.fajrWindowVisualMode == .hiddenFasting)
         #expect(fasting.wakeAdjustmentEnabled == false)
         #expect(outOfWindow.fajrWindowVisualMode == .hiddenOutOfWindow)
         #expect(outOfWindow.wakeAdjustmentEnabled == false)
         #expect(outOfWindow.fajrBeginDisplayText != nil)
         #expect(outOfWindow.fajrEndDisplayText != nil)
+    }
+
+    @Test
+    func morningHeroWakeAdjustmentMapperClampsAndRounds() {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let start = Self.makeDate(year: 2026, month: 4, day: 27, hour: 5, minute: 0, timeZone: timeZone)
+        let end = start.addingTimeInterval(80 * 60)
+
+        let beforeStart = MorningHeroWakeAdjustmentMapper.wakeTime(
+            forX: -40,
+            width: 160,
+            minTime: start,
+            maxTime: end,
+            stepMinutes: 5
+        )
+        let atEnd = MorningHeroWakeAdjustmentMapper.wakeTime(
+            forX: 160,
+            width: 160,
+            minTime: start,
+            maxTime: end,
+            stepMinutes: 5
+        )
+        let afterEnd = MorningHeroWakeAdjustmentMapper.wakeTime(
+            forX: 240,
+            width: 160,
+            minTime: start,
+            maxTime: end,
+            stepMinutes: 5
+        )
+        let roundedMiddle = MorningHeroWakeAdjustmentMapper.wakeTime(
+            forX: 53,
+            width: 160,
+            minTime: start,
+            maxTime: end,
+            stepMinutes: 5
+        )
+
+        #expect(beforeStart == start)
+        #expect(atEnd == end)
+        #expect(afterEnd == end)
+        #expect(abs(roundedMiddle.timeIntervalSince(start.addingTimeInterval(25 * 60))) < 1)
     }
 
     @Test

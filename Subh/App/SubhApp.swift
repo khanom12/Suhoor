@@ -14,6 +14,7 @@ struct SubhApp: App {
 
     init() {
         #if DEBUG
+        UITestFixtureConfigurator.resetPersistentStateIfNeeded()
         let resetMode = DeveloperInstallReset.configuredMode()
         let didReset = DeveloperInstallReset.resetIfNeeded(mode: resetMode) {
             UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
@@ -27,14 +28,27 @@ struct SubhApp: App {
         #endif
 
         let appNavigator = AppNavigator()
+        #if DEBUG
+        let timeProvider = UITestLaunchConfiguration.timeProvider
+        #else
+        let timeProvider = SystemTimeProvider()
+        #endif
         let settingsStore = SuhoorSettingsStore()
         let alarmConfigStore = AlarmConfigStore(legacySettings: settingsStore.settings)
+        #if DEBUG
+        UITestFixtureConfigurator.applyIfNeeded(
+            settingsStore: settingsStore,
+            alarmConfigStore: alarmConfigStore,
+            timeProvider: timeProvider
+        )
+        #endif
         let locationService = LocationService()
         let scheduleManager = ScheduleManager(
             settingsStore: settingsStore,
             locationService: locationService,
             alarmConfigStore: alarmConfigStore,
-            usesLegacyContexts: false
+            usesLegacyContexts: false,
+            timeProvider: timeProvider
         )
         _appNavigator = StateObject(wrappedValue: appNavigator)
         _settingsStore = StateObject(wrappedValue: settingsStore)

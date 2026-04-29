@@ -29,6 +29,14 @@
         "identifier" : "SubhTests",
         "name" : "SubhTests"
       }
+    },
+    {
+      "parallelizable" : false,
+      "target" : {
+        "containerPath" : "container:Subh.xcodeproj",
+        "identifier" : "SubhUITests",
+        "name" : "SubhUITests"
+      }
     }
   ],
   "version" : 1

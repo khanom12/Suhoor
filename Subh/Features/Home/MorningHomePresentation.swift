@@ -703,7 +703,7 @@ enum MorningHomePresentation {
     }
 
     private static func isFastingMorning(_ context: ResolvedDayContext) -> Bool {
-        let fastingContexts: Set<MorningContextType> = [.suhoor, .fasting, .qadaFast, .sunnahFast]
+        let fastingContexts: Set<MorningContextType> = [.fasting, .qadaFast, .sunnahFast]
         if fastingContexts.contains(context.primaryContext) {
             return true
         }

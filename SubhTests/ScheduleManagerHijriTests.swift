@@ -1121,7 +1121,7 @@ struct ScheduleManagerHijriTests {
 
     @Test
     @MainActor
-    func morningPlanStoreSeedsLegacyCompatFromExistingPersistence() throws {
+    func morningPlanStoreSeedsDailyActivationFromExistingPersistence() throws {
         let suiteName = "ScheduleManagerHijriTests.MorningPlanLegacyCompat"
         let defaults = UserDefaults(suiteName: suiteName)!
         defaults.removePersistentDomain(forName: suiteName)
@@ -1133,7 +1133,7 @@ struct ScheduleManagerHijriTests {
             defaultConfig: .default
         )
 
-        #expect(store.state.activationMode == .legacyCompat)
+        #expect(store.state.activationMode == .dailyActive)
     }
 
     @Test
@@ -1165,7 +1165,7 @@ struct ScheduleManagerHijriTests {
 
     @Test
     @MainActor
-    func legacyCompatDoesNotInjectDailyPlanProvenanceForExistingUsers() throws {
+    func existingUsersReceiveDailyPlanProvenanceAfterMigration() throws {
         let suiteName = "ScheduleManagerHijriTests.NoSurpriseDailyPlan"
         let defaults = UserDefaults(suiteName: suiteName)!
         defaults.removePersistentDomain(forName: suiteName)
@@ -1189,7 +1189,7 @@ struct ScheduleManagerHijriTests {
         )
 
         let provenances = manager.provenance(for: date, timeZone: timeZone)
-        #expect(provenances.map(\.sourceOrigin).contains(.defaultDailyPlan) == false)
+        #expect(provenances.map(\.sourceOrigin).contains(.defaultDailyPlan))
     }
 
     @Test
@@ -1808,6 +1808,94 @@ struct ScheduleManagerHijriTests {
         #expect(manager.activeDay(for: nextDate, timeZone: timeZone)?.schedule.wakeDate == nextWakeBefore)
         #expect(adjustedWake >= target.decisionLog.prayerWindow.fajrStart)
         #expect(adjustedWake <= fajrEnd)
+    }
+
+    @Test
+    @MainActor
+    func heroWakeAdjustmentKeepsFajrRowAtWindowBoundaries() async {
+        let suiteName = "ScheduleManagerHijriTests.HeroWakeAdjustmentBoundaries"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        let timeZone = TimeZone.current
+
+        let settingsStore = SuhoorSettingsStore(defaults: defaults)
+        settingsStore.update { draft in
+            draft.isConfigured = true
+            draft.locationMode = .fixed
+            draft.fixedLocation = FixedLocation(latitude: 43.6532, longitude: -79.3832)
+        }
+
+        let alarmConfigStore = AlarmConfigStore(defaultsStore: defaults)
+        let manager = ScheduleManager(
+            settingsStore: settingsStore,
+            locationService: LocationService(),
+            alarmConfigStore: alarmConfigStore,
+            hijriAdjustmentStore: HijriMonthAdjustmentStore(defaults: defaults),
+            cacheStore: ScheduleCacheStore(defaults: defaults)
+        )
+
+        await manager.refreshSchedules(force: true)
+
+        guard let target = manager.currentMorningHomeSnapshot.tomorrow?.activeDay,
+              let fajrEnd = target.decisionLog.prayerWindow.fajrEnd else {
+            Issue.record("Expected a resolved target morning with Fajr end.")
+            return
+        }
+
+        let fajrStart = target.decisionLog.prayerWindow.fajrStart
+        let committedStart = await manager.commitHeroWakeAdjustment(
+            for: target.date,
+            wakeTime: fajrStart,
+            timeZone: timeZone
+        )
+
+        #expect(committedStart)
+        guard let startDisplay = heroDisplay(for: target.date, manager: manager, timeZone: timeZone) else {
+            Issue.record("Expected a hero display after committing Fajr begin.")
+            return
+        }
+        let startWake = manager.activeDay(for: target.date, timeZone: timeZone)?.schedule.wakeDate
+        #expect(startWake ?? .distantPast >= fajrStart)
+        #expect(startWake ?? .distantFuture <= fajrEnd)
+        #expect(startDisplay.fajrWindowVisualMode == .interactiveWithinFajrWindow)
+        #expect(startDisplay.wakeAdjustmentEnabled)
+
+        let committedEnd = await manager.commitHeroWakeAdjustment(
+            for: target.date,
+            wakeTime: fajrEnd,
+            timeZone: timeZone
+        )
+
+        #expect(committedEnd)
+        guard let endDisplay = heroDisplay(for: target.date, manager: manager, timeZone: timeZone) else {
+            Issue.record("Expected a hero display after committing Fajr end.")
+            return
+        }
+        let endWake = manager.activeDay(for: target.date, timeZone: timeZone)?.schedule.wakeDate
+        #expect(endWake ?? .distantPast >= fajrStart)
+        #expect(endWake ?? .distantFuture <= fajrEnd)
+        #expect(endDisplay.fajrWindowVisualMode == .interactiveWithinFajrWindow)
+        #expect(endDisplay.wakeAdjustmentEnabled)
+    }
+
+    @MainActor
+    private func heroDisplay(
+        for date: Date,
+        manager: ScheduleManager,
+        timeZone: TimeZone
+    ) -> MorningHomeHeroDisplay? {
+        guard let activeDay = manager.activeDay(for: date, timeZone: timeZone) else {
+            return nil
+        }
+        let entry = WakeRowActionResolver.makeEntry(
+            activeDay: activeDay,
+            overrideDateKeys: [activeDay.dateKey]
+        )
+        return MorningHomePresentation.heroDisplay(
+            entry: entry,
+            permissionSummary: "",
+            timeZone: timeZone
+        )
     }
 
     private static func makeDate(

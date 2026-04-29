@@ -43,9 +43,10 @@ final class ScheduleManager: ObservableObject {
     private let qadaBatchStore: QadaBatchStore
     private let usesLegacyContexts: Bool
     private let cacheStore: ScheduleCacheStore
+    private let timeProvider: any TimeProviding
     private let fajrWindowSurfaceProvider = FajrWindowSurfaceProvider()
     private let nextWakeEventResolver = NextWakeEventResolver()
-    private let activeWindowSnapshotBuilder = ActiveWindowSnapshotBuilder()
+    private let activeWindowSnapshotBuilder: ActiveWindowSnapshotBuilder
     private let calculator = PrayerTimeCalculator()
     private lazy var dayScheduleBuilder = DayScheduleBuilder(calculator: calculator)
     private let hijriAdjustmentStore: HijriMonthAdjustmentStore
@@ -160,7 +161,8 @@ final class ScheduleManager: ObservableObject {
         usesLegacyContexts: Bool = true,
         hijriAdjustmentStore: HijriMonthAdjustmentStore = HijriMonthAdjustmentStore(),
         hijriAdjustmentChangeStore: HijriAdjustmentChangeStore = HijriAdjustmentChangeStore(),
-        cacheStore: ScheduleCacheStore = ScheduleCacheStore()
+        cacheStore: ScheduleCacheStore = ScheduleCacheStore(),
+        timeProvider: any TimeProviding = SystemTimeProvider()
     ) {
         let resolvedFastTagStore = fastTagStore ?? FastTagStore(loadPersistedData: usesLegacyContexts)
         let resolvedFastLogStore = fastLogStore ?? FastLogStore(loadPersistedData: usesLegacyContexts)
@@ -170,10 +172,13 @@ final class ScheduleManager: ObservableObject {
 
         self.settingsStore = settingsStore
         self.alarmConfigStore = alarmConfigStore
+        self.timeProvider = timeProvider
+        self.activeWindowSnapshotBuilder = ActiveWindowSnapshotBuilder(timeProvider: timeProvider)
         self.morningPlanStore = MorningPlanStore(
             defaults: alarmConfigStore.storageDefaults,
             legacySettings: settingsStore.settings,
-            defaultConfig: alarmConfigStore.defaults
+            defaultConfig: alarmConfigStore.defaults,
+            timeProvider: timeProvider
         )
         self.locationService = locationService
         self.fastTagStore = resolvedFastTagStore
@@ -211,14 +216,25 @@ final class ScheduleManager: ObservableObject {
         let cache = cacheStore.load()
         let expectedWakeRuleSignature = ScheduleCacheStore.wakeRuleSignature(for: alarmConfigStore.defaults)
         let cacheMatchesWakeRule = cache.wakeRuleSignature == expectedWakeRuleSignature
-        if !cacheMatchesWakeRule && (cache.activeWindowSnapshot != nil || !cache.schedules.isEmpty) {
+        let cachedActiveWindow = cacheMatchesWakeRule ? cache.activeWindowSnapshot : nil
+        let cacheReusable = cachedActiveWindow.map {
+            Self.shouldReuseScheduleWindow(
+                reason: .appLaunch,
+                lastScheduledDate: cache.lastScheduledDate,
+                snapshot: $0,
+                now: timeProvider.now(),
+                timeZone: .current,
+                requiresDailyWindow: morningPlanStore.usesDailyActivation
+            )
+        } ?? false
+        if (!cacheMatchesWakeRule || !cacheReusable) && (cache.activeWindowSnapshot != nil || !cache.schedules.isEmpty) {
             cacheStore.clear()
         }
-        let cachedSchedules = cacheMatchesWakeRule ? cache.schedules : []
+        let cachedSchedules = cacheReusable ? cache.schedules : []
         self.schedules = cachedSchedules
-        self.schedulingMode = cacheMatchesWakeRule ? cache.schedulingMode : .none
-        self.lastUpdated = cacheMatchesWakeRule ? cache.lastUpdated : nil
-        self.activeWindowSnapshot = (cacheMatchesWakeRule ? cache.activeWindowSnapshot : nil)
+        self.schedulingMode = cacheReusable ? cache.schedulingMode : .none
+        self.lastUpdated = cacheReusable ? cache.lastUpdated : nil
+        self.activeWindowSnapshot = (cacheReusable ? cachedActiveWindow : nil)
             ?? Self.makeLegacySnapshot(
                 schedules: cachedSchedules,
                 settings: settingsStore.settings,
@@ -283,10 +299,14 @@ final class ScheduleManager: ObservableObject {
             ?? schedules.first
     }
 
+    var currentDate: Date {
+        timeProvider.now()
+    }
+
     var nextWakeEventSummary: NextWakeEventSummary? {
         nextWakeEventResolver.resolve(
             activeWindowSnapshot: activeWindowSnapshot,
-            now: Date()
+            now: timeProvider.now()
         )
     }
 
@@ -339,7 +359,7 @@ final class ScheduleManager: ObservableObject {
                 dataset: dataset,
                 anchorDateKey: resolvedAnchorDateKey,
                 selectedDateKey: resolvedFocusedDateKey,
-                now: Date(),
+                now: timeProvider.now(),
                 timeZone: timeZone
             )
         }
@@ -437,13 +457,14 @@ final class ScheduleManager: ObservableObject {
 
     private func buildMorningHomeSnapshot(timeZone: TimeZone = .current) -> MorningHomeSnapshot {
         let overrideDateKeys = Set(alarmConfigStore.overridesByDay.keys)
-        let today = DateHelpers.startOfToday(in: timeZone)
+        let now = timeProvider.now()
+        let today = DateHelpers.startOfToday(in: timeZone, now: now)
         let todayKey = DateHelpers.dayIdentifier(for: today, timeZone: timeZone)
         let todayDay = activeWindowSnapshot.byDateKey[todayKey]
-        let tomorrow = DateHelpers.startOfTomorrow(in: timeZone)
+        let tomorrow = DateHelpers.startOfTomorrow(in: timeZone, now: now)
         let tomorrowKey = DateHelpers.dayIdentifier(for: tomorrow, timeZone: timeZone)
         let targetMorning: ActiveAlarmDay?
-        if let todayDay, Date() <= todayDay.schedule.wakeDate {
+        if let todayDay, now <= todayDay.schedule.wakeDate {
             targetMorning = todayDay
         } else {
             targetMorning = activeWindowSnapshot.byDateKey[tomorrowKey]
@@ -458,6 +479,7 @@ final class ScheduleManager: ObservableObject {
         let morningcast = Array(
             MorningHomeSnapshot.morningcastEntries(
                 from: allMorningEntries,
+                currentDate: now,
                 timeZone: timeZone
             )
             .prefix(MorningHomeSnapshot.maximumMorningcastCount)
@@ -581,12 +603,12 @@ final class ScheduleManager: ObservableObject {
         hijriAdjustmentChanges = []
     }
 
-    func currentHijriYearMonth(timeZone: TimeZone = .current, date: Date = Date()) -> HijriYearMonth? {
-        wakeListDataProvider.currentHijriYearMonth(timeZone: timeZone, date: date)
+    func currentHijriYearMonth(timeZone: TimeZone = .current, date: Date? = nil) -> HijriYearMonth? {
+        wakeListDataProvider.currentHijriYearMonth(timeZone: timeZone, date: date ?? timeProvider.now())
     }
 
-    func rollingHijriMonths(count: Int = 12, timeZone: TimeZone = .current, date: Date = Date()) -> [HijriYearMonth] {
-        wakeListDataProvider.rollingHijriMonths(count: count, timeZone: timeZone, date: date)
+    func rollingHijriMonths(count: Int = 12, timeZone: TimeZone = .current, date: Date? = nil) -> [HijriYearMonth] {
+        wakeListDataProvider.rollingHijriMonths(count: count, timeZone: timeZone, date: date ?? timeProvider.now())
     }
 
     func hasRecurringIslamicSchedules() -> Bool {
@@ -620,7 +642,7 @@ final class ScheduleManager: ObservableObject {
             return snapshotEntries
         }
         return activeDayResolver.resolvedEntriesForActiveWindow(
-            from: DateHelpers.startOfToday(in: timeZone),
+            from: DateHelpers.startOfToday(in: timeZone, now: timeProvider.now()),
             limit: limit,
             timeZone: timeZone
         )
@@ -745,7 +767,7 @@ final class ScheduleManager: ObservableObject {
         }
 
         let resolvedEntries = activeDayResolver.resolvedEntriesForActiveWindow(
-            from: DateHelpers.startOfToday(in: timeZone),
+            from: DateHelpers.startOfToday(in: timeZone, now: timeProvider.now()),
             limit: count,
             timeZone: timeZone
         )
@@ -771,7 +793,7 @@ final class ScheduleManager: ObservableObject {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = timeZone
 
-        let now = Date()
+        let now = timeProvider.now()
         let today = DateHelpers.startOfDay(now, in: timeZone)
         let todayKey = DateHelpers.dayIdentifier(for: today, timeZone: timeZone)
         if let todayDay = activeWindowSnapshot.byDateKey[todayKey],
@@ -945,10 +967,10 @@ final class ScheduleManager: ObservableObject {
     @discardableResult
     func addIslamicQuickAdd(
         _ kind: IslamicQuickAddKind,
-        startDate: Date = Date(),
+        startDate: Date? = nil,
         timeZone: TimeZone = .current
     ) async -> AddScheduledDatesResult {
-        let result = alarmConfigStore.addIslamicQuickAdd(kind, startDate: startDate, timeZone: timeZone)
+        let result = alarmConfigStore.addIslamicQuickAdd(kind, startDate: startDate ?? timeProvider.now(), timeZone: timeZone)
         guard !result.addedDates.isEmpty else { return result }
 
         for date in result.addedDates {
@@ -961,10 +983,10 @@ final class ScheduleManager: ObservableObject {
     @discardableResult
     func addAshuraQuickAdd(
         _ pattern: AshuraQuickAddPattern,
-        startDate: Date = Date(),
+        startDate: Date? = nil,
         timeZone: TimeZone = .current
     ) async -> AddScheduledDatesResult {
-        let result = alarmConfigStore.addAshuraQuickAdd(pattern, startDate: startDate, timeZone: timeZone)
+        let result = alarmConfigStore.addAshuraQuickAdd(pattern, startDate: startDate ?? timeProvider.now(), timeZone: timeZone)
         guard !result.addedDates.isEmpty else { return result }
 
         for date in result.addedDates {
@@ -977,10 +999,10 @@ final class ScheduleManager: ObservableObject {
     @discardableResult
     func addRecurringIslamicRule(
         _ rule: RecurringIslamicRule,
-        startDate: Date = Date(),
+        startDate: Date? = nil,
         timeZone: TimeZone = .current
     ) async -> Bool {
-        let added = alarmConfigStore.addRecurringIslamicSource(rule, startDate: startDate, timeZone: timeZone)
+        let added = alarmConfigStore.addRecurringIslamicSource(rule, startDate: startDate ?? timeProvider.now(), timeZone: timeZone)
         guard added else { return false }
         await refreshSchedules(force: true)
         return true
@@ -1073,13 +1095,14 @@ final class ScheduleManager: ObservableObject {
     }
 
     func ensureScheduleWindow(reason: ScheduleRefreshReason) async {
-        let now = Date()
+        let now = timeProvider.now()
         if Self.shouldReuseScheduleWindow(
             reason: reason,
             lastScheduledDate: settingsStore.settings.lastScheduledDate,
             snapshot: activeWindowSnapshot,
             now: now,
-            timeZone: .current
+            timeZone: .current,
+            requiresDailyWindow: morningPlanStore.usesDailyActivation
         ) {
             guard usesLegacyContexts else {
                 await refreshPermissionSummary()
@@ -1225,7 +1248,8 @@ final class ScheduleManager: ObservableObject {
             coordinate = ScheduleLocationSnapshot(latitude: fixed.latitude, longitude: fixed.longitude)
         }
 
-        let startDate = DateHelpers.startOfToday(in: timeZone)
+        let now = timeProvider.now()
+        let startDate = DateHelpers.startOfToday(in: timeZone, now: now)
         let mode = await effectiveSchedulingChannel()
         let resolvedEntries = PerformanceTrace.measure("active-window.resolve", metadata: "limit=\(visibleActiveDayLimit)") {
             activeDayResolver.resolvedEntriesForActiveWindow(
@@ -1245,9 +1269,7 @@ final class ScheduleManager: ObservableObject {
             "schedule.compute-window",
             metadata: "days=\(resolvedEntries.count)"
         ) {
-            await Task.detached(priority: .userInitiated) { [activeWindowSnapshotBuilder] in
-                activeWindowSnapshotBuilder.build(input: input)
-            }.value
+            activeWindowSnapshotBuilder.build(input: input)
         }
         let adjustedSnapshot: ActiveAlarmWindowSnapshot
         if usesLegacyContexts {
@@ -1271,7 +1293,7 @@ final class ScheduleManager: ObservableObject {
         }
         debugValidateActiveWindow(adjustedSnapshot, resolvedEntries: resolvedEntries)
 
-        let refreshCompletedAt = Date()
+        let refreshCompletedAt = timeProvider.now()
         activeWindowSnapshot = adjustedSnapshot
         schedules = adjustedSnapshot.visibleDays.map(\.schedule)
         lastUpdated = refreshCompletedAt
@@ -1301,7 +1323,7 @@ final class ScheduleManager: ObservableObject {
         )
 
         settingsStore.update { draft in
-            draft.lastScheduledDate = Date()
+            draft.lastScheduledDate = refreshCompletedAt
             draft.lastSchedulingMode = schedulingMode
         }
 
@@ -1330,9 +1352,9 @@ final class ScheduleManager: ObservableObject {
 
         guard activeDayResolver.dateParticipatesInWakePlan(normalizedDate, timeZone: timeZone) else {
             await cancelDay(normalizedDate)
-            activeWindowSnapshot = activeWindowSnapshot.removing(dateKey: key)
+            activeWindowSnapshot = activeWindowSnapshot.removing(dateKey: key, generatedAt: timeProvider.now())
             schedules = activeWindowSnapshot.visibleDays.map(\.schedule)
-            lastUpdated = Date()
+            lastUpdated = timeProvider.now()
             activeTagSelectionRevision = usesLegacyContexts ? fastTagStore.currentRevision : -1
             cacheStore.save(
                 ScheduleCacheStore.Cache(
@@ -1363,7 +1385,7 @@ final class ScheduleManager: ObservableObject {
             return
         }
 
-        activeWindowSnapshot = activeWindowSnapshot.replacing(updatedDay)
+        activeWindowSnapshot = activeWindowSnapshot.replacing(updatedDay, generatedAt: timeProvider.now())
         schedules = activeWindowSnapshot.visibleDays.map(\.schedule)
 
         let settings = settingsStore.settings
@@ -1382,7 +1404,7 @@ final class ScheduleManager: ObservableObject {
             await alarmScheduler.cancelDay(day: updatedDay)
         }
 
-        lastUpdated = Date()
+        lastUpdated = timeProvider.now()
         activeTagSelectionRevision = usesLegacyContexts ? fastTagStore.currentRevision : -1
         cacheStore.save(
             ScheduleCacheStore.Cache(
@@ -1415,7 +1437,13 @@ final class ScheduleManager: ObservableObject {
             return false
         }
 
-        let minutesFromMidnight = DateHelpers.minutesFromMidnight(for: clampedWakeTime, timeZone: timeZone)
+        let minutesFromMidnight = Self.persistedHeroWakeAdjustmentMinutes(
+            clampedWakeTime: clampedWakeTime,
+            date: normalizedDate,
+            fajrStart: window.fajrStart,
+            fajrEnd: fajrEnd,
+            timeZone: timeZone
+        )
         alarmConfigStore.updateOverride(for: normalizedDate, timeZone: timeZone) { override in
             override.skipDay = false
             override.suhoorEnabled = true
@@ -1432,6 +1460,29 @@ final class ScheduleManager: ObservableObject {
         return true
     }
 
+    private static func persistedHeroWakeAdjustmentMinutes(
+        clampedWakeTime: Date,
+        date: Date,
+        fajrStart: Date,
+        fajrEnd: Date,
+        timeZone: TimeZone
+    ) -> Int {
+        var minutes = DateHelpers.minutesFromMidnight(for: clampedWakeTime, timeZone: timeZone)
+        var resolvedWakeTime = DateHelpers.dateFromMidnight(for: date, minutes: minutes, timeZone: timeZone)
+
+        while resolvedWakeTime < fajrStart, minutes < 1439 {
+            minutes += 1
+            resolvedWakeTime = DateHelpers.dateFromMidnight(for: date, minutes: minutes, timeZone: timeZone)
+        }
+
+        while resolvedWakeTime > fajrEnd, minutes > 0 {
+            minutes -= 1
+            resolvedWakeTime = DateHelpers.dateFromMidnight(for: date, minutes: minutes, timeZone: timeZone)
+        }
+
+        return minutes
+    }
+
     func schedule(for date: Date) -> DaySchedule? {
         activeDayResolver.scheduleAndConfig(for: date, builder: dayScheduleBuilder)?.schedule
     }
@@ -1439,7 +1490,7 @@ final class ScheduleManager: ObservableObject {
     func defaultWakeValidation(timeZone: TimeZone = .current) -> DefaultWakeRuleValidationResult? {
         guard let coordinate = currentCoordinate() else { return nil }
         return DefaultWakeRuleValidator.validate(
-            startDate: Date(),
+            startDate: timeProvider.now(),
             timeZone: timeZone,
             coordinate: coordinate,
             settings: settingsStore.settings,
@@ -1450,7 +1501,7 @@ final class ScheduleManager: ObservableObject {
 
     func scheduleTomorrowActivation() async -> ActivationScheduleResult {
         let timeZone = TimeZone.current
-        let tomorrow = DateHelpers.startOfTomorrow(in: timeZone)
+        let tomorrow = DateHelpers.startOfTomorrow(in: timeZone, now: timeProvider.now())
         guard let result = activeDayResolver.scheduleAndConfig(for: tomorrow, builder: dayScheduleBuilder, timeZone: timeZone) else {
             return ActivationScheduleResult(
                 success: false,
@@ -1707,7 +1758,7 @@ final class ScheduleManager: ObservableObject {
     }
 
     private func resetPastHijriAdjustmentsIfNeeded(timeZone: TimeZone) {
-        let today = DateHelpers.startOfToday(in: timeZone)
+        let today = DateHelpers.startOfToday(in: timeZone, now: timeProvider.now())
         let currentComponents = adjustedHijriCalendar.adjustedComponents(for: today, timeZone: timeZone) ?? {
             var fallbackCalendar = Calendar(identifier: .islamicUmmAlQura)
             fallbackCalendar.timeZone = timeZone
@@ -1873,8 +1924,9 @@ final class ScheduleManager: ObservableObject {
     private func resolvedCurrentHijriYear(timeZone: TimeZone = .current) -> Int {
         var fallbackCalendar = Calendar(identifier: .islamicUmmAlQura)
         fallbackCalendar.timeZone = timeZone
-        return adjustedHijriCalendar.adjustedComponents(for: Date(), timeZone: timeZone)?.hijriYear
-            ?? fallbackCalendar.component(.year, from: Date())
+        let now = timeProvider.now()
+        return adjustedHijriCalendar.adjustedComponents(for: now, timeZone: timeZone)?.hijriYear
+            ?? fallbackCalendar.component(.year, from: now)
     }
 
     private func currentCoordinate() -> CLLocationCoordinate2D? {
@@ -2139,6 +2191,15 @@ final class ScheduleManager: ObservableObject {
     }
 
     private func updateBootstrapState() {
+        #if DEBUG
+        if UITestLaunchConfiguration.usesMorningHeroFajrAdjusterFixture,
+           settingsStore.settings.isConfigured,
+           !activeWindowSnapshot.visibleDays.isEmpty {
+            bootstrapState = .home
+            return
+        }
+        #endif
+
         if settingsStore.settings.isConfigured,
            !permissionsLoaded,
            !activeWindowSnapshot.visibleDays.isEmpty {
@@ -2220,23 +2281,63 @@ final class ScheduleManager: ObservableObject {
         permissionSnapshot.presentations.count == AppPermissionKind.allCases.count
     }
 
-    static func shouldReuseScheduleWindow(
+    nonisolated static func shouldReuseScheduleWindow(
         reason: ScheduleRefreshReason,
         lastScheduledDate: Date?,
         snapshot: ActiveAlarmWindowSnapshot,
         now: Date = Date(),
-        timeZone: TimeZone = .current
+        timeZone: TimeZone = .current,
+        requiresDailyWindow: Bool = false
     ) -> Bool {
-        guard reason == .foreground || reason == .appLaunch else {
+        func calendar() -> Calendar {
+            var calendar = Calendar(identifier: .gregorian)
+            calendar.timeZone = timeZone
+            return calendar
+        }
+
+        func isSameDay(_ lhs: Date?, _ rhs: Date) -> Bool {
+            guard let lhs else { return false }
+            return calendar().isDate(lhs, inSameDayAs: rhs)
+        }
+
+        func dayIdentifier(for date: Date) -> String {
+            let formatter = DateFormatter()
+            formatter.calendar = Calendar(identifier: .gregorian)
+            formatter.timeZone = timeZone
+            formatter.dateFormat = "yyyy-MM-dd"
+            return formatter.string(from: date)
+        }
+
+        switch reason {
+        case .foreground, .appLaunch:
+            break
+        default:
             return false
         }
-        guard DateHelpers.isSameDay(lastScheduledDate, now, in: timeZone) else {
+        guard isSameDay(lastScheduledDate, now) else {
             return false
         }
         guard !snapshot.visibleDays.isEmpty else {
             return false
         }
-        return DateHelpers.isSameDay(snapshot.generatedAt, now, in: timeZone)
+        guard isSameDay(snapshot.generatedAt, now) else {
+            return false
+        }
+        guard requiresDailyWindow else {
+            return true
+        }
+
+        let resolvedCalendar = calendar()
+        let today = resolvedCalendar.startOfDay(for: now)
+        guard let tomorrow = resolvedCalendar.date(byAdding: .day, value: 1, to: today) else {
+            return false
+        }
+        let requiredDateKeys = [
+            dayIdentifier(for: today),
+            dayIdentifier(for: tomorrow)
+        ]
+        let visibleDateKeys = Set(snapshot.visibleDays.map(\.dateKey))
+        return requiredDateKeys.allSatisfy { visibleDateKeys.contains($0) }
     }
 
     private func alarmAuthorizationStateText() async -> String {
@@ -2338,7 +2439,6 @@ struct NextWakeEventSummary: Equatable, Sendable {
     let priority: Int
 
     var relationText: String {
-        let delta = day.decisionLog.resolvedDelta
         switch event.type {
         case .wakeAlarm:
             return ProductSurfacePresentation.wakeExplanationText(
@@ -2575,7 +2675,7 @@ struct ActiveAlarmWindowSnapshot: Codable, Equatable, Sendable {
         Dictionary(uniqueKeysWithValues: visibleDays.map { ($0.dateKey, $0) })
     }
 
-    func replacing(_ day: ActiveAlarmDay) -> ActiveAlarmWindowSnapshot {
+    func replacing(_ day: ActiveAlarmDay, generatedAt: Date = Date()) -> ActiveAlarmWindowSnapshot {
         var updatedVisible = visibleDays
         if let index = updatedVisible.firstIndex(where: { $0.dateKey == day.dateKey }) {
             updatedVisible[index] = day
@@ -2585,7 +2685,7 @@ struct ActiveAlarmWindowSnapshot: Codable, Equatable, Sendable {
             updatedVisible = Array(updatedVisible.prefix(visibleHorizonDays))
         }
         return ActiveAlarmWindowSnapshot(
-            generatedAt: Date(),
+            generatedAt: generatedAt,
             visibleDays: updatedVisible,
             scheduledDays: Array(updatedVisible.prefix(scheduledHorizonDays)),
             visibleHorizonDays: visibleHorizonDays,
@@ -2593,10 +2693,10 @@ struct ActiveAlarmWindowSnapshot: Codable, Equatable, Sendable {
         )
     }
 
-    func removing(dateKey: String) -> ActiveAlarmWindowSnapshot {
+    func removing(dateKey: String, generatedAt: Date = Date()) -> ActiveAlarmWindowSnapshot {
         let updatedVisible = visibleDays.filter { $0.dateKey != dateKey }
         return ActiveAlarmWindowSnapshot(
-            generatedAt: Date(),
+            generatedAt: generatedAt,
             visibleDays: updatedVisible,
             scheduledDays: Array(updatedVisible.prefix(scheduledHorizonDays)),
             visibleHorizonDays: visibleHorizonDays,

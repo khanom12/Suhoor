@@ -53,6 +53,7 @@ struct SubhHomeView: View {
                         TomorrowMorningHero(
                             entry: snapshot.tomorrow,
                             permissionSummary: snapshot.permissionState.summaryText,
+                            currentDate: scheduleManager.currentDate,
                             onCommitWakeAdjustment: { date, wakeTime in
                                 await scheduleManager.commitHeroWakeAdjustment(for: date, wakeTime: wakeTime)
                             }
@@ -190,6 +191,7 @@ private struct TomorrowMorningHero: View {
 
     let entry: WakeRowEntry?
     let permissionSummary: String
+    let currentDate: Date
     let onCommitWakeAdjustment: (Date, Date) async -> Bool
     let onOpen: () -> Void
 
@@ -199,7 +201,8 @@ private struct TomorrowMorningHero: View {
     var body: some View {
         let baseDisplay = MorningHomePresentation.heroDisplay(
             entry: entry,
-            permissionSummary: permissionSummary
+            permissionSummary: permissionSummary,
+            currentDate: currentDate
         )
         let display = tentativeWakeTime.map {
             MorningHomePresentation.heroDisplay(adjusting: baseDisplay, tentativeWakeTime: $0)
@@ -233,6 +236,7 @@ private struct TomorrowMorningHero: View {
                 .lineLimit(nil)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.top, metrics.primaryToRelationGap)
+                .accessibilityIdentifier(MorningHeroUIIdentifier.relation)
 
             if display.fajrWindowVisualMode.rendersRange {
                 FajrWindowRangeVisual(display: display, metrics: metrics)
@@ -241,6 +245,9 @@ private struct TomorrowMorningHero: View {
                     }
                     .onWakeAdjustmentEnded { wakeTime in
                         commitWakeAdjustment(wakeTime)
+                    }
+                    .heroWakeAdjustmentAccessibility(display: display) { direction in
+                        adjustWakeAccessibility(display: display, direction: direction)
                     }
                     .padding(.top, metrics.relationToWindowGap)
             }
@@ -264,13 +271,10 @@ private struct TomorrowMorningHero: View {
                 tentativeWakeTime = nil
             }
         }
-        .accessibilityElement(children: .ignore)
+        .accessibilityElement(children: .contain)
         .accessibilityAddTraits(entry == nil ? [] : .isButton)
         .accessibilityLabel(display.accessibilityLabel)
         .accessibilityHint(entry == nil ? "" : "Double-tap for details.")
-        .heroWakeAdjustmentAccessibility(display: display) { direction in
-            adjustWakeAccessibility(display: display, direction: direction)
-        }
     }
 
     @ViewBuilder
@@ -292,6 +296,9 @@ private struct TomorrowMorningHero: View {
             .frame(maxWidth: .infinity, alignment: .center)
             .lineLimit(1)
             .minimumScaleFactor(0.84)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(display.primaryText)
+            .accessibilityIdentifier(MorningHeroUIIdentifier.primaryWakeTime)
         } else {
             HStack(alignment: .center, spacing: metrics.primaryRowSpacing) {
                 if let iconName = display.wakeIconName {
@@ -309,6 +316,9 @@ private struct TomorrowMorningHero: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             .frame(maxWidth: .infinity, alignment: .center)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(display.primaryText)
+            .accessibilityIdentifier(MorningHeroUIIdentifier.primaryWakeTime)
         }
     }
 
@@ -520,7 +530,9 @@ private struct FajrWindowRangeVisual: View {
                 stackedRange(begin: begin, end: end)
             }
             .frame(maxWidth: .infinity, alignment: .center)
-            .accessibilityHidden(true)
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier(MorningHeroUIIdentifier.fajrWindow)
+            .accessibilityLabel(accessibilityLabel)
         } else {
             Text(display.fajrWindowLine)
                 .font(.system(size: metrics.fajrWindowSize, weight: .regular))
@@ -534,7 +546,7 @@ private struct FajrWindowRangeVisual: View {
 
     private func horizontalRange(begin: String, end: String) -> some View {
         HStack(alignment: .center, spacing: metrics.rangeRowSpacing) {
-            rangeTime(begin)
+            rangeTime(begin, identifier: MorningHeroUIIdentifier.fajrWindowBeginTime)
 
             FajrWindowRangeTrack(
                 ratio: display.wakeWindowPositionRatio,
@@ -552,16 +564,16 @@ private struct FajrWindowRangeVisual: View {
             }
             .frame(width: metrics.rangeTrackWidth, height: max(metrics.rangeMarkerSize, 18 * metrics.scale))
 
-            rangeTime(end)
+            rangeTime(end, identifier: MorningHeroUIIdentifier.fajrWindowEndTime)
         }
     }
 
     private func stackedRange(begin: String, end: String) -> some View {
         VStack(alignment: .center, spacing: metrics.rangeFallbackSpacing) {
             HStack {
-                rangeTime(begin)
+                rangeTime(begin, identifier: MorningHeroUIIdentifier.fajrWindowBeginTime)
                 Spacer(minLength: metrics.rangeRowSpacing)
-                rangeTime(end)
+                rangeTime(end, identifier: MorningHeroUIIdentifier.fajrWindowEndTime)
             }
             .frame(width: metrics.rangeTrackWidth + 44)
 
@@ -583,7 +595,19 @@ private struct FajrWindowRangeVisual: View {
         }
     }
 
-    private func rangeTime(_ text: String) -> some View {
+    private var accessibilityLabel: String {
+        [
+            display.fajrWindowAccessibilityText,
+            display.wakeAdjustmentEnabled ? display.wakeAdjustmentAccessibilityValue : nil
+        ]
+            .compactMap { value in
+                guard let value, !value.isEmpty else { return nil }
+                return value
+            }
+            .joined(separator: ". ")
+    }
+
+    private func rangeTime(_ text: String, identifier: String) -> some View {
         Text(text)
             .font(.system(size: metrics.fajrWindowSize, weight: .regular))
             .foregroundStyle(WakeGlassTheme.primaryText.opacity(0.90))
@@ -591,6 +615,7 @@ private struct FajrWindowRangeVisual: View {
             .lineLimit(1)
             .minimumScaleFactor(0.82)
             .fixedSize(horizontal: true, vertical: false)
+            .accessibilityIdentifier(identifier)
     }
 }
 
@@ -613,7 +638,7 @@ private struct FajrWindowRangeTrack: View {
 
             if visualMode == .interactiveWithinFajrWindow {
                 trackContent(width: width, centerY: centerY)
-                    .gesture(
+                    .highPriorityGesture(
                         DragGesture(minimumDistance: 0)
                             .onChanged { value in
                                 onAdjustmentChanged(wakeTime(for: value.location.x, width: width))
@@ -630,6 +655,8 @@ private struct FajrWindowRangeTrack: View {
 
     private func trackContent(width: CGFloat, centerY: CGFloat) -> some View {
         ZStack(alignment: .leading) {
+            trackAccessibilityElement(width: width, centerY: centerY)
+
             endpoint(x: 0, y: centerY)
 
             Capsule()
@@ -658,6 +685,16 @@ private struct FajrWindowRangeTrack: View {
             }
         }
         .contentShape(Rectangle())
+    }
+
+    private func trackAccessibilityElement(width: CGFloat, centerY: CGFloat) -> some View {
+        Rectangle()
+            .fill(Color.white.opacity(0.001))
+            .frame(width: width, height: max(metrics.rangeMarkerSize, 44))
+            .position(x: width / 2, y: centerY)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Fajr window track")
+            .accessibilityIdentifier(MorningHeroUIIdentifier.fajrWindowTrack)
     }
 
     private func endpoint(x: CGFloat, y: CGFloat) -> some View {
@@ -712,6 +749,9 @@ private struct FajrWindowRangeTrack: View {
         }
         .frame(width: max(markerSize, 44), height: max(markerSize, 44))
         .position(x: x, y: centerY)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(indicatorState == .offAnchor ? "Wake marker off" : "Wake marker")
+        .accessibilityIdentifier(MorningHeroUIIdentifier.fajrWindowMarker)
     }
 
     private func markerIcon(systemName: String, size: CGFloat, isOffState: Bool) -> some View {
@@ -728,19 +768,13 @@ private struct FajrWindowRangeTrack: View {
             return minTime ?? Date()
         }
 
-        let clampedRatio = min(max(x / width, 0), 1)
-        let duration = maxTime.timeIntervalSince(minTime)
-        let rawTime = minTime.addingTimeInterval(duration * Double(clampedRatio))
-        return roundedWakeTime(rawTime, minTime: minTime, maxTime: maxTime)
-    }
-
-    private func roundedWakeTime(_ wakeTime: Date, minTime: Date, maxTime: Date) -> Date {
-        let step = max(1, stepMinutes)
-        let stepSeconds = Double(step * 60)
-        let offset = wakeTime.timeIntervalSince(minTime)
-        let roundedOffset = (offset / stepSeconds).rounded() * stepSeconds
-        let rounded = minTime.addingTimeInterval(roundedOffset)
-        return min(max(rounded, minTime), maxTime)
+        return MorningHeroWakeAdjustmentMapper.wakeTime(
+            forX: x,
+            width: width,
+            minTime: minTime,
+            maxTime: maxTime,
+            stepMinutes: stepMinutes
+        )
     }
 }
 

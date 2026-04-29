@@ -1,11 +1,25 @@
 import Foundation
 
-protocol TimeProviding {
-    func now() -> Date
+protocol TimeProviding: Sendable {
+    nonisolated func now() -> Date
 }
 
 struct SystemTimeProvider: TimeProviding {
-    func now() -> Date {
+    nonisolated init() {}
+
+    nonisolated func now() -> Date {
         Date()
+    }
+}
+
+struct FixedTimeProvider: TimeProviding {
+    let fixedNow: Date
+
+    nonisolated init(fixedNow: Date) {
+        self.fixedNow = fixedNow
+    }
+
+    nonisolated func now() -> Date {
+        fixedNow
     }
 }

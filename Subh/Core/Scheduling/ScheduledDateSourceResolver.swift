@@ -131,25 +131,32 @@ struct ScheduledDateSourceResolver {
             }
         }
 
-        for date in normalizedDates where adjustedHijriCalendar.isRamadan(date: date, timeZone: timeZone) {
-            let key = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
-            let ramadanSourceID = DateHelpers.stableUUID(from: "default-ramadan-\(key)")
-            let ramadanGroupID = DateHelpers.stableUUID(from: "default-ramadan-group")
-            guard suppressedDateStore.shouldSuppress(
-                dateKey: key,
-                sourceID: ramadanSourceID,
-                groupID: ramadanGroupID
-            ) == false else { continue }
-            results[key, default: []].append(
-                ResolvedScheduledDateProvenance(
+        #if DEBUG
+        let shouldSuppressDefaultRamadan = UITestLaunchConfiguration.suppressesFastingCalendarContext
+        #else
+        let shouldSuppressDefaultRamadan = false
+        #endif
+        if !shouldSuppressDefaultRamadan {
+            for date in normalizedDates where adjustedHijriCalendar.isRamadan(date: date, timeZone: timeZone) {
+                let key = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
+                let ramadanSourceID = DateHelpers.stableUUID(from: "default-ramadan-\(key)")
+                let ramadanGroupID = DateHelpers.stableUUID(from: "default-ramadan-group")
+                guard suppressedDateStore.shouldSuppress(
+                    dateKey: key,
                     sourceID: ramadanSourceID,
-                    groupID: ramadanGroupID,
-                    label: ScheduledDateSourceOrigin.defaultRamadan.label,
-                    stopSeriesLabel: nil,
-                    isExplicitOneOff: false,
-                    sourceOrigin: .defaultRamadan
+                    groupID: ramadanGroupID
+                ) == false else { continue }
+                results[key, default: []].append(
+                    ResolvedScheduledDateProvenance(
+                        sourceID: ramadanSourceID,
+                        groupID: ramadanGroupID,
+                        label: ScheduledDateSourceOrigin.defaultRamadan.label,
+                        stopSeriesLabel: nil,
+                        isExplicitOneOff: false,
+                        sourceOrigin: .defaultRamadan
+                    )
                 )
-            )
+            }
         }
 
         return results.mapValues { provenances in
@@ -415,31 +422,38 @@ struct ScheduledDateSourceResolver {
             }
         }
 
-        for date in implicitDates {
-            let normalizedDate = calendar.startOfDay(for: date)
-            let key = DateHelpers.dayIdentifier(for: normalizedDate, timeZone: timeZone)
-            let ramadanSourceID = DateHelpers.stableUUID(from: "default-ramadan-\(key)")
-            let ramadanGroupID = DateHelpers.stableUUID(from: "default-ramadan-group")
-            guard suppressedDateStore.shouldSuppress(
-                dateKey: key,
-                sourceID: ramadanSourceID,
-                groupID: ramadanGroupID
-            ) == false else { continue }
+        #if DEBUG
+        let shouldSuppressImplicitRamadan = UITestLaunchConfiguration.suppressesFastingCalendarContext
+        #else
+        let shouldSuppressImplicitRamadan = false
+        #endif
+        if !shouldSuppressImplicitRamadan {
+            for date in implicitDates {
+                let normalizedDate = calendar.startOfDay(for: date)
+                let key = DateHelpers.dayIdentifier(for: normalizedDate, timeZone: timeZone)
+                let ramadanSourceID = DateHelpers.stableUUID(from: "default-ramadan-\(key)")
+                let ramadanGroupID = DateHelpers.stableUUID(from: "default-ramadan-group")
+                guard suppressedDateStore.shouldSuppress(
+                    dateKey: key,
+                    sourceID: ramadanSourceID,
+                    groupID: ramadanGroupID
+                ) == false else { continue }
 
-            let provenance = ResolvedScheduledDateProvenance(
-                sourceID: ramadanSourceID,
-                groupID: ramadanGroupID,
-                label: ScheduledDateSourceOrigin.defaultRamadan.label,
-                stopSeriesLabel: nil,
-                isExplicitOneOff: false,
-                sourceOrigin: .defaultRamadan
-            )
+                let provenance = ResolvedScheduledDateProvenance(
+                    sourceID: ramadanSourceID,
+                    groupID: ramadanGroupID,
+                    label: ScheduledDateSourceOrigin.defaultRamadan.label,
+                    stopSeriesLabel: nil,
+                    isExplicitOneOff: false,
+                    sourceOrigin: .defaultRamadan
+                )
 
-            if var existing = byKey[key] {
-                existing.provenances.append(provenance)
-                byKey[key] = existing
-            } else {
-                byKey[key] = (normalizedDate, [provenance])
+                if var existing = byKey[key] {
+                    existing.provenances.append(provenance)
+                    byKey[key] = existing
+                } else {
+                    byKey[key] = (normalizedDate, [provenance])
+                }
             }
         }
 

@@ -10,22 +10,23 @@ final class MorningPlanStore {
     init(
         defaults: UserDefaults = .standard,
         legacySettings: AppSettings,
-        defaultConfig: DefaultAlarmConfig
+        defaultConfig: DefaultAlarmConfig,
+        timeProvider: any TimeProviding = SystemTimeProvider()
     ) {
         self.defaults = defaults
         if let data = defaults.data(forKey: storageKey),
            let decoded = try? JSONDecoder().decode(MorningPlanState.self, from: data) {
-            let normalized = MorningPlanStore.normalizedForCurrentProductModel(decoded)
+            let normalized = MorningPlanStore.normalizedForCurrentProductModel(decoded, now: timeProvider.now())
             self.state = normalized.state
             if normalized.didChange {
                 persist()
             }
         } else {
             self.state = MorningPlanStore.makeInitialState(
-                defaults: defaults,
                 schemaVersion: currentSchemaVersion,
                 legacySettings: legacySettings,
-                defaultConfig: defaultConfig
+                defaultConfig: defaultConfig,
+                now: timeProvider.now()
             )
             persist()
         }
@@ -57,22 +58,16 @@ final class MorningPlanStore {
     }
 
     private static func makeInitialState(
-        defaults: UserDefaults,
         schemaVersion: Int,
         legacySettings: AppSettings,
-        defaultConfig: DefaultAlarmConfig
+        defaultConfig: DefaultAlarmConfig,
+        now: Date
     ) -> MorningPlanState {
-        let hasPersistedLegacyData =
-            defaults.data(forKey: "Suhoor.AppSettings") != nil ||
-            defaults.data(forKey: "Suhoor.DefaultAlarmConfig") != nil ||
-            defaults.data(forKey: "Suhoor.DailyAlarmOverrides") != nil ||
-            defaults.data(forKey: "Suhoor.ScheduledDateSources") != nil
-
         return MorningPlanState(
             schemaVersion: schemaVersion,
-            activationMode: hasPersistedLegacyData ? .legacyCompat : .dailyActive,
+            activationMode: .dailyActive,
             defaultDailyPlan: makeDefaultPlan(defaultConfig: defaultConfig, settings: legacySettings),
-            lastMigrationAt: Date()
+            lastMigrationAt: now
         )
     }
 
@@ -115,14 +110,17 @@ final class MorningPlanStore {
         )
     }
 
-    private static func normalizedForCurrentProductModel(_ state: MorningPlanState) -> (state: MorningPlanState, didChange: Bool) {
+    private static func normalizedForCurrentProductModel(
+        _ state: MorningPlanState,
+        now: Date
+    ) -> (state: MorningPlanState, didChange: Bool) {
         guard state.activationMode == .legacyCompat else {
             return (state, false)
         }
 
         var migrated = state
         migrated.activationMode = .dailyActive
-        migrated.lastMigrationAt = Date()
+        migrated.lastMigrationAt = now
         return (migrated, true)
     }
 }

@@ -1,0 +1,12 @@
+import Foundation
+
+enum MorningHeroUIIdentifier {
+    static let primaryWakeTime = "morningHero.primaryWakeTime"
+    static let relation = "morningHero.relation"
+    static let fajrWindow = "morningHero.fajrWindow"
+    static let fajrWindowBeginTime = "morningHero.fajrWindow.beginTime"
+    static let fajrWindowTrack = "morningHero.fajrWindow.track"
+    static let fajrWindowMarker = "morningHero.fajrWindow.marker"
+    static let fajrWindowEndTime = "morningHero.fajrWindow.endTime"
+}
+

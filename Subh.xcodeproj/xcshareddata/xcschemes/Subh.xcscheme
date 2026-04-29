@@ -34,6 +34,20 @@
                ReferencedContainer = "container:Subh.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
+         <BuildActionEntry
+            buildForTesting = "YES"
+            buildForRunning = "NO"
+            buildForProfiling = "NO"
+            buildForArchiving = "NO"
+            buildForAnalyzing = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "B2C000001234567890000105"
+               BuildableName = "SubhUITests.xctest"
+               BlueprintName = "SubhUITests"
+               ReferencedContainer = "container:Subh.xcodeproj">
+            </BuildableReference>
+         </BuildActionEntry>
       </BuildActionEntries>
    </BuildAction>
    <TestAction
@@ -59,6 +73,16 @@
                BlueprintIdentifier = "A1B000001234567890000206"
                BuildableName = "SubhTests.xctest"
                BlueprintName = "SubhTests"
+               ReferencedContainer = "container:Subh.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
+         <TestableReference
+            skipped = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "B2C000001234567890000105"
+               BuildableName = "SubhUITests.xctest"
+               BlueprintName = "SubhUITests"
                ReferencedContainer = "container:Subh.xcodeproj">
             </BuildableReference>
          </TestableReference>

@@ -2,26 +2,26 @@ import Foundation
 import CryptoKit
 
 enum DateHelpers {
-    static func startOfDay(_ date: Date, in timeZone: TimeZone = .current) -> Date {
+    nonisolated static func startOfDay(_ date: Date, in timeZone: TimeZone = .current) -> Date {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = timeZone
         return calendar.startOfDay(for: date)
     }
 
-    static func startOfToday(in timeZone: TimeZone = .current) -> Date {
+    nonisolated static func startOfToday(in timeZone: TimeZone = .current, now: Date = Date()) -> Date {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = timeZone
-        return calendar.startOfDay(for: Date())
+        return calendar.startOfDay(for: now)
     }
 
-    static func startOfTomorrow(in timeZone: TimeZone = .current) -> Date {
+    nonisolated static func startOfTomorrow(in timeZone: TimeZone = .current, now: Date = Date()) -> Date {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = timeZone
-        let startOfToday = calendar.startOfDay(for: Date())
+        let startOfToday = calendar.startOfDay(for: now)
         return calendar.date(byAdding: .day, value: 1, to: startOfToday) ?? startOfToday
     }
 
-    static func dayIdentifier(for date: Date, timeZone: TimeZone = .current) -> String {
+    nonisolated static func dayIdentifier(for date: Date, timeZone: TimeZone = .current) -> String {
         let formatter = DateFormatter()
         formatter.calendar = Calendar(identifier: .gregorian)
         formatter.timeZone = timeZone
@@ -29,7 +29,7 @@ enum DateHelpers {
         return formatter.string(from: date)
     }
 
-    static func date(fromDayIdentifier dayIdentifier: String, timeZone: TimeZone = .current) -> Date? {
+    nonisolated static func date(fromDayIdentifier dayIdentifier: String, timeZone: TimeZone = .current) -> Date? {
         let formatter = DateFormatter()
         formatter.calendar = Calendar(identifier: .gregorian)
         formatter.timeZone = timeZone
@@ -37,7 +37,7 @@ enum DateHelpers {
         return formatter.date(from: dayIdentifier)
     }
 
-    static func stableUUID(from string: String) -> UUID {
+    nonisolated static func stableUUID(from string: String) -> UUID {
         let data = Data(string.utf8)
         let digest = SHA256.hash(data: data)
         let bytes = Array(digest)
@@ -50,27 +50,27 @@ enum DateHelpers {
         ))
     }
 
-    static func isSameDay(_ lhs: Date?, _ rhs: Date, in timeZone: TimeZone = .current) -> Bool {
+    nonisolated static func isSameDay(_ lhs: Date?, _ rhs: Date, in timeZone: TimeZone = .current) -> Bool {
         guard let lhs else { return false }
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = timeZone
         return calendar.isDate(lhs, inSameDayAs: rhs)
     }
 
-    static func dates(startingFrom start: Date, count: Int, calendar: Calendar) -> [Date] {
+    nonisolated static func dates(startingFrom start: Date, count: Int, calendar: Calendar) -> [Date] {
         guard count > 0 else { return [] }
         return (0..<count).compactMap { offset in
             calendar.date(byAdding: .day, value: offset, to: start)
         }
     }
 
-    static func dates(from start: Date, to end: Date, calendar: Calendar) -> [Date] {
+    nonisolated static func dates(from start: Date, to end: Date, calendar: Calendar) -> [Date] {
         guard end >= start else { return [] }
         let dayCount = (calendar.dateComponents([.day], from: start, to: end).day ?? 0) + 1
         return dates(startingFrom: start, count: dayCount, calendar: calendar)
     }
 
-    static func minutesFromMidnight(for date: Date, timeZone: TimeZone = .current) -> Int {
+    nonisolated static func minutesFromMidnight(for date: Date, timeZone: TimeZone = .current) -> Int {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = timeZone
         let components = calendar.dateComponents([.hour, .minute], from: date)
@@ -79,7 +79,7 @@ enum DateHelpers {
         return max(0, min(1439, hour * 60 + minute))
     }
 
-    static func dateFromMidnight(for day: Date, minutes: Int, timeZone: TimeZone = .current) -> Date {
+    nonisolated static func dateFromMidnight(for day: Date, minutes: Int, timeZone: TimeZone = .current) -> Date {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = timeZone
         let clamped = max(0, min(1439, minutes))

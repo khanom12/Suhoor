@@ -246,6 +246,11 @@ enum TagComputationEngine {
         if FastIntentEngine.isForbiddenToFast(date, timeZone: timeZone) {
             return .forbidden
         }
+        #if DEBUG
+        if UITestLaunchConfiguration.suppressesFastingCalendarContext {
+            return selection.primaryIntent
+        }
+        #endif
         if isRamadan(date: date, timeZone: timeZone) {
             return .ramadanObligatory
         }

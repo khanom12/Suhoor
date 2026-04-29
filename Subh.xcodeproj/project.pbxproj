@@ -18,10 +18,18 @@
 		A1B000001234567890000012 /* AlarmConfigMigrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B000001234567890000111 /* AlarmConfigMigrationTests.swift */; };
 		A1B000001234567890000013 /* ScheduleServiceExtractionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B000001234567890000112 /* ScheduleServiceExtractionTests.swift */; };
 		A1B000001234567890000014 /* MorningPlanStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B000001234567890000113 /* MorningPlanStoreTests.swift */; };
+		B2C000001234567890000103 /* MorningHeroFajrAdjusterUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2C000001234567890000101 /* MorningHeroFajrAdjusterUITests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
 		A1B000001234567890000204 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 07135B6A2F439A5A007CEEF7 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 07135B712F439A5A007CEEF7;
+			remoteInfo = Subh;
+		};
+		B2C000001234567890000109 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 07135B6A2F439A5A007CEEF7 /* Project object */;
 			proxyType = 1;
@@ -45,6 +53,8 @@
 		A1B000001234567890000111 /* AlarmConfigMigrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlarmConfigMigrationTests.swift; sourceTree = "<group>"; };
 		A1B000001234567890000112 /* ScheduleServiceExtractionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScheduleServiceExtractionTests.swift; sourceTree = "<group>"; };
 		A1B000001234567890000113 /* MorningPlanStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MorningPlanStoreTests.swift; sourceTree = "<group>"; };
+		B2C000001234567890000101 /* MorningHeroFajrAdjusterUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MorningHeroFajrAdjusterUITests.swift; sourceTree = "<group>"; };
+		B2C000001234567890000102 /* SubhUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SubhUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -70,6 +80,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		B2C000001234567890000106 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -79,6 +96,7 @@
 				07135B742F439A5A007CEEF7 /* Subh */,
 				07135B732F439A5A007CEEF7 /* Products */,
 				07EF91CE2F43B5DC00BD8692 /* SubhTests */,
+				B2C000001234567890000104 /* SubhUITests */,
 				07EF93432F49055C00BD8692 /* TEST_PLAN.md */,
 			);
 			sourceTree = "<group>";
@@ -88,6 +106,7 @@
 			children = (
 				07135B722F439A5A007CEEF7 /* Subh.app */,
 				A1B000001234567890000107 /* SubhTests.xctest */,
+				B2C000001234567890000102 /* SubhUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -108,6 +127,14 @@
 				A1B000001234567890000113 /* MorningPlanStoreTests.swift */,
 			);
 			path = SubhTests;
+			sourceTree = "<group>";
+		};
+		B2C000001234567890000104 /* SubhUITests */ = {
+			isa = PBXGroup;
+			children = (
+				B2C000001234567890000101 /* MorningHeroFajrAdjusterUITests.swift */,
+			);
+			path = SubhUITests;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -155,6 +182,26 @@
 			productReference = A1B000001234567890000107 /* SubhTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
+		B2C000001234567890000105 /* SubhUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B2C000001234567890000111 /* Build configuration list for PBXNativeTarget "SubhUITests" */;
+			buildPhases = (
+				B2C000001234567890000107 /* Sources */,
+				B2C000001234567890000106 /* Frameworks */,
+				B2C000001234567890000108 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				B2C000001234567890000110 /* PBXTargetDependency */,
+			);
+			name = SubhUITests;
+			packageProductDependencies = (
+			);
+			productName = SubhUITests;
+			productReference = B2C000001234567890000102 /* SubhUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -169,6 +216,10 @@
 						CreatedOnToolsVersion = 26.2;
 					};
 					A1B000001234567890000206 = {
+						CreatedOnToolsVersion = 26.2;
+						TestTargetID = 07135B712F439A5A007CEEF7;
+					};
+					B2C000001234567890000105 = {
 						CreatedOnToolsVersion = 26.2;
 						TestTargetID = 07135B712F439A5A007CEEF7;
 					};
@@ -190,6 +241,7 @@
 			targets = (
 				07135B712F439A5A007CEEF7 /* Subh */,
 				A1B000001234567890000206 /* SubhTests */,
+				B2C000001234567890000105 /* SubhUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -204,6 +256,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		A1B000001234567890000203 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B2C000001234567890000108 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -237,6 +296,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		B2C000001234567890000107 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B2C000001234567890000103 /* MorningHeroFajrAdjusterUITests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -244,6 +311,11 @@
 			isa = PBXTargetDependency;
 			target = 07135B712F439A5A007CEEF7 /* Subh */;
 			targetProxy = A1B000001234567890000204 /* PBXContainerItemProxy */;
+		};
+		B2C000001234567890000110 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 07135B712F439A5A007CEEF7 /* Subh */;
+			targetProxy = B2C000001234567890000109 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -492,6 +564,51 @@
 			};
 			name = Release;
 		};
+		B2C000001234567890000112 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = J6QD2TR878;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = khanomar.SubhUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_TARGET_NAME = Subh;
+			};
+			name = Debug;
+		};
+		B2C000001234567890000113 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = J6QD2TR878;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = khanomar.SubhUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_TARGET_NAME = Subh;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -518,6 +635,15 @@
 			buildConfigurations = (
 				A1B000001234567890000208 /* Debug */,
 				A1B000001234567890000209 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		B2C000001234567890000111 /* Build configuration list for PBXNativeTarget "SubhUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B2C000001234567890000112 /* Debug */,
+				B2C000001234567890000113 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

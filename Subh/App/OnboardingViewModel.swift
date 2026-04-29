@@ -229,12 +229,22 @@ final class OnboardingViewModel: ObservableObject {
     }
 
     func markOnboardingComplete() {
+        Task {
+            await completeOnboarding()
+        }
+    }
+
+    private func completeOnboarding() async {
+        isWorking = true
+        if let scheduleManager {
+            await scheduleManager.refreshSchedules(force: true)
+        }
         settingsStore?.update { draft in
             draft.isConfigured = true
         }
         OnboardingAnalytics.log("onboarding_completed")
-        scheduleManager?.requestRefresh(reason: .settingsChanged)
-        refreshPermissionsInBackground()
+        await refreshPermissions()
+        isWorking = false
     }
 
     var progressIndex: Int {
@@ -560,8 +570,8 @@ final class OnboardingViewModel: ObservableObject {
 
     private var nextAlarmStartDay: Date {
         let calendar = Calendar.current
-        let now = Date()
-        let startOfToday = DateHelpers.startOfToday(in: .current)
+        let now = scheduleManager?.currentDate ?? Date()
+        let startOfToday = DateHelpers.startOfToday(in: .current, now: now)
         let tomorrow = calendar.date(byAdding: .day, value: 1, to: startOfToday) ?? startOfToday
         guard let scheduleManager else { return tomorrow }
         guard let todaySchedule = scheduleManager.schedule(for: startOfToday) else { return tomorrow }
@@ -571,7 +581,7 @@ final class OnboardingViewModel: ObservableObject {
 
     private func dayLabel(for date: Date) -> String {
         let calendar = Calendar.current
-        let today = DateHelpers.startOfToday(in: .current)
+        let today = DateHelpers.startOfToday(in: .current, now: scheduleManager?.currentDate ?? Date())
         let tomorrow = calendar.date(byAdding: .day, value: 1, to: today) ?? today
         if calendar.isDate(date, inSameDayAs: today) {
             return Strings.Onboarding.todayLabel

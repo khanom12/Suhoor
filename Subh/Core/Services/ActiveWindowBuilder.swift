@@ -10,6 +10,12 @@ struct ActiveWindowBuildInput: Sendable {
 }
 
 struct ActiveWindowSnapshotBuilder: Sendable {
+    private let timeProvider: any TimeProviding
+
+    init(timeProvider: any TimeProviding = SystemTimeProvider()) {
+        self.timeProvider = timeProvider
+    }
+
     func build(input: ActiveWindowBuildInput) -> ActiveAlarmWindowSnapshot {
         let timeZone = input.stateSnapshot.timeZone
         let calculator = PrayerTimeCalculator()
@@ -76,7 +82,7 @@ struct ActiveWindowSnapshotBuilder: Sendable {
 
         let visibleDays = Array(activeDays.prefix(input.visibleHorizonDays))
         return ActiveAlarmWindowSnapshot(
-            generatedAt: Date(),
+            generatedAt: timeProvider.now(),
             visibleDays: visibleDays,
             scheduledDays: Array(visibleDays.prefix(input.scheduledHorizonDays)),
             visibleHorizonDays: input.visibleHorizonDays,

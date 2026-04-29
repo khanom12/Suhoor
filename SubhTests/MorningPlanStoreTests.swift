@@ -21,6 +21,27 @@ struct MorningPlanStoreTests {
     }
 
     @Test
+    func legacySettingsWithoutMorningPlanStateDefaultsToDailyActivation() throws {
+        let suiteName = "MorningPlanStoreTests.LegacySettingsNoPlanState"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        defaults.set(try JSONEncoder().encode(AppSettings.default), forKey: "Suhoor.AppSettings")
+        defaults.set(try JSONEncoder().encode(DefaultAlarmConfig.default), forKey: "Suhoor.DefaultAlarmConfig")
+
+        let now = Date(timeIntervalSince1970: 1_777_500_000)
+        let store = MorningPlanStore(
+            defaults: defaults,
+            legacySettings: .default,
+            defaultConfig: .default,
+            timeProvider: FixedTimeProvider(fixedNow: now)
+        )
+
+        #expect(store.usesDailyActivation)
+        #expect(store.state.activationMode == .dailyActive)
+        #expect(store.state.lastMigrationAt == now)
+    }
+
+    @Test
     func persistedLegacyCompatMigratesToDailyActivation() throws {
         let suiteName = "MorningPlanStoreTests.LegacyMigration"
         let defaults = UserDefaults(suiteName: suiteName)!
@@ -37,7 +58,8 @@ struct MorningPlanStoreTests {
         let store = MorningPlanStore(
             defaults: defaults,
             legacySettings: .default,
-            defaultConfig: .default
+            defaultConfig: .default,
+            timeProvider: FixedTimeProvider(fixedNow: Date(timeIntervalSince1970: 1_800_000_000))
         )
 
         #expect(store.usesDailyActivation)
