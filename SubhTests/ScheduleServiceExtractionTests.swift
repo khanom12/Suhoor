@@ -214,7 +214,8 @@ struct ScheduleServiceExtractionTests {
         )
 
         #expect(display.title == "Tomorrow")
-        #expect(display.dateLine?.contains(" • ") == true)
+        #expect(display.dateLine == "April 27th • ZQ10")
+        #expect(display.dateLine?.contains("Mon") == false)
         #expect(display.wakeState == .active)
         #expect(display.primaryTime == entry.schedule.wakeDate)
         #expect(display.primaryText.contains(":"))
@@ -222,6 +223,11 @@ struct ScheduleServiceExtractionTests {
         #expect(display.statusText == "Wake alarm")
         #expect(display.detailText == "30 min before Fajr ends")
         #expect(Self.normalizedTimeSpaces(display.fajrWindowLine) == "Fajr begins: 5:00 AM • Fajr ends: 6:16 AM")
+        #expect(Self.normalizedTimeSpaces(display.fajrBeginDisplayText ?? "") == "5:00 AM")
+        #expect(Self.normalizedTimeSpaces(display.fajrEndDisplayText ?? "") == "6:16 AM")
+        #expect(abs((display.wakeWindowPositionRatio ?? -1) - (46.0 / 76.0)) < 0.0001)
+        #expect(display.wakeWindowIndicatorState == .active)
+        #expect(Self.normalizedTimeSpaces(display.fajrWindowAccessibilityText ?? "") == "Fajr begins: 5:00 AM. Fajr ends: 6:16 AM")
         #expect(display.chipTitles.isEmpty)
         #expect(display.accessibilityLabel.contains("Wake alarm at"))
         #expect(Self.normalizedTimeSpaces(display.accessibilityLabel).contains("Fajr begins: 5:00 AM"))
@@ -246,8 +252,9 @@ struct ScheduleServiceExtractionTests {
             accessibleHijriDateTextProvider: { _, _ in nil }
         )
 
-        #expect(display.dateLine == "Mon, Apr 27")
+        #expect(display.dateLine == "April 27th")
         #expect(display.dateLine?.contains("•") == false)
+        #expect(display.dateLine?.contains("Mon") == false)
     }
 
     @Test
@@ -269,6 +276,11 @@ struct ScheduleServiceExtractionTests {
         #expect(display.primaryTime == entry.schedule.wakeDate)
         #expect(display.detailText == "Fajr times are not available yet")
         #expect(display.fajrWindowLine == "Fajr times are not available yet")
+        #expect(display.fajrBeginDisplayText == nil)
+        #expect(display.fajrEndDisplayText == nil)
+        #expect(display.wakeWindowPositionRatio == nil)
+        #expect(display.wakeWindowIndicatorState == .unavailable)
+        #expect(display.fajrWindowAccessibilityText == nil)
         #expect(display.accessibilityLabel.contains("Fajr ends:") == false)
     }
 
@@ -344,7 +356,9 @@ struct ScheduleServiceExtractionTests {
         #expect(skipped.primaryText == "Alarm off")
         #expect(skipped.wakeIconName == "bell.slash.fill")
         #expect(skipped.statusText == "Alarm off")
-        #expect(skipped.detailText == "Alarm is off for this date")
+        #expect(skipped.detailText == "Planned wake was 30 min before Fajr ends")
+        #expect(skipped.wakeWindowIndicatorState == .offAnchor)
+        #expect(skipped.wakeWindowPositionRatio != nil)
         #expect(fixed.detailText == "Set for a custom wake time")
     }
 

@@ -198,12 +198,6 @@ private struct TomorrowMorningHero: View {
 
         Button(action: onOpen) {
             VStack(alignment: .center, spacing: 0) {
-                Text(display.title)
-                    .font(.system(size: metrics.relativeLabelSize, weight: .regular))
-                    .foregroundStyle(WakeGlassTheme.primaryText)
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
-
                 if let dateLine = display.dateLine {
                     Text(dateLine)
                         .font(.system(size: metrics.dateLineSize, weight: .regular))
@@ -211,27 +205,27 @@ private struct TomorrowMorningHero: View {
                         .multilineTextAlignment(.center)
                         .lineLimit(nil)
                         .fixedSize(horizontal: false, vertical: true)
-                        .padding(.top, metrics.relativeToDateGap)
                 }
 
+                Text(display.title)
+                    .font(.system(size: metrics.relativeLabelSize, weight: .regular))
+                    .foregroundStyle(WakeGlassTheme.primaryText)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, metrics.dateToRelativeGap)
+
                 primaryWakeRow(display: display, metrics: metrics)
-                    .padding(.top, metrics.dateToPrimaryGap)
+                    .padding(.top, metrics.relativeToPrimaryGap)
 
                 Text(display.detailText)
-                    .font(.system(size: metrics.relationSize, weight: .regular))
-                    .foregroundStyle(WakeGlassTheme.primaryText.opacity(0.94))
+                    .font(.system(size: metrics.dateLineSize, weight: .regular))
+                    .foregroundStyle(WakeGlassTheme.secondaryText.opacity(0.92))
                     .multilineTextAlignment(.center)
                     .lineLimit(nil)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.top, metrics.primaryToRelationGap)
 
-                Text(display.fajrWindowLine)
-                    .font(.system(size: metrics.fajrWindowSize, weight: .regular))
-                    .foregroundStyle(WakeGlassTheme.primaryText.opacity(0.88))
-                    .monospacedDigit()
-                    .multilineTextAlignment(.center)
-                    .lineLimit(nil)
-                    .fixedSize(horizontal: false, vertical: true)
+                FajrWindowRangeVisual(display: display, metrics: metrics)
                     .padding(.top, metrics.relationToWindowGap)
             }
             .frame(maxWidth: metrics.maxContentWidth)
@@ -254,12 +248,12 @@ private struct TomorrowMorningHero: View {
         metrics: MorningHeroMetrics
     ) -> some View {
         if let primaryTime = display.primaryTime {
-            HStack(alignment: .firstTextBaseline, spacing: metrics.primaryRowSpacing) {
+            HStack(alignment: .center, spacing: metrics.primaryRowSpacing) {
                 if let iconName = display.wakeIconName {
                     Image(systemName: iconName)
                         .font(.system(size: metrics.iconSize, weight: .regular))
                         .foregroundStyle(WakeGlassTheme.primaryText.opacity(0.92))
-                        .baselineOffset(metrics.iconBaselineOffset)
+                        .offset(y: metrics.iconVerticalOffset)
                 }
 
                 SubhHomeHeroTimeLockup(date: primaryTime, pointSize: metrics.wakeTimeSize)
@@ -268,12 +262,12 @@ private struct TomorrowMorningHero: View {
             .lineLimit(1)
             .minimumScaleFactor(0.84)
         } else {
-            HStack(alignment: .firstTextBaseline, spacing: metrics.primaryRowSpacing) {
+            HStack(alignment: .center, spacing: metrics.primaryRowSpacing) {
                 if let iconName = display.wakeIconName {
                     Image(systemName: iconName)
                         .font(.system(size: metrics.iconSize, weight: .regular))
                         .foregroundStyle(WakeGlassTheme.primaryText.opacity(0.86))
-                        .baselineOffset(metrics.iconBaselineOffset)
+                        .offset(y: metrics.iconVerticalOffset)
                 }
 
                 Text(display.primaryText)
@@ -369,16 +363,21 @@ private struct MorningHeroMetrics {
     var iconSize: CGFloat { 22 * scale }
     var wakeTimeSize: CGFloat { 68 * scale }
     var wakeStateSize: CGFloat { 44 * scale }
-    var relationSize: CGFloat { 20 * scale }
     var fajrWindowSize: CGFloat { 15 * scale }
-    var relativeToDateGap: CGFloat { max(4, 4 * scale) }
-    var dateToPrimaryGap: CGFloat { 22 * min(scale, 1.2) }
+    var dateToRelativeGap: CGFloat { max(4, 4 * scale) }
+    var relativeToDateGap: CGFloat { dateToRelativeGap }
+    var relativeToPrimaryGap: CGFloat { 22 * min(scale, 1.2) }
     var primaryToRelationGap: CGFloat { 8 * min(scale, 1.2) }
     var relationToWindowGap: CGFloat { 12 * min(scale, 1.2) }
     var primaryRowSpacing: CGFloat { max(7, 8 * scale) }
-    var iconBaselineOffset: CGFloat { 4 * scale }
+    var iconVerticalOffset: CGFloat { -1 * scale }
     var verticalBreathing: CGFloat { max(18, (minHeroRegionHeight - minTextStackHeight) / 2) }
     var maxContentWidth: CGFloat { 390 }
+    var rangeTrackHeight: CGFloat { max(3, 4 * scale) }
+    var rangeTrackWidth: CGFloat { min(164, max(116, 132 * scale)) }
+    var rangeMarkerSize: CGFloat { max(10, 12 * scale) }
+    var rangeRowSpacing: CGFloat { max(9, 10 * scale) }
+    var rangeFallbackSpacing: CGFloat { max(7, 8 * scale) }
 }
 
 private struct SubhHomeHeroTimeLockup: View {
@@ -386,7 +385,7 @@ private struct SubhHomeHeroTimeLockup: View {
     let pointSize: CGFloat
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 5) {
+        HStack(alignment: .center, spacing: 5) {
             Text(Self.timeMainFormatter.string(from: date))
                 .font(AppTypography.timeDisplayFont(size: pointSize, weight: .light))
                 .foregroundStyle(WakeGlassTheme.primaryText)
@@ -397,7 +396,7 @@ private struct SubhHomeHeroTimeLockup: View {
                 .font(AppTypography.timeDisplayFont(size: pointSize * 0.41, weight: .regular))
                 .foregroundStyle(WakeGlassTheme.primaryText.opacity(0.78))
                 .monospacedDigit()
-                .baselineOffset(3 * min(pointSize / 68, 1.4))
+                .offset(y: pointSize * 0.015)
         }
         .accessibilityHidden(true)
     }
@@ -417,6 +416,161 @@ private struct SubhHomeHeroTimeLockup: View {
         formatter.locale = .current
         return formatter
     }()
+}
+
+private struct FajrWindowRangeVisual: View {
+    let display: MorningHomeHeroDisplay
+    let metrics: MorningHeroMetrics
+
+    var body: some View {
+        if let begin = display.fajrBeginDisplayText,
+           let end = display.fajrEndDisplayText {
+            ViewThatFits(in: .horizontal) {
+                horizontalRange(begin: begin, end: end)
+                stackedRange(begin: begin, end: end)
+            }
+            .frame(maxWidth: .infinity, alignment: .center)
+            .accessibilityHidden(true)
+        } else {
+            Text(display.fajrWindowLine)
+                .font(.system(size: metrics.fajrWindowSize, weight: .regular))
+                .foregroundStyle(WakeGlassTheme.primaryText.opacity(0.88))
+                .monospacedDigit()
+                .multilineTextAlignment(.center)
+                .lineLimit(nil)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func horizontalRange(begin: String, end: String) -> some View {
+        HStack(alignment: .center, spacing: metrics.rangeRowSpacing) {
+            rangeTime(begin)
+
+            FajrWindowRangeTrack(
+                ratio: display.wakeWindowPositionRatio,
+                indicatorState: display.wakeWindowIndicatorState,
+                metrics: metrics
+            )
+            .frame(width: metrics.rangeTrackWidth, height: max(metrics.rangeMarkerSize, 18 * metrics.scale))
+
+            rangeTime(end)
+        }
+    }
+
+    private func stackedRange(begin: String, end: String) -> some View {
+        VStack(alignment: .center, spacing: metrics.rangeFallbackSpacing) {
+            HStack {
+                rangeTime(begin)
+                Spacer(minLength: metrics.rangeRowSpacing)
+                rangeTime(end)
+            }
+            .frame(width: metrics.rangeTrackWidth + 44)
+
+            FajrWindowRangeTrack(
+                ratio: display.wakeWindowPositionRatio,
+                indicatorState: display.wakeWindowIndicatorState,
+                metrics: metrics
+            )
+            .frame(width: metrics.rangeTrackWidth + 28, height: max(metrics.rangeMarkerSize, 18 * metrics.scale))
+        }
+    }
+
+    private func rangeTime(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: metrics.fajrWindowSize, weight: .regular))
+            .foregroundStyle(WakeGlassTheme.primaryText.opacity(0.90))
+            .monospacedDigit()
+            .lineLimit(1)
+            .minimumScaleFactor(0.82)
+            .fixedSize(horizontal: true, vertical: false)
+    }
+}
+
+private struct FajrWindowRangeTrack: View {
+    let ratio: Double?
+    let indicatorState: MorningHeroWakeWindowIndicatorState
+    let metrics: MorningHeroMetrics
+
+    var body: some View {
+        GeometryReader { proxy in
+            let width = proxy.size.width
+            let centerY = proxy.size.height / 2
+
+            ZStack(alignment: .leading) {
+                Capsule()
+                    .fill(Color.white.opacity(0.20))
+                    .frame(height: metrics.rangeTrackHeight)
+                    .position(x: width / 2, y: centerY)
+
+                Capsule()
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color.white.opacity(0.32),
+                                Color.white.opacity(0.18)
+                            ],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .frame(height: max(1.5, metrics.rangeTrackHeight * 0.52))
+                    .position(x: width / 2, y: centerY)
+
+                if let ratio, indicatorState != .none, indicatorState != .unavailable {
+                    marker(ratio: ratio, width: width, centerY: centerY)
+                }
+            }
+        }
+    }
+
+    private func marker(ratio: Double, width: CGFloat, centerY: CGFloat) -> some View {
+        let markerSize = metrics.rangeMarkerSize
+        let isBefore = ratio < 0
+        let isAfter = ratio > 1
+        let clampedRatio = min(max(ratio, 0), 1)
+        let x: CGFloat = if isBefore {
+            -markerSize * 0.34
+        } else if isAfter {
+            width + markerSize * 0.34
+        } else {
+            width * clampedRatio
+        }
+
+        return ZStack {
+            if isBefore || isAfter {
+                Capsule()
+                    .fill(Color.white.opacity(0.64))
+                    .frame(width: max(2, markerSize * 0.22), height: markerSize * 1.25)
+                    .offset(x: isBefore ? markerSize * 0.38 : -markerSize * 0.38)
+            }
+
+            switch indicatorState {
+            case .active:
+                Circle()
+                    .fill(Color.white.opacity(0.96))
+                    .overlay {
+                        Circle()
+                            .stroke(Color.white.opacity(0.55), lineWidth: 1)
+                    }
+                    .shadow(color: Color.black.opacity(0.22), radius: 4, x: 0, y: 1)
+            case .offAnchor:
+                Circle()
+                    .fill(Color.clear)
+                    .overlay {
+                        Circle()
+                            .stroke(Color.white.opacity(0.92), lineWidth: max(1.4, 1.8 * metrics.scale))
+                    }
+                    .background {
+                        Circle()
+                            .fill(Color.black.opacity(0.12))
+                    }
+            case .none, .unavailable:
+                EmptyView()
+            }
+        }
+        .frame(width: markerSize, height: markerSize)
+        .position(x: x, y: centerY)
+    }
 }
 
 private struct HomeSettingsFloatingControl: View {
