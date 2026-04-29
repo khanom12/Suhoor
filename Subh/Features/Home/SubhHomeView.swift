@@ -478,8 +478,8 @@ private struct MorningHeroMetrics {
     var relativeToDateGap: CGFloat { dateToRelativeGap }
     var relativeToPrimaryGap: CGFloat { max(9, 11 * min(scale, 1.18)) }
     var primaryToRelationGap: CGFloat { 8 * min(scale, 1.2) }
-    var primaryToWindowGap: CGFloat { 12 * min(scale, 1.2) }
-    var windowToRelationGap: CGFloat { 8 * min(scale, 1.2) }
+    var primaryToWindowGap: CGFloat { 8 * min(scale, 1.2) }
+    var windowToRelationGap: CGFloat { 12 * min(scale, 1.2) }
     var primaryRowSpacing: CGFloat { max(7, 8 * scale) }
     var iconVerticalOffset: CGFloat { -1 * scale }
     var verticalBreathing: CGFloat { max(18, (minHeroRegionHeight - minTextStackHeight) / 2) }

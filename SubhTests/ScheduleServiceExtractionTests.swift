@@ -480,7 +480,7 @@ struct ScheduleServiceExtractionTests {
         #expect(display.primaryText.contains(":"))
         #expect(display.wakeIconName == "alarm.fill")
         #expect(display.statusText == "Wake alarm")
-        #expect(display.detailText == "30 min before Fajr ends")
+        #expect(display.detailText == "Wake up 30 minutes before Fajr ends")
         #expect(Self.normalizedTimeSpaces(display.fajrWindowLine) == "Fajr begins: 5:00 AM • Fajr ends: 6:16 AM")
         #expect(Self.normalizedTimeSpaces(display.fajrBeginDisplayText ?? "") == "5:00 AM")
         #expect(Self.normalizedTimeSpaces(display.fajrEndDisplayText ?? "") == "6:16 AM")
@@ -492,6 +492,7 @@ struct ScheduleServiceExtractionTests {
         #expect(display.wakeAdjustmentMinTime == entry.activeDay.decisionLog.prayerWindow.fajrStart)
         #expect(display.wakeAdjustmentMaxTime == entry.activeDay.decisionLog.prayerWindow.fajrEnd)
         #expect(display.wakeAdjustmentAccessibilityValue?.contains("Adjustable between Fajr begin") == true)
+        #expect(display.wakeAdjustmentAccessibilityValue?.contains("Wake up 30 minutes before Fajr ends") == true)
         #expect(Self.normalizedTimeSpaces(display.fajrWindowAccessibilityText ?? "") == "Fajr begins: 5:00 AM. Fajr ends: 6:16 AM")
         #expect(display.chipTitles.isEmpty)
         #expect(display.accessibilityLabel.hasPrefix("Toronto. Tomorrow."))
@@ -508,8 +509,22 @@ struct ScheduleServiceExtractionTests {
             timeZone: timeZone
         )
         #expect(adjusted.primaryTime == adjustedWake)
-        #expect(adjusted.detailText == "28 min before Fajr ends")
+        #expect(adjusted.detailText == "Wake up 28 minutes before Fajr ends")
         #expect(abs((adjusted.wakeWindowPositionRatio ?? -1) - (48.0 / 76.0)) < 0.0001)
+
+        let adjustedToStart = MorningHomePresentation.heroDisplay(
+            adjusting: display,
+            tentativeWakeTime: entry.activeDay.decisionLog.prayerWindow.fajrStart,
+            timeZone: timeZone
+        )
+        #expect(adjustedToStart.detailText == "Wake up at the start of Fajr")
+
+        let adjustedToEnd = MorningHomePresentation.heroDisplay(
+            adjusting: display,
+            tentativeWakeTime: entry.activeDay.decisionLog.prayerWindow.fajrEnd ?? adjustedWake,
+            timeZone: timeZone
+        )
+        #expect(adjustedToEnd.detailText == "Wake up at the end of Fajr")
     }
 
     @Test
@@ -777,13 +792,13 @@ struct ScheduleServiceExtractionTests {
         #expect(skipped.primaryText == "Alarm off")
         #expect(skipped.wakeIconName == "bell.slash.fill")
         #expect(skipped.statusText == "Alarm off")
-        #expect(skipped.detailText == "Planned wake was 30 min before Fajr ends")
+        #expect(skipped.detailText == "Planned wake was 30 minutes before Fajr ends")
         #expect(skipped.wakeWindowIndicatorState == .offAnchor)
         #expect(skipped.wakeWindowIndicatorIconName == "bell.slash.fill")
         #expect(skipped.wakeWindowPositionRatio != nil)
         #expect(skipped.fajrWindowVisualMode == .staticWithinFajrWindow)
         #expect(skipped.wakeAdjustmentEnabled == false)
-        #expect(fixed.detailText == "Set for a custom wake time")
+        #expect(fixed.detailText == "Wake up at the custom wake time")
     }
 
     @Test

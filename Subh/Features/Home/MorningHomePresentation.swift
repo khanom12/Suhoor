@@ -332,9 +332,9 @@ enum MorningHomePresentation {
             return "Fajr times are not available yet"
         }
         if entry.activeDay.decisionLog.plannedWakeState == .fixedWake {
-            return "Set for a custom wake time"
+            return activeHeroWakeRelationText(for: entry.activeDay)
         }
-        return heroWakeOffsetText(for: entry.activeDay)
+        return activeHeroWakeRelationText(for: entry.activeDay)
     }
 
     private static func actionableChipTitles(for entry: WakeRowEntry) -> [String] {
@@ -458,21 +458,44 @@ enum MorningHomePresentation {
         let decision = day.decisionLog
         switch decision.plannedWakeState {
         case .preFajr:
-            let unit = decision.resolvedDelta.minutes == 1 ? "min" : "min"
+            let unit = minuteUnit(for: decision.resolvedDelta.minutes)
             return "\(decision.resolvedDelta.minutes) \(unit) before Fajr begins"
         case .inFajr:
             if decision.resolvedAnchor.type == .fajrEnd {
-                let unit = decision.resolvedDelta.minutes == 1 ? "min" : "min"
+                let unit = minuteUnit(for: decision.resolvedDelta.minutes)
                 return "\(decision.resolvedDelta.minutes) \(unit) before Fajr ends"
             }
-            let unit = decision.resolvedDelta.minutes == 1 ? "min" : "min"
+            let unit = minuteUnit(for: decision.resolvedDelta.minutes)
             return "\(decision.resolvedDelta.minutes) \(unit) after Fajr begins"
         case .postFajr:
-            let unit = decision.resolvedDelta.minutes == 1 ? "min" : "min"
+            let unit = minuteUnit(for: decision.resolvedDelta.minutes)
             return "\(decision.resolvedDelta.minutes) \(unit) after Fajr ends"
         case .fixedWake:
-            return "Set for a custom wake time"
+            return "at the custom wake time"
         }
+    }
+
+    private static func activeHeroWakeRelationText(for day: ActiveAlarmDay) -> String {
+        let decision = day.decisionLog
+        if decision.resolvedDelta.minutes == 0 {
+            switch decision.plannedWakeState {
+            case .preFajr:
+                return "Wake up at the start of Fajr"
+            case .inFajr:
+                return decision.resolvedAnchor.type == .fajrEnd
+                    ? "Wake up at the end of Fajr"
+                    : "Wake up at the start of Fajr"
+            case .postFajr:
+                return "Wake up at the end of Fajr"
+            case .fixedWake:
+                break
+            }
+        }
+        return "Wake up \(heroWakeOffsetText(for: day))"
+    }
+
+    private static func minuteUnit(for minutes: Int) -> String {
+        minutes == 1 ? "minute" : "minutes"
     }
 
     private struct FajrWindowDisplay {
@@ -767,25 +790,34 @@ enum MorningHomePresentation {
         maxTime: Date,
         anchor: WakeAnchorType?
     ) -> String {
+        if abs(wakeTime.timeIntervalSince(minTime)) < 0.5 {
+            return "Wake up at the start of Fajr"
+        }
+        if abs(wakeTime.timeIntervalSince(maxTime)) < 0.5 {
+            return "Wake up at the end of Fajr"
+        }
+
         switch anchor {
         case .fajrStart:
             let minutes = Int(round(wakeTime.timeIntervalSince(minTime) / 60))
             if minutes == 0 {
-                return "At the start of Fajr"
+                return "Wake up at the start of Fajr"
             }
             if minutes > 0 {
-                return "\(minutes) min after Fajr begins"
+                return "Wake up \(minutes) \(minuteUnit(for: minutes)) after Fajr begins"
             }
-            return "\(abs(minutes)) min before Fajr begins"
+            let absoluteMinutes = abs(minutes)
+            return "Wake up \(absoluteMinutes) \(minuteUnit(for: absoluteMinutes)) before Fajr begins"
         case .fajrEnd, .masjidFajr, .clockTime, .none:
             let minutes = Int(round(maxTime.timeIntervalSince(wakeTime) / 60))
             if minutes == 0 {
-                return "At the end of Fajr"
+                return "Wake up at the end of Fajr"
             }
             if minutes > 0 {
-                return "\(minutes) min before Fajr ends"
+                return "Wake up \(minutes) \(minuteUnit(for: minutes)) before Fajr ends"
             }
-            return "\(abs(minutes)) min after Fajr ends"
+            let absoluteMinutes = abs(minutes)
+            return "Wake up \(absoluteMinutes) \(minuteUnit(for: absoluteMinutes)) after Fajr ends"
         }
     }
 
