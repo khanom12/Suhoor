@@ -89,15 +89,15 @@ enum FajrWindowOverlay: String, CaseIterable, Identifiable, Hashable, Sendable {
 
 enum FajrWindowBoundaryTruth: Equatable, Hashable, Sendable {
     case canonicalEnd
-    case sunriseProxy
+    case solarSunrise
     case supportedFallback
 
     var boundaryLabel: String {
         switch self {
         case .canonicalEnd:
             return "Fajr ends"
-        case .sunriseProxy:
-            return "Supported Fajr end"
+        case .solarSunrise:
+            return "Fajr ends"
         case .supportedFallback:
             return "Supported Fajr boundary"
         }
@@ -107,8 +107,8 @@ enum FajrWindowBoundaryTruth: Equatable, Hashable, Sendable {
         switch self {
         case .canonicalEnd:
             return "Subh is using the supported Fajr end for this date."
-        case .sunriseProxy:
-            return "The supported Fajr end is based on sunrise for this date."
+        case .solarSunrise:
+            return "Fajr end is based on sunrise for this date."
         case .supportedFallback:
             return "Subh is using the closest supported Fajr boundary available for this date."
         }

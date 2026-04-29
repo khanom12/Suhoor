@@ -146,8 +146,8 @@ struct AlarmDayDetailView: View {
     private var trustNote: String? {
         guard let note = activeDay?.decisionLog.resolvedAnchor.providerNotes else { return nil }
         switch note {
-        case "provider:solar_sunrise_proxy":
-            return "The supported Fajr end is based on sunrise for this date."
+        case "source:solar_sunrise_fajr_end":
+            return "Fajr end is based on sunrise for this date."
         case "fallback:missing_fajr_end":
             return "Subh could not resolve a separate supported Fajr end, so it used the closest supported fallback."
         default:
@@ -178,8 +178,8 @@ struct AlarmDayDetailView: View {
     }
 
     private func supportedEndTitle(for providerNotes: String?) -> String {
-        providerNotes == "provider:solar_sunrise_proxy"
-            ? "Supported Fajr end"
+        providerNotes == "source:solar_sunrise_fajr_end"
+            ? "Fajr ends"
             : "Supported Fajr boundary"
     }
 

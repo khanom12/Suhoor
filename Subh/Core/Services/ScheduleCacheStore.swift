@@ -16,6 +16,7 @@ final class ScheduleCacheStore {
         var activeWindowSnapshot: ActiveAlarmWindowSnapshot?
         var tagSelectionRevision: Int?
         var wakeRuleSignature: String?
+        var calculationSignature: String?
     }
 
     init(defaults: UserDefaults = .standard) {
@@ -34,7 +35,8 @@ final class ScheduleCacheStore {
             schedules: [],
             activeWindowSnapshot: nil,
             tagSelectionRevision: nil,
-            wakeRuleSignature: nil
+            wakeRuleSignature: nil,
+            calculationSignature: nil
         )
     }
 
@@ -47,6 +49,19 @@ final class ScheduleCacheStore {
             "fixed=\(rule.fixedWakeTimeMinutesFromMidnight.map(String.init) ?? "none")",
             "cap=\(rule.latestWakeCapMinutesFromMidnight.map(String.init) ?? "none")",
             "mode=\(defaults.defaultSuhoorTimeMode.rawValue)"
+        ].joined(separator: "|")
+    }
+
+    static func calculationSignature(for settings: AppSettings) -> String {
+        [
+            "method=\(settings.calculationMethod.canonicalID)",
+            "fajrBeginAdjustment=\(settings.fajrAdjustmentMinutes)",
+            "fajrEndAdjustment=\(settings.fajrEndAdjustmentMinutes)",
+            "maghribAdjustment=\(settings.maghribAdjustmentMinutes)",
+            "highLatitudeRule=\(settings.highLatitudeRule.rawValue)",
+            "rounding=\(settings.roundingPolicy.rawValue)",
+            "locationMode=\(settings.locationMode.rawValue)",
+            "fixedLocation=\(settings.fixedLocation?.summarySignature ?? "none")"
         ].joined(separator: "|")
     }
 

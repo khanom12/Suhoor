@@ -139,6 +139,141 @@ struct ScheduleServiceExtractionTests {
 
     @Test
     @MainActor
+    func calculationMethodProfilesPreserveAnglesAndCanonicalIDs() throws {
+        let expectations: [(CalculationMethod, String, Double)] = [
+            (.muslimWorldLeague, "muslimWorldLeague", 18.0),
+            (.northAmerica, "isna", 15.0),
+            (.egyptian, "egyptianGeneralAuthority", 19.5),
+            (.karachi, "karachi", 18.0),
+            (.makkah, "ummAlQura", 18.5)
+        ]
+
+        for (method, canonicalID, angle) in expectations {
+            #expect(method.canonicalID == canonicalID)
+            #expect(method.fajrAngle == angle)
+            #expect(method.profile.isBuiltIn)
+        }
+
+        let legacyNorthAmerica = try JSONDecoder().decode(CalculationMethod.self, from: Data(#""northAmerica""#.utf8))
+        let legacyMakkah = try JSONDecoder().decode(CalculationMethod.self, from: Data(#""makkah""#.utf8))
+        let legacyEgyptian = try JSONDecoder().decode(CalculationMethod.self, from: Data(#""egyptian""#.utf8))
+        #expect(legacyNorthAmerica == .northAmerica)
+        #expect(legacyMakkah == .makkah)
+        #expect(legacyEgyptian == .egyptian)
+
+        let encodedISNA = try JSONEncoder().encode(CalculationMethod.northAmerica)
+        #expect(String(data: encodedISNA, encoding: .utf8) == #""isna""#)
+    }
+
+    @Test
+    func localPrayerWindowUsesSelectedTimezoneDayOfYearAndRoundsToMinute() throws {
+        let calculator = PrayerTimeCalculator()
+        let instant = Self.makeDate(year: 2026, month: 1, day: 1, hour: 8, minute: 30, timeZone: TimeZone(secondsFromGMT: 0) ?? .gmt)
+        let honoluluTimeZone = TimeZone(identifier: "Pacific/Honolulu") ?? .current
+        let kiritimatiTimeZone = TimeZone(identifier: "Pacific/Kiritimati") ?? .current
+
+        let honolulu = try #require(calculator.localPrayerWindow(
+            for: instant,
+            location: CLLocationCoordinate2D(latitude: 21.3069, longitude: -157.8583),
+            timeZone: honoluluTimeZone,
+            method: .northAmerica,
+            fajrBeginAdjustmentMinutes: 0,
+            fajrEndAdjustmentMinutes: 0,
+            maghribAdjustmentMinutes: 0,
+            highLatitudeRule: .automatic,
+            roundingPolicy: .nearestMinute
+        ))
+        let kiritimati = try #require(calculator.localPrayerWindow(
+            for: instant,
+            location: CLLocationCoordinate2D(latitude: 1.8721, longitude: -157.4278),
+            timeZone: kiritimatiTimeZone,
+            method: .muslimWorldLeague,
+            fajrBeginAdjustmentMinutes: 0,
+            fajrEndAdjustmentMinutes: 0,
+            maghribAdjustmentMinutes: 0,
+            highLatitudeRule: .automatic,
+            roundingPolicy: .nearestMinute
+        ))
+
+        #expect(honolulu.diagnostics.dayOfYearUsed == 365)
+        #expect(kiritimati.diagnostics.dayOfYearUsed == 1)
+        #expect(Calendar(identifier: .gregorian).component(.second, from: honolulu.fajrStart) == 0)
+        #expect(Calendar(identifier: .gregorian).component(.second, from: honolulu.fajrEnd ?? honolulu.fajrStart) == 0)
+        #expect(Calendar(identifier: .gregorian).component(.second, from: honolulu.maghrib) == 0)
+        #expect(honolulu.fajrEndSource == .solarSunrise)
+    }
+
+    @Test
+    func localPrayerWindowAppliesBoundaryAdjustmentsIndependently() throws {
+        let calculator = PrayerTimeCalculator()
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let date = Self.makeDate(year: 2026, month: 4, day: 27, timeZone: timeZone)
+        let location = CLLocationCoordinate2D(latitude: 43.6532, longitude: -79.3832)
+
+        let base = try #require(calculator.localPrayerWindow(
+            for: date,
+            location: location,
+            timeZone: timeZone,
+            method: .northAmerica,
+            fajrBeginAdjustmentMinutes: 0,
+            fajrEndAdjustmentMinutes: 0,
+            maghribAdjustmentMinutes: 0,
+            highLatitudeRule: .automatic,
+            roundingPolicy: .nearestMinute
+        ))
+        let beginAdjusted = try #require(calculator.localPrayerWindow(
+            for: date,
+            location: location,
+            timeZone: timeZone,
+            method: .northAmerica,
+            fajrBeginAdjustmentMinutes: 5,
+            fajrEndAdjustmentMinutes: 0,
+            maghribAdjustmentMinutes: 0,
+            highLatitudeRule: .automatic,
+            roundingPolicy: .nearestMinute
+        ))
+        let endAdjusted = try #require(calculator.localPrayerWindow(
+            for: date,
+            location: location,
+            timeZone: timeZone,
+            method: .northAmerica,
+            fajrBeginAdjustmentMinutes: 0,
+            fajrEndAdjustmentMinutes: 5,
+            maghribAdjustmentMinutes: 0,
+            highLatitudeRule: .automatic,
+            roundingPolicy: .nearestMinute
+        ))
+
+        #expect(beginAdjusted.fajrStart == base.fajrStart.addingTimeInterval(5 * 60))
+        #expect(beginAdjusted.fajrEnd == base.fajrEnd)
+        #expect(endAdjusted.fajrStart == base.fajrStart)
+        #expect(endAdjusted.fajrEnd == base.fajrEnd?.addingTimeInterval(5 * 60))
+        #expect(endAdjusted.adjustmentsApplied.fajrEndMinutes == 5)
+    }
+
+    @Test
+    func localPrayerWindowRejectsInvalidBoundaryOrdering() {
+        let calculator = PrayerTimeCalculator()
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let date = Self.makeDate(year: 2026, month: 4, day: 27, timeZone: timeZone)
+
+        let invalid = calculator.localPrayerWindow(
+            for: date,
+            location: CLLocationCoordinate2D(latitude: 43.6532, longitude: -79.3832),
+            timeZone: timeZone,
+            method: .northAmerica,
+            fajrBeginAdjustmentMinutes: 500,
+            fajrEndAdjustmentMinutes: -500,
+            maghribAdjustmentMinutes: 0,
+            highLatitudeRule: .automatic,
+            roundingPolicy: .nearestMinute
+        )
+
+        #expect(invalid == nil)
+    }
+
+    @Test
+    @MainActor
     func activeWindowSnapshotBuilderPreservesResolvedEntryOrdering() {
         let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
         let date = Self.makeDate(year: 2026, month: 4, day: 10, timeZone: timeZone)
@@ -458,7 +593,7 @@ struct ScheduleServiceExtractionTests {
         let entry = Self.makeWakeEntry(
             date: Self.makeDate(year: 2026, month: 4, day: 27, timeZone: timeZone),
             timeZone: timeZone,
-            providerNotes: "provider:solar_sunrise_proxy"
+            providerNotes: "source:solar_sunrise_fajr_end"
         )
 
         let display = MorningHomePresentation.heroDisplay(
@@ -873,15 +1008,16 @@ struct ScheduleServiceExtractionTests {
 
         #expect(summary.contains("Calculation method:"))
         #expect(summary.contains("\nPrayer offsets:"))
-        #expect(summary.contains("Fajr +0 min"))
+        #expect(summary.contains("Fajr begin +0 min"))
+        #expect(summary.contains("Fajr end +0 min"))
         #expect(summary.contains("Maghrib +0 min"))
     }
 
     @Test
     func trustCopyUsesHumanFajrBoundaryLanguage() {
         #expect(WakePagePresentation.ordinaryMeaningText == "Regular Fajr morning")
-        #expect(FajrWindowBoundaryTruth.sunriseProxy.boundaryLabel == "Supported Fajr end")
-        #expect(FajrWindowBoundaryTruth.sunriseProxy.explanationText == "The supported Fajr end is based on sunrise for this date.")
+        #expect(FajrWindowBoundaryTruth.solarSunrise.boundaryLabel == "Fajr ends")
+        #expect(FajrWindowBoundaryTruth.solarSunrise.explanationText == "Fajr end is based on sunrise for this date.")
         #expect(Strings.SettingsIssues.fallbackTitle == "Wake delivery is limited")
         #expect(Strings.SettingsIssues.fallbackMessage == "This device is using notifications instead of AlarmKit.")
     }
@@ -1417,7 +1553,7 @@ struct ScheduleServiceExtractionTests {
         let anchorType: WakeAnchorType = plannedWakeState == .fixedWake ? .clockTime : .fajrEnd
         let anchorDate = plannedWakeState == .fixedWake
             ? schedule.wakeDate
-            : (schedule.boundaryDate ?? schedule.fajrDate)
+            : (schedule.fajrEndDate ?? schedule.boundaryDate ?? schedule.fajrDate)
         let delta = WakeDelta(relation: .before, minutes: plannedWakeState == .fixedWake ? 0 : 30)
 
         return RuleDecisionLog(
@@ -1427,7 +1563,7 @@ struct ScheduleServiceExtractionTests {
             prayerWindow: DailyPrayerWindow(
                 date: schedule.date,
                 fajrStart: schedule.fajrDate,
-                fajrEnd: schedule.boundaryDate,
+                fajrEnd: schedule.fajrEndDate ?? schedule.boundaryDate,
                 maghrib: schedule.maghribDate
             ),
             candidateContexts: [context.primaryContext],

@@ -5,6 +5,106 @@ struct DailyPrayerWindow: Codable, Equatable, Hashable, Sendable {
     let fajrStart: Date
     let fajrEnd: Date?
     let maghrib: Date
+    let calculationSource: PrayerCalculationSource
+    let methodID: String?
+    let methodDisplayName: String?
+    let authorityName: String?
+    let fajrAngleDegrees: Double?
+    let highLatitudeRuleRequested: PrayerHighLatitudeRule
+    let highLatitudeRuleApplied: PrayerHighLatitudeRule?
+    let highLatitudeFallbackWasUsed: Bool
+    let fajrBeginSource: FajrBeginSource
+    let fajrEndSource: FajrEndSource
+    let maghribSource: MaghribSource
+    let adjustmentsApplied: PrayerBoundaryAdjustments
+    let diagnostics: PrayerCalculationDiagnostics
+    let isValid: Bool
+
+    init(
+        date: Date,
+        fajrStart: Date,
+        fajrEnd: Date?,
+        maghrib: Date,
+        calculationSource: PrayerCalculationSource = .localCalculated,
+        methodID: String? = nil,
+        methodDisplayName: String? = nil,
+        authorityName: String? = nil,
+        fajrAngleDegrees: Double? = nil,
+        highLatitudeRuleRequested: PrayerHighLatitudeRule = .automatic,
+        highLatitudeRuleApplied: PrayerHighLatitudeRule? = nil,
+        highLatitudeFallbackWasUsed: Bool = false,
+        fajrBeginSource: FajrBeginSource = .localSolarAngle,
+        fajrEndSource: FajrEndSource = .unavailable,
+        maghribSource: MaghribSource = .localSolarSunset,
+        adjustmentsApplied: PrayerBoundaryAdjustments = .none,
+        diagnostics: PrayerCalculationDiagnostics = .unavailable,
+        isValid: Bool = true
+    ) {
+        self.date = date
+        self.fajrStart = fajrStart
+        self.fajrEnd = fajrEnd
+        self.maghrib = maghrib
+        self.calculationSource = calculationSource
+        self.methodID = methodID
+        self.methodDisplayName = methodDisplayName
+        self.authorityName = authorityName
+        self.fajrAngleDegrees = fajrAngleDegrees
+        self.highLatitudeRuleRequested = highLatitudeRuleRequested
+        self.highLatitudeRuleApplied = highLatitudeRuleApplied
+        self.highLatitudeFallbackWasUsed = highLatitudeFallbackWasUsed
+        self.fajrBeginSource = fajrBeginSource
+        self.fajrEndSource = fajrEndSource
+        self.maghribSource = maghribSource
+        self.adjustmentsApplied = adjustmentsApplied
+        self.diagnostics = diagnostics
+        self.isValid = isValid
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case date
+        case fajrStart
+        case fajrEnd
+        case maghrib
+        case calculationSource
+        case methodID
+        case methodDisplayName
+        case authorityName
+        case fajrAngleDegrees
+        case highLatitudeRuleRequested
+        case highLatitudeRuleApplied
+        case highLatitudeFallbackWasUsed
+        case fajrBeginSource
+        case fajrEndSource
+        case maghribSource
+        case adjustmentsApplied
+        case diagnostics
+        case isValid
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let fajrEnd = try container.decodeIfPresent(Date.self, forKey: .fajrEnd)
+        self.init(
+            date: try container.decode(Date.self, forKey: .date),
+            fajrStart: try container.decode(Date.self, forKey: .fajrStart),
+            fajrEnd: fajrEnd,
+            maghrib: try container.decode(Date.self, forKey: .maghrib),
+            calculationSource: try container.decodeIfPresent(PrayerCalculationSource.self, forKey: .calculationSource) ?? .localCalculated,
+            methodID: try container.decodeIfPresent(String.self, forKey: .methodID),
+            methodDisplayName: try container.decodeIfPresent(String.self, forKey: .methodDisplayName),
+            authorityName: try container.decodeIfPresent(String.self, forKey: .authorityName),
+            fajrAngleDegrees: try container.decodeIfPresent(Double.self, forKey: .fajrAngleDegrees),
+            highLatitudeRuleRequested: try container.decodeIfPresent(PrayerHighLatitudeRule.self, forKey: .highLatitudeRuleRequested) ?? .automatic,
+            highLatitudeRuleApplied: try container.decodeIfPresent(PrayerHighLatitudeRule.self, forKey: .highLatitudeRuleApplied),
+            highLatitudeFallbackWasUsed: try container.decodeIfPresent(Bool.self, forKey: .highLatitudeFallbackWasUsed) ?? false,
+            fajrBeginSource: try container.decodeIfPresent(FajrBeginSource.self, forKey: .fajrBeginSource) ?? .localSolarAngle,
+            fajrEndSource: try container.decodeIfPresent(FajrEndSource.self, forKey: .fajrEndSource) ?? (fajrEnd == nil ? .unavailable : .solarSunrise),
+            maghribSource: try container.decodeIfPresent(MaghribSource.self, forKey: .maghribSource) ?? .localSolarSunset,
+            adjustmentsApplied: try container.decodeIfPresent(PrayerBoundaryAdjustments.self, forKey: .adjustmentsApplied) ?? .none,
+            diagnostics: try container.decodeIfPresent(PrayerCalculationDiagnostics.self, forKey: .diagnostics) ?? .unavailable,
+            isValid: try container.decodeIfPresent(Bool.self, forKey: .isValid) ?? true
+        )
+    }
 }
 
 enum MorningSoundRole: String, Codable, CaseIterable, Identifiable, Sendable {

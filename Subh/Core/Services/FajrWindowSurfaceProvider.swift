@@ -214,10 +214,12 @@ struct FajrWindowSurfaceProvider {
         let lowerBoundaryDate: Date
         let boundaryTruth: FajrWindowBoundaryTruth
 
-        // The current resolver stores a sunrise-derived proxy in prayerWindow.fajrEnd.
         if let fajrEnd = day.decisionLog.prayerWindow.fajrEnd {
             lowerBoundaryDate = fajrEnd
-            boundaryTruth = .sunriseProxy
+            boundaryTruth = day.decisionLog.prayerWindow.fajrEndSource == .solarSunrise ? .solarSunrise : .canonicalEnd
+        } else if let fajrEnd = day.schedule.fajrEndDate {
+            lowerBoundaryDate = fajrEnd
+            boundaryTruth = .solarSunrise
         } else if let boundaryDate = day.schedule.boundaryDate {
             lowerBoundaryDate = boundaryDate
             boundaryTruth = .supportedFallback

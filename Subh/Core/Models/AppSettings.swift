@@ -19,7 +19,10 @@ struct AppSettings: Codable, Equatable, Sendable {
     var label: String
     var calculationMethod: CalculationMethod
     var fajrAdjustmentMinutes: Int
+    var fajrEndAdjustmentMinutes: Int
     var maghribAdjustmentMinutes: Int
+    var highLatitudeRule: PrayerHighLatitudeRule
+    var roundingPolicy: PrayerRoundingPolicy
     var locationMode: LocationMode
     var fixedLocation: FixedLocation?
     var lastScheduledDate: Date?
@@ -48,7 +51,10 @@ struct AppSettings: Codable, Equatable, Sendable {
         label: "Subh",
         calculationMethod: CalculationMethod.defaultForTimeZone(TimeZone.current),
         fajrAdjustmentMinutes: 0,
+        fajrEndAdjustmentMinutes: 0,
         maghribAdjustmentMinutes: 0,
+        highLatitudeRule: .automatic,
+        roundingPolicy: .nearestMinute,
         locationMode: .auto,
         fixedLocation: nil,
         lastScheduledDate: nil,
@@ -102,7 +108,10 @@ extension AppSettings {
         case label
         case calculationMethod
         case fajrAdjustmentMinutes
+        case fajrEndAdjustmentMinutes
         case maghribAdjustmentMinutes
+        case highLatitudeRule
+        case roundingPolicy
         case locationMode
         case fixedLocation
         case lastScheduledDate
@@ -189,7 +198,10 @@ extension AppSettings {
         calculationMethod = try container.decodeIfPresent(CalculationMethod.self, forKey: .calculationMethod)
             ?? CalculationMethod.defaultForTimeZone(TimeZone.current)
         fajrAdjustmentMinutes = try container.decodeIfPresent(Int.self, forKey: .fajrAdjustmentMinutes) ?? 0
+        fajrEndAdjustmentMinutes = try container.decodeIfPresent(Int.self, forKey: .fajrEndAdjustmentMinutes) ?? 0
         maghribAdjustmentMinutes = try container.decodeIfPresent(Int.self, forKey: .maghribAdjustmentMinutes) ?? 0
+        highLatitudeRule = try container.decodeIfPresent(PrayerHighLatitudeRule.self, forKey: .highLatitudeRule) ?? .automatic
+        roundingPolicy = try container.decodeIfPresent(PrayerRoundingPolicy.self, forKey: .roundingPolicy) ?? .nearestMinute
         locationMode = try container.decodeIfPresent(LocationMode.self, forKey: .locationMode) ?? .auto
         fixedLocation = try container.decodeIfPresent(FixedLocation.self, forKey: .fixedLocation)
         lastScheduledDate = try container.decodeIfPresent(Date.self, forKey: .lastScheduledDate)
@@ -220,7 +232,10 @@ extension AppSettings {
         try container.encode(label, forKey: .label)
         try container.encode(calculationMethod, forKey: .calculationMethod)
         try container.encode(fajrAdjustmentMinutes, forKey: .fajrAdjustmentMinutes)
+        try container.encode(fajrEndAdjustmentMinutes, forKey: .fajrEndAdjustmentMinutes)
         try container.encode(maghribAdjustmentMinutes, forKey: .maghribAdjustmentMinutes)
+        try container.encode(highLatitudeRule, forKey: .highLatitudeRule)
+        try container.encode(roundingPolicy, forKey: .roundingPolicy)
         try container.encode(locationMode, forKey: .locationMode)
         try container.encodeIfPresent(fixedLocation, forKey: .fixedLocation)
         try container.encodeIfPresent(lastScheduledDate, forKey: .lastScheduledDate)
@@ -311,6 +326,17 @@ enum LocationMode: String, Codable, CaseIterable, Identifiable, Sendable {
 struct FixedLocation: Codable, Equatable, Sendable {
     let latitude: Double
     let longitude: Double
+
+    var summarySignature: String {
+        "\(latitude.rounded(toPlaces: 5)),\(longitude.rounded(toPlaces: 5))"
+    }
+}
+
+private extension Double {
+    func rounded(toPlaces places: Int) -> Double {
+        let divisor = pow(10.0, Double(places))
+        return (self * divisor).rounded() / divisor
+    }
 }
 
 extension AppSettings {

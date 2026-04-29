@@ -4,6 +4,7 @@ struct DaySchedule: Identifiable, Codable, Equatable, Sendable {
     let id: String
     let date: Date
     let fajrDate: Date
+    let fajrEndDate: Date?
     let maghribDate: Date
     let wakeDate: Date
     let reminderDate: Date?
@@ -18,6 +19,7 @@ struct DaySchedule: Identifiable, Codable, Equatable, Sendable {
     init(
         date: Date,
         fajrDate: Date,
+        fajrEndDate: Date? = nil,
         maghribDate: Date,
         wakeDate: Date,
         reminderDate: Date?,
@@ -32,6 +34,7 @@ struct DaySchedule: Identifiable, Codable, Equatable, Sendable {
     ) {
         self.date = date
         self.fajrDate = fajrDate
+        self.fajrEndDate = fajrEndDate
         self.maghribDate = maghribDate
         self.wakeDate = wakeDate
         self.reminderDate = reminderDate

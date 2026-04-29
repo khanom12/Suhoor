@@ -11,6 +11,7 @@ enum LegacyResolvedDayAdapter {
         DaySchedule(
             date: snapshot.date,
             fajrDate: snapshot.prayerWindow.fajrStart,
+            fajrEndDate: snapshot.prayerWindow.fajrEnd,
             maghribDate: snapshot.prayerWindow.maghrib,
             wakeDate: snapshot.decisionLog.resolvedWakeTime,
             reminderDate: eventDate(for: .wakeReminder, in: snapshot.materializedEvents),
@@ -20,7 +21,7 @@ enum LegacyResolvedDayAdapter {
             iftarSoundChoice: effectiveConfig.iftarSoundChoice,
             locationDescription: locationDescription,
             offsetMinutes: max(0, Int(round(snapshot.prayerWindow.fajrStart.timeIntervalSince(snapshot.decisionLog.resolvedWakeTime) / 60))),
-            calculationMethodName: settings.calculationMethod.displayName,
+            calculationMethodName: snapshot.prayerWindow.methodDisplayName ?? settings.calculationMethod.displayName,
             timeZone: timeZone
         )
     }

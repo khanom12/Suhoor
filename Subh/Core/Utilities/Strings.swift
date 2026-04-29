@@ -183,8 +183,11 @@ enum Strings {
         static let prayerTimeCalculationSection = "Prayer time calculation"
         static let calculationMethodTitle = "Calculation method"
         static let method = "Method"
-        static let fajrAdjustment = "Fajr adjustment"
-        static let fajrAdjustmentHelper = "Adjust Fajr earlier or later."
+        static let fajrAdjustment = "Fajr begin adjustment"
+        static let fajrAdjustmentHelper = "Adjust the Fajr begin boundary earlier or later."
+        static let fajrEndAdjustment = "Fajr end adjustment"
+        static let fajrEndAdjustmentHelper = "Adjust the sunrise/Fajr-end boundary earlier or later."
+        static let prayerBoundaryAdjustmentHelper = "Use adjustments only when your local authority or mosque publishes slightly different times."
         static let hijriCalendarTitle = "Hijri calendar corrections"
         static let hijriMonthCorrectionsTitle = "Month corrections"
         static let hijriCalendarHelper = "Adjust month starts if your local mosque begins a Hijri month one day earlier or later."
@@ -259,8 +262,8 @@ enum Strings {
         static let muslimWorldLeague = "Commonly used in many regions and a good general default."
         static let egyptian = "Uses the Egyptian General Authority of Survey calculation."
         static let karachi = "Uses the University of Islamic Sciences, Karachi calculation."
-        static let northAmerica = "Often used for schedules in the United States and Canada."
-        static let makkah = "Uses the Umm al-Qura calculation associated with Makkah."
+        static let northAmerica = "Islamic Society of North America • common in the United States and Canada."
+        static let makkah = "Umm al-Qura, Makkah • Saudi Arabia setting."
     }
 
     enum SettingsHijri {

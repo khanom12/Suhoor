@@ -193,34 +193,16 @@ enum MorningScheduleResolver {
         settings: AppSettings,
         calculator: PrayerTimeCalculator
     ) -> DailyPrayerWindow? {
-        guard let fajrStart = calculator.fajrDate(
+        calculator.localPrayerWindow(
             for: date,
             location: coordinate,
             timeZone: timeZone,
             method: settings.calculationMethod,
-            adjustmentMinutes: settings.fajrAdjustmentMinutes
-        ),
-        let maghrib = calculator.maghribDate(
-            for: date,
-            location: coordinate,
-            timeZone: timeZone,
-            adjustmentMinutes: settings.maghribAdjustmentMinutes
-        ) else {
-            return nil
-        }
-
-        let fajrEnd = calculator.sunriseDate(
-            for: date,
-            location: coordinate,
-            timeZone: timeZone,
-            adjustmentMinutes: 0
-        )
-
-        return DailyPrayerWindow(
-            date: date,
-            fajrStart: fajrStart,
-            fajrEnd: fajrEnd,
-            maghrib: maghrib
+            fajrBeginAdjustmentMinutes: settings.fajrAdjustmentMinutes,
+            fajrEndAdjustmentMinutes: settings.fajrEndAdjustmentMinutes,
+            maghribAdjustmentMinutes: settings.maghribAdjustmentMinutes,
+            highLatitudeRule: settings.highLatitudeRule,
+            roundingPolicy: settings.roundingPolicy
         )
     }
 
@@ -246,7 +228,7 @@ enum MorningScheduleResolver {
             return WakeAnchor(
                 type: .fajrEnd,
                 date: prayerWindow.fajrEnd ?? prayerWindow.fajrStart,
-                providerNotes: prayerWindow.fajrEnd == nil ? "fallback:missing_fajr_end" : "provider:solar_sunrise_proxy"
+                providerNotes: prayerWindow.fajrEnd == nil ? "fallback:missing_fajr_end" : prayerWindow.fajrEndSource.providerNote
             )
         case .masjidFajr:
             return WakeAnchor(type: .masjidFajr, date: prayerWindow.fajrStart, providerNotes: "fallback:fajr_start")

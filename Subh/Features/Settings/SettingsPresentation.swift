@@ -32,7 +32,8 @@ struct SettingsSummaryFormatter {
     static func prayerTimesSummary(settings: AppSettings) -> String {
         let method = "Calculation method: \(settings.calculationMethod.displayName)"
         let offsets = [
-            Strings.SettingsSummary.fajrAdjustment(adjustmentText(settings.fajrAdjustmentMinutes)),
+            "Fajr begin \(adjustmentText(settings.fajrAdjustmentMinutes))",
+            "Fajr end \(adjustmentText(settings.fajrEndAdjustmentMinutes))",
             "Maghrib \(adjustmentText(settings.maghribAdjustmentMinutes))"
         ].joined(separator: " · ")
         return "\(method)\nPrayer offsets: \(offsets)"

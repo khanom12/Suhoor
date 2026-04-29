@@ -9,7 +9,7 @@ struct PrayerTimeSettingsView: View {
             SettingsGroup(
                 title: Strings.Settings.prayerTimeCalculationSection,
                 supportingText: Strings.Settings.prayerTimesHelper,
-                footer: Strings.Settings.fajrAdjustmentHelper
+                footer: Strings.Settings.prayerBoundaryAdjustmentHelper
             ) {
                 NavigationLink {
                     CalculationMethodSelectionView()
@@ -31,6 +31,18 @@ struct PrayerTimeSettingsView: View {
                         label: Strings.Settings.fajrAdjustment,
                         detail: Strings.Settings.fajrAdjustmentHelper,
                         value: fajrAdjustmentBinding,
+                        range: -30...30,
+                        step: 1
+                    )
+                }
+
+                AppGroupDivider()
+
+                SettingsRow {
+                    RelativeOffsetControl(
+                        label: Strings.Settings.fajrEndAdjustment,
+                        detail: Strings.Settings.fajrEndAdjustmentHelper,
+                        value: fajrEndAdjustmentBinding,
                         range: -30...30,
                         step: 1
                     )
@@ -68,6 +80,16 @@ struct PrayerTimeSettingsView: View {
             get: { settingsStore.settings.maghribAdjustmentMinutes },
             set: { newValue in
                 settingsStore.settings.maghribAdjustmentMinutes = newValue
+                scheduleManager.requestRefresh(reason: .settingsChanged)
+            }
+        )
+    }
+
+    private var fajrEndAdjustmentBinding: Binding<Int> {
+        Binding(
+            get: { settingsStore.settings.fajrEndAdjustmentMinutes },
+            set: { newValue in
+                settingsStore.settings.fajrEndAdjustmentMinutes = newValue
                 scheduleManager.requestRefresh(reason: .settingsChanged)
             }
         )

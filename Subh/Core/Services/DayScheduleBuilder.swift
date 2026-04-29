@@ -26,43 +26,30 @@ final class DayScheduleBuilder {
         timeZone: TimeZone,
         method: CalculationMethod,
         adjustmentMinutes: Int,
+        fajrEndAdjustmentMinutes: Int = 0,
         maghribAdjustmentMinutes: Int,
+        highLatitudeRule: PrayerHighLatitudeRule = .automatic,
+        roundingPolicy: PrayerRoundingPolicy = .nearestMinute,
         effectiveConfig: EffectiveDailyConfig,
         locationDescription: String
     ) -> DaySchedule? {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = timeZone
 
-        guard let fajr = calculator.fajrDate(
+        guard let prayerWindow = calculator.localPrayerWindow(
             for: day,
             location: coordinate,
             timeZone: timeZone,
             method: method,
-            adjustmentMinutes: adjustmentMinutes
-        ) else {
-            return nil
-        }
-        guard let maghrib = calculator.maghribDate(
-            for: day,
-            location: coordinate,
-            timeZone: timeZone,
-            adjustmentMinutes: maghribAdjustmentMinutes
+            fajrBeginAdjustmentMinutes: adjustmentMinutes,
+            fajrEndAdjustmentMinutes: fajrEndAdjustmentMinutes,
+            maghribAdjustmentMinutes: maghribAdjustmentMinutes,
+            highLatitudeRule: highLatitudeRule,
+            roundingPolicy: roundingPolicy
         ) else {
             return nil
         }
 
-        let fajrEnd = calculator.sunriseDate(
-            for: day,
-            location: coordinate,
-            timeZone: timeZone,
-            adjustmentMinutes: 0
-        )
-        let prayerWindow = DailyPrayerWindow(
-            date: day,
-            fajrStart: fajr,
-            fajrEnd: fajrEnd,
-            maghrib: maghrib
-        )
         let wakeAnchor = MorningScheduleResolver.resolveWakeAnchor(
             prayerWindow: prayerWindow,
             day: day,
@@ -77,6 +64,8 @@ final class DayScheduleBuilder {
             timeZone: timeZone
         )
         let wake = wakeResolution.finalWakeTime
+        let fajr = prayerWindow.fajrStart
+        let maghrib = prayerWindow.maghrib
         let offsetMinutes = Int(round(fajr.timeIntervalSince(wake) / 60))
         let reminder = effectiveConfig.reminderEnabled
             ? resolvedReminderDate(for: day, wake: wake, fajr: fajr, config: effectiveConfig, calendar: calendar)
@@ -87,6 +76,7 @@ final class DayScheduleBuilder {
         return DaySchedule(
             date: day,
             fajrDate: fajr,
+            fajrEndDate: prayerWindow.fajrEnd,
             maghribDate: maghrib,
             wakeDate: wake,
             reminderDate: reminder,
@@ -96,7 +86,7 @@ final class DayScheduleBuilder {
             iftarSoundChoice: effectiveConfig.iftarSoundChoice,
             locationDescription: locationDescription,
             offsetMinutes: offsetMinutes,
-            calculationMethodName: method.displayName,
+            calculationMethodName: prayerWindow.methodDisplayName ?? method.displayName,
             timeZone: timeZone
         )
     }

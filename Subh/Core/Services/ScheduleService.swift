@@ -215,8 +215,10 @@ final class ScheduleManager: ObservableObject {
         self.alarmScheduler = AlarmScheduler(routineScheduler: routineScheduler)
         let cache = cacheStore.load()
         let expectedWakeRuleSignature = ScheduleCacheStore.wakeRuleSignature(for: alarmConfigStore.defaults)
-        let cacheMatchesWakeRule = cache.wakeRuleSignature == expectedWakeRuleSignature
-        let cachedActiveWindow = cacheMatchesWakeRule ? cache.activeWindowSnapshot : nil
+        let expectedCalculationSignature = ScheduleCacheStore.calculationSignature(for: settingsStore.settings)
+        let cacheMatchesResolutionInputs = cache.wakeRuleSignature == expectedWakeRuleSignature
+            && cache.calculationSignature == expectedCalculationSignature
+        let cachedActiveWindow = cacheMatchesResolutionInputs ? cache.activeWindowSnapshot : nil
         let cacheReusable = cachedActiveWindow.map {
             Self.shouldReuseScheduleWindow(
                 reason: .appLaunch,
@@ -227,7 +229,7 @@ final class ScheduleManager: ObservableObject {
                 requiresDailyWindow: morningPlanStore.usesDailyActivation
             )
         } ?? false
-        if (!cacheMatchesWakeRule || !cacheReusable) && (cache.activeWindowSnapshot != nil || !cache.schedules.isEmpty) {
+        if (!cacheMatchesResolutionInputs || !cacheReusable) && (cache.activeWindowSnapshot != nil || !cache.schedules.isEmpty) {
             cacheStore.clear()
         }
         let cachedSchedules = cacheReusable ? cache.schedules : []
@@ -1147,7 +1149,8 @@ final class ScheduleManager: ObservableObject {
                         schedules: schedules,
                         activeWindowSnapshot: activeWindowSnapshot,
                         tagSelectionRevision: activeTagSelectionRevision,
-                        wakeRuleSignature: ScheduleCacheStore.wakeRuleSignature(for: alarmConfigStore.defaults)
+                        wakeRuleSignature: ScheduleCacheStore.wakeRuleSignature(for: alarmConfigStore.defaults),
+                        calculationSignature: ScheduleCacheStore.calculationSignature(for: settingsStore.settings)
                     )
                 )
             }
@@ -1344,7 +1347,8 @@ final class ScheduleManager: ObservableObject {
                 schedules: schedules,
                 activeWindowSnapshot: activeWindowSnapshot,
                 tagSelectionRevision: activeTagSelectionRevision,
-                wakeRuleSignature: ScheduleCacheStore.wakeRuleSignature(for: alarmConfigStore.defaults)
+                wakeRuleSignature: ScheduleCacheStore.wakeRuleSignature(for: alarmConfigStore.defaults),
+                calculationSignature: ScheduleCacheStore.calculationSignature(for: settingsStore.settings)
             )
         )
 
@@ -1372,7 +1376,8 @@ final class ScheduleManager: ObservableObject {
                     schedules: schedules,
                     activeWindowSnapshot: activeWindowSnapshot,
                     tagSelectionRevision: activeTagSelectionRevision,
-                    wakeRuleSignature: ScheduleCacheStore.wakeRuleSignature(for: alarmConfigStore.defaults)
+                    wakeRuleSignature: ScheduleCacheStore.wakeRuleSignature(for: alarmConfigStore.defaults),
+                    calculationSignature: ScheduleCacheStore.calculationSignature(for: settingsStore.settings)
                 )
             )
             updateBootstrapState()
@@ -1422,7 +1427,8 @@ final class ScheduleManager: ObservableObject {
                 schedules: schedules,
                 activeWindowSnapshot: activeWindowSnapshot,
                 tagSelectionRevision: activeTagSelectionRevision,
-                wakeRuleSignature: ScheduleCacheStore.wakeRuleSignature(for: alarmConfigStore.defaults)
+                wakeRuleSignature: ScheduleCacheStore.wakeRuleSignature(for: alarmConfigStore.defaults),
+                calculationSignature: ScheduleCacheStore.calculationSignature(for: settingsStore.settings)
             )
         )
         updateBootstrapState()
@@ -2099,7 +2105,8 @@ final class ScheduleManager: ObservableObject {
                 schedules: schedules,
                 activeWindowSnapshot: activeWindowSnapshot,
                 tagSelectionRevision: activeTagSelectionRevision,
-                wakeRuleSignature: ScheduleCacheStore.wakeRuleSignature(for: alarmConfigStore.defaults)
+                wakeRuleSignature: ScheduleCacheStore.wakeRuleSignature(for: alarmConfigStore.defaults),
+                calculationSignature: ScheduleCacheStore.calculationSignature(for: settingsStore.settings)
             )
         )
     }
