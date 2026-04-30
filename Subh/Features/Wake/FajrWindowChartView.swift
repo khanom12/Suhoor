@@ -855,7 +855,7 @@ struct FajrWindowChartView: View {
         if let beginGeometry = compactBoundaryLabelGeometry(
             title: "Fajr begins",
             keyPath: \.fajrStartMinutes,
-            placement: .above,
+            placement: compactFajrBeginBoundaryLabelPlacement,
             in: metrics
         ) {
             Text("Fajr begins")
@@ -883,22 +883,71 @@ struct FajrWindowChartView: View {
         }
     }
 
+    private var compactFajrBeginBoundaryLabelPlacement: CompactFajrcastGeometry.BoundaryLabelPlacement {
+        compactWakePatternPlacesMarkersBeforeFajr ? .below : .above
+    }
+
+    private var compactWakePatternPlacesMarkersBeforeFajr: Bool {
+        let restingDateKey = compactStaticBackdropDateKey ?? chart.selectedDateKey
+
+        if let restingDateKey,
+           let restingPoint = chart.points.first(where: { $0.dateKey == restingDateKey }),
+           restingPoint.isSkipped == false {
+            return restingPoint.primaryWakeMinutes < restingPoint.fajrStartMinutes
+        }
+
+        let activeVisiblePoints = chart.renderPoints.filter { $0.isSkipped == false }
+        guard activeVisiblePoints.isEmpty == false else { return false }
+
+        let preFajrCount = activeVisiblePoints.filter {
+            $0.primaryWakeMinutes < $0.fajrStartMinutes
+        }.count
+
+        return preFajrCount > activeVisiblePoints.count / 2
+    }
+
     private func compactBoundaryLabelGeometry(
         title: String,
         keyPath: KeyPath<FajrWindowPoint, Int>,
         placement: CompactFajrcastGeometry.BoundaryLabelPlacement,
         in metrics: CompactLayoutMetrics
     ) -> CompactBoundaryLabelGeometry? {
-        let leadingInset: CGFloat = 5
-        let availableWidth = max(48, metrics.plotFrame.maxX - metrics.plotFrame.minX - (leadingInset * 2))
+        let preferredEdgeClearance: CGFloat = 6
+        let minimumEdgeClearance: CGFloat = 4
+        let availableWidth = max(48, metrics.plotFrame.width - (preferredEdgeClearance * 2))
         let labelWidth = compactBoundaryLabelWidth(title, maxWidth: availableWidth)
         let labelHeight = compactBoundaryLabelLineHeight
-        let minCenterX = metrics.plotFrame.minX + leadingInset + labelWidth / 2
-        let maxCenterX = metrics.plotFrame.maxX - leadingInset - labelWidth / 2
-        let preferredCenterX = minCenterX
-        let centerX = min(max(preferredCenterX, minCenterX), max(minCenterX, maxCenterX))
         let dayStep = metrics.dayColumnFrame.width / CGFloat(max(chart.points.count - 1, 1))
         let sampleRadius = min(max(12, 0.35 * dayStep), 28)
+        let initialCenterX = metrics.plotFrame.minX + preferredEdgeClearance + labelWidth / 2
+        let initialX0 = min(max(initialCenterX - sampleRadius, metrics.plotFrame.minX), metrics.plotFrame.maxX)
+        let initialX1 = min(max(initialCenterX + sampleRadius, metrics.plotFrame.minX), metrics.plotFrame.maxX)
+
+        guard
+            let initialY0 = compactBoundaryY(at: initialX0, keyPath: keyPath, in: metrics.plotFrame),
+            let initialY1 = compactBoundaryY(at: initialX1, keyPath: keyPath, in: metrics.plotFrame)
+        else {
+            return nil
+        }
+
+        let initialAngle = CompactFajrcastGeometry.tangentAngleRadians(
+            x0: initialX0,
+            y0: initialY0,
+            x1: initialX1,
+            y1: initialY1
+        )
+        let initialHalfExtents = CompactFajrcastGeometry.rotatedHalfExtents(
+            labelWidth: labelWidth,
+            labelHeight: labelHeight,
+            angleRadians: initialAngle
+        )
+        let minCenterX = metrics.plotFrame.minX + preferredEdgeClearance + initialHalfExtents.width
+        let maxCenterX = metrics.plotFrame.maxX - preferredEdgeClearance - initialHalfExtents.width
+        let centerX = CompactFajrcastGeometry.clamped(
+            initialCenterX,
+            lowerBound: minCenterX,
+            upperBound: maxCenterX
+        )
         let x0 = min(max(centerX - sampleRadius, metrics.plotFrame.minX), metrics.plotFrame.maxX)
         let x1 = min(max(centerX + sampleRadius, metrics.plotFrame.minX), metrics.plotFrame.maxX)
 
@@ -912,15 +961,52 @@ struct FajrWindowChartView: View {
 
         let angle = CompactFajrcastGeometry.tangentAngleRadians(x0: x0, y0: y0, x1: x1, y1: y1)
         let normal = CompactFajrcastGeometry.outwardNormal(for: angle, placement: placement)
-        let normalOffset = max(4, 0.25 * labelHeight)
-        let rawCenterY = boundaryY + (normal.y * normalOffset)
-        let centerY = min(
-            max(rawCenterY, metrics.plotFrame.minY + labelHeight / 2),
-            metrics.plotFrame.maxY - labelHeight / 2
+        let halfExtents = CompactFajrcastGeometry.rotatedHalfExtents(
+            labelWidth: labelWidth,
+            labelHeight: labelHeight,
+            angleRadians: angle
         )
+        let halfExtentAlongNormal = CompactFajrcastGeometry.rotatedHalfExtentAlongNormal(
+            labelWidth: labelWidth,
+            labelHeight: labelHeight,
+            angleRadians: angle,
+            normal: normal
+        )
+        let minimumBoundaryClearance = max(5, 0.30 * labelHeight)
+        let preferredBoundaryClearance = max(6, 0.35 * labelHeight)
+        let preferredNormalOffset = preferredBoundaryClearance + halfExtentAlongNormal
+        let minimumNormalOffset = minimumBoundaryClearance + halfExtentAlongNormal
+        let preferredCenter = CGPoint(
+            x: centerX + (normal.x * preferredNormalOffset),
+            y: boundaryY + (normal.y * preferredNormalOffset)
+        )
+        let minimumCenter = CGPoint(
+            x: centerX + (normal.x * minimumNormalOffset),
+            y: boundaryY + (normal.y * minimumNormalOffset)
+        )
+        let preferredEdgeBounds = CompactFajrcastGeometry.insetBounds(
+            for: metrics.plotFrame,
+            halfExtents: halfExtents,
+            clearance: preferredEdgeClearance
+        )
+        let minimumEdgeBounds = CompactFajrcastGeometry.insetBounds(
+            for: metrics.plotFrame,
+            halfExtents: halfExtents,
+            clearance: minimumEdgeClearance
+        )
+        let center: CGPoint
+        if CompactFajrcastGeometry.point(preferredCenter, fitsIn: preferredEdgeBounds) {
+            center = preferredCenter
+        } else if CompactFajrcastGeometry.point(preferredCenter, fitsIn: minimumEdgeBounds) {
+            center = preferredCenter
+        } else if CompactFajrcastGeometry.point(minimumCenter, fitsIn: minimumEdgeBounds) {
+            center = minimumCenter
+        } else {
+            center = CompactFajrcastGeometry.clamped(preferredCenter, inside: minimumEdgeBounds)
+        }
 
         return CompactBoundaryLabelGeometry(
-            center: CGPoint(x: centerX + (normal.x * normalOffset), y: centerY),
+            center: center,
             labelWidth: labelWidth,
             angleRadians: angle
         )
@@ -1373,6 +1459,66 @@ struct CompactFajrcastGeometry {
         }
 
         return normal
+    }
+
+    static func rotatedHalfExtents(
+        labelWidth: CGFloat,
+        labelHeight: CGFloat,
+        angleRadians: CGFloat
+    ) -> CGSize {
+        let cosine = abs(cos(angleRadians))
+        let sine = abs(sin(angleRadians))
+
+        return CGSize(
+            width: ((labelWidth * cosine) + (labelHeight * sine)) / 2,
+            height: ((labelWidth * sine) + (labelHeight * cosine)) / 2
+        )
+    }
+
+    static func rotatedHalfExtentAlongNormal(
+        labelWidth: CGFloat,
+        labelHeight: CGFloat,
+        angleRadians: CGFloat,
+        normal: CGPoint
+    ) -> CGFloat {
+        let tangent = CGPoint(x: cos(angleRadians), y: sin(angleRadians))
+        let perpendicular = CGPoint(x: -sin(angleRadians), y: cos(angleRadians))
+        let halfWidthProjection = abs((tangent.x * normal.x) + (tangent.y * normal.y)) * labelWidth / 2
+        let halfHeightProjection = abs((perpendicular.x * normal.x) + (perpendicular.y * normal.y)) * labelHeight / 2
+
+        return halfWidthProjection + halfHeightProjection
+    }
+
+    static func point(_ point: CGPoint, fitsIn rect: CGRect) -> Bool {
+        point.x >= rect.minX
+            && point.x <= rect.maxX
+            && point.y >= rect.minY
+            && point.y <= rect.maxY
+    }
+
+    static func insetBounds(
+        for rect: CGRect,
+        halfExtents: CGSize,
+        clearance: CGFloat
+    ) -> CGRect {
+        CGRect(
+            x: rect.minX + clearance + halfExtents.width,
+            y: rect.minY + clearance + halfExtents.height,
+            width: max(0, rect.width - (clearance * 2) - (halfExtents.width * 2)),
+            height: max(0, rect.height - (clearance * 2) - (halfExtents.height * 2))
+        )
+    }
+
+    static func clamped(_ value: CGFloat, lowerBound: CGFloat, upperBound: CGFloat) -> CGFloat {
+        let resolvedUpperBound = max(lowerBound, upperBound)
+        return min(max(value, lowerBound), resolvedUpperBound)
+    }
+
+    static func clamped(_ point: CGPoint, inside rect: CGRect) -> CGPoint {
+        CGPoint(
+            x: clamped(point.x, lowerBound: rect.minX, upperBound: rect.maxX),
+            y: clamped(point.y, lowerBound: rect.minY, upperBound: rect.maxY)
+        )
     }
 }
 
