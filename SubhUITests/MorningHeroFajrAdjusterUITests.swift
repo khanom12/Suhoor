@@ -165,13 +165,16 @@ final class MorningHeroFajrAdjusterUITests: XCTestCase {
         })
         XCTAssertTrue(app.descendants(matching: .any)["morningHero.fajrWindow.marker"].exists)
         let primarySlotYBeforeQuiet = primaryWakeTime.frame.midY
+        let windowSlotYBeforeQuiet = app.descendants(matching: .any)["morningHero.fajrWindow"].frame.midY
+        let relationSlotYBeforeQuiet = relation.frame.midY
+        let selectorSlotYBeforeQuiet = selector.frame.midY
 
         let quietAfterFast = app.descendants(matching: .any)["morningHero.quickWakeMode.quiet"]
         XCTAssertTrue(quietAfterFast.waitForExistence(timeout: 4))
         quietAfterFast.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
 
         XCTAssertTrue(waitForElementLabel(in: app, identifier: "morningHero.primaryWakeTime") {
-            $0 == "Quiet mode on"
+            $0 == "Quiet mode"
         })
         XCTAssertTrue(waitForElementLabel(in: app, identifier: "morningHero.relation") {
             $0 == "No alarm will ring for tomorrow"
@@ -180,6 +183,9 @@ final class MorningHeroFajrAdjusterUITests: XCTestCase {
             $0.contains("selected")
         })
         XCTAssertLessThan(abs(primaryWakeTime.frame.midY - primarySlotYBeforeQuiet), 10)
+        XCTAssertLessThan(abs(app.descendants(matching: .any)["morningHero.fajrWindow"].frame.midY - windowSlotYBeforeQuiet), 10)
+        XCTAssertLessThan(abs(relation.frame.midY - relationSlotYBeforeQuiet), 10)
+        XCTAssertLessThan(abs(selector.frame.midY - selectorSlotYBeforeQuiet), 10)
         XCTAssertTrue(app.descendants(matching: .any)["morningHero.fajrWindow"].waitForExistence(timeout: 4))
         XCTAssertTrue(app.descendants(matching: .any)["morningHero.fajrWindow.track"].exists)
         XCTAssertFalse(app.descendants(matching: .any)["morningHero.fajrWindow.marker"].exists)

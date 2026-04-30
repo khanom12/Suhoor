@@ -213,59 +213,6 @@ private enum MorningHeroModeTransitionDirection: Equatable {
         }
     }
 
-    var relationEdge: Edge {
-        switch self {
-        case .earlier:
-            return .leading
-        case .later:
-            return .trailing
-        case .toQuiet, .fromQuiet, .crossfade:
-            return .bottom
-        }
-    }
-
-    var markerInsertionEdge: Edge {
-        switch self {
-        case .earlier:
-            return .trailing
-        case .later:
-            return .leading
-        case .fromQuiet:
-            return .bottom
-        case .toQuiet, .crossfade:
-            return .bottom
-        }
-    }
-
-    var markerRemovalEdge: Edge {
-        switch self {
-        case .earlier:
-            return .leading
-        case .later:
-            return .trailing
-        case .toQuiet:
-            return .bottom
-        case .fromQuiet, .crossfade:
-            return .bottom
-        }
-    }
-
-    var rangeTransition: AnyTransition {
-        switch self {
-        case .earlier:
-            return .asymmetric(
-                insertion: .move(edge: .trailing).combined(with: .opacity),
-                removal: .move(edge: .leading).combined(with: .opacity)
-            )
-        case .later:
-            return .asymmetric(
-                insertion: .move(edge: .leading).combined(with: .opacity),
-                removal: .move(edge: .trailing).combined(with: .opacity)
-            )
-        case .toQuiet, .fromQuiet, .crossfade:
-            return .opacity
-        }
-    }
 }
 
 private struct TomorrowMorningHero: View {
@@ -301,14 +248,6 @@ private struct TomorrowMorningHero: View {
         } ?? baseDisplay
         let metrics = MorningHeroMetrics(dynamicTypeSize: dynamicTypeSize)
         let modeAnimation = heroModeAnimation
-        let primaryTransitionKey = [
-            display.selectedQuickWakeMode?.rawValue ?? display.wakeState.rawValue,
-            display.wakeState.rawValue
-        ].joined(separator: "-")
-        let rangeTransitionKey = [
-            display.selectedQuickWakeMode?.rawValue ?? "none",
-            display.fajrWindowVisualMode.rawValue
-        ].joined(separator: "-")
         let relationTransitionKey = [
             display.selectedQuickWakeMode?.rawValue ?? "none",
             display.fajrWindowVisualMode.rawValue,
@@ -326,17 +265,17 @@ private struct TomorrowMorningHero: View {
                 .padding(.top, metrics.dateToRelativeGap)
                 .accessibilityIdentifier(MorningHeroUIIdentifier.relativeDay)
 
-            primaryWakeRow(display: display, metrics: metrics)
-                .id(primaryTransitionKey)
-                .transition(primaryRowTransition)
-                .animation(modeAnimation, value: primaryTransitionKey)
+            primaryWakeRow(
+                display: display,
+                metrics: metrics,
+                rollsActiveWakeTime: tentativeWakeTime == nil
+            )
                 .padding(.top, metrics.relativeToPrimaryGap)
 
             if display.fajrWindowVisualMode.rendersRange {
                 FajrWindowRangeVisual(
                     display: display,
                     metrics: metrics,
-                    transitionDirection: modeTransitionDirection,
                     reduceMotion: reduceMotion
                 )
                     .onWakeAdjustmentChanged { wakeTime in
@@ -348,9 +287,6 @@ private struct TomorrowMorningHero: View {
                     .heroWakeAdjustmentAccessibility(display: display) { direction in
                         adjustWakeAccessibility(display: display, direction: direction)
                     }
-                    .id(rangeTransitionKey)
-                    .transition(rangeTransition)
-                    .animation(modeAnimation, value: rangeTransitionKey)
                     .padding(.top, metrics.primaryToWindowGap)
             }
 
@@ -360,6 +296,7 @@ private struct TomorrowMorningHero: View {
                 .multilineTextAlignment(.center)
                 .lineLimit(nil)
                 .fixedSize(horizontal: false, vertical: true)
+                .frame(minHeight: metrics.relationRowHeight)
                 .padding(.top, display.fajrWindowVisualMode.rendersRange ? metrics.windowToRelationGap : metrics.primaryToRelationGap)
                 .accessibilityIdentifier(MorningHeroUIIdentifier.relation)
                 .id(relationTransitionKey)
@@ -420,20 +357,8 @@ private struct TomorrowMorningHero: View {
             : .easeInOut(duration: 0.34)
     }
 
-    private var primaryRowTransition: AnyTransition {
-        reduceMotion
-            ? .opacity
-            : .opacity.combined(with: .scale(scale: 0.985, anchor: .center))
-    }
-
     private var relationTransition: AnyTransition {
-        reduceMotion
-            ? .opacity
-            : .opacity.combined(with: .move(edge: modeTransitionDirection.relationEdge))
-    }
-
-    private var rangeTransition: AnyTransition {
-        reduceMotion ? .opacity : modeTransitionDirection.rangeTransition
+        .opacity
     }
 
     private func relationForegroundStyle(for tone: MorningHeroRelationTone) -> Color {
@@ -474,48 +399,16 @@ private struct TomorrowMorningHero: View {
     @ViewBuilder
     private func primaryWakeRow(
         display: MorningHomeHeroDisplay,
-        metrics: MorningHeroMetrics
+        metrics: MorningHeroMetrics,
+        rollsActiveWakeTime: Bool
     ) -> some View {
-        if let primaryTime = display.primaryTime {
-            HStack(alignment: .center, spacing: metrics.primaryRowSpacing) {
-                if let iconName = display.wakeIconName {
-                    Image(systemName: iconName)
-                        .font(.system(size: metrics.iconSize, weight: .regular))
-                        .foregroundStyle(WakeGlassTheme.primaryText.opacity(0.92))
-                        .offset(y: metrics.iconVerticalOffset)
-                }
-
-                SubhHomeHeroTimeLockup(date: primaryTime, pointSize: metrics.wakeTimeSize)
-            }
-            .frame(maxWidth: .infinity, alignment: .center)
-            .frame(minHeight: metrics.primaryRowHeight)
-            .lineLimit(1)
-            .minimumScaleFactor(0.84)
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(display.primaryText)
-            .accessibilityIdentifier(MorningHeroUIIdentifier.primaryWakeTime)
-        } else {
-            HStack(alignment: .center, spacing: metrics.primaryRowSpacing) {
-                if let iconName = display.wakeIconName {
-                    Image(systemName: iconName)
-                        .font(.system(size: metrics.iconSize, weight: .regular))
-                        .foregroundStyle(WakeGlassTheme.primaryText.opacity(0.86))
-                        .offset(y: metrics.iconVerticalOffset)
-                }
-
-                Text(display.primaryText)
-                    .font(.system(size: metrics.wakeStateSize, weight: .regular))
-                    .foregroundStyle(WakeGlassTheme.primaryText)
-                    .multilineTextAlignment(.center)
-                    .lineLimit(nil)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .frame(maxWidth: .infinity, alignment: .center)
-            .frame(minHeight: metrics.primaryRowHeight)
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(display.primaryText)
-            .accessibilityIdentifier(MorningHeroUIIdentifier.primaryWakeTime)
-        }
+        MorningHeroPrimaryWakeRow(
+            display: display,
+            metrics: metrics,
+            rollsActiveWakeTime: rollsActiveWakeTime,
+            transitionDirection: modeTransitionDirection,
+            reduceMotion: reduceMotion
+        )
     }
 
     private func commitWakeAdjustment(_ wakeTime: Date) {
@@ -659,8 +552,10 @@ private struct MorningHeroMetrics {
     var iconSize: CGFloat { 22 * scale }
     var wakeTimeSize: CGFloat { 68 * scale }
     var wakeStateSize: CGFloat { 44 * scale }
+    var quietWakeStateSize: CGFloat { 52 * scale }
     var fajrWindowSize: CGFloat { 15 * scale }
-    var primaryRowHeight: CGFloat { max(wakeTimeSize * 1.08, wakeStateSize * 1.28) }
+    var primaryRowHeight: CGFloat { max(wakeTimeSize * 1.22, quietWakeStateSize * 1.36) }
+    var relationRowHeight: CGFloat { max(22, dateLineSize * 1.35) }
     var dateToRelativeGap: CGFloat { max(4, 4 * scale) }
     var relativeToDateGap: CGFloat { dateToRelativeGap }
     var relativeToPrimaryGap: CGFloat { max(9, 11 * min(scale, 1.18)) }
@@ -683,6 +578,79 @@ private struct MorningHeroMetrics {
     var quickSelectorHeight: CGFloat { max(44, 44 * min(scale, 1.28)) }
     var quickSelectorWidth: CGFloat { min(maxContentWidth, max(224, 238 * min(scale, 1.22))) }
     var quickSelectorPadding: CGFloat { max(4, 4 * scale) }
+}
+
+private struct MorningHeroPrimaryWakeRow: View {
+    let display: MorningHomeHeroDisplay
+    let metrics: MorningHeroMetrics
+    let rollsActiveWakeTime: Bool
+    let transitionDirection: MorningHeroModeTransitionDirection
+    let reduceMotion: Bool
+
+    var body: some View {
+        ZStack {
+            if let primaryTime = display.primaryTime {
+                activeWakeRow(primaryTime)
+                    .transition(.opacity)
+            } else {
+                stateWakeRow
+                    .transition(.opacity)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .center)
+        .frame(height: metrics.primaryRowHeight)
+        .animation(primaryCrossfadeAnimation, value: display.primaryTime == nil)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(display.primaryText)
+        .accessibilityIdentifier(MorningHeroUIIdentifier.primaryWakeTime)
+    }
+
+    private func activeWakeRow(_ primaryTime: Date) -> some View {
+        HStack(alignment: .center, spacing: metrics.primaryRowSpacing) {
+            if let iconName = display.wakeIconName {
+                Image(systemName: iconName)
+                    .font(.system(size: metrics.iconSize, weight: .regular))
+                    .foregroundStyle(WakeGlassTheme.primaryText.opacity(0.92))
+                    .offset(y: metrics.iconVerticalOffset)
+            }
+
+            RollingHeroTimeLockup(
+                targetDate: primaryTime,
+                pointSize: metrics.wakeTimeSize,
+                shouldRoll: rollsActiveWakeTime && !reduceMotion,
+                direction: transitionDirection
+            )
+        }
+        .lineLimit(1)
+        .minimumScaleFactor(0.84)
+    }
+
+    private var stateWakeRow: some View {
+        HStack(alignment: .center, spacing: metrics.primaryRowSpacing) {
+            if let iconName = display.wakeIconName {
+                Image(systemName: iconName)
+                    .font(.system(size: metrics.iconSize, weight: .regular))
+                    .foregroundStyle(WakeGlassTheme.primaryText.opacity(0.88))
+                    .offset(y: metrics.iconVerticalOffset)
+            }
+
+            Text(display.primaryText)
+                .font(AppTypography.timeDisplayFont(
+                    size: display.wakeState == .quietHours ? metrics.quietWakeStateSize : metrics.wakeStateSize,
+                    weight: .regular
+                ))
+                .foregroundStyle(WakeGlassTheme.primaryText)
+                .multilineTextAlignment(.center)
+                .lineLimit(1)
+                .minimumScaleFactor(0.74)
+        }
+    }
+
+    private var primaryCrossfadeAnimation: Animation {
+        reduceMotion
+            ? .easeOut(duration: 0.12)
+            : .easeInOut(duration: 0.22)
+    }
 }
 
 private struct MorningHeroQuickWakeModeSelector: View {
@@ -725,23 +693,24 @@ private struct MorningHeroQuickWakeModeSelector: View {
         .frame(minHeight: metrics.quickSelectorHeight)
         .background {
             Capsule()
-                .fill(Color.white.opacity(0.10))
-                .background(.ultraThinMaterial, in: Capsule())
+                .fill(Color.white.opacity(0.035))
+                .background(.thinMaterial, in: Capsule())
+                .overlay {
+                    Capsule().fill(Color.white.opacity(0.018))
+                }
+                .overlay(alignment: .top) {
+                    Capsule()
+                        .fill(Color.white.opacity(0.10))
+                        .frame(height: max(1, metrics.quickSelectorHeight * 0.34))
+                        .blur(radius: 10)
+                        .padding(.horizontal, 10)
+                        .offset(y: -metrics.quickSelectorHeight * 0.22)
+                }
                 .overlay {
                     Capsule()
-                        .stroke(
-                            LinearGradient(
-                                colors: [
-                                    Color.white.opacity(0.36),
-                                    Color.white.opacity(0.12)
-                                ],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            ),
-                            lineWidth: 0.9
-                        )
+                        .stroke(Color.white.opacity(0.11), lineWidth: 1)
                 }
-                .shadow(color: Color.black.opacity(0.18), radius: 12, x: 0, y: 4)
+                .shadow(color: Color.black.opacity(0.035), radius: 8, x: 0, y: 3)
         }
         .opacity(isDisabled ? 0.72 : 1)
         .accessibilityElement(children: .contain)
@@ -761,13 +730,16 @@ private struct MorningHeroQuickWakeModeSelector: View {
 
     private var selectedHighlight: some View {
         Capsule()
-            .fill(Color.white.opacity(0.24))
+            .fill(Color.white.opacity(0.11))
             .background(.ultraThinMaterial, in: Capsule())
             .overlay {
-                Capsule()
-                    .stroke(Color.white.opacity(0.45), lineWidth: 0.8)
+                Capsule().fill(Color.white.opacity(0.035))
             }
-            .shadow(color: Color.black.opacity(0.12), radius: 6, x: 0, y: 2)
+            .overlay {
+                Capsule()
+                    .stroke(Color.white.opacity(0.22), lineWidth: 0.8)
+            }
+            .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: 1)
     }
 }
 
@@ -805,6 +777,74 @@ private struct MorningHeroQuickWakeModeSegment: View {
         .accessibilityHint(option.accessibilityHint)
         .accessibilityAddTraits(option.isSelected ? .isSelected : [])
         .accessibilityIdentifier(MorningHeroUIIdentifier.quickWakeModeSegment(option.mode))
+    }
+}
+
+private struct RollingHeroTimeLockup: View {
+    let targetDate: Date
+    let pointSize: CGFloat
+    let shouldRoll: Bool
+    let direction: MorningHeroModeTransitionDirection
+
+    @State private var visibleDate: Date?
+    @State private var rollTask: Task<Void, Never>?
+
+    var body: some View {
+        SubhHomeHeroTimeLockup(date: visibleDate ?? targetDate, pointSize: pointSize)
+            .onAppear {
+                visibleDate = targetDate
+            }
+            .onChange(of: targetDate) { oldDate, newDate in
+                updateVisibleDate(from: visibleDate ?? oldDate, to: newDate)
+            }
+            .onDisappear {
+                rollTask?.cancel()
+            }
+    }
+
+    private func updateVisibleDate(from oldDate: Date, to newDate: Date) {
+        rollTask?.cancel()
+
+        guard shouldRoll else {
+            withAnimation(.easeOut(duration: 0.16)) {
+                visibleDate = newDate
+            }
+            return
+        }
+
+        let totalMinutes = Int(round(newDate.timeIntervalSince(oldDate) / 60))
+        guard totalMinutes != 0, direction == .earlier || direction == .later else {
+            visibleDate = newDate
+            return
+        }
+
+        let stepCount = min(24, max(8, abs(totalMinutes) / 4))
+        let duration: TimeInterval = 0.32
+        let sleepNanoseconds = UInt64((duration / Double(stepCount)) * 1_000_000_000)
+
+        rollTask = Task {
+            for step in 1...stepCount {
+                if Task.isCancelled { return }
+
+                let fraction = Double(step) / Double(stepCount)
+                let minuteOffset = Int((Double(totalMinutes) * fraction).rounded())
+                let intermediateDate = Calendar.current.date(
+                    byAdding: .minute,
+                    value: minuteOffset,
+                    to: oldDate
+                ) ?? newDate
+
+                await MainActor.run {
+                    visibleDate = intermediateDate
+                }
+
+                try? await Task.sleep(nanoseconds: sleepNanoseconds)
+            }
+
+            await MainActor.run {
+                visibleDate = newDate
+            }
+        }
     }
 }
 
@@ -849,7 +889,6 @@ private struct SubhHomeHeroTimeLockup: View {
 private struct FajrWindowRangeVisual: View {
     let display: MorningHomeHeroDisplay
     let metrics: MorningHeroMetrics
-    let transitionDirection: MorningHeroModeTransitionDirection
     let reduceMotion: Bool
     var adjustmentChanged: (Date) -> Void = { _ in }
     var adjustmentEnded: (Date) -> Void = { _ in }
@@ -905,7 +944,6 @@ private struct FajrWindowRangeVisual: View {
                 maxTime: display.wakeAdjustmentMaxTime,
                 stepMinutes: display.wakeAdjustmentStepMinutes,
                 metrics: metrics,
-                transitionDirection: transitionDirection,
                 reduceMotion: reduceMotion
             ) { wakeTime in
                 adjustmentChanged(wakeTime)
@@ -938,7 +976,6 @@ private struct FajrWindowRangeVisual: View {
                 maxTime: display.wakeAdjustmentMaxTime,
                 stepMinutes: display.wakeAdjustmentStepMinutes,
                 metrics: metrics,
-                transitionDirection: transitionDirection,
                 reduceMotion: reduceMotion
             ) { wakeTime in
                 adjustmentChanged(wakeTime)
@@ -969,7 +1006,16 @@ private struct FajrWindowRangeVisual: View {
             .lineLimit(1)
             .minimumScaleFactor(0.82)
             .fixedSize(horizontal: true, vertical: false)
+            .id(text)
+            .transition(.opacity)
+            .animation(rangeTextAnimation, value: text)
             .accessibilityIdentifier(identifier)
+    }
+
+    private var rangeTextAnimation: Animation {
+        reduceMotion
+            ? .easeOut(duration: 0.12)
+            : .easeInOut(duration: 0.18)
     }
 }
 
@@ -984,10 +1030,15 @@ private struct FajrWindowRangeTrack: View {
     let maxTime: Date?
     let stepMinutes: Int
     let metrics: MorningHeroMetrics
-    let transitionDirection: MorningHeroModeTransitionDirection
     let reduceMotion: Bool
     let onAdjustmentChanged: (Date) -> Void
     let onAdjustmentEnded: (Date) -> Void
+
+    @State private var animatedMarkerRatio: Double?
+    @State private var markerOpacity: Double = 1
+    @State private var renderedIndicatorState: MorningHeroWakeWindowIndicatorState = .none
+    @State private var renderedIndicatorIconName: String?
+    @State private var markerRemovalTask: Task<Void, Never>?
 
     var body: some View {
         GeometryReader { proxy in
@@ -1006,8 +1057,23 @@ private struct FajrWindowRangeTrack: View {
                             }
                     )
             } else {
-                trackContent(width: width, centerY: centerY)
+                    trackContent(width: width, centerY: centerY)
             }
+        }
+        .onAppear {
+            animatedMarkerRatio = ratio
+            renderedIndicatorState = indicatorState
+            renderedIndicatorIconName = indicatorIconName
+            markerOpacity = indicatorState == .none || indicatorState == .unavailable ? 0 : 1
+        }
+        .onChange(of: ratio) { _, newRatio in
+            updateMarker(targetRatio: newRatio, previousMode: visualMode, newMode: visualMode)
+        }
+        .onChange(of: visualMode) { oldMode, newMode in
+            updateMarker(targetRatio: ratio, previousMode: oldMode, newMode: newMode)
+        }
+        .onChange(of: indicatorState) { _, newState in
+            updateMarkerVisibility(for: newState)
         }
     }
 
@@ -1016,6 +1082,9 @@ private struct FajrWindowRangeTrack: View {
             trackAccessibilityElement(width: width, centerY: centerY)
 
             boundaryMarker(style: leftBoundaryMarkerStyle, x: 0, y: centerY)
+                .id(leftBoundaryMarkerStyle.rawValue)
+                .transition(.opacity)
+                .animation(boundaryAnimation, value: leftBoundaryMarkerStyle.rawValue)
 
             Capsule()
                 .fill(Color.white.opacity(0.20))
@@ -1037,12 +1106,23 @@ private struct FajrWindowRangeTrack: View {
                 .position(x: width / 2, y: centerY)
 
             boundaryMarker(style: rightBoundaryMarkerStyle, x: width, y: centerY)
+                .id(rightBoundaryMarkerStyle.rawValue)
+                .transition(.opacity)
+                .animation(boundaryAnimation, value: rightBoundaryMarkerStyle.rawValue)
 
-            if let ratio, indicatorState != .none, indicatorState != .unavailable {
-                marker(ratio: ratio, width: width, centerY: centerY)
-                    .id("\(visualMode.rawValue)-\(indicatorState.rawValue)")
-                    .transition(markerTransition)
-                    .animation(markerAnimation, value: visualMode.rawValue)
+            if let markerRatio = animatedMarkerRatio ?? ratio,
+               renderedIndicatorState != .none,
+               renderedIndicatorState != .unavailable {
+                marker(
+                    ratio: markerRatio,
+                    width: width,
+                    centerY: centerY,
+                    state: renderedIndicatorState,
+                    iconName: renderedIndicatorIconName
+                )
+                    .opacity(markerOpacity)
+                    .animation(markerAnimation, value: animatedMarkerRatio)
+                    .animation(markerAnimation, value: markerOpacity)
             }
         }
         .contentShape(Rectangle())
@@ -1051,18 +1131,96 @@ private struct FajrWindowRangeTrack: View {
     private var markerAnimation: Animation {
         reduceMotion
             ? .easeOut(duration: 0.12)
-            : .easeInOut(duration: 0.34)
+            : .easeInOut(duration: 0.38)
     }
 
-    private var markerTransition: AnyTransition {
-        if reduceMotion {
-            return .opacity
+    private var boundaryAnimation: Animation {
+        reduceMotion
+            ? .easeOut(duration: 0.12)
+            : .easeInOut(duration: 0.18)
+    }
+
+    private func updateMarker(
+        targetRatio: Double?,
+        previousMode: MorningHeroFajrWindowVisualMode,
+        newMode: MorningHeroFajrWindowVisualMode
+    ) {
+        guard let targetRatio else {
+            withAnimation(markerAnimation) {
+                markerOpacity = 0
+            }
+            animatedMarkerRatio = nil
+            return
         }
 
-        return .asymmetric(
-            insertion: .move(edge: transitionDirection.markerInsertionEdge).combined(with: .opacity),
-            removal: .move(edge: transitionDirection.markerRemovalEdge).combined(with: .opacity)
-        )
+        guard indicatorState != .none, indicatorState != .unavailable else {
+            animatedMarkerRatio = targetRatio
+            markerOpacity = 0
+            return
+        }
+
+        guard !reduceMotion else {
+            withAnimation(markerAnimation) {
+                animatedMarkerRatio = targetRatio
+                markerOpacity = 1
+            }
+            return
+        }
+
+        if previousMode != newMode, let handoffRatio = markerHandoffRatio(from: previousMode, to: newMode) {
+            markerOpacity = 0
+            animatedMarkerRatio = handoffRatio
+            withAnimation(markerAnimation) {
+                markerOpacity = 1
+                animatedMarkerRatio = targetRatio
+            }
+        } else {
+            withAnimation(markerAnimation) {
+                markerOpacity = 1
+                animatedMarkerRatio = targetRatio
+            }
+        }
+    }
+
+    private func updateMarkerVisibility(for state: MorningHeroWakeWindowIndicatorState) {
+        markerRemovalTask?.cancel()
+        let isHidden = state == .none || state == .unavailable
+        if isHidden {
+            withAnimation(markerAnimation) {
+                markerOpacity = 0
+            }
+            markerRemovalTask = Task {
+                try? await Task.sleep(nanoseconds: reduceMotion ? 120_000_000 : 180_000_000)
+                guard !Task.isCancelled else { return }
+                await MainActor.run {
+                    renderedIndicatorState = state
+                    renderedIndicatorIconName = nil
+                    animatedMarkerRatio = ratio
+                }
+            }
+        } else {
+            renderedIndicatorState = state
+            renderedIndicatorIconName = indicatorIconName
+            withAnimation(markerAnimation) {
+                animatedMarkerRatio = ratio
+                markerOpacity = 1
+            }
+        }
+    }
+
+    private func markerHandoffRatio(
+        from previousMode: MorningHeroFajrWindowVisualMode,
+        to newMode: MorningHeroFajrWindowVisualMode
+    ) -> Double? {
+        if previousMode == .interactiveWithinFajrWindow,
+           newMode == .interactiveEarlyWorshipWindow {
+            return 1
+        }
+        if previousMode == .interactiveEarlyWorshipWindow,
+           newMode == .interactiveWithinFajrWindow {
+            return 0
+        }
+        return nil
     }
 
     private func trackAccessibilityElement(width: CGFloat, centerY: CGFloat) -> some View {
@@ -1106,7 +1264,13 @@ private struct FajrWindowRangeTrack: View {
         }
     }
 
-    private func marker(ratio: Double, width: CGFloat, centerY: CGFloat) -> some View {
+    private func marker(
+        ratio: Double,
+        width: CGFloat,
+        centerY: CGFloat,
+        state: MorningHeroWakeWindowIndicatorState,
+        iconName: String?
+    ) -> some View {
         let markerSize = metrics.rangeMarkerSize
         let isBefore = ratio < 0
         let isAfter = ratio > 1
@@ -1127,16 +1291,16 @@ private struct FajrWindowRangeTrack: View {
                     .offset(x: isBefore ? markerSize * 0.38 : -markerSize * 0.38)
             }
 
-            switch indicatorState {
+            switch state {
             case .active:
                 markerIcon(
-                    systemName: indicatorIconName ?? "alarm.fill",
+                    systemName: iconName ?? "alarm.fill",
                     size: markerSize,
                     isOffState: false
                 )
             case .offAnchor:
                 markerIcon(
-                    systemName: indicatorIconName ?? "bell.slash.fill",
+                    systemName: iconName ?? "bell.slash.fill",
                     size: markerSize,
                     isOffState: true
                 )
@@ -1147,7 +1311,7 @@ private struct FajrWindowRangeTrack: View {
         .frame(width: max(markerSize, 44), height: max(markerSize, 44))
         .position(x: x, y: centerY)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(indicatorState == .offAnchor ? "Wake marker off" : "Wake marker")
+        .accessibilityLabel(state == .offAnchor ? "Wake marker off" : "Wake marker")
         .accessibilityIdentifier(MorningHeroUIIdentifier.fajrWindowMarker)
     }
 

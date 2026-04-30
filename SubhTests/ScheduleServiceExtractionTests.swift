@@ -1158,7 +1158,7 @@ struct ScheduleServiceExtractionTests {
 
         #expect(quietDisplay.selectedQuickWakeMode == .quiet)
         #expect(quietDisplay.quickWakeModeOptions.first(where: { $0.mode == .quiet })?.isSelected == true)
-        #expect(quietDisplay.primaryText == "Quiet mode on")
+        #expect(quietDisplay.primaryText == "Quiet mode")
         #expect(quietDisplay.detailText == "No alarm will ring for tomorrow")
         #expect(quietDisplay.accessibilityLabel.contains("Quiet mode selected"))
         #expect(quietDisplay.wakeWindowIndicatorState == .none)
