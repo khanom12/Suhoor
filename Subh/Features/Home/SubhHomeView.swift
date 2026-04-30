@@ -945,13 +945,16 @@ private struct NextTenMorningsRow: View {
     }
 
     private var rowContent: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 0) {
+        HStack(alignment: .center, spacing: 0) {
             Text(display.dateLabel)
                 .font(.subheadline.weight(.medium))
                 .foregroundStyle(display.isInactive ? WakeGlassTheme.primaryText.opacity(0.62) : WakeGlassTheme.primaryText.opacity(0.92))
                 .lineLimit(1)
                 .minimumScaleFactor(0.78)
-                .frame(width: CGFloat(rowMetrics.outerLaneWidth), alignment: .leading)
+                .frame(width: CGFloat(rowMetrics.dateLaneWidth), alignment: .leading)
+
+            Color.clear
+                .frame(width: CGFloat(rowMetrics.minimumDateToTagGap))
 
             tagLane
                 .frame(
@@ -960,8 +963,11 @@ private struct NextTenMorningsRow: View {
                     alignment: .center
                 )
 
+            Color.clear
+                .frame(width: CGFloat(rowMetrics.minimumTagToTimeGap))
+
             trailingLockup
-                .frame(width: CGFloat(rowMetrics.outerLaneWidth), alignment: .trailing)
+                .frame(width: CGFloat(rowMetrics.trailingLaneWidth), alignment: .trailing)
         }
     }
 
@@ -989,6 +995,13 @@ private struct NextTenMorningsRow: View {
     }
 }
 
+private enum NextTenMorningsTagMetrics {
+    static let interTagSpacing: CGFloat = 4
+    static let horizontalPadding: CGFloat = 6
+    static let verticalPadding: CGFloat = 3
+    static let strokeWidth: CGFloat = 0.8
+}
+
 private struct NextTenMorningsTagCluster: View {
     let tags: [NextTenMorningsTagDisplay]
     let isDisabled: Bool
@@ -999,7 +1012,7 @@ private struct NextTenMorningsTagCluster: View {
     }
 
     private func tagRow(_ tags: [NextTenMorningsTagDisplay]) -> some View {
-        HStack(spacing: DesignTokens.space6) {
+        HStack(spacing: NextTenMorningsTagMetrics.interTagSpacing) {
             ForEach(tags) { tag in
                 NextTenMorningsTagChip(tag: tag, isDisabled: isDisabled)
             }
@@ -1021,14 +1034,14 @@ private struct NextTenMorningsTagChip: View {
             .foregroundStyle(textColor(base: base, prominence: tag.prominence))
             .lineLimit(1)
             .minimumScaleFactor(0.82)
-            .padding(.vertical, DesignTokens.compactChipVerticalPadding)
-            .padding(.horizontal, DesignTokens.compactChipHorizontalPadding)
+            .padding(.vertical, NextTenMorningsTagMetrics.verticalPadding)
+            .padding(.horizontal, NextTenMorningsTagMetrics.horizontalPadding)
             .background(
                 Capsule(style: .continuous)
                     .fill(base.opacity(fillOpacity))
                     .overlay {
                         Capsule(style: .continuous)
-                            .stroke(base.opacity(strokeOpacity), lineWidth: 0.8)
+                            .stroke(base.opacity(strokeOpacity), lineWidth: NextTenMorningsTagMetrics.strokeWidth)
                     }
             )
             .opacity(isDisabled ? 0.55 : 1.0)

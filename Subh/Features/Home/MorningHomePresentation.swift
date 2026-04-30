@@ -129,40 +129,46 @@ struct NextTenMorningsRowDisplay: Equatable, Identifiable {
 
 struct NextTenMorningsResolvedRowLanes: Equatable {
     let dateLaneWidth: Double
+    let dateToTagGap: Double
     let tagLaneWidth: Double
+    let tagToTrailingGap: Double
     let trailingLaneWidth: Double
 
     var tagLaneCenterX: Double {
-        dateLaneWidth + (tagLaneWidth / 2)
+        dateLaneWidth + dateToTagGap + (tagLaneWidth / 2)
     }
 }
 
 struct NextTenMorningsRowMetrics: Equatable {
     static let minimumDateLaneWidth: Double = 78
+    static let minimumDateToTagGap: Double = 6
     static let minimumTagLaneWidth: Double = 44
+    static let minimumTagToTimeGap: Double = 6
     static let minimumTrailingLaneWidth: Double = 92
 
     let dateLaneWidth: Double
+    let minimumDateToTagGap: Double
     let minimumTagLaneWidth: Double
+    let minimumTagToTimeGap: Double
     let trailingLaneWidth: Double
-
-    var outerLaneWidth: Double {
-        max(dateLaneWidth, trailingLaneWidth)
-    }
 
     static let fallback = NextTenMorningsRowMetrics(
         dateLaneWidth: minimumDateLaneWidth,
+        minimumDateToTagGap: minimumDateToTagGap,
         minimumTagLaneWidth: minimumTagLaneWidth,
+        minimumTagToTimeGap: minimumTagToTimeGap,
         trailingLaneWidth: minimumTrailingLaneWidth
     )
 
     func resolvedLanes(for contentWidth: Double) -> NextTenMorningsResolvedRowLanes {
-        let fixedWidth = outerLaneWidth * 2
+        let fixedWidth = dateLaneWidth + minimumDateToTagGap + minimumTagToTimeGap + trailingLaneWidth
         let tagLaneWidth = max(minimumTagLaneWidth, contentWidth - fixedWidth)
         return NextTenMorningsResolvedRowLanes(
-            dateLaneWidth: outerLaneWidth,
+            dateLaneWidth: dateLaneWidth,
+            dateToTagGap: minimumDateToTagGap,
             tagLaneWidth: tagLaneWidth,
-            trailingLaneWidth: outerLaneWidth
+            tagToTrailingGap: minimumTagToTimeGap,
+            trailingLaneWidth: trailingLaneWidth
         )
     }
 }
@@ -528,7 +534,9 @@ enum MorningHomePresentation {
 
         return NextTenMorningsRowMetrics(
             dateLaneWidth: max(NextTenMorningsRowMetrics.minimumDateLaneWidth, dateWidth),
+            minimumDateToTagGap: NextTenMorningsRowMetrics.minimumDateToTagGap,
             minimumTagLaneWidth: NextTenMorningsRowMetrics.minimumTagLaneWidth,
+            minimumTagToTimeGap: NextTenMorningsRowMetrics.minimumTagToTimeGap,
             trailingLaneWidth: max(NextTenMorningsRowMetrics.minimumTrailingLaneWidth, trailingWidth)
         )
     }
