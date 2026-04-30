@@ -127,11 +127,48 @@ struct NextTenMorningsRowDisplay: Equatable, Identifiable {
     let accessibilityLabel: String
 }
 
+struct NextTenMorningsResolvedRowLanes: Equatable {
+    let dateLaneWidth: Double
+    let tagLaneWidth: Double
+    let trailingLaneWidth: Double
+
+    var tagLaneCenterX: Double {
+        dateLaneWidth + (tagLaneWidth / 2)
+    }
+}
+
+struct NextTenMorningsRowMetrics: Equatable {
+    static let minimumDateLaneWidth: Double = 78
+    static let minimumTagLaneWidth: Double = 44
+    static let minimumTrailingLaneWidth: Double = 92
+
+    let dateLaneWidth: Double
+    let minimumTagLaneWidth: Double
+    let trailingLaneWidth: Double
+
+    static let fallback = NextTenMorningsRowMetrics(
+        dateLaneWidth: minimumDateLaneWidth,
+        minimumTagLaneWidth: minimumTagLaneWidth,
+        trailingLaneWidth: minimumTrailingLaneWidth
+    )
+
+    func resolvedLanes(for contentWidth: Double) -> NextTenMorningsResolvedRowLanes {
+        let fixedWidth = dateLaneWidth + trailingLaneWidth
+        let tagLaneWidth = max(minimumTagLaneWidth, contentWidth - fixedWidth)
+        return NextTenMorningsResolvedRowLanes(
+            dateLaneWidth: dateLaneWidth,
+            tagLaneWidth: tagLaneWidth,
+            trailingLaneWidth: trailingLaneWidth
+        )
+    }
+}
+
 struct NextTenMorningsSnapshot: Equatable {
     static let title = "NEXT 10 MORNINGS"
 
     let title: String
     let rows: [NextTenMorningsRowDisplay]
+    let rowMetrics: NextTenMorningsRowMetrics
     let loadingState: NextTenMorningsLoadingState
     let generatedAt: Date
 }
@@ -183,7 +220,9 @@ enum NextTenMorningsTagResolver {
             tags = tahajjudTags(input)
         } else {
             let opportunityTags = opportunityTags(input)
-            tags = opportunityTags.isEmpty ? [tag(.fajrFallback, priority: 100)] : opportunityTags
+            tags = opportunityTags.isEmpty
+                ? [tag(.fajrFallback, priority: 100)]
+                : [tag(.fajrFallback, priority: 65)] + opportunityTags
         }
 
         let ordered = orderedUnique(tags)
@@ -460,8 +499,29 @@ enum MorningHomePresentation {
         return NextTenMorningsSnapshot(
             title: NextTenMorningsSnapshot.title,
             rows: rows,
+            rowMetrics: nextTenMorningsRowMetrics(for: rows, timeZone: timeZone),
             loadingState: rows.isEmpty ? .empty : .ready,
             generatedAt: generatedAt
+        )
+    }
+
+    static func nextTenMorningsRowMetrics(
+        for rows: [NextTenMorningsRowDisplay],
+        timeZone: TimeZone = .current
+    ) -> NextTenMorningsRowMetrics {
+        guard !rows.isEmpty else { return .fallback }
+
+        let dateWidth = rows
+            .map { estimatedDateLaneWidth(for: $0.dateLabel) }
+            .max() ?? NextTenMorningsRowMetrics.minimumDateLaneWidth
+        let trailingWidth = rows
+            .map { estimatedTrailingLaneWidth(for: $0, timeZone: timeZone) }
+            .max() ?? NextTenMorningsRowMetrics.minimumTrailingLaneWidth
+
+        return NextTenMorningsRowMetrics(
+            dateLaneWidth: max(NextTenMorningsRowMetrics.minimumDateLaneWidth, dateWidth),
+            minimumTagLaneWidth: NextTenMorningsRowMetrics.minimumTagLaneWidth,
+            trailingLaneWidth: max(NextTenMorningsRowMetrics.minimumTrailingLaneWidth, trailingWidth)
         )
     }
 
@@ -805,6 +865,13 @@ enum MorningHomePresentation {
         if tags.count == 1 {
             return tags[0].accessibilityText
         }
+        if tags.first?.semantic == .fajrFallback {
+            let details = tags.dropFirst().map(\.accessibilityText)
+            if details.isEmpty {
+                return "Fajr morning"
+            }
+            return "Fajr morning; \(details.joined(separator: ", "))"
+        }
         if tags.first?.semantic == .fastingIntent {
             let details = tags.dropFirst().map(\.accessibilityText)
             if details.isEmpty {
@@ -820,6 +887,29 @@ enum MorningHomePresentation {
             return "Tahajjud intended; \(details.joined(separator: ", "))"
         }
         return tags.map(\.accessibilityText).joined(separator: ", ")
+    }
+
+    private static func estimatedDateLaneWidth(for text: String) -> Double {
+        let measured = Double(text.count) * 7.6 + 8
+        return ceil(measured)
+    }
+
+    private static func estimatedTrailingLaneWidth(
+        for row: NextTenMorningsRowDisplay,
+        timeZone: TimeZone
+    ) -> Double {
+        if let trailingTime = row.trailingTime {
+            let displayText = timeFormatter(timeZone: timeZone).string(from: trailingTime)
+            let mainWidth = Double(displayText.split(separator: " ").first?.count ?? 4) * 16.5
+            let suffixWidth = Double(displayText.split(separator: " ").last?.count ?? 2) * 7.6
+            return ceil(mainWidth + suffixWidth + 10)
+        }
+
+        if let trailingStatusText = row.trailingStatusText {
+            return ceil(Double(trailingStatusText.count) * 7.4 + 8)
+        }
+
+        return NextTenMorningsRowMetrics.minimumTrailingLaneWidth
     }
 
     private static func nextTenMorningsAccessibilityDateLabel(

@@ -911,7 +911,7 @@ private struct NextTenMorningsCard: View {
                         .padding(.vertical, DesignTokens.spacingM)
                 } else {
                     ForEach(Array(forecast.rows.enumerated()), id: \.element.id) { index, row in
-                        NextTenMorningsRow(display: row) {
+                        NextTenMorningsRow(display: row, rowMetrics: forecast.rowMetrics) {
                             guard let entry = entries.first(where: { $0.id == row.id }) else { return }
                             onSelect(entry)
                         }
@@ -929,15 +929,12 @@ private struct NextTenMorningsCard: View {
 
 private struct NextTenMorningsRow: View {
     let display: NextTenMorningsRowDisplay
+    let rowMetrics: NextTenMorningsRowMetrics
     let onSelect: () -> Void
 
     var body: some View {
         Button(action: onSelect) {
-            ViewThatFits(in: .horizontal) {
-                rowContent(tags: display.tags)
-                rowContent(tags: Array(display.tags.prefix(2)))
-                rowContent(tags: Array(display.tags.prefix(1)))
-            }
+            rowContent
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
             .accessibilityElement(children: .ignore)
@@ -947,29 +944,48 @@ private struct NextTenMorningsRow: View {
         .padding(.vertical, DesignTokens.compactRowVerticalPadding)
     }
 
-    private func rowContent(tags: [NextTenMorningsTagDisplay]) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: DesignTokens.spacingM) {
+    private var rowContent: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 0) {
             Text(display.dateLabel)
                 .font(.subheadline.weight(.medium))
                 .foregroundStyle(display.isInactive ? WakeGlassTheme.primaryText.opacity(0.62) : WakeGlassTheme.primaryText.opacity(0.92))
                 .lineLimit(1)
                 .minimumScaleFactor(0.78)
-                .frame(minWidth: 76, alignment: .leading)
+                .frame(width: CGFloat(rowMetrics.dateLaneWidth), alignment: .leading)
 
-            NextTenMorningsTagCluster(tags: tags, isDisabled: display.isInactive)
+            tagLane
+                .frame(
+                    minWidth: CGFloat(rowMetrics.minimumTagLaneWidth),
+                    maxWidth: .infinity,
+                    alignment: .center
+                )
+                .padding(.horizontal, DesignTokens.spacingS)
 
-            Spacer(minLength: DesignTokens.spacingS)
+            trailingLockup
+                .frame(width: CGFloat(rowMetrics.trailingLaneWidth), alignment: .trailing)
+        }
+    }
 
-            if let trailingTime = display.trailingTime {
-                NextTenMorningsTimeLockup(date: trailingTime, isDisabled: display.isInactive)
-                    .fixedSize(horizontal: true, vertical: false)
-            } else if let trailingStatusText = display.trailingStatusText {
-                Text(trailingStatusText)
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(WakeGlassTheme.secondaryText)
-                    .multilineTextAlignment(.trailing)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+    private var tagLane: some View {
+        ViewThatFits(in: .horizontal) {
+            NextTenMorningsTagCluster(tags: display.tags, isDisabled: display.isInactive)
+            NextTenMorningsTagCluster(tags: Array(display.tags.prefix(2)), isDisabled: display.isInactive)
+            NextTenMorningsTagCluster(tags: Array(display.tags.prefix(1)), isDisabled: display.isInactive)
+        }
+    }
+
+    @ViewBuilder
+    private var trailingLockup: some View {
+        if let trailingTime = display.trailingTime {
+            NextTenMorningsTimeLockup(date: trailingTime, isDisabled: display.isInactive)
+                .fixedSize(horizontal: true, vertical: false)
+        } else if let trailingStatusText = display.trailingStatusText {
+            Text(trailingStatusText)
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(WakeGlassTheme.secondaryText)
+                .lineLimit(1)
+                .minimumScaleFactor(0.82)
+                .multilineTextAlignment(.trailing)
         }
     }
 }
@@ -1005,6 +1021,7 @@ private struct NextTenMorningsTagChip: View {
             .font(AppTypography.badge)
             .foregroundStyle(textColor(base: base, prominence: tag.prominence))
             .lineLimit(1)
+            .minimumScaleFactor(0.82)
             .padding(.vertical, DesignTokens.compactChipVerticalPadding)
             .padding(.horizontal, DesignTokens.compactChipHorizontalPadding)
             .background(

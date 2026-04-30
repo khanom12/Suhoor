@@ -1216,14 +1216,14 @@ struct ScheduleServiceExtractionTests {
         #expect(Self.nextTenTagTitles(primary: .ramadanObligatory, opportunities: [.ashura]) == ["Ramadan"])
         #expect(Self.nextTenTagTitles(quietModeState: .active, primary: .voluntary, secondary: [.ashura]) == ["Quiet mode"])
         #expect(Self.nextTenTagTitles(primary: .voluntary, secondary: [.ashura]) == ["Fasting", "Ashura"])
-        #expect(Self.nextTenTagTitles(opportunities: [.ashura]) == ["Ashura"])
+        #expect(Self.nextTenTagTitles(opportunities: [.ashura]) == ["Fajr", "Ashura"])
         #expect(Self.nextTenTagTitles(primary: .qadaMakeup, secondary: [.whiteDays]) == ["Fasting", "Qada"])
         #expect(Self.nextTenTagTitles(opportunities: [.ashura], tahajjudIntended: true) == ["Tahajjud", "Ashura"])
         #expect(Self.nextTenTagTitles(opportunities: [.mondayThursday]) == ["Fajr"])
         #expect(Self.nextTenTagTitles(primary: .voluntary, secondary: [.mondayThursday]) == ["Fasting", "Mon/Thu"])
-        #expect(Self.nextTenTagTitles(opportunities: [.whiteDays]) == ["White Days"])
+        #expect(Self.nextTenTagTitles(opportunities: [.whiteDays]) == ["Fajr", "White Days"])
         #expect(Self.nextTenTagTitles(primary: .voluntary, secondary: [.whiteDays]) == ["Fasting", "White Days"])
-        #expect(Self.nextTenTagTitles(opportunities: [.shawwalSix]) == ["Shawwal 6"])
+        #expect(Self.nextTenTagTitles(opportunities: [.shawwalSix]) == ["Fajr", "Shawwal 6"])
         #expect(Self.nextTenTagTitles(opportunities: [.shawwalSix], shawwalComplete: true) == ["Fajr"])
     }
 
@@ -1238,6 +1238,51 @@ struct ScheduleServiceExtractionTests {
         #expect(resolution.visibleTags.map(\.title) == ["Fasting", "Arafah", "Dhul Hijjah"])
         #expect(resolution.visibleTags.count == 3)
         #expect(resolution.accessibilityTags.map(\.title) == ["Fasting", "Arafah", "Dhul Hijjah", "White Days"])
+
+        let opportunityResolution = Self.nextTenTagResolution(
+            opportunities: [.arafah, .dhulHijjahFirstNine, .whiteDays, .shawwalSix]
+        )
+        #expect(opportunityResolution.visibleTags.map(\.title) == ["Fajr", "Arafah", "Dhul Hijjah"])
+        #expect(opportunityResolution.visibleTags.count == 3)
+        #expect(opportunityResolution.accessibilityTags.map(\.title) == ["Fajr", "Arafah", "Dhul Hijjah", "White Days", "Shawwal 6"])
+    }
+
+    @Test
+    func nextTenMorningsRowMetricsShareStableGridLanes() {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let date = Self.makeDate(year: 2026, month: 5, day: 1, timeZone: timeZone)
+        let shortRow = Self.nextTenRowDisplay(
+            date: date,
+            dateLabel: "Tomorrow",
+            trailingTime: date,
+            trailingStatusText: nil
+        )
+        let longRow = Self.nextTenRowDisplay(
+            date: date,
+            dateLabel: "Wednesday, May 6",
+            trailingTime: Self.makeDate(year: 2026, month: 5, day: 1, hour: 10, minute: 10, timeZone: timeZone),
+            trailingStatusText: nil
+        )
+        let statusRow = Self.nextTenRowDisplay(
+            date: date,
+            dateLabel: "Fri, May 8",
+            trailingTime: nil,
+            trailingStatusText: "No wake"
+        )
+
+        let metrics = MorningHomePresentation.nextTenMorningsRowMetrics(
+            for: [shortRow, longRow, statusRow],
+            timeZone: timeZone
+        )
+        let narrowLanes = metrics.resolvedLanes(for: 320)
+        let wideLanes = metrics.resolvedLanes(for: 420)
+
+        #expect(metrics.dateLaneWidth > NextTenMorningsRowMetrics.minimumDateLaneWidth)
+        #expect(metrics.trailingLaneWidth >= NextTenMorningsRowMetrics.minimumTrailingLaneWidth)
+        #expect(narrowLanes.dateLaneWidth == wideLanes.dateLaneWidth)
+        #expect(narrowLanes.trailingLaneWidth == wideLanes.trailingLaneWidth)
+        #expect(narrowLanes.tagLaneWidth >= metrics.minimumTagLaneWidth)
+        #expect(wideLanes.tagLaneCenterX > narrowLanes.tagLaneCenterX)
     }
 
     @Test
@@ -2113,6 +2158,26 @@ struct ScheduleServiceExtractionTests {
                 hasDayOverride: false,
                 tahajjudIntended: tahajjudIntended
             )
+        )
+    }
+
+    private static func nextTenRowDisplay(
+        date: Date,
+        dateLabel: String,
+        trailingTime: Date?,
+        trailingStatusText: String?
+    ) -> NextTenMorningsRowDisplay {
+        NextTenMorningsRowDisplay(
+            id: dateLabel,
+            dateKey: dateLabel,
+            date: date,
+            dateLabel: dateLabel,
+            tags: [],
+            allAccessibilityTags: [],
+            trailingTime: trailingTime,
+            trailingStatusText: trailingStatusText,
+            isInactive: trailingTime == nil,
+            accessibilityLabel: dateLabel
         )
     }
 
