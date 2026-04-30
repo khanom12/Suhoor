@@ -166,8 +166,7 @@ struct FajrWindowSurfaceProvider {
             xAxisLabels: dataset.xAxisLabels
         )
         let summary = buildCompactSummary(
-            selectedPoint: selectedPoint,
-            now: now,
+            rows: dataset.rows,
             timeZone: timeZone
         )
         let compactInsight = compactSecondarySummaryLine(rows: dataset.rows, timeZone: timeZone)
@@ -533,26 +532,19 @@ struct FajrWindowSurfaceProvider {
     }
 
     private func buildCompactSummary(
-        selectedPoint: FajrWindowPoint?,
-        now: Date,
+        rows: [FajrWindowDatasetRow],
         timeZone: TimeZone
     ) -> FajrWindowCompactSummarySnapshot {
-        guard let selectedPoint else {
+        guard !rows.isEmpty else {
             return FajrWindowCompactSummarySnapshot(
-                primaryText: "Fajr times will appear once Subh has resolved mornings.",
+                primaryText: "Weekly Fajrcast will appear once Fajr times are available.",
                 secondaryText: nil
             )
         }
 
-        let windowState = compactFajrWindowState(for: selectedPoint, now: now)
         return FajrWindowCompactSummarySnapshot(
-            primaryText: compactFajrBoundaryLine(for: selectedPoint, state: windowState),
-            secondaryText: compactFastingIntentionLine(
-                for: selectedPoint,
-                state: windowState,
-                now: now,
-                timeZone: timeZone
-            )
+            primaryText: compactWeekAlarmSummaryLine(for: rows),
+            secondaryText: compactWeekFastingSummaryLine(for: rows, timeZone: timeZone)
         )
     }
 
@@ -571,26 +563,6 @@ struct FajrWindowSurfaceProvider {
         case .completed:
             return "Fajr began at \(beginTime) • Fajr ended at \(endTime)"
         }
-    }
-
-    private func compactFastingIntentionLine(
-        for point: FajrWindowPoint,
-        state: CompactFajrWindowState,
-        now: Date,
-        timeZone: TimeZone
-    ) -> String? {
-        guard hasNonRamadanFastingIntention(point) else { return nil }
-
-        let subject = compactSubject(for: point, now: now, timeZone: timeZone)
-        let verb = state == .completed ? "was" : "is"
-        return "\(subject) \(verb) a fasting day."
-    }
-
-    private func hasNonRamadanFastingIntention(_ point: FajrWindowPoint) -> Bool {
-        guard point.isFastingContext else { return false }
-
-        let normalizedTags = point.contextTags.map { $0.lowercased() }
-        return !normalizedTags.contains(where: { $0.contains("ramadan") })
     }
 
     private func compactFajrWindowState(
@@ -628,10 +600,51 @@ struct FajrWindowSurfaceProvider {
             isAlarmActive: !point.isSkipped,
             timeMain: timeParts.0,
             timeSuffix: timeParts.1,
-            accessibilityValue: point.isSkipped
-                ? "\(compactSubject(for: point, now: now, timeZone: timeZone)), off for this date."
-                : "\(compactSubject(for: point, now: now, timeZone: timeZone)), \(TimeFormatters.timeFormatter.string(from: point.primaryWake))."
+            accessibilityValue: compactFocusedAccessibilityValue(
+                for: point,
+                now: now,
+                timeZone: timeZone
+            )
         )
+    }
+
+    private func compactFocusedAccessibilityValue(
+        for point: FajrWindowPoint,
+        now: Date,
+        timeZone: TimeZone
+    ) -> String {
+        let subject = compactSubject(for: point, now: now, timeZone: timeZone)
+        let state = compactFajrWindowState(for: point, now: now)
+        let alarmText: String
+        if point.isSkipped {
+            alarmText = state == .completed
+                ? "Alarm was off for this date."
+                : "Alarm is off for this date."
+        } else {
+            let wakeTime = TimeFormatters.timeFormatter.string(from: point.primaryWake)
+            alarmText = state == .completed
+                ? "Alarm was at \(wakeTime)."
+                : "Alarm is at \(wakeTime)."
+        }
+
+        return "\(subject) focused. \(alarmText) \(compactFajrBoundaryAccessibilityLine(for: point, state: state))"
+    }
+
+    private func compactFajrBoundaryAccessibilityLine(
+        for point: FajrWindowPoint,
+        state: CompactFajrWindowState
+    ) -> String {
+        let beginTime = TimeFormatters.timeFormatter.string(from: point.fajrStart)
+        let endTime = TimeFormatters.timeFormatter.string(from: point.fajrEndOrBoundary)
+
+        switch state {
+        case .upcoming:
+            return "Fajr begins at \(beginTime). Fajr ends at \(endTime)."
+        case .inProgress:
+            return "Fajr began at \(beginTime). Fajr ends at \(endTime)."
+        case .completed:
+            return "Fajr began at \(beginTime). Fajr ended at \(endTime)."
+        }
     }
 
     private func compactSubject(
@@ -659,6 +672,106 @@ struct FajrWindowSurfaceProvider {
         }
 
         return point.longLabel.components(separatedBy: ",").first ?? point.longLabel
+    }
+
+    private func compactWeekAlarmSummaryLine(for rows: [FajrWindowDatasetRow]) -> String {
+        let adjustedCount = rows.filter { $0.isOverride || $0.isSkipped }.count
+        if adjustedCount > 0 {
+            return adjustedCount == 1
+                ? "This week includes 1 adjusted wake morning."
+                : "This week includes \(adjustedCount) adjusted wake mornings."
+        }
+
+        let activeRows = rows.filter { !$0.isSkipped }
+        guard !activeRows.isEmpty else {
+            return "No wake alarms are set for this week."
+        }
+
+        let relationCounts = Dictionary(grouping: activeRows, by: \.relationText)
+            .mapValues(\.count)
+        if let commonRelation = relationCounts.max(by: { $0.value < $1.value })?.key {
+            return "Default alarm: \(compactDefaultAlarmRelation(commonRelation))."
+        }
+
+        return "This week includes mixed wake settings."
+    }
+
+    private func compactDefaultAlarmRelation(_ relationText: String) -> String {
+        if relationText == "Fixed wake" {
+            return "fixed wake time"
+        }
+
+        if relationText == "At Fajr" {
+            return "at Fajr begins"
+        }
+
+        if relationText == "At Fajr ends" {
+            return "at Fajr ends"
+        }
+
+        var normalized = relationText
+            .replacingOccurrences(of: " minutes ", with: " min ")
+            .replacingOccurrences(of: " minute ", with: " min ")
+
+        if normalized.hasSuffix(" before Fajr") {
+            normalized = normalized.replacingOccurrences(of: " before Fajr", with: " before Fajr begins")
+        } else if normalized.hasSuffix(" after Fajr") {
+            normalized = normalized.replacingOccurrences(of: " after Fajr", with: " after Fajr begins")
+        }
+
+        return normalized.lowercasedFirstCharacter()
+    }
+
+    private func compactWeekFastingSummaryLine(
+        for rows: [FajrWindowDatasetRow],
+        timeZone: TimeZone
+    ) -> String? {
+        let fastingRows = rows.filter(isNonRamadanFastingIntention)
+        if !fastingRows.isEmpty {
+            if fastingRows.count <= 2 {
+                return "Fasting planned on \(compactWeekdayList(for: fastingRows, timeZone: timeZone))."
+            }
+            return "Fasting planned on \(fastingRows.count) days this week."
+        }
+
+        if rows.contains(where: isRamadanContext) {
+            return nil
+        }
+
+        return "No fasting days are planned this week."
+    }
+
+    private func isNonRamadanFastingIntention(_ row: FajrWindowDatasetRow) -> Bool {
+        row.isFastingContext && !isRamadanContext(row)
+    }
+
+    private func isRamadanContext(_ row: FajrWindowDatasetRow) -> Bool {
+        row.contextTags.contains { $0.lowercased().contains("ramadan") }
+    }
+
+    private func compactWeekdayList(
+        for rows: [FajrWindowDatasetRow],
+        timeZone: TimeZone
+    ) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "EEEE"
+        formatter.timeZone = timeZone
+        formatter.locale = .current
+
+        let names = rows
+            .sorted { $0.date < $1.date }
+            .map { formatter.string(from: $0.date) }
+
+        switch names.count {
+        case 0:
+            return ""
+        case 1:
+            return names[0]
+        case 2:
+            return "\(names[0]) and \(names[1])"
+        default:
+            return "\(names.dropLast().joined(separator: ", ")), and \(names.last ?? "")"
+        }
     }
 
     private func compactSecondarySummaryLine(
@@ -1119,6 +1232,13 @@ private enum CompactFajrWindowState {
     case upcoming
     case inProgress
     case completed
+}
+
+private extension String {
+    func lowercasedFirstCharacter() -> String {
+        guard let first else { return self }
+        return String(first).lowercased() + dropFirst()
+    }
 }
 
 private struct LabelFormatterBundle {

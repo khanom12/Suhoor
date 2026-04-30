@@ -1068,8 +1068,9 @@ struct ScheduleServiceExtractionTests {
 
         #expect(snapshot.selectedDay.dateKey == tomorrowKey)
         #expect(snapshot.selectedDay.relativeLabel == "TOMORROW")
-        #expect(Self.normalizedTimeSpaces(snapshot.summary.primaryText) == "Fajr begins at 5:00 AM • Fajr ends at 6:16 AM")
-        #expect(snapshot.summary.secondaryText == nil)
+        #expect(snapshot.summary.primaryText == "Default alarm: 30 min before Fajr ends.")
+        #expect(snapshot.summary.secondaryText == "No fasting days are planned this week.")
+        #expect(Self.normalizedTimeSpaces(snapshot.selectedDay.accessibilityValue).contains("Fajr begins at 5:00 AM. Fajr ends at 6:16 AM."))
     }
 
     @Test
@@ -1100,8 +1101,8 @@ struct ScheduleServiceExtractionTests {
         )
 
         #expect(snapshot.selectedDay.relativeLabel == "TODAY")
-        #expect(Self.normalizedTimeSpaces(snapshot.summary.primaryText) == "Fajr begins at 5:00 AM • Fajr ends at 6:16 AM")
-        #expect(snapshot.summary.secondaryText == nil)
+        #expect(snapshot.summary.primaryText == "Default alarm: 30 min before Fajr ends.")
+        #expect(snapshot.summary.secondaryText == "No fasting days are planned this week.")
     }
 
     @Test
@@ -1128,11 +1129,12 @@ struct ScheduleServiceExtractionTests {
             timeZone: timeZone
         )
 
-        #expect(Self.normalizedTimeSpaces(snapshot.summary.primaryText) == "Fajr begins at 5:00 AM • Fajr ends at 6:16 AM")
-        #expect(snapshot.summary.secondaryText == nil)
+        #expect(snapshot.summary.primaryText == "This week includes 1 adjusted wake morning.")
+        #expect(snapshot.summary.secondaryText == "No fasting days are planned this week.")
         #expect(snapshot.selectedDay.iconName == "bell.slash.fill")
         #expect(snapshot.selectedDay.timeMain == "Off")
         #expect(snapshot.selectedDay.timeSuffix == nil)
+        #expect(snapshot.selectedDay.accessibilityValue.contains("Alarm is off for this date."))
     }
 
     @Test
@@ -1156,12 +1158,13 @@ struct ScheduleServiceExtractionTests {
             timeZone: timeZone
         )
 
-        #expect(Self.normalizedTimeSpaces(snapshot.summary.primaryText) == "Fajr began at 5:00 AM • Fajr ends at 6:16 AM")
-        #expect(snapshot.summary.secondaryText == nil)
+        #expect(snapshot.summary.primaryText == "Default alarm: 30 min before Fajr ends.")
+        #expect(snapshot.summary.secondaryText == "No fasting days are planned this week.")
+        #expect(Self.normalizedTimeSpaces(snapshot.selectedDay.accessibilityValue).contains("Fajr began at 5:00 AM. Fajr ends at 6:16 AM."))
     }
 
     @Test
-    func compactFajrcastUsesPastFajrFooterTense() {
+    func compactFajrcastUsesPastFajrAccessibilityTense() {
         let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
         let yesterday = Self.makeDate(year: 2026, month: 4, day: 25, timeZone: timeZone)
         let today = Self.makeDate(year: 2026, month: 4, day: 26, hour: 9, minute: 0, timeZone: timeZone)
@@ -1181,9 +1184,10 @@ struct ScheduleServiceExtractionTests {
             timeZone: timeZone
         )
 
-        #expect(Self.normalizedTimeSpaces(snapshot.summary.primaryText) == "Fajr began at 5:00 AM • Fajr ended at 6:16 AM")
-        #expect(snapshot.summary.secondaryText == nil)
+        #expect(snapshot.summary.primaryText == "Default alarm: 30 min before Fajr ends.")
+        #expect(snapshot.summary.secondaryText == "No fasting days are planned this week.")
         #expect(snapshot.selectedDay.relativeLabel == "YESTERDAY")
+        #expect(Self.normalizedTimeSpaces(snapshot.selectedDay.accessibilityValue).contains("Fajr began at 5:00 AM. Fajr ended at 6:16 AM."))
     }
 
     @Test
@@ -1211,9 +1215,10 @@ struct ScheduleServiceExtractionTests {
             timeZone: timeZone
         )
 
-        #expect(Self.normalizedTimeSpaces(snapshot.summary.primaryText) == "Fajr began at 5:00 AM • Fajr ended at 6:16 AM")
-        #expect(snapshot.summary.secondaryText == nil)
+        #expect(snapshot.summary.primaryText == "This week includes 1 adjusted wake morning.")
+        #expect(snapshot.summary.secondaryText == "No fasting days are planned this week.")
         #expect(snapshot.selectedDay.timeMain == "Off")
+        #expect(snapshot.selectedDay.accessibilityValue.contains("Alarm was off for this date."))
     }
 
     @Test
@@ -1244,8 +1249,8 @@ struct ScheduleServiceExtractionTests {
             timeZone: timeZone
         )
 
-        #expect(Self.normalizedTimeSpaces(snapshot.summary.primaryText) == "Fajr begins at 5:00 AM • Fajr ends at 6:16 AM")
-        #expect(snapshot.summary.secondaryText == nil)
+        #expect(snapshot.summary.primaryText == "This week includes 1 adjusted wake morning.")
+        #expect(snapshot.summary.secondaryText == "No fasting days are planned this week.")
         #expect(snapshot.compactInsight == "1 morning is adjusted this week.")
     }
 
@@ -1279,7 +1284,8 @@ struct ScheduleServiceExtractionTests {
 
         #expect(snapshot.selectedDay.dateKey == adjustedKey)
         #expect(snapshot.selectedDay.relativeLabel == "WEDNESDAY")
-        #expect(snapshot.summary.secondaryText == nil)
+        #expect(snapshot.summary.primaryText == "This week includes 1 adjusted wake morning.")
+        #expect(snapshot.summary.secondaryText == "No fasting days are planned this week.")
     }
 
     @Test
@@ -1312,7 +1318,8 @@ struct ScheduleServiceExtractionTests {
         )
 
         #expect(snapshot.selectedDay.relativeLabel == "TOMORROW")
-        #expect(snapshot.summary.secondaryText == "Tomorrow is a fasting day.")
+        #expect(snapshot.summary.primaryText == "Default alarm: 30 min before Fajr ends.")
+        #expect(snapshot.summary.secondaryText == "Fasting planned on Monday.")
     }
 
     @Test
@@ -1345,7 +1352,9 @@ struct ScheduleServiceExtractionTests {
         )
 
         #expect(snapshot.selectedDay.relativeLabel == "YESTERDAY")
-        #expect(snapshot.summary.secondaryText == "Yesterday was a fasting day.")
+        #expect(snapshot.summary.primaryText == "Default alarm: 30 min before Fajr ends.")
+        #expect(snapshot.summary.secondaryText == "Fasting planned on Saturday.")
+        #expect(Self.normalizedTimeSpaces(snapshot.selectedDay.accessibilityValue).contains("Fajr began at 5:00 AM. Fajr ended at 6:16 AM."))
     }
 
     @Test
@@ -1378,6 +1387,7 @@ struct ScheduleServiceExtractionTests {
         )
 
         #expect(snapshot.selectedDay.relativeLabel == "TOMORROW")
+        #expect(snapshot.summary.primaryText == "Default alarm: 30 min before Fajr ends.")
         #expect(snapshot.summary.secondaryText == nil)
     }
 
@@ -1434,7 +1444,8 @@ struct ScheduleServiceExtractionTests {
         #expect(focusedSnapshot.chart.points.firstIndex(where: { $0.dateKey == focusedSnapshot.selectedDay.dateKey }) == 0)
         #expect(focusedDateKeys == visibleDateKeys)
         #expect(focusedSnapshot.selectedDay.relativeLabel == "FRIDAY")
-        #expect(focusedSnapshot.summary.secondaryText == nil)
+        #expect(focusedSnapshot.summary.primaryText == "Default alarm: 30 min before Fajr ends.")
+        #expect(focusedSnapshot.summary.secondaryText == "No fasting days are planned this week.")
 
         let snapBackSnapshot = provider.compactSnapshot(
             dataset: dataset,
@@ -1448,7 +1459,8 @@ struct ScheduleServiceExtractionTests {
         #expect(snapBackSnapshot.selectedDay.dateKey == anchorKey)
         #expect(snapBackSnapshot.chart.points.firstIndex(where: { $0.dateKey == snapBackSnapshot.selectedDay.dateKey }) == 3)
         #expect(snapBackDateKeys == visibleDateKeys)
-        #expect(snapBackSnapshot.summary.secondaryText == nil)
+        #expect(snapBackSnapshot.summary.primaryText == focusedSnapshot.summary.primaryText)
+        #expect(snapBackSnapshot.summary.secondaryText == focusedSnapshot.summary.secondaryText)
     }
 
     private static func makeDate(

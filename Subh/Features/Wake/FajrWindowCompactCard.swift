@@ -86,7 +86,8 @@ struct WeeklyFajrcastCard: View {
                 .font(.system(size: monthTagPointSize, weight: .regular))
                 .foregroundStyle(monthTagColor)
                 .lineLimit(1)
-                .frame(width: monthTagWidth, height: monthTagHeight)
+                .multilineTextAlignment(.center)
+                .frame(width: monthTagWidth, height: monthTagHeight, alignment: .center)
                 .background(
                     Capsule(style: .continuous)
                         .fill(WakeGlassTheme.divider)
@@ -183,6 +184,9 @@ struct WeeklyFajrcastCard: View {
             return 10
         case .xLarge, .xxLarge, .xxxLarge:
             return 12
+        case .accessibility1, .accessibility2, .accessibility3, .accessibility4, .accessibility5:
+            let scaledFooterLineHeight = layoutProfile.scaled(base: 13) * 1.22
+            return max(12, 0.55 * scaledFooterLineHeight)
         @unknown default:
             return 10
         }
@@ -243,21 +247,7 @@ struct WeeklyFajrcastCard: View {
             return "This week"
         }
 
-        let gregorian = gregorianWeekRange(start: firstDate, end: lastDate)
-        guard let preferredHijri = hijriWeekRange(start: firstDate, end: lastDate, style: .preferred) else {
-            return gregorian
-        }
-
-        let preferred = "\(gregorian) | \(preferredHijri)"
-        if weekTagFitsComfortably(preferred) {
-            return preferred
-        }
-
-        guard let compactHijri = hijriWeekRange(start: firstDate, end: lastDate, style: .compact) else {
-            return preferred
-        }
-
-        return "\(gregorian) | \(compactHijri)"
+        return gregorianWeekRange(start: firstDate, end: lastDate)
     }
 
     private func openIfChartIsIdle() {
@@ -308,8 +298,8 @@ struct WeeklyFajrcastCard: View {
             return "This week"
         }
 
-        let startToken = gregorianMonthToken(for: startMonth)
-        let endToken = gregorianMonthToken(for: endMonth)
+        let startToken = gregorianMonthName(for: start)
+        let endToken = gregorianMonthName(for: end)
 
         if startMonth == endMonth {
             if startDay == endDay {
@@ -321,87 +311,17 @@ struct WeeklyFajrcastCard: View {
         return "\(startToken) \(startDay)–\(endToken) \(endDay)"
     }
 
-    private func hijriWeekRange(
-        start: Date,
-        end: Date,
-        style: WeekTagHijriTokenStyle
-    ) -> String? {
-        let timeZone = TimeZone.current
-        guard
-            let startComponents = AdjustedHijriCalendar.shared.adjustedComponents(for: start, timeZone: timeZone),
-            let endComponents = AdjustedHijriCalendar.shared.adjustedComponents(for: end, timeZone: timeZone)
-        else {
-            return nil
-        }
-
-        let startToken = hijriToken(for: startComponents.month, style: style)
-        let endToken = hijriToken(for: endComponents.month, style: style)
-
-        if startComponents.hijriYear == endComponents.hijriYear,
-           startComponents.month == endComponents.month {
-            if startComponents.day == endComponents.day {
-                return "\(startToken) \(startComponents.day)"
-            }
-            return "\(startToken) \(startComponents.day)–\(endComponents.day)"
-        }
-
-        return "\(startToken) \(startComponents.day)–\(endToken) \(endComponents.day)"
-    }
-
     private func singleDatePillText(for date: Date) -> String {
-        let gregorian = gregorianSingleDate(date)
-        guard let preferredHijri = hijriSingleDate(date, style: .preferred) else {
-            return gregorian
-        }
-
-        let preferred = "\(gregorian) | \(preferredHijri)"
-        if weekTagFitsComfortably(preferred) {
-            return preferred
-        }
-
-        guard let compactHijri = hijriSingleDate(date, style: .compact) else {
-            return preferred
-        }
-
-        return "\(gregorian) | \(compactHijri)"
+        gregorianSingleDate(date)
     }
 
     private func gregorianSingleDate(_ date: Date) -> String {
         let components = gregorianCalendar.dateComponents([.month, .day], from: date)
-        guard let month = components.month, let day = components.day else {
+        guard components.month != nil, let day = components.day else {
             return "This day"
         }
 
-        return "\(gregorianMonthToken(for: month)) \(day)"
-    }
-
-    private func hijriSingleDate(_ date: Date, style: WeekTagHijriTokenStyle) -> String? {
-        let timeZone = TimeZone.current
-        guard let components = AdjustedHijriCalendar.shared.adjustedComponents(for: date, timeZone: timeZone) else {
-            return nil
-        }
-
-        return "\(hijriToken(for: components.month, style: style)) \(components.day)"
-    }
-
-    private func hijriToken(for month: HijriMonth, style: WeekTagHijriTokenStyle) -> String {
-        switch style {
-        case .preferred:
-            return month.weeklyTagPreferredToken
-        case .compact:
-            return month.weeklyTagCompactToken
-        }
-    }
-
-    private func weekTagFitsComfortably(_ text: String) -> Bool {
-        let width = (text as NSString).size(
-            withAttributes: [.font: UIFont.systemFont(ofSize: 12, weight: .regular)]
-        ).width
-        return width <= weekTagComfortWidth
-    }
-
-    private var weekTagComfortWidth: CGFloat {
-        monthTagWidth - 20
+        return "\(gregorianMonthName(for: date)) \(day)"
     }
 
     private var gregorianCalendar: Calendar {
@@ -410,41 +330,14 @@ struct WeeklyFajrcastCard: View {
         return calendar
     }
 
-    private func gregorianMonthToken(for month: Int) -> String {
-        switch month {
-        case 1:
-            return "Jan"
-        case 2:
-            return "Feb"
-        case 3:
-            return "Mar"
-        case 4:
-            return "Apr"
-        case 5:
-            return "May"
-        case 6:
-            return "Jun"
-        case 7:
-            return "Jul"
-        case 8:
-            return "Aug"
-        case 9:
-            return "Sep"
-        case 10:
-            return "Oct"
-        case 11:
-            return "Nov"
-        case 12:
-            return "Dec"
-        default:
-            return ""
-        }
+    private func gregorianMonthName(for date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMMM"
+        formatter.calendar = gregorianCalendar
+        formatter.timeZone = .current
+        formatter.locale = .current
+        return formatter.string(from: date)
     }
-}
-
-private enum WeekTagHijriTokenStyle {
-    case preferred
-    case compact
 }
 
 private struct WeeklyFajrcastCardLayoutProfile {
@@ -491,7 +384,11 @@ private struct WeeklyFajrcastCardLayoutProfile {
     }
 
     var monthTagWidth: CGFloat {
-        max(196, 196 + ((textScale - 1) * 84))
+        let font = UIFont.systemFont(ofSize: scaled(base: 12), weight: .regular)
+        let referenceWidth = ("September 30–October 6" as NSString).size(
+            withAttributes: [.font: font]
+        ).width
+        return ceil(max(196, referenceWidth + 30))
     }
 
     var monthTagHeight: CGFloat {
