@@ -146,6 +146,10 @@ struct NextTenMorningsRowMetrics: Equatable {
     let minimumTagLaneWidth: Double
     let trailingLaneWidth: Double
 
+    var outerLaneWidth: Double {
+        max(dateLaneWidth, trailingLaneWidth)
+    }
+
     static let fallback = NextTenMorningsRowMetrics(
         dateLaneWidth: minimumDateLaneWidth,
         minimumTagLaneWidth: minimumTagLaneWidth,
@@ -153,12 +157,12 @@ struct NextTenMorningsRowMetrics: Equatable {
     )
 
     func resolvedLanes(for contentWidth: Double) -> NextTenMorningsResolvedRowLanes {
-        let fixedWidth = dateLaneWidth + trailingLaneWidth
+        let fixedWidth = outerLaneWidth * 2
         let tagLaneWidth = max(minimumTagLaneWidth, contentWidth - fixedWidth)
         return NextTenMorningsResolvedRowLanes(
-            dateLaneWidth: dateLaneWidth,
+            dateLaneWidth: outerLaneWidth,
             tagLaneWidth: tagLaneWidth,
-            trailingLaneWidth: trailingLaneWidth
+            trailingLaneWidth: outerLaneWidth
         )
     }
 }
@@ -293,7 +297,11 @@ enum NextTenMorningsTagResolver {
     }
 
     private static func opportunityTags(_ input: NextTenMorningsTagResolverInput) -> [NextTenMorningsTagDisplay] {
-        sortedVisibleOpportunityTags(input.compatibleOpportunityTags, shawwalSixProgress: input.shawwalSixProgress).map {
+        let opportunities = Set(input.compatibleOpportunityTags).union(secondaryTags(from: input.resolvedContext))
+        return sortedVisibleOpportunityTags(
+            Array(opportunities),
+            shawwalSixProgress: input.shawwalSixProgress
+        ).map {
             tag(.observanceOpportunity($0), priority: opportunityPriority(for: $0))
         }
     }
@@ -900,9 +908,11 @@ enum MorningHomePresentation {
     ) -> Double {
         if let trailingTime = row.trailingTime {
             let displayText = timeFormatter(timeZone: timeZone).string(from: trailingTime)
-            let mainWidth = Double(displayText.split(separator: " ").first?.count ?? 4) * 16.5
-            let suffixWidth = Double(displayText.split(separator: " ").last?.count ?? 2) * 7.6
-            return ceil(mainWidth + suffixWidth + 10)
+            let mainCharacterCount = displayText.filter { $0.isNumber || $0 == ":" }.count
+            let suffixCharacterCount = displayText.filter(\.isLetter).count
+            let mainWidth = Double(mainCharacterCount) * 12.4
+            let suffixWidth = Double(suffixCharacterCount) * 6.8
+            return ceil(mainWidth + suffixWidth + 12)
         }
 
         if let trailingStatusText = row.trailingStatusText {

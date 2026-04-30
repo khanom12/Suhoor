@@ -951,7 +951,7 @@ private struct NextTenMorningsRow: View {
                 .foregroundStyle(display.isInactive ? WakeGlassTheme.primaryText.opacity(0.62) : WakeGlassTheme.primaryText.opacity(0.92))
                 .lineLimit(1)
                 .minimumScaleFactor(0.78)
-                .frame(width: CGFloat(rowMetrics.dateLaneWidth), alignment: .leading)
+                .frame(width: CGFloat(rowMetrics.outerLaneWidth), alignment: .leading)
 
             tagLane
                 .frame(
@@ -959,10 +959,9 @@ private struct NextTenMorningsRow: View {
                     maxWidth: .infinity,
                     alignment: .center
                 )
-                .padding(.horizontal, DesignTokens.spacingS)
 
             trailingLockup
-                .frame(width: CGFloat(rowMetrics.trailingLaneWidth), alignment: .trailing)
+                .frame(width: CGFloat(rowMetrics.outerLaneWidth), alignment: .trailing)
         }
     }
 

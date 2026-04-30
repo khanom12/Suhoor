@@ -1228,6 +1228,28 @@ struct ScheduleServiceExtractionTests {
     }
 
     @Test
+    func nextTenMorningsOpportunityTagsUseResolvedContext() {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let date = Self.makeDate(year: 2026, month: 5, day: 1, timeZone: timeZone)
+        let resolution = NextTenMorningsTagResolver.resolve(
+            NextTenMorningsTagResolverInput(
+                date: date,
+                dateKey: DateHelpers.dayIdentifier(for: date, timeZone: timeZone),
+                resolvedContext: Self.context(primary: .standard, tags: [.whiteDays]),
+                tagResult: Self.tagResult(primary: .other),
+                compatibleOpportunityTags: [],
+                quietModeState: .inactive,
+                shawwalSixProgress: .incomplete,
+                hasDayOverride: false,
+                tahajjudIntended: false
+            )
+        )
+
+        #expect(resolution.visibleTags.map(\.title) == ["Fajr", "White Days"])
+        #expect(resolution.accessibilityTags.map(\.title) == ["Fajr", "White Days"])
+    }
+
+    @Test
     func nextTenMorningsTagCapPreservesAccessibilityTags() {
         let resolution = Self.nextTenTagResolution(
             primary: .voluntary,
@@ -1259,7 +1281,7 @@ struct ScheduleServiceExtractionTests {
         )
         let longRow = Self.nextTenRowDisplay(
             date: date,
-            dateLabel: "Wednesday, May 6",
+            dateLabel: "Wed, May 6",
             trailingTime: Self.makeDate(year: 2026, month: 5, day: 1, hour: 10, minute: 10, timeZone: timeZone),
             trailingStatusText: nil
         )
@@ -1279,10 +1301,15 @@ struct ScheduleServiceExtractionTests {
 
         #expect(metrics.dateLaneWidth > NextTenMorningsRowMetrics.minimumDateLaneWidth)
         #expect(metrics.trailingLaneWidth >= NextTenMorningsRowMetrics.minimumTrailingLaneWidth)
+        #expect(metrics.outerLaneWidth == max(metrics.dateLaneWidth, metrics.trailingLaneWidth))
         #expect(narrowLanes.dateLaneWidth == wideLanes.dateLaneWidth)
         #expect(narrowLanes.trailingLaneWidth == wideLanes.trailingLaneWidth)
+        #expect(narrowLanes.dateLaneWidth == narrowLanes.trailingLaneWidth)
+        #expect(wideLanes.dateLaneWidth == wideLanes.trailingLaneWidth)
         #expect(narrowLanes.tagLaneWidth >= metrics.minimumTagLaneWidth)
-        #expect(wideLanes.tagLaneCenterX > narrowLanes.tagLaneCenterX)
+        #expect(narrowLanes.tagLaneCenterX == 160)
+        #expect(wideLanes.tagLaneCenterX == 210)
+        #expect(narrowLanes.tagLaneWidth >= 132)
     }
 
     @Test
