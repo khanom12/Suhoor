@@ -89,6 +89,12 @@ struct SubhApp: App {
                 .onChange(of: locationService.authorizationStatus) { _, _ in
                     scheduleManager.requestRefresh(reason: .locationUpdated)
                 }
+                .onReceive(NotificationCenter.default.publisher(for: UIApplication.significantTimeChangeNotification)) { _ in
+                    scheduleManager.requestRefresh(reason: .timeChanged)
+                }
+                .onReceive(NotificationCenter.default.publisher(for: .NSSystemTimeZoneDidChange)) { _ in
+                    scheduleManager.requestRefresh(reason: .timeZoneChanged)
+                }
         }
     }
 }

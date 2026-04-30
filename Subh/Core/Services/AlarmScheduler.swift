@@ -3,10 +3,10 @@ import os
 
 @MainActor
 final class AlarmScheduler {
-    private let routineScheduler: RoutineScheduler
+    private let routineScheduler: any RoutineScheduling
     private var lastPlannedEvents: [String: PlannedScheduledEvent] = [:]
 
-    init(routineScheduler: RoutineScheduler) {
+    init(routineScheduler: any RoutineScheduling) {
         self.routineScheduler = routineScheduler
     }
 
@@ -42,6 +42,11 @@ final class AlarmScheduler {
         settings: AppSettings,
         canUseAlarmKit: Bool
     ) async -> Bool {
+        if lastPlannedEvents.values.contains(where: { $0.dayID == day.id }) == false {
+            await routineScheduler.cancelIdentifiers(
+                SchedulingIdentifierSet.forSchedule(day.schedule, events: day.scheduledEvents)
+            )
+        }
         let nextPlans = buildPlannedEvents(
             days: [day],
             settings: settings,
@@ -56,16 +61,9 @@ final class AlarmScheduler {
 
     func cancelDay(day: ActiveAlarmDay) async {
         if lastPlannedEvents.values.contains(where: { $0.dayID == day.id }) == false {
-            for event in day.scheduledEvents {
-                for deliveryKind in event.deliveryKinds {
-                    await routineScheduler.cancelEvent(
-                        identifier: SchedulingIdentifiers.identifier(for: event, deliveryKind: deliveryKind),
-                        event: event,
-                        deliveryKind: deliveryKind,
-                        schedule: day.schedule
-                    )
-                }
-            }
+            await routineScheduler.cancelIdentifiers(
+                SchedulingIdentifierSet.forSchedule(day.schedule, events: day.scheduledEvents)
+            )
             return
         }
         _ = await reconcile(

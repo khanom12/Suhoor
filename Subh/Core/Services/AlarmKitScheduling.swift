@@ -19,4 +19,6 @@ protocol AlarmKitScheduling {
 
     func cancelAllUpcoming(days: Int) async
     func cancel(schedule: DaySchedule, kind: ScheduleEventKind)
+    func cancel(ids: [UUID])
+    func scheduledAlarmDeliveries() -> [ScheduledAlarmDelivery]
 }

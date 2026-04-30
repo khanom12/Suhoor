@@ -6,7 +6,30 @@ import AlarmKit
 #endif
 
 @MainActor
-final class RoutineScheduler {
+protocol RoutineScheduling: AnyObject {
+    func scheduleEvent(
+        identifier: String,
+        event: ScheduledEvent,
+        deliveryKind: ScheduleEventKind,
+        schedule: DaySchedule,
+        settings: AppSettings,
+        canUseAlarmKit: Bool,
+        now: Date
+    ) async -> Bool
+
+    func cancelEvent(
+        identifier: String,
+        event: ScheduledEvent,
+        deliveryKind: ScheduleEventKind,
+        schedule: DaySchedule
+    ) async
+
+    func cancelIdentifiers(_ identifiers: SchedulingIdentifierSet) async
+    func cancelAllUpcoming(days: Int) async
+}
+
+@MainActor
+final class RoutineScheduler: RoutineScheduling {
     private let notificationScheduler: NotificationScheduler
     private let alarmKitScheduler: AlarmKitScheduling?
     private let alarmCoordinator: AlarmCoordinator?
@@ -207,10 +230,11 @@ final class RoutineScheduler {
         schedule: DaySchedule
     ) async {
         if deliveryKind != .iftarNotification {
+            let identifiers = SchedulingIdentifierSet.forEvent(event, deliveryKind: deliveryKind)
             if FeatureFlags.useAlarmCoordinatorForScheduling, #available(iOS 26.0, *), let alarmCoordinator {
-                alarmCoordinator.cancel(id: SchedulingIdentifiers.alarmID(for: event, deliveryKind: deliveryKind))
+                alarmCoordinator.cancel(ids: identifiers.alarmIdentifiers)
             } else if #available(iOS 26.0, *), let alarmKitScheduler {
-                alarmKitScheduler.cancel(schedule: schedule, kind: deliveryKind)
+                alarmKitScheduler.cancel(ids: identifiers.alarmIdentifiers)
             }
         }
         await notificationScheduler.cancelNotifications(identifiers: [identifier])
@@ -268,30 +292,26 @@ final class RoutineScheduler {
 
     func cancelAllUpcoming(days: Int) async {
         eventLog.record(category: "schedule", message: "Cancel all upcoming schedules (days=\(days))")
+        let identifiers = SchedulingIdentifierSet.forUpcoming(days: days)
         if FeatureFlags.useAlarmCoordinatorForScheduling, #available(iOS 26.0, *), let alarmCoordinator {
-            var ids: [UUID] = []
-            let upcoming = upcomingSchedules(days: days)
-            for schedule in upcoming {
-                ids.append(SchedulingIdentifiers.alarmID(for: schedule, kind: .wake))
-                ids.append(SchedulingIdentifiers.alarmID(for: schedule, kind: .reminder))
-                ids.append(SchedulingIdentifiers.alarmID(for: schedule, kind: .boundary))
-                ids.append(SchedulingIdentifiers.alarmID(for: schedule, kind: .iftarAlarm))
-                ids.append(SchedulingIdentifiers.alarmID(for: schedule, kind: .iftarAdhan))
-                ids.append(SchedulingIdentifiers.alarmID(for: eventStub(for: schedule, type: .wakeAlarm), deliveryKind: .wake))
-                ids.append(SchedulingIdentifiers.alarmID(for: eventStub(for: schedule, type: .wakeReminder), deliveryKind: .reminder))
-                ids.append(SchedulingIdentifiers.alarmID(for: eventStub(for: schedule, type: .fajrBoundaryNotice), deliveryKind: .boundary))
-                ids.append(SchedulingIdentifiers.alarmID(for: eventStub(for: schedule, type: .iftarReminder), deliveryKind: .iftarAlarm))
-                ids.append(SchedulingIdentifiers.alarmID(for: eventStub(for: schedule, type: .iftarReminder), deliveryKind: .iftarAdhan))
-                ids.append(SchedulingIdentifiers.legacyAlarmID(for: schedule, kind: .wake))
-                ids.append(SchedulingIdentifiers.legacyAlarmID(for: schedule, kind: .reminder))
-                ids.append(SchedulingIdentifiers.legacyAlarmID(for: schedule, kind: .boundary))
-            }
-            alarmCoordinator.cancel(ids: ids)
+            alarmCoordinator.cancel(ids: identifiers.alarmIdentifiers)
         } else if #available(iOS 26.0, *), let alarmKitScheduler {
-            await alarmKitScheduler.cancelAllUpcoming(days: days)
+            alarmKitScheduler.cancel(ids: identifiers.alarmIdentifiers)
         }
-        await notificationScheduler.cancelNotifications(identifiers: notificationIdentifiers(days: days))
-        await notificationScheduler.cancelNotifications(identifiers: legacyNotificationIdentifiers(days: days))
+        await notificationScheduler.cancelNotifications(identifiers: identifiers.notificationIdentifiers)
+    }
+
+    func cancelIdentifiers(_ identifiers: SchedulingIdentifierSet) async {
+        eventLog.record(
+            category: "schedule",
+            message: "Cancel identifier set notifications=\(identifiers.notificationIdentifiers.count) alarms=\(identifiers.alarmIdentifiers.count)"
+        )
+        if FeatureFlags.useAlarmCoordinatorForScheduling, #available(iOS 26.0, *), let alarmCoordinator {
+            alarmCoordinator.cancel(ids: identifiers.alarmIdentifiers)
+        } else if #available(iOS 26.0, *), let alarmKitScheduler {
+            alarmKitScheduler.cancel(ids: identifiers.alarmIdentifiers)
+        }
+        await notificationScheduler.cancelNotifications(identifiers: identifiers.notificationIdentifiers)
     }
 
     static func isScheduleUpcoming(_ schedule: DaySchedule, settings: AppSettings, now: Date) -> Bool {

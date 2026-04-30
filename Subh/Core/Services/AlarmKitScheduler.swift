@@ -118,31 +118,33 @@ final class AlarmKitScheduler {
     }
 
     func cancelAllUpcoming(days: Int) async {
-        let upcoming = upcomingSchedules(days: days)
-        var ids: [UUID] = []
-        for schedule in upcoming {
-            ids.append(SchedulingIdentifiers.alarmID(for: schedule, kind: .wake))
-            ids.append(SchedulingIdentifiers.alarmID(for: schedule, kind: .reminder))
-            ids.append(SchedulingIdentifiers.alarmID(for: schedule, kind: .boundary))
-            ids.append(SchedulingIdentifiers.alarmID(for: schedule, kind: .iftarAlarm))
-            ids.append(SchedulingIdentifiers.alarmID(for: schedule, kind: .iftarAdhan))
-            ids.append(SchedulingIdentifiers.legacyAlarmID(for: schedule, kind: .wake))
-            ids.append(SchedulingIdentifiers.legacyAlarmID(for: schedule, kind: .reminder))
-            ids.append(SchedulingIdentifiers.legacyAlarmID(for: schedule, kind: .boundary))
-        }
-        cancel(ids: ids)
+        cancel(ids: SchedulingIdentifierSet.forUpcoming(days: days).alarmIdentifiers)
     }
 
     func cancel(schedule: DaySchedule, kind: ScheduleEventKind) {
-        let id = SchedulingIdentifiers.alarmID(for: schedule, kind: kind)
-        try? alarmManager.cancel(id: id)
-        let legacy = SchedulingIdentifiers.legacyAlarmID(for: schedule, kind: kind)
-        try? alarmManager.cancel(id: legacy)
+        let identifiers = SchedulingIdentifierSet.forSchedule(schedule)
+            .alarmIdentifiers
+            .filter {
+                $0 == SchedulingIdentifiers.alarmID(for: schedule, kind: kind)
+                    || $0 == SchedulingIdentifiers.legacyAlarmID(for: schedule, kind: kind)
+                    || $0 == SchedulingIdentifiers.legacyAlarmIDV1(for: schedule, kind: kind)
+            }
+        cancel(ids: identifiers)
     }
 
     func cancel(ids: [UUID]) {
         for id in ids {
             try? alarmManager.cancel(id: id)
+        }
+    }
+
+    func scheduledAlarmDeliveries() -> [ScheduledAlarmDelivery] {
+        guard let alarms = try? alarmManager.alarms else { return [] }
+        return alarms.map { alarm in
+            ScheduledAlarmDelivery(
+                id: alarm.id,
+                fireDate: scheduleInfo(for: alarm.schedule).1
+            )
         }
     }
 

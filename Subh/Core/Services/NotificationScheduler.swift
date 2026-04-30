@@ -139,8 +139,7 @@ final class NotificationScheduler {
     }
 
     func cancelAll() async {
-        let identifiers = upcomingIdentifiers(days: 30) + legacyUpcomingIdentifiers(days: 30)
-        await cancelNotifications(identifiers: identifiers)
+        await cancelNotifications(identifiers: SchedulingIdentifierSet.forUpcoming(days: 30).notificationIdentifiers)
     }
 
     func cancelNotifications(identifiers: [String]) async {
@@ -150,6 +149,12 @@ final class NotificationScheduler {
 
     func pendingRequests() async -> [UNNotificationRequest] {
         await center.pendingNotificationRequests()
+    }
+
+    func pendingDeliveries() async -> [PendingNotificationDelivery] {
+        await center.pendingNotificationRequests().map {
+            PendingNotificationDelivery(request: $0)
+        }
     }
 
     private func addNotificationRequest(

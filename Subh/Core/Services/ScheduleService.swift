@@ -31,6 +31,7 @@ final class ScheduleManager: ObservableObject {
     @Published private(set) var currentMorningHomeSnapshot: MorningHomeSnapshot = .empty
     @Published private(set) var bootstrapState: AppBootstrapState = .welcome
     @Published private(set) var hijriAdjustmentChanges: [HijriAdjustmentChange] = []
+    @Published private(set) var lastDeliveryReconciliationReport: DeliveryReconciliationReport?
 
     private let settingsStore: SuhoorSettingsStore
     private let alarmConfigStore: AlarmConfigStore
@@ -52,6 +53,7 @@ final class ScheduleManager: ObservableObject {
     private let hijriAdjustmentStore: HijriMonthAdjustmentStore
     private let adjustedHijriCalendar: AdjustedHijriCalendar
     private let hijriAdjustmentChangeStore: HijriAdjustmentChangeStore
+    private let alarmDeliveryLedger: AlarmDeliveryLedgerStore
 
     private var alarmKitScheduler: AlarmKitScheduler?
     private let notificationScheduler = NotificationScheduler()
@@ -162,7 +164,8 @@ final class ScheduleManager: ObservableObject {
         hijriAdjustmentStore: HijriMonthAdjustmentStore = HijriMonthAdjustmentStore(),
         hijriAdjustmentChangeStore: HijriAdjustmentChangeStore = HijriAdjustmentChangeStore(),
         cacheStore: ScheduleCacheStore = ScheduleCacheStore(),
-        timeProvider: any TimeProviding = SystemTimeProvider()
+        timeProvider: any TimeProviding = SystemTimeProvider(),
+        alarmDeliveryLedger: AlarmDeliveryLedgerStore? = nil
     ) {
         let resolvedFastTagStore = fastTagStore ?? FastTagStore(loadPersistedData: usesLegacyContexts)
         let resolvedFastLogStore = fastLogStore ?? FastLogStore(loadPersistedData: usesLegacyContexts)
@@ -190,6 +193,7 @@ final class ScheduleManager: ObservableObject {
         self.hijriAdjustmentStore = hijriAdjustmentStore
         self.hijriAdjustmentChangeStore = hijriAdjustmentChangeStore
         self.cacheStore = cacheStore
+        self.alarmDeliveryLedger = alarmDeliveryLedger ?? .shared
         let hijriCalendarService = HijriCalendarService(adjustmentStore: hijriAdjustmentStore)
         let adjustedHijriCalendar = AdjustedHijriCalendar(calendarService: hijriCalendarService)
         self.adjustedHijriCalendar = adjustedHijriCalendar
@@ -513,6 +517,17 @@ final class ScheduleManager: ObservableObject {
     var lastUpdatedText: String {
         guard let date = lastUpdated else { return "--" }
         return TimeFormatters.shortDateTime.string(from: date)
+    }
+
+    var deliveryReconciliationSummaryText: String {
+        lastDeliveryReconciliationReport?.summaryText ?? "Not checked"
+    }
+
+    var deliveryDiagnosticsText: String {
+        [
+            lastDeliveryReconciliationReport?.diagnosticsText ?? "Delivery check: not checked",
+            alarmDeliveryLedger.diagnosticsText()
+        ].joined(separator: "\n")
     }
 
     var usesNotificationFallback: Bool {
@@ -1115,6 +1130,7 @@ final class ScheduleManager: ObservableObject {
             requiresDailyWindow: morningPlanStore.usesDailyActivation
         ) {
             guard usesLegacyContexts else {
+                await reconcileCachedScheduleWindow(reason: reason, now: now)
                 await refreshPermissionSummary()
                 return
             }
@@ -1124,7 +1140,7 @@ final class ScheduleManager: ObservableObject {
                     await refreshPermissionSummary()
                     return
                 }
-                await refreshSchedules(force: true)
+                await refreshSchedules(force: true, reason: reason)
                 return
             }
             let adjustedVisibleDays = monthTagResultProvider.applyShawwalTagResults(
@@ -1222,7 +1238,61 @@ final class ScheduleManager: ObservableObject {
         await refreshSchedules(force: true)
     }
 
-    func refreshSchedules(force: Bool) async {
+    private func reconcileCachedScheduleWindow(
+        reason: ScheduleRefreshReason,
+        now: Date
+    ) async {
+        let settings = settingsStore.settings
+        let mode = await effectiveSchedulingChannel()
+        EventTimelineLog.shared.record(
+            category: "schedule",
+            message: "reconcileCachedScheduleWindow(reason=\(reason.diagnosticLabel))"
+        )
+
+        let reconciliation = await SchedulingReconciler.reconcile(
+            snapshot: activeWindowSnapshot,
+            settings: settings,
+            requestedMode: mode,
+            alarmScheduler: alarmScheduler,
+            cancelAll: { [weak self] in
+                await self?.cancelAll()
+            },
+            blockedMessage: { [weak self] in
+                await self?.schedulingBlockedMessage() ?? "Unable to schedule"
+            }
+        )
+        schedulingMode = reconciliation.schedulingMode
+        statusText = reconciliation.statusText
+        lastUpdated = now
+
+        await runAlarmPipelineDiagnostics(
+            snapshot: activeWindowSnapshot,
+            settings: settings,
+            mode: schedulingMode,
+            schedulingStatus: reconciliation.statusText,
+            now: now,
+            reason: reason.diagnosticLabel
+        )
+
+        settingsStore.update { draft in
+            draft.lastScheduledDate = now
+            draft.lastSchedulingMode = schedulingMode
+        }
+        cacheStore.save(
+            ScheduleCacheStore.Cache(
+                lastScheduledDate: settingsStore.settings.lastScheduledDate,
+                lastUpdated: lastUpdated,
+                schedulingMode: schedulingMode,
+                schedules: schedules,
+                activeWindowSnapshot: activeWindowSnapshot,
+                tagSelectionRevision: activeTagSelectionRevision,
+                wakeRuleSignature: ScheduleCacheStore.wakeRuleSignature(for: alarmConfigStore.defaults),
+                calculationSignature: ScheduleCacheStore.calculationSignature(for: settingsStore.settings)
+            )
+        )
+    }
+
+    func refreshSchedules(force: Bool, reason: ScheduleRefreshReason? = nil) async {
         let token = PerformanceTrace.begin("schedule.refresh", metadata: "force=\(force)")
         defer { PerformanceTrace.end(token) }
         invalidateExpandedMonthSnapshots(reason: "schedule_refresh")
@@ -1330,7 +1400,8 @@ final class ScheduleManager: ObservableObject {
             settings: settings,
             mode: schedulingMode,
             schedulingStatus: reconciliation.statusText,
-            now: refreshCompletedAt
+            now: refreshCompletedAt,
+            reason: reason?.diagnosticLabel ?? "refreshSchedules"
         )
 
         settingsStore.update { draft in
@@ -1364,6 +1435,7 @@ final class ScheduleManager: ObservableObject {
 
         guard activeDayResolver.dateParticipatesInWakePlan(normalizedDate, timeZone: timeZone) else {
             await cancelDay(normalizedDate)
+            recordCancellationLedger(dateKey: key, reason: "day_no_longer_participates", timestamp: timeProvider.now())
             activeWindowSnapshot = activeWindowSnapshot.removing(dateKey: key, generatedAt: timeProvider.now())
             schedules = activeWindowSnapshot.visibleDays.map(\.schedule)
             lastUpdated = timeProvider.now()
@@ -1583,6 +1655,7 @@ final class ScheduleManager: ObservableObject {
         let key = DateHelpers.dayIdentifier(for: day.date, timeZone: .current)
         Logging.diagnostics.debug("[toggle] cancelDay \(key, privacy: .public) via cancelDay()")
         await alarmScheduler.cancelDay(day: day)
+        recordCancellationLedger(dateKey: key, reason: "cancelDay", timestamp: timeProvider.now())
     }
 
     func requestAlarmAuthorization() async -> Bool {
@@ -2254,38 +2327,122 @@ final class ScheduleManager: ObservableObject {
         settings: AppSettings,
         mode: SchedulingMode,
         schedulingStatus: String,
-        now: Date
+        now: Date,
+        reason: String
     ) async {
         let report = AlarmPipelineDiagnostics.report(
             snapshot: snapshot,
             settings: settings,
             mode: mode,
-            now: now
+            now: now,
+            pendingNotifications: await notificationScheduler.pendingDeliveries(),
+            pendingAlarms: pendingAlarmKitDeliveries(for: mode)
         )
+        lastDeliveryReconciliationReport = report.deliveryReport
 
         EventTimelineLog.shared.record(
             category: "schedule-diagnostics",
-            message: "status=\(schedulingStatus) mode=\(mode.rawValue) expectedDeliveries=\(report.expectedDeliveryCount) futureVisibleEvents=\(report.futureVisibleEventCount)"
+            message: "status=\(schedulingStatus) mode=\(mode.rawValue) expectedDeliveries=\(report.expectedDeliveryCount) futureVisibleEvents=\(report.futureVisibleEventCount) deliveryCheck=\(report.deliveryReport.summaryText)"
+        )
+
+        recordAlarmDeliveryLedger(
+            report: report.deliveryReport,
+            schedulingStatus: schedulingStatus,
+            reason: reason,
+            timestamp: now
         )
 
         guard report.shouldWarn else { return }
 
-        Logging.scheduler.error("Alarm pipeline warning: no deliverable future events while scheduling remains enabled.")
+        Logging.scheduler.error("Alarm pipeline warning: \(report.deliveryReport.summaryText)")
         EventTimelineLog.shared.record(
             category: "schedule-diagnostics",
-            message: "warning=no_deliverable_future_events"
+            message: "warning=\(report.warningCode)"
         )
+    }
 
-        guard mode == .notifications else { return }
-        let pendingIDs = Set(await notificationScheduler.pendingRequests().map(\.identifier))
-        let expectedIDs = report.expectedNotificationIdentifiers
-        let missingIDs = expectedIDs.filter { pendingIDs.contains($0) == false }
-        if !missingIDs.isEmpty {
-            EventTimelineLog.shared.record(
-                category: "schedule-diagnostics",
-                message: "warning=missing_pending_notifications count=\(missingIDs.count)"
+    private func pendingAlarmKitDeliveries(for mode: SchedulingMode) -> [ScheduledAlarmDelivery] {
+        guard mode == .alarmKit else { return [] }
+        #if targetEnvironment(simulator)
+        return []
+        #else
+        if #available(iOS 26.0, *), let alarmKitScheduler {
+            return alarmKitScheduler.scheduledAlarmDeliveries()
+        }
+        return []
+        #endif
+    }
+
+    private func recordAlarmDeliveryLedger(
+        report: DeliveryReconciliationReport,
+        schedulingStatus: String,
+        reason: String,
+        timestamp: Date
+    ) {
+        let permissionMode = permissionSummary.isEmpty ? schedulingMode.rawValue : permissionSummary
+        let wakeRuleSignature = ScheduleCacheStore.wakeRuleSignature(for: alarmConfigStore.defaults)
+        let missingNotifications = Set(report.missingNotificationIdentifiers)
+        let mismatchedNotifications = Set(report.mismatchedNotificationIdentifiers)
+        let missingAlarms = Set(report.missingAlarmIdentifiers)
+        let mismatchedAlarms = Set(report.mismatchedAlarmIdentifiers)
+        let summaryEntry = AlarmDeliveryLedgerEntry(
+            timestamp: timestamp,
+            action: .reconciliation,
+            dateKey: nil,
+            eventID: nil,
+            eventType: nil,
+            deliveryKind: nil,
+            fireDate: nil,
+            channel: report.mode.rawValue,
+            platformIdentifier: nil,
+            permissionMode: permissionMode,
+            wakeRuleSignature: wakeRuleSignature,
+            refreshReason: reason,
+            result: report.summaryText,
+            message: "expected=\(report.expectedDeliveryCount) pendingNotifications=\(report.pendingNotificationCount) pendingAlarms=\(report.pendingAlarmCount)"
+        )
+        let entries = [summaryEntry] + report.expectedDeliveries.map { delivery in
+            let platformIdentifier: String
+            let result: String
+            switch delivery.channel {
+            case .notification:
+                platformIdentifier = delivery.notificationIdentifier
+                if missingNotifications.contains(delivery.notificationIdentifier) {
+                    result = "missing_pending"
+                } else if mismatchedNotifications.contains(delivery.notificationIdentifier) {
+                    result = "time_mismatch"
+                } else {
+                    result = schedulingStatus
+                }
+            case .alarmKit:
+                platformIdentifier = delivery.alarmIdentifier.uuidString
+                if missingAlarms.contains(delivery.alarmIdentifier) {
+                    result = "missing_pending"
+                } else if mismatchedAlarms.contains(delivery.alarmIdentifier) {
+                    result = "time_mismatch"
+                } else {
+                    result = schedulingStatus
+                }
+            }
+
+            return AlarmDeliveryLedgerEntry(
+                timestamp: timestamp,
+                action: .scheduleDecision,
+                dateKey: delivery.dateKey,
+                eventID: delivery.eventID,
+                eventType: delivery.eventType.rawValue,
+                deliveryKind: delivery.deliveryKind.rawValue,
+                fireDate: delivery.fireDate,
+                channel: delivery.channel.rawValue,
+                platformIdentifier: platformIdentifier,
+                permissionMode: permissionMode,
+                wakeRuleSignature: wakeRuleSignature,
+                refreshReason: reason,
+                result: result,
+                message: report.hasWarnings ? report.summaryText : nil
             )
         }
+        alarmDeliveryLedger.record(entries)
     }
 
     static func resolveBootstrapState(
@@ -2407,6 +2564,31 @@ final class ScheduleManager: ObservableObject {
     private func cancelAll() async {
         await routineScheduler.cancelAllUpcoming(days: scheduledActiveDayLimit)
         alarmScheduler.resetReconciliationState()
+        recordCancellationLedger(dateKey: nil, reason: "cancelAll", timestamp: timeProvider.now())
+    }
+
+    private func recordCancellationLedger(
+        dateKey: String?,
+        reason: String,
+        timestamp: Date
+    ) {
+        alarmDeliveryLedger.record(
+            AlarmDeliveryLedgerEntry(
+                timestamp: timestamp,
+                action: .cancelDecision,
+                dateKey: dateKey,
+                eventID: nil,
+                eventType: nil,
+                deliveryKind: nil,
+                fireDate: nil,
+                channel: schedulingMode.rawValue,
+                platformIdentifier: nil,
+                permissionMode: permissionSummary.isEmpty ? schedulingMode.rawValue : permissionSummary,
+                wakeRuleSignature: ScheduleCacheStore.wakeRuleSignature(for: alarmConfigStore.defaults),
+                refreshReason: reason,
+                result: "cancelled"
+            )
+        )
     }
 
     private func dayForCancellation(on date: Date) -> ActiveAlarmDay? {
@@ -2639,10 +2821,17 @@ struct ActiveAlarmDay: Codable, Equatable, Identifiable, Sendable {
 struct AlarmPipelineDiagnosticsReport: Equatable {
     let expectedDeliveryCount: Int
     let futureVisibleEventCount: Int
-    let expectedNotificationIdentifiers: [String]
+    let deliveryReport: DeliveryReconciliationReport
 
     var shouldWarn: Bool {
-        expectedDeliveryCount == 0 && futureVisibleEventCount > 0
+        (expectedDeliveryCount == 0 && futureVisibleEventCount > 0) || deliveryReport.hasWarnings
+    }
+
+    var warningCode: String {
+        if deliveryReport.hasWarnings {
+            return "delivery_reconciliation_mismatch"
+        }
+        return "no_deliverable_future_events"
     }
 }
 
@@ -2651,13 +2840,22 @@ enum AlarmPipelineDiagnostics {
         snapshot: ActiveAlarmWindowSnapshot,
         settings: AppSettings,
         mode: SchedulingMode,
-        now: Date
+        now: Date,
+        pendingNotifications: [PendingNotificationDelivery] = [],
+        pendingAlarms: [ScheduledAlarmDelivery] = []
     ) -> AlarmPipelineDiagnosticsReport {
         guard settings.isEnabled, mode != .none else {
+            let deliveryReport = DeliveryReconciliation.report(
+                mode: mode,
+                generatedAt: now,
+                expectedDeliveries: [],
+                pendingNotifications: pendingNotifications,
+                pendingAlarms: pendingAlarms
+            )
             return AlarmPipelineDiagnosticsReport(
                 expectedDeliveryCount: 0,
                 futureVisibleEventCount: 0,
-                expectedNotificationIdentifiers: []
+                deliveryReport: deliveryReport
             )
         }
 
@@ -2665,27 +2863,19 @@ enum AlarmPipelineDiagnostics {
             .flatMap(\.scheduledEvents)
             .filter { $0.fireDate > now }
 
-        let deliverableEvents = snapshot.scheduledDays
-            .flatMap { day in
-                day.scheduledEvents.compactMap { event -> (ScheduledEvent, DaySchedule)? in
-                    event.fireDate > now ? (event, day.schedule) : nil
-                }
-            }
-
-        let expectedNotificationIdentifiers = mode == .notifications
-            ? deliverableEvents.flatMap { event, schedule in
-                event.deliveryKinds.map { kind in
-                    SchedulingIdentifiers.identifier(for: event, deliveryKind: kind)
-                } + event.deliveryKinds.map { kind in
-                    SchedulingIdentifiers.dailyIdentifier(for: schedule, kind: kind)
-                }
-            }
-            : []
+        let deliveryReport = DeliveryReconciliation.report(
+            snapshot: snapshot,
+            settings: settings,
+            mode: mode,
+            now: now,
+            pendingNotifications: pendingNotifications,
+            pendingAlarms: pendingAlarms
+        )
 
         return AlarmPipelineDiagnosticsReport(
-            expectedDeliveryCount: deliverableEvents.reduce(0) { $0 + $1.0.deliveryKinds.count },
+            expectedDeliveryCount: deliveryReport.expectedDeliveryCount,
             futureVisibleEventCount: futureVisibleEvents.count,
-            expectedNotificationIdentifiers: Array(Set(expectedNotificationIdentifiers)).sorted()
+            deliveryReport: deliveryReport
         )
     }
 }

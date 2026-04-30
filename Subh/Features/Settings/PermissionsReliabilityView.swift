@@ -20,6 +20,8 @@ struct PermissionsReliabilityView: View {
                 reliabilityRow(title: "Next scheduled wake", value: nextScheduledWakeText)
                 AppGroupDivider()
                 reliabilityRow(title: "Last schedule update", value: scheduleManager.lastUpdatedText)
+                AppGroupDivider()
+                reliabilityRow(title: "Delivery check", value: scheduleManager.deliveryReconciliationSummaryText)
             }
 
             if scheduleManager.schedulingMode == .notifications {

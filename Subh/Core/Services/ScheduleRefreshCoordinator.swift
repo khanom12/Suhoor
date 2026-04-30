@@ -5,6 +5,8 @@ enum ScheduleRefreshReason: Equatable, Sendable {
     case foreground
     case settingsChanged
     case locationUpdated
+    case timeChanged
+    case timeZoneChanged
     case manual
 }
 
@@ -105,12 +107,31 @@ final class ScheduleRefreshCoordinator {
     }
 }
 
-private extension ScheduleRefreshReason {
+extension ScheduleRefreshReason {
+    var diagnosticLabel: String {
+        switch self {
+        case .appLaunch:
+            return "appLaunch"
+        case .foreground:
+            return "foreground"
+        case .settingsChanged:
+            return "settingsChanged"
+        case .locationUpdated:
+            return "locationUpdated"
+        case .timeChanged:
+            return "timeChanged"
+        case .timeZoneChanged:
+            return "timeZoneChanged"
+        case .manual:
+            return "manual"
+        }
+    }
+
     var isLifecycleRefresh: Bool {
         switch self {
         case .appLaunch, .foreground:
             return true
-        case .settingsChanged, .locationUpdated, .manual:
+        case .settingsChanged, .locationUpdated, .timeChanged, .timeZoneChanged, .manual:
             return false
         }
     }
@@ -123,6 +144,8 @@ private extension ScheduleRefreshReason {
             return 200_000_000
         case .locationUpdated:
             return 100_000_000
+        case .timeChanged, .timeZoneChanged:
+            return 0
         }
     }
 }

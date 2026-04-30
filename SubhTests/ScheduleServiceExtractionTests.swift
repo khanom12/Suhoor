@@ -468,6 +468,145 @@ struct ScheduleServiceExtractionTests {
     }
 
     @Test
+    func scheduleWindowReuseRejectsClockAndTimezoneChanges() {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let now = Self.makeDate(year: 2026, month: 4, day: 29, hour: 12, timeZone: timeZone)
+        let today = DateHelpers.startOfDay(now, in: timeZone)
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let tomorrow = calendar.date(byAdding: .day, value: 1, to: today) ?? today
+        let snapshot = ActiveAlarmWindowSnapshot(
+            generatedAt: now,
+            visibleDays: [
+                Self.makeWakeEntry(date: today, timeZone: timeZone).activeDay,
+                Self.makeWakeEntry(date: tomorrow, timeZone: timeZone).activeDay
+            ],
+            scheduledDays: [],
+            visibleHorizonDays: 60,
+            scheduledHorizonDays: 30
+        )
+
+        #expect(ScheduleManager.shouldReuseScheduleWindow(
+            reason: .timeChanged,
+            lastScheduledDate: now,
+            snapshot: snapshot,
+            now: now,
+            timeZone: timeZone,
+            requiresDailyWindow: true
+        ) == false)
+        #expect(ScheduleManager.shouldReuseScheduleWindow(
+            reason: .timeZoneChanged,
+            lastScheduledDate: now,
+            snapshot: snapshot,
+            now: now,
+            timeZone: timeZone,
+            requiresDailyWindow: true
+        ) == false)
+    }
+
+    @Test
+    func schedulingIdentifierSetIncludesCurrentLegacyAndEventIDs() {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let date = Self.makeDate(year: 2026, month: 5, day: 1, timeZone: timeZone)
+        let schedule = Self.makeSchedule(for: date, timeZone: timeZone)
+
+        let identifiers = SchedulingIdentifierSet.forSchedule(schedule)
+
+        #expect(identifiers.notificationIdentifiers.contains(SchedulingIdentifiers.dailyIdentifier(for: schedule, kind: .wake)))
+        #expect(identifiers.notificationIdentifiers.contains(SchedulingIdentifiers.legacyDailyIdentifier(for: schedule, kind: .wake)))
+        #expect(identifiers.notificationIdentifiers.contains(SchedulingIdentifiers.legacyDailyIdentifierV1(for: schedule, kind: .wake)))
+        #expect(identifiers.notificationIdentifiers.contains("\(schedule.id).wakeAlarm.wake"))
+        #expect(identifiers.alarmIdentifiers.contains(SchedulingIdentifiers.alarmID(for: schedule, kind: .wake)))
+        #expect(identifiers.alarmIdentifiers.contains(SchedulingIdentifiers.legacyAlarmID(for: schedule, kind: .wake)))
+        #expect(identifiers.alarmIdentifiers.contains(SchedulingIdentifiers.legacyAlarmIDV1(for: schedule, kind: .wake)))
+    }
+
+    @Test
+    @MainActor
+    func scheduleDayCancelsStaleIdentifiersWhenNoPriorPlanIsKnown() async {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let activeDay = Self.makeSchedulerActiveDay(
+            date: Self.makeDate(year: 2026, month: 5, day: 1, timeZone: timeZone),
+            timeZone: timeZone
+        )
+        let routineScheduler = RecordingRoutineScheduler()
+        let scheduler = AlarmScheduler(routineScheduler: routineScheduler)
+
+        let scheduled = await scheduler.scheduleDay(
+            day: activeDay,
+            settings: .default,
+            canUseAlarmKit: false
+        )
+
+        #expect(scheduled)
+        #expect(routineScheduler.cancelledIdentifierSets.count == 1)
+        let cancelled = routineScheduler.cancelledIdentifierSets[0]
+        #expect(cancelled.notificationIdentifiers.contains(SchedulingIdentifiers.legacyDailyIdentifierV1(for: activeDay.schedule, kind: .wake)))
+        #expect(cancelled.alarmIdentifiers.contains(SchedulingIdentifiers.legacyAlarmIDV1(for: activeDay.schedule, kind: .wake)))
+        #expect(routineScheduler.scheduledEventIdentifiers == [
+            SchedulingIdentifiers.identifier(for: activeDay.scheduledEvents[0], deliveryKind: .wake)
+        ])
+    }
+
+    @Test
+    func deliveryReconciliationWarnsWhenOneOfSeveralNotificationsIsMissing() {
+        let now = Date()
+        let expected = [
+            Self.expectedDelivery(
+                identifier: "expected.one",
+                alarmIDSeed: "alarm.one",
+                fireDate: now.addingTimeInterval(600),
+                channel: .notification
+            ),
+            Self.expectedDelivery(
+                identifier: "expected.two",
+                alarmIDSeed: "alarm.two",
+                fireDate: now.addingTimeInterval(900),
+                channel: .notification
+            )
+        ]
+
+        let report = DeliveryReconciliation.report(
+            mode: .notifications,
+            generatedAt: now,
+            expectedDeliveries: expected,
+            pendingNotifications: [
+                PendingNotificationDelivery(identifier: "expected.one", fireDate: expected[0].fireDate)
+            ],
+            pendingAlarms: []
+        )
+
+        #expect(report.expectedDeliveryCount == 2)
+        #expect(report.missingNotificationIdentifiers == ["expected.two"])
+        #expect(report.hasWarnings)
+    }
+
+    @Test
+    func deliveryReconciliationWarnsWhenAlarmKitFireDateDiffers() {
+        let now = Date()
+        let alarmID = DateHelpers.stableUUID(from: "alarmkit.expected")
+        let expected = Self.expectedDelivery(
+            identifier: "notification.unused",
+            alarmID: alarmID,
+            fireDate: now.addingTimeInterval(600),
+            channel: .alarmKit
+        )
+
+        let report = DeliveryReconciliation.report(
+            mode: .alarmKit,
+            generatedAt: now,
+            expectedDeliveries: [expected],
+            pendingNotifications: [],
+            pendingAlarms: [
+                ScheduledAlarmDelivery(id: alarmID, fireDate: expected.fireDate.addingTimeInterval(180))
+            ]
+        )
+
+        #expect(report.mismatchedAlarmIdentifiers == [alarmID])
+        #expect(report.hasWarnings)
+    }
+
+    @Test
     @MainActor
     func scheduleManagerRejectsCachedFebruaryRamadanWindowOnInitialization() throws {
         let suiteName = "ScheduleServiceExtractionTests.StaleRamadanCache"
@@ -1561,6 +1700,110 @@ struct ScheduleServiceExtractionTests {
         #expect(snapBackDateKeys == visibleDateKeys)
         #expect(snapBackSnapshot.summary.primaryText == focusedSnapshot.summary.primaryText)
         #expect(snapBackSnapshot.summary.secondaryText == focusedSnapshot.summary.secondaryText)
+    }
+
+    @MainActor
+    private final class RecordingRoutineScheduler: RoutineScheduling {
+        var cancelledIdentifierSets: [SchedulingIdentifierSet] = []
+        var scheduledEventIdentifiers: [String] = []
+        var cancelledEventIdentifiers: [String] = []
+        var cancelAllUpcomingDays: [Int] = []
+
+        func scheduleEvent(
+            identifier: String,
+            event: ScheduledEvent,
+            deliveryKind: ScheduleEventKind,
+            schedule: DaySchedule,
+            settings: AppSettings,
+            canUseAlarmKit: Bool,
+            now: Date
+        ) async -> Bool {
+            scheduledEventIdentifiers.append(identifier)
+            return true
+        }
+
+        func cancelEvent(
+            identifier: String,
+            event: ScheduledEvent,
+            deliveryKind: ScheduleEventKind,
+            schedule: DaySchedule
+        ) async {
+            cancelledEventIdentifiers.append(identifier)
+        }
+
+        func cancelIdentifiers(_ identifiers: SchedulingIdentifierSet) async {
+            cancelledIdentifierSets.append(identifiers)
+        }
+
+        func cancelAllUpcoming(days: Int) async {
+            cancelAllUpcomingDays.append(days)
+        }
+    }
+
+    private static func makeSchedulerActiveDay(date: Date, timeZone: TimeZone) -> ActiveAlarmDay {
+        let activeDay = makeWakeEntry(date: date, timeZone: timeZone).activeDay
+        let event = ScheduledEvent(
+            id: "\(activeDay.dateKey).wakeAlarm",
+            type: .wakeAlarm,
+            dateKey: activeDay.dateKey,
+            fireDate: activeDay.schedule.wakeDate,
+            relativeTo: .wakeAnchor(type: .fajrEnd, offsetMinutes: -30),
+            isUserVisible: true,
+            affectsCompletion: true,
+            deliveryKinds: [.wake],
+            soundRole: .inFajrWake,
+            wakeSessionID: "\(activeDay.dateKey).wake-session",
+            wakeSessionRole: .primaryWake
+        )
+
+        return ActiveAlarmDay(
+            date: activeDay.date,
+            dateKey: activeDay.dateKey,
+            schedule: activeDay.schedule,
+            effectiveConfig: activeDay.effectiveConfig,
+            provenances: activeDay.provenances,
+            isImplicitRamadan: activeDay.isImplicitRamadan,
+            isExplicitOneOff: activeDay.isExplicitOneOff,
+            tagResult: activeDay.tagResult,
+            primaryDisplay: activeDay.primaryDisplay,
+            sourceSummaryText: activeDay.sourceSummaryText,
+            resolvedDayContext: activeDay.resolvedDayContext,
+            scheduledEvents: [event],
+            decisionLog: activeDay.decisionLog,
+            dailyCompletion: activeDay.dailyCompletion
+        )
+    }
+
+    private static func expectedDelivery(
+        identifier: String,
+        alarmIDSeed: String,
+        fireDate: Date,
+        channel: AlarmDeliveryChannel
+    ) -> ExpectedAlarmDelivery {
+        expectedDelivery(
+            identifier: identifier,
+            alarmID: DateHelpers.stableUUID(from: alarmIDSeed),
+            fireDate: fireDate,
+            channel: channel
+        )
+    }
+
+    private static func expectedDelivery(
+        identifier: String,
+        alarmID: UUID,
+        fireDate: Date,
+        channel: AlarmDeliveryChannel
+    ) -> ExpectedAlarmDelivery {
+        ExpectedAlarmDelivery(
+            dateKey: "2026-05-01",
+            eventID: "2026-05-01.wakeAlarm",
+            eventType: .wakeAlarm,
+            deliveryKind: .wake,
+            fireDate: fireDate,
+            channel: channel,
+            notificationIdentifier: identifier,
+            alarmIdentifier: alarmID
+        )
     }
 
     private static func makeDate(

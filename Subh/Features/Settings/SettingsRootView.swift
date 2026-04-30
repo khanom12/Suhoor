@@ -255,6 +255,8 @@ struct SettingsRootView: View {
         - Time Zone: \(timeZone)
         - Locale: \(locale)
         - Permissions: \(scheduleManager.permissionSummary)
+
+        \(scheduleManager.deliveryDiagnosticsText)
         """
     }
 
@@ -263,7 +265,8 @@ struct SettingsRootView: View {
             "Wake delivery: \(wakeDeliveryModeText)",
             "Notifications: \(notificationPermissionText)",
             "Next scheduled wake: \(nextScheduledWakeText)",
-            "Last schedule update: \(scheduleManager.lastUpdatedText)"
+            "Last schedule update: \(scheduleManager.lastUpdatedText)",
+            "Delivery check: \(scheduleManager.deliveryReconciliationSummaryText)"
         ].joined(separator: "\n")
     }
 
