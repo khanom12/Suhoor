@@ -174,21 +174,21 @@ struct WeeklyFajrcastCard: View {
     private var footerBottomPadding: CGFloat {
         if dynamicTypeSize.isAccessibilitySize {
             let scaledFooterLineHeight = layoutProfile.scaled(base: 13) * 1.22
-            return max(12, 0.55 * scaledFooterLineHeight)
+            return max(22, 0.75 * scaledFooterLineHeight)
         }
 
         switch dynamicTypeSize {
         case .xSmall, .small, .medium:
-            return 8
+            return 16
         case .large:
-            return 10
+            return 20
         case .xLarge, .xxLarge, .xxxLarge:
-            return 12
+            return 22
         case .accessibility1, .accessibility2, .accessibility3, .accessibility4, .accessibility5:
             let scaledFooterLineHeight = layoutProfile.scaled(base: 13) * 1.22
-            return max(12, 0.55 * scaledFooterLineHeight)
+            return max(22, 0.75 * scaledFooterLineHeight)
         @unknown default:
-            return 10
+            return 20
         }
     }
 
@@ -347,19 +347,19 @@ private struct WeeklyFajrcastCardLayoutProfile {
     init(dynamicTypeSize: DynamicTypeSize) {
         switch dynamicTypeSize {
         case .xSmall:
-            self.init(textScale: 0.88, minimumCardHeight: 260)
+            self.init(textScale: 0.88, minimumCardHeight: 266)
         case .small:
-            self.init(textScale: 0.94, minimumCardHeight: 262)
+            self.init(textScale: 0.94, minimumCardHeight: 268)
         case .medium:
-            self.init(textScale: 0.98, minimumCardHeight: 264)
+            self.init(textScale: 0.98, minimumCardHeight: 270)
         case .large:
-            self.init(textScale: 1.0, minimumCardHeight: 266)
+            self.init(textScale: 1.0, minimumCardHeight: 272)
         case .xLarge:
-            self.init(textScale: 1.08, minimumCardHeight: 278)
+            self.init(textScale: 1.08, minimumCardHeight: 284)
         case .xxLarge:
-            self.init(textScale: 1.17, minimumCardHeight: 290)
+            self.init(textScale: 1.17, minimumCardHeight: 296)
         case .xxxLarge:
-            self.init(textScale: 1.28, minimumCardHeight: 304)
+            self.init(textScale: 1.28, minimumCardHeight: 310)
         case .accessibility1:
             self.init(textScale: 1.38, minimumCardHeight: 328)
         case .accessibility2:
@@ -371,7 +371,7 @@ private struct WeeklyFajrcastCardLayoutProfile {
         case .accessibility5:
             self.init(textScale: 1.84, minimumCardHeight: 440)
         @unknown default:
-            self.init(textScale: 1.0, minimumCardHeight: 266)
+            self.init(textScale: 1.0, minimumCardHeight: 272)
         }
     }
 

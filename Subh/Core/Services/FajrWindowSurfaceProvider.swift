@@ -543,8 +543,8 @@ struct FajrWindowSurfaceProvider {
         }
 
         return FajrWindowCompactSummarySnapshot(
-            primaryText: compactWeekAlarmSummaryLine(for: rows),
-            secondaryText: compactWeekFastingSummaryLine(for: rows, timeZone: timeZone)
+            primaryText: compactWeekFajrTrendLine(for: rows),
+            secondaryText: compactSpecialFastingOpportunityLine(for: rows, timeZone: timeZone)
         )
     }
 
@@ -674,75 +674,95 @@ struct FajrWindowSurfaceProvider {
         return point.longLabel.components(separatedBy: ",").first ?? point.longLabel
     }
 
-    private func compactWeekAlarmSummaryLine(for rows: [FajrWindowDatasetRow]) -> String {
-        let adjustedCount = rows.filter { $0.isOverride || $0.isSkipped }.count
-        if adjustedCount > 0 {
-            return adjustedCount == 1
-                ? "This week includes 1 adjusted wake morning."
-                : "This week includes \(adjustedCount) adjusted wake mornings."
+    private func compactWeekFajrTrendLine(for rows: [FajrWindowDatasetRow]) -> String {
+        let visibleRows = rows.sorted { $0.date < $1.date }
+        guard let first = visibleRows.first, let last = visibleRows.last else {
+            return "Fajr trend will appear once times are available."
         }
 
-        let activeRows = rows.filter { !$0.isSkipped }
-        guard !activeRows.isEmpty else {
-            return "No wake alarms are set for this week."
+        let delta = last.fajrStartMinutes - first.fajrStartMinutes
+        let absoluteDelta = abs(delta)
+        guard absoluteDelta >= 2 else {
+            return "Fajr begins around the same time this week."
         }
 
-        let relationCounts = Dictionary(grouping: activeRows, by: \.relationText)
-            .mapValues(\.count)
-        if let commonRelation = relationCounts.max(by: { $0.value < $1.value })?.key {
-            return "Default alarm: \(compactDefaultAlarmRelation(commonRelation))."
+        let minuteUnit = absoluteDelta == 1 ? "minute" : "minutes"
+        if delta < 0 {
+            return "Fajr begins \(absoluteDelta) \(minuteUnit) earlier by week’s end."
         }
 
-        return "This week includes mixed wake settings."
+        return "Fajr begins \(absoluteDelta) \(minuteUnit) later by week’s end."
     }
 
-    private func compactDefaultAlarmRelation(_ relationText: String) -> String {
-        if relationText == "Fixed wake" {
-            return "fixed wake time"
-        }
-
-        if relationText == "At Fajr" {
-            return "at Fajr begins"
-        }
-
-        if relationText == "At Fajr ends" {
-            return "at Fajr ends"
-        }
-
-        var normalized = relationText
-            .replacingOccurrences(of: " minutes ", with: " min ")
-            .replacingOccurrences(of: " minute ", with: " min ")
-
-        if normalized.hasSuffix(" before Fajr") {
-            normalized = normalized.replacingOccurrences(of: " before Fajr", with: " before Fajr begins")
-        } else if normalized.hasSuffix(" after Fajr") {
-            normalized = normalized.replacingOccurrences(of: " after Fajr", with: " after Fajr begins")
-        }
-
-        return normalized.lowercasedFirstCharacter()
-    }
-
-    private func compactWeekFastingSummaryLine(
+    private func compactSpecialFastingOpportunityLine(
         for rows: [FajrWindowDatasetRow],
         timeZone: TimeZone
     ) -> String? {
-        let fastingRows = rows.filter(isNonRamadanFastingIntention)
-        if !fastingRows.isEmpty {
-            if fastingRows.count <= 2 {
-                return "Fasting planned on \(compactWeekdayList(for: fastingRows, timeZone: timeZone))."
+        let candidates = rows
+            .filter { !isRamadanContext($0) }
+            .compactMap { row -> CompactSpecialFastingOpportunity? in
+                compactSpecialFastingOpportunity(for: row)
             }
-            return "Fasting planned on \(fastingRows.count) days this week."
-        }
+            .sorted { lhs, rhs in
+                if lhs.priority == rhs.priority {
+                    return lhs.row.date < rhs.row.date
+                }
+                return lhs.priority < rhs.priority
+            }
 
-        if rows.contains(where: isRamadanContext) {
+        guard let first = candidates.first else {
             return nil
         }
 
-        return "No fasting days are planned this week."
+        let matching = candidates.filter { $0.name == first.name }
+        let plannedCount = matching.filter(\.isPlanned).count
+        if first.name == "Dhul Hijjah days", matching.count > 1 {
+            if plannedCount > 0 {
+                return "Fasting planned on \(plannedCount) special days this week."
+            }
+            return "Fasting opportunity: Dhul Hijjah days this week."
+        }
+
+        let weekday = compactWeekdayList(for: [first.row], timeZone: timeZone)
+        if first.isPlanned {
+            return "Fasting planned: \(first.name) on \(weekday)."
+        }
+
+        return "Fasting opportunity: \(first.name) on \(weekday)."
     }
 
-    private func isNonRamadanFastingIntention(_ row: FajrWindowDatasetRow) -> Bool {
-        row.isFastingContext && !isRamadanContext(row)
+    private func compactSpecialFastingOpportunity(
+        for row: FajrWindowDatasetRow
+    ) -> CompactSpecialFastingOpportunity? {
+        let normalizedTags = row.contextTags.map { $0.lowercased() }
+        if normalizedTags.contains(where: { $0.contains("arafah") }) {
+            return CompactSpecialFastingOpportunity(
+                row: row,
+                name: "Arafah",
+                isPlanned: row.isFastingContext,
+                priority: 0
+            )
+        }
+
+        if normalizedTags.contains(where: { $0.contains("ashura") }) {
+            return CompactSpecialFastingOpportunity(
+                row: row,
+                name: "Ashura",
+                isPlanned: row.isFastingContext,
+                priority: 1
+            )
+        }
+
+        if normalizedTags.contains(where: { $0.contains("dhul hijjah") || $0.contains("dhulhijjah") }) {
+            return CompactSpecialFastingOpportunity(
+                row: row,
+                name: "Dhul Hijjah days",
+                isPlanned: row.isFastingContext,
+                priority: 2
+            )
+        }
+
+        return nil
     }
 
     private func isRamadanContext(_ row: FajrWindowDatasetRow) -> Bool {
@@ -1234,11 +1254,11 @@ private enum CompactFajrWindowState {
     case completed
 }
 
-private extension String {
-    func lowercasedFirstCharacter() -> String {
-        guard let first else { return self }
-        return String(first).lowercased() + dropFirst()
-    }
+private struct CompactSpecialFastingOpportunity {
+    let row: FajrWindowDatasetRow
+    let name: String
+    let isPlanned: Bool
+    let priority: Int
 }
 
 private struct LabelFormatterBundle {

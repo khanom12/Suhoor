@@ -1145,31 +1145,31 @@ private struct CompactFajrcastChartLayoutProfile {
     init(dynamicTypeSize: DynamicTypeSize) {
         switch dynamicTypeSize {
         case .xSmall:
-            self.init(textScale: 0.88, minimumChartHeight: 184, minimumRailWidth: 40, staticPlotScaleHeight: 128, topAxisSpacing: 6, xAxisToPlotSpacing: 3, plotToCalloutSpacing: 4, bottomCalloutSpacing: 8)
+            self.init(textScale: 0.88, minimumChartHeight: 184, minimumRailWidth: 40, staticPlotScaleHeight: 128, topAxisSpacing: 6, xAxisToPlotSpacing: 3, plotToCalloutSpacing: 4, bottomCalloutSpacing: 4)
         case .small:
-            self.init(textScale: 0.94, minimumChartHeight: 184, minimumRailWidth: 42, staticPlotScaleHeight: 128, topAxisSpacing: 6, xAxisToPlotSpacing: 3, plotToCalloutSpacing: 4, bottomCalloutSpacing: 8)
+            self.init(textScale: 0.94, minimumChartHeight: 184, minimumRailWidth: 42, staticPlotScaleHeight: 128, topAxisSpacing: 6, xAxisToPlotSpacing: 3, plotToCalloutSpacing: 4, bottomCalloutSpacing: 4)
         case .medium:
-            self.init(textScale: 0.98, minimumChartHeight: 186, minimumRailWidth: 44, staticPlotScaleHeight: 128, topAxisSpacing: 6, xAxisToPlotSpacing: 3, plotToCalloutSpacing: 4, bottomCalloutSpacing: 8)
+            self.init(textScale: 0.98, minimumChartHeight: 186, minimumRailWidth: 44, staticPlotScaleHeight: 128, topAxisSpacing: 6, xAxisToPlotSpacing: 3, plotToCalloutSpacing: 4, bottomCalloutSpacing: 4)
         case .large:
-            self.init(textScale: 1.0, minimumChartHeight: 188, minimumRailWidth: 46, staticPlotScaleHeight: 128, topAxisSpacing: 8, xAxisToPlotSpacing: 4, plotToCalloutSpacing: 5, bottomCalloutSpacing: 10)
+            self.init(textScale: 1.0, minimumChartHeight: 188, minimumRailWidth: 46, staticPlotScaleHeight: 128, topAxisSpacing: 8, xAxisToPlotSpacing: 4, plotToCalloutSpacing: 5, bottomCalloutSpacing: 5)
         case .xLarge:
-            self.init(textScale: 1.08, minimumChartHeight: 194, minimumRailWidth: 52, staticPlotScaleHeight: 128, topAxisSpacing: 9, xAxisToPlotSpacing: 5, plotToCalloutSpacing: 6, bottomCalloutSpacing: 12)
+            self.init(textScale: 1.08, minimumChartHeight: 194, minimumRailWidth: 52, staticPlotScaleHeight: 128, topAxisSpacing: 9, xAxisToPlotSpacing: 5, plotToCalloutSpacing: 6, bottomCalloutSpacing: 6)
         case .xxLarge:
-            self.init(textScale: 1.17, minimumChartHeight: 202, minimumRailWidth: 58, staticPlotScaleHeight: 128, topAxisSpacing: 9, xAxisToPlotSpacing: 5, plotToCalloutSpacing: 6, bottomCalloutSpacing: 12)
+            self.init(textScale: 1.17, minimumChartHeight: 202, minimumRailWidth: 58, staticPlotScaleHeight: 128, topAxisSpacing: 9, xAxisToPlotSpacing: 5, plotToCalloutSpacing: 6, bottomCalloutSpacing: 6)
         case .xxxLarge:
-            self.init(textScale: 1.28, minimumChartHeight: 210, minimumRailWidth: 64, staticPlotScaleHeight: 128, topAxisSpacing: 9, xAxisToPlotSpacing: 5, plotToCalloutSpacing: 6, bottomCalloutSpacing: 12)
+            self.init(textScale: 1.28, minimumChartHeight: 210, minimumRailWidth: 64, staticPlotScaleHeight: 128, topAxisSpacing: 9, xAxisToPlotSpacing: 5, plotToCalloutSpacing: 6, bottomCalloutSpacing: 6)
         case .accessibility1:
-            self.init(textScale: 1.38, minimumChartHeight: 224, minimumRailWidth: 72, staticPlotScaleHeight: 136, topAxisSpacing: 9, xAxisToPlotSpacing: 5, plotToCalloutSpacing: 6, bottomCalloutSpacing: 12)
+            self.init(textScale: 1.38, minimumChartHeight: 224, minimumRailWidth: 72, staticPlotScaleHeight: 136, topAxisSpacing: 9, xAxisToPlotSpacing: 5, plotToCalloutSpacing: 6, bottomCalloutSpacing: 6)
         case .accessibility2:
-            self.init(textScale: 1.48, minimumChartHeight: 240, minimumRailWidth: 80, staticPlotScaleHeight: 144, topAxisSpacing: 9, xAxisToPlotSpacing: 5, plotToCalloutSpacing: 6, bottomCalloutSpacing: 12)
+            self.init(textScale: 1.48, minimumChartHeight: 240, minimumRailWidth: 80, staticPlotScaleHeight: 144, topAxisSpacing: 9, xAxisToPlotSpacing: 5, plotToCalloutSpacing: 6, bottomCalloutSpacing: 6)
         case .accessibility3:
-            self.init(textScale: 1.60, minimumChartHeight: 258, minimumRailWidth: 88, staticPlotScaleHeight: 152, topAxisSpacing: 9, xAxisToPlotSpacing: 5, plotToCalloutSpacing: 6, bottomCalloutSpacing: 12)
+            self.init(textScale: 1.60, minimumChartHeight: 258, minimumRailWidth: 88, staticPlotScaleHeight: 152, topAxisSpacing: 9, xAxisToPlotSpacing: 5, plotToCalloutSpacing: 6, bottomCalloutSpacing: 6)
         case .accessibility4:
-            self.init(textScale: 1.72, minimumChartHeight: 276, minimumRailWidth: 96, staticPlotScaleHeight: 160, topAxisSpacing: 9, xAxisToPlotSpacing: 5, plotToCalloutSpacing: 6, bottomCalloutSpacing: 12)
+            self.init(textScale: 1.72, minimumChartHeight: 276, minimumRailWidth: 96, staticPlotScaleHeight: 160, topAxisSpacing: 9, xAxisToPlotSpacing: 5, plotToCalloutSpacing: 6, bottomCalloutSpacing: 6)
         case .accessibility5:
-            self.init(textScale: 1.84, minimumChartHeight: 294, minimumRailWidth: 104, staticPlotScaleHeight: 168, topAxisSpacing: 9, xAxisToPlotSpacing: 5, plotToCalloutSpacing: 6, bottomCalloutSpacing: 12)
+            self.init(textScale: 1.84, minimumChartHeight: 294, minimumRailWidth: 104, staticPlotScaleHeight: 168, topAxisSpacing: 9, xAxisToPlotSpacing: 5, plotToCalloutSpacing: 6, bottomCalloutSpacing: 6)
         @unknown default:
-            self.init(textScale: 1.0, minimumChartHeight: 188, minimumRailWidth: 46, staticPlotScaleHeight: 128, topAxisSpacing: 8, xAxisToPlotSpacing: 4, plotToCalloutSpacing: 5, bottomCalloutSpacing: 10)
+            self.init(textScale: 1.0, minimumChartHeight: 188, minimumRailWidth: 46, staticPlotScaleHeight: 128, topAxisSpacing: 8, xAxisToPlotSpacing: 4, plotToCalloutSpacing: 5, bottomCalloutSpacing: 5)
         }
     }
 
@@ -1214,7 +1214,7 @@ private struct CompactFajrcastChartLayoutProfile {
     }
 
     var resolvedBottomCalloutSpacing: CGFloat {
-        textScale >= 1.38 ? max(bottomCalloutSpacing, compactCalloutTimeLineHeight * 0.55) : bottomCalloutSpacing
+        textScale >= 1.38 ? max(bottomCalloutSpacing, compactCalloutTimeLineHeight * 0.28) : bottomCalloutSpacing
     }
 
     var resolvedChartHeight: CGFloat {
