@@ -191,8 +191,86 @@ struct SubhHomeView: View {
     }
 }
 
+private enum MorningHeroModeTransitionDirection: Equatable {
+    case earlier
+    case later
+    case toQuiet
+    case fromQuiet
+    case crossfade
+
+    init(from: QuickWakeMode?, to: QuickWakeMode) {
+        switch (from, to) {
+        case (.some(.fajr), .fast):
+            self = .earlier
+        case (.some(.fast), .fajr):
+            self = .later
+        case (_, .quiet):
+            self = .toQuiet
+        case (.some(.quiet), .fast), (.some(.quiet), .fajr):
+            self = .fromQuiet
+        default:
+            self = .crossfade
+        }
+    }
+
+    var relationEdge: Edge {
+        switch self {
+        case .earlier:
+            return .leading
+        case .later:
+            return .trailing
+        case .toQuiet, .fromQuiet, .crossfade:
+            return .bottom
+        }
+    }
+
+    var markerInsertionEdge: Edge {
+        switch self {
+        case .earlier:
+            return .trailing
+        case .later:
+            return .leading
+        case .fromQuiet:
+            return .bottom
+        case .toQuiet, .crossfade:
+            return .bottom
+        }
+    }
+
+    var markerRemovalEdge: Edge {
+        switch self {
+        case .earlier:
+            return .leading
+        case .later:
+            return .trailing
+        case .toQuiet:
+            return .bottom
+        case .fromQuiet, .crossfade:
+            return .bottom
+        }
+    }
+
+    var rangeTransition: AnyTransition {
+        switch self {
+        case .earlier:
+            return .asymmetric(
+                insertion: .move(edge: .trailing).combined(with: .opacity),
+                removal: .move(edge: .leading).combined(with: .opacity)
+            )
+        case .later:
+            return .asymmetric(
+                insertion: .move(edge: .leading).combined(with: .opacity),
+                removal: .move(edge: .trailing).combined(with: .opacity)
+            )
+        case .toQuiet, .fromQuiet, .crossfade:
+            return .opacity
+        }
+    }
+}
+
 private struct TomorrowMorningHero: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     let entry: WakeRowEntry?
     let permissionSummary: String
@@ -206,6 +284,9 @@ private struct TomorrowMorningHero: View {
     @State private var tentativeWakeTime: Date?
     @State private var isCommittingWakeAdjustment = false
     @State private var isSelectingWakeMode = false
+    @State private var lastResolvedQuickMode: QuickWakeMode?
+    @State private var modeTransitionDirection: MorningHeroModeTransitionDirection = .crossfade
+    @Namespace private var quickSelectorHighlight
 
     var body: some View {
         let baseDisplay = MorningHomePresentation.heroDisplay(
@@ -219,6 +300,20 @@ private struct TomorrowMorningHero: View {
             MorningHomePresentation.heroDisplay(adjusting: baseDisplay, tentativeWakeTime: $0)
         } ?? baseDisplay
         let metrics = MorningHeroMetrics(dynamicTypeSize: dynamicTypeSize)
+        let modeAnimation = heroModeAnimation
+        let primaryTransitionKey = [
+            display.selectedQuickWakeMode?.rawValue ?? display.wakeState.rawValue,
+            display.wakeState.rawValue
+        ].joined(separator: "-")
+        let rangeTransitionKey = [
+            display.selectedQuickWakeMode?.rawValue ?? "none",
+            display.fajrWindowVisualMode.rawValue
+        ].joined(separator: "-")
+        let relationTransitionKey = [
+            display.selectedQuickWakeMode?.rawValue ?? "none",
+            display.fajrWindowVisualMode.rawValue,
+            display.relationTone.rawValue
+        ].joined(separator: "-")
 
         VStack(alignment: .center, spacing: 0) {
             locationLine(display: display, metrics: metrics)
@@ -232,10 +327,18 @@ private struct TomorrowMorningHero: View {
                 .accessibilityIdentifier(MorningHeroUIIdentifier.relativeDay)
 
             primaryWakeRow(display: display, metrics: metrics)
+                .id(primaryTransitionKey)
+                .transition(primaryRowTransition)
+                .animation(modeAnimation, value: primaryTransitionKey)
                 .padding(.top, metrics.relativeToPrimaryGap)
 
             if display.fajrWindowVisualMode.rendersRange {
-                FajrWindowRangeVisual(display: display, metrics: metrics)
+                FajrWindowRangeVisual(
+                    display: display,
+                    metrics: metrics,
+                    transitionDirection: modeTransitionDirection,
+                    reduceMotion: reduceMotion
+                )
                     .onWakeAdjustmentChanged { wakeTime in
                         tentativeWakeTime = wakeTime
                     }
@@ -245,6 +348,9 @@ private struct TomorrowMorningHero: View {
                     .heroWakeAdjustmentAccessibility(display: display) { direction in
                         adjustWakeAccessibility(display: display, direction: direction)
                     }
+                    .id(rangeTransitionKey)
+                    .transition(rangeTransition)
+                    .animation(modeAnimation, value: rangeTransitionKey)
                     .padding(.top, metrics.primaryToWindowGap)
             }
 
@@ -256,11 +362,16 @@ private struct TomorrowMorningHero: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.top, display.fajrWindowVisualMode.rendersRange ? metrics.windowToRelationGap : metrics.primaryToRelationGap)
                 .accessibilityIdentifier(MorningHeroUIIdentifier.relation)
+                .id(relationTransitionKey)
+                .transition(relationTransition)
+                .animation(modeAnimation, value: relationTransitionKey)
 
             if !display.quickWakeModeOptions.isEmpty {
                 MorningHeroQuickWakeModeSelector(
                     options: display.quickWakeModeOptions,
                     metrics: metrics,
+                    highlightNamespace: quickSelectorHighlight,
+                    reduceMotion: reduceMotion,
                     isDisabled: isSelectingWakeMode || isCommittingWakeAdjustment
                 ) { mode in
                     selectWakeMode(mode)
@@ -288,10 +399,41 @@ private struct TomorrowMorningHero: View {
                 tentativeWakeTime = nil
             }
         }
+        .onAppear {
+            lastResolvedQuickMode = display.selectedQuickWakeMode
+        }
+        .onChange(of: display.selectedQuickWakeMode) { oldMode, newMode in
+            guard let newMode, oldMode != newMode else { return }
+            let fromMode = lastResolvedQuickMode ?? oldMode
+            modeTransitionDirection = MorningHeroModeTransitionDirection(from: fromMode, to: newMode)
+            lastResolvedQuickMode = newMode
+        }
         .accessibilityElement(children: .contain)
         .accessibilityAddTraits(entry == nil ? [] : .isButton)
         .accessibilityLabel(display.accessibilityLabel)
         .accessibilityHint(entry == nil ? "" : "Double-tap for details.")
+    }
+
+    private var heroModeAnimation: Animation {
+        reduceMotion
+            ? .easeOut(duration: 0.12)
+            : .easeInOut(duration: 0.34)
+    }
+
+    private var primaryRowTransition: AnyTransition {
+        reduceMotion
+            ? .opacity
+            : .opacity.combined(with: .scale(scale: 0.985, anchor: .center))
+    }
+
+    private var relationTransition: AnyTransition {
+        reduceMotion
+            ? .opacity
+            : .opacity.combined(with: .move(edge: modeTransitionDirection.relationEdge))
+    }
+
+    private var rangeTransition: AnyTransition {
+        reduceMotion ? .opacity : modeTransitionDirection.rangeTransition
     }
 
     private func relationForegroundStyle(for tone: MorningHeroRelationTone) -> Color {
@@ -346,6 +488,7 @@ private struct TomorrowMorningHero: View {
                 SubhHomeHeroTimeLockup(date: primaryTime, pointSize: metrics.wakeTimeSize)
             }
             .frame(maxWidth: .infinity, alignment: .center)
+            .frame(minHeight: metrics.primaryRowHeight)
             .lineLimit(1)
             .minimumScaleFactor(0.84)
             .accessibilityElement(children: .ignore)
@@ -368,6 +511,7 @@ private struct TomorrowMorningHero: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             .frame(maxWidth: .infinity, alignment: .center)
+            .frame(minHeight: metrics.primaryRowHeight)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(display.primaryText)
             .accessibilityIdentifier(MorningHeroUIIdentifier.primaryWakeTime)
@@ -389,12 +533,16 @@ private struct TomorrowMorningHero: View {
 
     private func selectWakeMode(_ mode: QuickWakeMode) {
         guard let date = entry?.schedule.date else { return }
-        isSelectingWakeMode = true
-        tentativeWakeTime = nil
+        withAnimation(heroModeAnimation) {
+            isSelectingWakeMode = true
+            tentativeWakeTime = nil
+        }
         Task {
             _ = await onSelectWakeMode(date, mode)
             await MainActor.run {
-                isSelectingWakeMode = false
+                withAnimation(heroModeAnimation) {
+                    isSelectingWakeMode = false
+                }
             }
         }
     }
@@ -512,6 +660,7 @@ private struct MorningHeroMetrics {
     var wakeTimeSize: CGFloat { 68 * scale }
     var wakeStateSize: CGFloat { 44 * scale }
     var fajrWindowSize: CGFloat { 15 * scale }
+    var primaryRowHeight: CGFloat { max(wakeTimeSize * 1.08, wakeStateSize * 1.28) }
     var dateToRelativeGap: CGFloat { max(4, 4 * scale) }
     var relativeToDateGap: CGFloat { dateToRelativeGap }
     var relativeToPrimaryGap: CGFloat { max(9, 11 * min(scale, 1.18)) }
@@ -526,6 +675,7 @@ private struct MorningHeroMetrics {
     var rangeTrackHeight: CGFloat { max(3, 4 * scale) }
     var rangeTrackWidth: CGFloat { min(176, max(124, 142 * scale)) }
     var rangeMarkerSize: CGFloat { max(16, 18 * scale) }
+    var rangeRowHeight: CGFloat { max(44, rangeMarkerSize + 14 * scale) }
     var rangeEndpointSize: CGFloat { max(8, 9 * scale) }
     var rangeRowSpacing: CGFloat { max(9, 10 * scale) }
     var rangeFallbackSpacing: CGFloat { max(7, 8 * scale) }
@@ -538,21 +688,36 @@ private struct MorningHeroMetrics {
 private struct MorningHeroQuickWakeModeSelector: View {
     let options: [MorningHeroQuickWakeModeOption]
     let metrics: MorningHeroMetrics
+    let highlightNamespace: Namespace.ID
+    let reduceMotion: Bool
     let isDisabled: Bool
     let onSelect: (QuickWakeMode) -> Void
 
     var body: some View {
         let segmentWidth = (metrics.quickSelectorWidth - (metrics.quickSelectorPadding * 2))
             / CGFloat(max(options.count, 1))
-        HStack(spacing: 0) {
-            ForEach(options) { option in
-                MorningHeroQuickWakeModeSegment(
-                    option: option,
-                    metrics: metrics,
-                    width: segmentWidth,
-                    isDisabled: isDisabled,
-                    onSelect: onSelect
-                )
+        ZStack(alignment: .leading) {
+            if let selectedIndex {
+                selectedHighlight
+                    .frame(
+                        width: segmentWidth,
+                        height: metrics.quickSelectorHeight - (metrics.quickSelectorPadding * 2)
+                    )
+                    .offset(x: CGFloat(selectedIndex) * segmentWidth)
+                    .matchedGeometryEffect(id: "quickWakeModeSelection", in: highlightNamespace)
+                    .animation(selectorAnimation, value: selectedIndex)
+            }
+
+            HStack(spacing: 0) {
+                ForEach(options) { option in
+                    MorningHeroQuickWakeModeSegment(
+                        option: option,
+                        metrics: metrics,
+                        width: segmentWidth,
+                        isDisabled: isDisabled,
+                        onSelect: onSelect
+                    )
+                }
             }
         }
         .padding(metrics.quickSelectorPadding)
@@ -582,6 +747,27 @@ private struct MorningHeroQuickWakeModeSelector: View {
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Wake mode")
         .accessibilityIdentifier(MorningHeroUIIdentifier.quickWakeModeSelector)
+    }
+
+    private var selectedIndex: Int? {
+        options.firstIndex(where: \.isSelected)
+    }
+
+    private var selectorAnimation: Animation {
+        reduceMotion
+            ? .easeOut(duration: 0.12)
+            : .spring(response: 0.22, dampingFraction: 0.92, blendDuration: 0.02)
+    }
+
+    private var selectedHighlight: some View {
+        Capsule()
+            .fill(Color.white.opacity(0.24))
+            .background(.ultraThinMaterial, in: Capsule())
+            .overlay {
+                Capsule()
+                    .stroke(Color.white.opacity(0.45), lineWidth: 0.8)
+            }
+            .shadow(color: Color.black.opacity(0.12), radius: 6, x: 0, y: 2)
     }
 }
 
@@ -619,21 +805,6 @@ private struct MorningHeroQuickWakeModeSegment: View {
         .accessibilityHint(option.accessibilityHint)
         .accessibilityAddTraits(option.isSelected ? .isSelected : [])
         .accessibilityIdentifier(MorningHeroUIIdentifier.quickWakeModeSegment(option.mode))
-        .background {
-            if option.isSelected {
-                selectedBackground
-            }
-        }
-    }
-
-    private var selectedBackground: some View {
-        Capsule()
-            .fill(Color.white.opacity(0.26))
-            .overlay {
-                Capsule()
-                    .stroke(Color.white.opacity(0.42), lineWidth: 0.8)
-            }
-            .shadow(color: Color.black.opacity(0.16), radius: 7, x: 0, y: 2)
     }
 }
 
@@ -678,6 +849,8 @@ private struct SubhHomeHeroTimeLockup: View {
 private struct FajrWindowRangeVisual: View {
     let display: MorningHomeHeroDisplay
     let metrics: MorningHeroMetrics
+    let transitionDirection: MorningHeroModeTransitionDirection
+    let reduceMotion: Bool
     var adjustmentChanged: (Date) -> Void = { _ in }
     var adjustmentEnded: (Date) -> Void = { _ in }
 
@@ -702,6 +875,7 @@ private struct FajrWindowRangeVisual: View {
                 stackedRange(begin: begin, end: end)
             }
             .frame(maxWidth: .infinity, alignment: .center)
+            .frame(minHeight: metrics.rangeRowHeight)
             .accessibilityElement(children: .contain)
             .accessibilityIdentifier(MorningHeroUIIdentifier.fajrWindow)
             .accessibilityLabel(accessibilityLabel)
@@ -730,7 +904,9 @@ private struct FajrWindowRangeVisual: View {
                 minTime: display.wakeAdjustmentMinTime,
                 maxTime: display.wakeAdjustmentMaxTime,
                 stepMinutes: display.wakeAdjustmentStepMinutes,
-                metrics: metrics
+                metrics: metrics,
+                transitionDirection: transitionDirection,
+                reduceMotion: reduceMotion
             ) { wakeTime in
                 adjustmentChanged(wakeTime)
             } onAdjustmentEnded: { wakeTime in
@@ -761,7 +937,9 @@ private struct FajrWindowRangeVisual: View {
                 minTime: display.wakeAdjustmentMinTime,
                 maxTime: display.wakeAdjustmentMaxTime,
                 stepMinutes: display.wakeAdjustmentStepMinutes,
-                metrics: metrics
+                metrics: metrics,
+                transitionDirection: transitionDirection,
+                reduceMotion: reduceMotion
             ) { wakeTime in
                 adjustmentChanged(wakeTime)
             } onAdjustmentEnded: { wakeTime in
@@ -806,6 +984,8 @@ private struct FajrWindowRangeTrack: View {
     let maxTime: Date?
     let stepMinutes: Int
     let metrics: MorningHeroMetrics
+    let transitionDirection: MorningHeroModeTransitionDirection
+    let reduceMotion: Bool
     let onAdjustmentChanged: (Date) -> Void
     let onAdjustmentEnded: (Date) -> Void
 
@@ -860,9 +1040,29 @@ private struct FajrWindowRangeTrack: View {
 
             if let ratio, indicatorState != .none, indicatorState != .unavailable {
                 marker(ratio: ratio, width: width, centerY: centerY)
+                    .id("\(visualMode.rawValue)-\(indicatorState.rawValue)")
+                    .transition(markerTransition)
+                    .animation(markerAnimation, value: visualMode.rawValue)
             }
         }
         .contentShape(Rectangle())
+    }
+
+    private var markerAnimation: Animation {
+        reduceMotion
+            ? .easeOut(duration: 0.12)
+            : .easeInOut(duration: 0.34)
+    }
+
+    private var markerTransition: AnyTransition {
+        if reduceMotion {
+            return .opacity
+        }
+
+        return .asymmetric(
+            insertion: .move(edge: transitionDirection.markerInsertionEdge).combined(with: .opacity),
+            removal: .move(edge: transitionDirection.markerRemovalEdge).combined(with: .opacity)
+        )
     }
 
     private func trackAccessibilityElement(width: CGFloat, centerY: CGFloat) -> some View {

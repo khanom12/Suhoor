@@ -747,6 +747,7 @@ enum MorningHomePresentation {
             title: title,
             entry: entry,
             dateLine: dateLine,
+            selectedQuickWakeMode: selectedQuickWakeMode,
             wakeState: wakeState,
             primaryText: primaryText,
             detailText: relation.text,
@@ -1100,7 +1101,7 @@ enum MorningHomePresentation {
         let resolvedWakeState = MorningWakeResolutionService.resolve(for: entry.activeDay, timeZone: timeZone)
         if resolvedWakeState.quickWakeSelection == .quiet {
             let day = relativeDayLabel.map(quickWakeModeRelativeDayReference) ?? "this date"
-            let text = day == "tomorrow" ? "No wake alarm for tomorrow" : "No wake alarm for \(day)"
+            let text = "No alarm will ring for \(day)"
             return RelationDisplay(text: text, tone: .normal)
         }
 
@@ -1167,7 +1168,7 @@ enum MorningHomePresentation {
         case .fajr:
             return "Wakes 30 min before Fajr ends for \(day)."
         case .quiet:
-            return "No wake alarm will ring for \(day)."
+            return "No alarm will ring for \(day)."
         }
     }
 
@@ -1587,6 +1588,7 @@ enum MorningHomePresentation {
         title: String,
         entry: WakeRowEntry,
         dateLine _: String?,
+        selectedQuickWakeMode: QuickWakeMode?,
         wakeState: MorningHeroWakeState,
         primaryText: String,
         detailText: String,
@@ -1600,14 +1602,17 @@ enum MorningHomePresentation {
         } else {
             wakeText = primaryText
         }
+        let selectedModeText = selectedQuickWakeMode.map { "\($0.displayTitle) mode selected" }
 
         return [
             locationText,
             title,
+            selectedModeText,
             wakeText,
             detailText,
             fajrWindowAccessibilityText.replacingOccurrences(of: " • ", with: ". ")
         ]
+            .compactMap { $0 }
             .filter { !$0.isEmpty }
             .joined(separator: ". ")
     }

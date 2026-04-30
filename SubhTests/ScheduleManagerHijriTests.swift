@@ -2052,7 +2052,7 @@ struct ScheduleManagerHijriTests {
         #expect(quietOverride.fajrEnabled == false)
         #expect(quietDay.effectiveConfig.quickWakeModeOverride == .quiet)
         #expect(quietDisplay.primaryText == "Quiet mode on")
-        #expect(quietDisplay.detailText == "No wake alarm for tomorrow")
+        #expect(quietDisplay.detailText == "No alarm will ring for tomorrow")
         #expect(quietDisplay.fajrWindowVisualMode == .staticEarlyWorshipWindow)
         #expect(quietDisplay.wakeAdjustmentEnabled == false)
         #expect(quietPoint?.isSkipped == true)

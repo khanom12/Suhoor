@@ -1097,6 +1097,7 @@ struct ScheduleServiceExtractionTests {
         #expect(fajrDisplay.primaryTime == fajrEntry.schedule.wakeDate)
         #expect(fajrDisplay.detailText == "Wake up 30 min before Fajr ends")
         #expect(fajrDisplay.fajrWindowVisualMode == .interactiveWithinFajrWindow)
+        #expect(fajrDisplay.accessibilityLabel.contains("Fajr mode selected"))
 
         let adjustedFajr = MorningHomePresentation.heroDisplay(
             adjusting: fajrDisplay,
@@ -1133,6 +1134,7 @@ struct ScheduleServiceExtractionTests {
         #expect(fastDisplay.detailText == "Wake up 30 min before Fajr begins")
         #expect(fastDisplay.fajrWindowVisualMode == .interactiveEarlyWorshipWindow)
         #expect(fastDisplay.wakeAdjustmentRelationAnchor == .fajrStart)
+        #expect(fastDisplay.accessibilityLabel.contains("Fast mode selected"))
         #expect(fastForecastRow.tags.map(\.title) == ["Fasting"])
 
         let quietEntry = Self.makeWakeEntry(
@@ -1157,7 +1159,8 @@ struct ScheduleServiceExtractionTests {
         #expect(quietDisplay.selectedQuickWakeMode == .quiet)
         #expect(quietDisplay.quickWakeModeOptions.first(where: { $0.mode == .quiet })?.isSelected == true)
         #expect(quietDisplay.primaryText == "Quiet mode on")
-        #expect(quietDisplay.detailText == "No wake alarm for tomorrow")
+        #expect(quietDisplay.detailText == "No alarm will ring for tomorrow")
+        #expect(quietDisplay.accessibilityLabel.contains("Quiet mode selected"))
         #expect(quietDisplay.wakeWindowIndicatorState == .none)
         #expect(quietDisplay.wakeWindowIndicatorIconName == nil)
         #expect(quietDisplay.fajrWindowVisualMode == .staticWithinFajrWindow)
@@ -1219,6 +1222,7 @@ struct ScheduleServiceExtractionTests {
         #expect(quietFajr.alarmActivation == .quietSuppressed)
         #expect(quietFajr.scheduleStatus == .notScheduledBecauseQuiet)
         #expect(quietFajr.visualMode == .staticDefaultFajrQuiet)
+        #expect(quietFajr.copyState.finalRelationText == "No alarm will ring for tomorrow")
 
         let quietFast = MorningWakeResolutionService.resolve(
             for: Self.makeWakeEntry(

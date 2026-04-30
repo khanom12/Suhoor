@@ -164,6 +164,7 @@ final class MorningHeroFajrAdjusterUITests: XCTestCase {
             $0.contains("selected")
         })
         XCTAssertTrue(app.descendants(matching: .any)["morningHero.fajrWindow.marker"].exists)
+        let primarySlotYBeforeQuiet = primaryWakeTime.frame.midY
 
         let quietAfterFast = app.descendants(matching: .any)["morningHero.quickWakeMode.quiet"]
         XCTAssertTrue(quietAfterFast.waitForExistence(timeout: 4))
@@ -173,11 +174,12 @@ final class MorningHeroFajrAdjusterUITests: XCTestCase {
             $0 == "Quiet mode on"
         })
         XCTAssertTrue(waitForElementLabel(in: app, identifier: "morningHero.relation") {
-            $0 == "No wake alarm for tomorrow"
+            $0 == "No alarm will ring for tomorrow"
         })
         XCTAssertTrue(waitForElementLabel(in: app, identifier: "morningHero.quickWakeMode.quiet") {
             $0.contains("selected")
         })
+        XCTAssertLessThan(abs(primaryWakeTime.frame.midY - primarySlotYBeforeQuiet), 10)
         XCTAssertTrue(app.descendants(matching: .any)["morningHero.fajrWindow"].waitForExistence(timeout: 4))
         XCTAssertTrue(app.descendants(matching: .any)["morningHero.fajrWindow.track"].exists)
         XCTAssertFalse(app.descendants(matching: .any)["morningHero.fajrWindow.marker"].exists)

@@ -371,10 +371,10 @@ enum MorningWakeResolutionService {
     ) -> WakeCopyState {
         let scheduleWarning = scheduleWarningText(for: scheduleStatus)
         if selection == .quiet {
-            let accessibility = "Quiet mode on. No wake alarm will ring. \(boundaryAccessibilityText(boundary, timeZone: timeZone))"
+            let accessibility = "Quiet mode selected. Quiet mode on. No alarm will ring for tomorrow. \(boundaryAccessibilityText(boundary, timeZone: timeZone))"
             return WakeCopyState(
                 primaryHeroText: "Quiet mode on",
-                finalRelationText: "No wake alarm for tomorrow",
+                finalRelationText: "No alarm will ring for tomorrow",
                 relationTone: .stateText,
                 detailExplanation: "Quiet suppresses the wake alarm without deleting this morning's underlying plan.",
                 scheduleWarningText: scheduleWarning,
