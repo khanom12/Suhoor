@@ -50,7 +50,7 @@ struct WeeklyFajrcastCard: View {
                     footer
                         .padding(.horizontal, horizontalInset)
                         .padding(.top, footerVerticalPadding)
-                        .padding(.bottom, footerVerticalPadding)
+                        .padding(.bottom, footerBottomPadding)
                 }
                 .frame(maxWidth: .infinity, minHeight: minimumHeight, alignment: .topLeading)
             }
@@ -168,6 +168,24 @@ struct WeeklyFajrcastCard: View {
 
     private var footerVerticalPadding: CGFloat {
         dynamicTypeSize.isAccessibilitySize ? 8 : 6
+    }
+
+    private var footerBottomPadding: CGFloat {
+        if dynamicTypeSize.isAccessibilitySize {
+            let scaledFooterLineHeight = layoutProfile.scaled(base: 13) * 1.22
+            return max(12, 0.55 * scaledFooterLineHeight)
+        }
+
+        switch dynamicTypeSize {
+        case .xSmall, .small, .medium:
+            return 8
+        case .large:
+            return 10
+        case .xLarge, .xxLarge, .xxxLarge:
+            return 12
+        @unknown default:
+            return 10
+        }
     }
 
     private var headerTitleTopInset: CGFloat {

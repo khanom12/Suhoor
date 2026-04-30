@@ -1069,7 +1069,7 @@ struct ScheduleServiceExtractionTests {
         #expect(snapshot.selectedDay.dateKey == tomorrowKey)
         #expect(snapshot.selectedDay.relativeLabel == "TOMORROW")
         #expect(Self.normalizedTimeSpaces(snapshot.summary.primaryText) == "Fajr begins at 5:00 AM • Fajr ends at 6:16 AM")
-        #expect(snapshot.summary.secondaryText == "Tomorrow's alarm is 30 minutes before Fajr ends.")
+        #expect(snapshot.summary.secondaryText == nil)
     }
 
     @Test
@@ -1101,7 +1101,7 @@ struct ScheduleServiceExtractionTests {
 
         #expect(snapshot.selectedDay.relativeLabel == "TODAY")
         #expect(Self.normalizedTimeSpaces(snapshot.summary.primaryText) == "Fajr begins at 5:00 AM • Fajr ends at 6:16 AM")
-        #expect(snapshot.summary.secondaryText == "Today's alarm is 30 minutes before Fajr ends.")
+        #expect(snapshot.summary.secondaryText == nil)
     }
 
     @Test
@@ -1129,7 +1129,7 @@ struct ScheduleServiceExtractionTests {
         )
 
         #expect(Self.normalizedTimeSpaces(snapshot.summary.primaryText) == "Fajr begins at 5:00 AM • Fajr ends at 6:16 AM")
-        #expect(snapshot.summary.secondaryText == "Today's alarm is off for this date.")
+        #expect(snapshot.summary.secondaryText == nil)
         #expect(snapshot.selectedDay.iconName == "bell.slash.fill")
         #expect(snapshot.selectedDay.timeMain == "Off")
         #expect(snapshot.selectedDay.timeSuffix == nil)
@@ -1157,11 +1157,11 @@ struct ScheduleServiceExtractionTests {
         )
 
         #expect(Self.normalizedTimeSpaces(snapshot.summary.primaryText) == "Fajr began at 5:00 AM • Fajr ends at 6:16 AM")
-        #expect(snapshot.summary.secondaryText == "Today's alarm is 30 minutes before Fajr ends.")
+        #expect(snapshot.summary.secondaryText == nil)
     }
 
     @Test
-    func compactFajrcastUsesPastFajrFooterAndAlarmTense() {
+    func compactFajrcastUsesPastFajrFooterTense() {
         let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
         let yesterday = Self.makeDate(year: 2026, month: 4, day: 25, timeZone: timeZone)
         let today = Self.makeDate(year: 2026, month: 4, day: 26, hour: 9, minute: 0, timeZone: timeZone)
@@ -1182,7 +1182,7 @@ struct ScheduleServiceExtractionTests {
         )
 
         #expect(Self.normalizedTimeSpaces(snapshot.summary.primaryText) == "Fajr began at 5:00 AM • Fajr ended at 6:16 AM")
-        #expect(snapshot.summary.secondaryText == "Yesterday's alarm was 30 minutes before Fajr ended.")
+        #expect(snapshot.summary.secondaryText == nil)
         #expect(snapshot.selectedDay.relativeLabel == "YESTERDAY")
     }
 
@@ -1212,12 +1212,12 @@ struct ScheduleServiceExtractionTests {
         )
 
         #expect(Self.normalizedTimeSpaces(snapshot.summary.primaryText) == "Fajr began at 5:00 AM • Fajr ended at 6:16 AM")
-        #expect(snapshot.summary.secondaryText == "Yesterday's alarm was off for this date.")
+        #expect(snapshot.summary.secondaryText == nil)
         #expect(snapshot.selectedDay.timeMain == "Off")
     }
 
     @Test
-    func compactFajrcastPreservesAdjustedSecondarySummary() {
+    func compactFajrcastPreservesAdjustedCompactInsightWithoutFooterSecondary() {
         let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
         let monday = Self.makeDate(year: 2026, month: 4, day: 27, timeZone: timeZone)
         var calendar = Calendar(identifier: .gregorian)
@@ -1245,12 +1245,12 @@ struct ScheduleServiceExtractionTests {
         )
 
         #expect(Self.normalizedTimeSpaces(snapshot.summary.primaryText) == "Fajr begins at 5:00 AM • Fajr ends at 6:16 AM")
-        #expect(snapshot.summary.secondaryText == "Today's alarm is 30 minutes before Fajr ends.")
+        #expect(snapshot.summary.secondaryText == nil)
         #expect(snapshot.compactInsight == "1 morning is adjusted this week.")
     }
 
     @Test
-    func compactFajrcastUsesFocusedAdjustedFooterContext() {
+    func compactFajrcastOmitsFocusedAdjustedFooterSecondary() {
         let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
         let monday = Self.makeDate(year: 2026, month: 4, day: 27, timeZone: timeZone)
         var calendar = Calendar(identifier: .gregorian)
@@ -1279,11 +1279,11 @@ struct ScheduleServiceExtractionTests {
 
         #expect(snapshot.selectedDay.dateKey == adjustedKey)
         #expect(snapshot.selectedDay.relativeLabel == "WEDNESDAY")
-        #expect(snapshot.summary.secondaryText == "Adjusted: Wednesday's alarm is 30 minutes before Fajr ends.")
+        #expect(snapshot.summary.secondaryText == nil)
     }
 
     @Test
-    func compactFajrcastUsesFocusedFastingFooterContext() {
+    func compactFajrcastUsesFocusedFastingFooterSecondary() {
         let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
         let tomorrow = Self.makeDate(year: 2026, month: 4, day: 27, timeZone: timeZone)
         let activeDay = Self.makeWakeEntry(
@@ -1312,7 +1312,73 @@ struct ScheduleServiceExtractionTests {
         )
 
         #expect(snapshot.selectedDay.relativeLabel == "TOMORROW")
-        #expect(snapshot.summary.secondaryText == "Fasting day: Tomorrow's alarm is 30 minutes before Fajr ends.")
+        #expect(snapshot.summary.secondaryText == "Tomorrow is a fasting day.")
+    }
+
+    @Test
+    func compactFajrcastUsesPastFastingFooterSecondaryTense() {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let yesterday = Self.makeDate(year: 2026, month: 4, day: 25, timeZone: timeZone)
+        let activeDay = Self.makeWakeEntry(
+            date: yesterday,
+            timeZone: timeZone,
+            context: ResolvedDayContext(
+                primaryContext: .fasting,
+                secondaryContexts: [],
+                supportingTags: [],
+                explanation: .empty
+            )
+        ).activeDay
+        let provider = FajrWindowSurfaceProvider()
+        let dataset = provider.buildDataset(
+            period: .sevenDays,
+            activeDays: [activeDay],
+            overrideDateKeys: [],
+            timeZone: timeZone
+        )
+
+        let snapshot = provider.compactSnapshot(
+            dataset: dataset,
+            selectedDateKey: activeDay.dateKey,
+            now: Self.makeDate(year: 2026, month: 4, day: 26, hour: 9, minute: 0, timeZone: timeZone),
+            timeZone: timeZone
+        )
+
+        #expect(snapshot.selectedDay.relativeLabel == "YESTERDAY")
+        #expect(snapshot.summary.secondaryText == "Yesterday was a fasting day.")
+    }
+
+    @Test
+    func compactFajrcastOmitsRamadanFooterSecondary() {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let tomorrow = Self.makeDate(year: 2026, month: 4, day: 27, timeZone: timeZone)
+        let activeDay = Self.makeWakeEntry(
+            date: tomorrow,
+            timeZone: timeZone,
+            context: ResolvedDayContext(
+                primaryContext: .fasting,
+                secondaryContexts: [],
+                supportingTags: [.ramadan],
+                explanation: .empty
+            )
+        ).activeDay
+        let provider = FajrWindowSurfaceProvider()
+        let dataset = provider.buildDataset(
+            period: .sevenDays,
+            activeDays: [activeDay],
+            overrideDateKeys: [],
+            timeZone: timeZone
+        )
+
+        let snapshot = provider.compactSnapshot(
+            dataset: dataset,
+            selectedDateKey: activeDay.dateKey,
+            now: Self.makeDate(year: 2026, month: 4, day: 26, timeZone: timeZone),
+            timeZone: timeZone
+        )
+
+        #expect(snapshot.selectedDay.relativeLabel == "TOMORROW")
+        #expect(snapshot.summary.secondaryText == nil)
     }
 
     @Test
@@ -1368,7 +1434,7 @@ struct ScheduleServiceExtractionTests {
         #expect(focusedSnapshot.chart.points.firstIndex(where: { $0.dateKey == focusedSnapshot.selectedDay.dateKey }) == 0)
         #expect(focusedDateKeys == visibleDateKeys)
         #expect(focusedSnapshot.selectedDay.relativeLabel == "FRIDAY")
-        #expect(focusedSnapshot.summary.secondaryText == "Friday's alarm was 30 minutes before Fajr ended.")
+        #expect(focusedSnapshot.summary.secondaryText == nil)
 
         let snapBackSnapshot = provider.compactSnapshot(
             dataset: dataset,
@@ -1382,7 +1448,7 @@ struct ScheduleServiceExtractionTests {
         #expect(snapBackSnapshot.selectedDay.dateKey == anchorKey)
         #expect(snapBackSnapshot.chart.points.firstIndex(where: { $0.dateKey == snapBackSnapshot.selectedDay.dateKey }) == 3)
         #expect(snapBackDateKeys == visibleDateKeys)
-        #expect(snapBackSnapshot.summary.secondaryText == "Tomorrow's alarm is 30 minutes before Fajr ends.")
+        #expect(snapBackSnapshot.summary.secondaryText == nil)
     }
 
     private static func makeDate(

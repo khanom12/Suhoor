@@ -547,7 +547,7 @@ struct FajrWindowSurfaceProvider {
         let windowState = compactFajrWindowState(for: selectedPoint, now: now)
         return FajrWindowCompactSummarySnapshot(
             primaryText: compactFajrBoundaryLine(for: selectedPoint, state: windowState),
-            secondaryText: compactWakeSummaryLine(
+            secondaryText: compactFastingIntentionLine(
                 for: selectedPoint,
                 state: windowState,
                 now: now,
@@ -573,22 +573,24 @@ struct FajrWindowSurfaceProvider {
         }
     }
 
-    private func compactWakeSummaryLine(
+    private func compactFastingIntentionLine(
         for point: FajrWindowPoint,
         state: CompactFajrWindowState,
         now: Date,
         timeZone: TimeZone
-    ) -> String {
+    ) -> String? {
+        guard hasNonRamadanFastingIntention(point) else { return nil }
+
         let subject = compactSubject(for: point, now: now, timeZone: timeZone)
-        let relationClause = compactRelationClause(for: point, state: state)
         let verb = state == .completed ? "was" : "is"
-        let sentence = "\(possessive(subject)) alarm \(verb) \(relationClause)."
+        return "\(subject) \(verb) a fasting day."
+    }
 
-        guard let contextPrefix = compactContextPrefix(for: point) else {
-            return sentence
-        }
+    private func hasNonRamadanFastingIntention(_ point: FajrWindowPoint) -> Bool {
+        guard point.isFastingContext else { return false }
 
-        return "\(contextPrefix): \(sentence)"
+        let normalizedTags = point.contextTags.map { $0.lowercased() }
+        return !normalizedTags.contains(where: { $0.contains("ramadan") })
     }
 
     private func compactFajrWindowState(
@@ -657,84 +659,6 @@ struct FajrWindowSurfaceProvider {
         }
 
         return point.longLabel.components(separatedBy: ",").first ?? point.longLabel
-    }
-
-    private func compactRelationClause(
-        for point: FajrWindowPoint,
-        state: CompactFajrWindowState
-    ) -> String {
-        if point.isSkipped {
-            return "off for this date"
-        }
-
-        if point.relationText == "Fixed wake" {
-            return "set for \(TimeFormatters.timeFormatter.string(from: point.primaryWake))"
-        }
-
-        if point.relationText == "At Fajr" {
-            return "at the start of Fajr"
-        }
-
-        if point.relationText == "At Fajr ends" {
-            return "at the end of Fajr"
-        }
-
-        return compactTensedRelationText(point.relationText, state: state)
-    }
-
-    private func compactTensedRelationText(
-        _ relationText: String,
-        state: CompactFajrWindowState
-    ) -> String {
-        let fajrBeginToken = state == .upcoming ? "Fajr begins" : "Fajr began"
-        let fajrEndToken = state == .completed ? "Fajr ended" : "Fajr ends"
-
-        if relationText.hasSuffix(" before Fajr ends") {
-            return relationText.replacingOccurrences(of: " before Fajr ends", with: " before \(fajrEndToken)").lowercasedFirstCharacter()
-        }
-
-        if relationText.hasSuffix(" after Fajr ends") {
-            return relationText.replacingOccurrences(of: " after Fajr ends", with: " after \(fajrEndToken)").lowercasedFirstCharacter()
-        }
-
-        if relationText.hasSuffix(" after Fajr") {
-            return relationText.replacingOccurrences(of: " after Fajr", with: " after \(fajrBeginToken)").lowercasedFirstCharacter()
-        }
-
-        if relationText.hasSuffix(" before Fajr") {
-            return relationText.replacingOccurrences(of: " before Fajr", with: " before \(fajrBeginToken)").lowercasedFirstCharacter()
-        }
-
-        if relationText.hasSuffix(" after Fajr begins") {
-            return relationText.replacingOccurrences(of: " after Fajr begins", with: " after \(fajrBeginToken)").lowercasedFirstCharacter()
-        }
-
-        if relationText.hasSuffix(" before Fajr begins") {
-            return relationText.replacingOccurrences(of: " before Fajr begins", with: " before \(fajrBeginToken)").lowercasedFirstCharacter()
-        }
-
-        return relationText.lowercasedFirstCharacter()
-    }
-
-    private func compactContextPrefix(for point: FajrWindowPoint) -> String? {
-        let normalizedTags = point.contextTags.map { $0.lowercased() }
-        if normalizedTags.contains(where: { $0.contains("ramadan") }) {
-            return "Ramadan"
-        }
-
-        if point.isFastingContext {
-            return "Fasting day"
-        }
-
-        if point.isTahajjudContext {
-            return "Tahajjud"
-        }
-
-        if point.isOverride {
-            return "Adjusted"
-        }
-
-        return nil
     }
 
     private func compactSecondarySummaryLine(
@@ -1184,9 +1108,6 @@ struct FajrWindowSurfaceProvider {
         DateFormatter.dateFormat(fromTemplate: "j", options: 0, locale: .current)?.contains("a") == true
     }
 
-    private func possessive(_ subject: String) -> String {
-        "\(subject)'s"
-    }
 }
 
 private struct CompactChartScale {
@@ -1198,13 +1119,6 @@ private enum CompactFajrWindowState {
     case upcoming
     case inProgress
     case completed
-}
-
-private extension String {
-    func lowercasedFirstCharacter() -> String {
-        guard let first else { return self }
-        return String(first).lowercased() + dropFirst()
-    }
 }
 
 private struct LabelFormatterBundle {
