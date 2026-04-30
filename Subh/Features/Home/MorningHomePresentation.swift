@@ -76,7 +76,456 @@ struct MorningcastRowDisplay: Equatable {
     let accessibilityLabel: String
 }
 
+enum NextTenMorningsLoadingState: Equatable {
+    case ready
+    case empty
+}
+
+enum NextTenMorningsQuietModeState: Equatable {
+    case inactive
+    case active
+}
+
+enum NextTenMorningsTagProminence: Equatable {
+    case strong
+    case opportunity
+    case fallback
+}
+
+enum NextTenMorningsTagSemantic: Equatable {
+    case fajrFallback
+    case quietMode
+    case ramadan
+    case fastingIntent
+    case tahajjudIntent
+    case qada
+    case kaffarah
+    case vow
+    case observanceOpportunity(FastSecondaryVirtueTag)
+    case observanceIntended(FastSecondaryVirtueTag)
+}
+
+struct NextTenMorningsTagDisplay: Equatable, Identifiable {
+    let id: String
+    let title: String
+    let semantic: NextTenMorningsTagSemantic
+    let prominence: NextTenMorningsTagProminence
+    let priority: Int
+    let accessibilityText: String
+}
+
+struct NextTenMorningsRowDisplay: Equatable, Identifiable {
+    let id: String
+    let dateKey: String
+    let date: Date
+    let dateLabel: String
+    let tags: [NextTenMorningsTagDisplay]
+    let allAccessibilityTags: [NextTenMorningsTagDisplay]
+    let trailingTime: Date?
+    let trailingStatusText: String?
+    let isInactive: Bool
+    let accessibilityLabel: String
+}
+
+struct NextTenMorningsSnapshot: Equatable {
+    static let title = "NEXT 10 MORNINGS"
+
+    let title: String
+    let rows: [NextTenMorningsRowDisplay]
+    let loadingState: NextTenMorningsLoadingState
+    let generatedAt: Date
+}
+
+struct ShawwalSixProgressSummary: Equatable {
+    let completedIntendedShawwalSixCount: Int
+    let remainingCount: Int
+    let completedDateKeys: Set<String>
+    let isComplete: Bool
+
+    static let incomplete = ShawwalSixProgressSummary(
+        completedIntendedShawwalSixCount: 0,
+        remainingCount: 6,
+        completedDateKeys: [],
+        isComplete: false
+    )
+}
+
+struct NextTenMorningsTagResolverInput: Equatable {
+    let date: Date
+    let dateKey: String
+    let resolvedContext: ResolvedDayContext
+    let tagResult: TagComputationResult
+    let compatibleOpportunityTags: [FastSecondaryVirtueTag]
+    let quietModeState: NextTenMorningsQuietModeState
+    let shawwalSixProgress: ShawwalSixProgressSummary?
+    let hasDayOverride: Bool
+    let tahajjudIntended: Bool
+}
+
+struct NextTenMorningsTagResolution: Equatable {
+    let visibleTags: [NextTenMorningsTagDisplay]
+    let accessibilityTags: [NextTenMorningsTagDisplay]
+}
+
+enum NextTenMorningsTagResolver {
+    static let maximumVisibleTags = 3
+
+    static func resolve(_ input: NextTenMorningsTagResolverInput) -> NextTenMorningsTagResolution {
+        let tags: [NextTenMorningsTagDisplay]
+
+        if input.quietModeState == .active {
+            tags = [tag(.quietMode, priority: 0)]
+        } else if isRamadan(input) {
+            tags = [tag(.ramadan, priority: 10)]
+        } else if hasFastingIntent(input) {
+            tags = fastingTags(input)
+        } else if input.tahajjudIntended {
+            tags = tahajjudTags(input)
+        } else {
+            let opportunityTags = opportunityTags(input)
+            tags = opportunityTags.isEmpty ? [tag(.fajrFallback, priority: 100)] : opportunityTags
+        }
+
+        let ordered = orderedUnique(tags)
+        return NextTenMorningsTagResolution(
+            visibleTags: Array(ordered.prefix(maximumVisibleTags)),
+            accessibilityTags: ordered
+        )
+    }
+
+    private static func isRamadan(_ input: NextTenMorningsTagResolverInput) -> Bool {
+        input.tagResult.computedPrimaryIntent == .ramadanObligatory
+            || input.resolvedContext.supportingTags.contains(.ramadan)
+    }
+
+    private static func hasFastingIntent(_ input: NextTenMorningsTagResolverInput) -> Bool {
+        switch input.tagResult.computedPrimaryIntent {
+        case .voluntary, .qadaMakeup, .kaffarahExpiation, .vowNadhr:
+            return true
+        case .ramadanObligatory, .forbidden, .other:
+            break
+        }
+
+        let tags = Set(input.resolvedContext.supportingTags)
+        if tags.contains(.voluntary) || tags.contains(.qada) || tags.contains(.kaffarah) || tags.contains(.vow) {
+            return true
+        }
+
+        switch input.resolvedContext.primaryContext {
+        case .fasting, .suhoor, .sunnahFast, .qadaFast:
+            return true
+        case .standard, .tahajjud, .jamaah, .specialDay:
+            return false
+        }
+    }
+
+    private static func fastingTags(_ input: NextTenMorningsTagResolverInput) -> [NextTenMorningsTagDisplay] {
+        var tags = [tag(.fastingIntent, priority: 20)]
+
+        switch input.tagResult.computedPrimaryIntent {
+        case .qadaMakeup:
+            tags.append(tag(.qada, priority: 30))
+        case .kaffarahExpiation:
+            tags.append(tag(.kaffarah, priority: 31))
+        case .vowNadhr:
+            tags.append(tag(.vow, priority: 32))
+        case .voluntary, .ramadanObligatory, .forbidden, .other:
+            break
+        }
+
+        guard input.tagResult.computedPrimaryIntent == .voluntary else {
+            return tags
+        }
+
+        let intended = Set(input.tagResult.computedSecondaryTags).union(secondaryTags(from: input.resolvedContext))
+        for secondaryTag in sortedVisibleSecondaryTags(intended, shawwalSixProgress: input.shawwalSixProgress) {
+            tags.append(tag(.observanceIntended(secondaryTag), priority: intendedPriority(for: secondaryTag)))
+        }
+
+        return tags
+    }
+
+    private static func tahajjudTags(_ input: NextTenMorningsTagResolverInput) -> [NextTenMorningsTagDisplay] {
+        var tags = [tag(.tahajjudIntent, priority: 60)]
+        for secondaryTag in sortedVisibleOpportunityTags(input.compatibleOpportunityTags, shawwalSixProgress: input.shawwalSixProgress) {
+            tags.append(tag(.observanceOpportunity(secondaryTag), priority: opportunityPriority(for: secondaryTag)))
+        }
+        return tags
+    }
+
+    private static func opportunityTags(_ input: NextTenMorningsTagResolverInput) -> [NextTenMorningsTagDisplay] {
+        sortedVisibleOpportunityTags(input.compatibleOpportunityTags, shawwalSixProgress: input.shawwalSixProgress).map {
+            tag(.observanceOpportunity($0), priority: opportunityPriority(for: $0))
+        }
+    }
+
+    private static func sortedVisibleOpportunityTags(
+        _ tags: [FastSecondaryVirtueTag],
+        shawwalSixProgress: ShawwalSixProgressSummary?
+    ) -> [FastSecondaryVirtueTag] {
+        let filtered = tags.filter { secondaryTag in
+            guard secondaryTag != .mondayThursday else { return false }
+            guard secondaryTag != .shawwalSix || shawwalSixProgress?.isComplete != true else { return false }
+            return true
+        }
+        return FastIntentEngine.displaySecondaryTags(Set(filtered))
+    }
+
+    private static func sortedVisibleSecondaryTags(
+        _ tags: Set<FastSecondaryVirtueTag>,
+        shawwalSixProgress: ShawwalSixProgressSummary?
+    ) -> [FastSecondaryVirtueTag] {
+        let filtered = tags.filter { secondaryTag in
+            guard secondaryTag != .shawwalSix || shawwalSixProgress?.isComplete != true else { return false }
+            return true
+        }
+        return FastIntentEngine.displaySecondaryTags(Set(filtered))
+    }
+
+    private static func secondaryTags(from context: ResolvedDayContext) -> Set<FastSecondaryVirtueTag> {
+        Set(context.supportingTags.compactMap { dayTag in
+            switch dayTag {
+            case .shawwalSix:
+                return .shawwalSix
+            case .arafah:
+                return .arafah
+            case .ashura:
+                return .ashura
+            case .whiteDays:
+                return .whiteDays
+            case .mondayThursday:
+                return .mondayThursday
+            case .dhulHijjahFirstNine:
+                return .dhulHijjahFirstNine
+            case .dailyPlan, .manualDay, .manualRange, .ramadan, .qada, .kaffarah, .vow, .voluntary, .eid, .tashreeq, .locationBased, .fixedTimeCompatibility:
+                return nil
+            }
+        })
+    }
+
+    private static func orderedUnique(_ tags: [NextTenMorningsTagDisplay]) -> [NextTenMorningsTagDisplay] {
+        var seen = Set<String>()
+        return tags.sorted { lhs, rhs in
+            if lhs.priority == rhs.priority {
+                return lhs.title < rhs.title
+            }
+            return lhs.priority < rhs.priority
+        }.filter { tag in
+            seen.insert(tag.id).inserted
+        }
+    }
+
+    private static func intendedPriority(for tag: FastSecondaryVirtueTag) -> Int {
+        40 + secondaryPriority(for: tag)
+    }
+
+    private static func opportunityPriority(for tag: FastSecondaryVirtueTag) -> Int {
+        70 + secondaryPriority(for: tag)
+    }
+
+    private static func secondaryPriority(for tag: FastSecondaryVirtueTag) -> Int {
+        switch tag {
+        case .arafah:
+            return 0
+        case .ashura:
+            return 1
+        case .dhulHijjahFirstNine:
+            return 2
+        case .whiteDays:
+            return 3
+        case .shawwalSix:
+            return 4
+        case .mondayThursday:
+            return 5
+        }
+    }
+
+    private static func tag(
+        _ semantic: NextTenMorningsTagSemantic,
+        priority: Int
+    ) -> NextTenMorningsTagDisplay {
+        NextTenMorningsTagDisplay(
+            id: tagID(for: semantic),
+            title: title(for: semantic),
+            semantic: semantic,
+            prominence: prominence(for: semantic),
+            priority: priority,
+            accessibilityText: accessibilityText(for: semantic)
+        )
+    }
+
+    private static func tagID(for semantic: NextTenMorningsTagSemantic) -> String {
+        switch semantic {
+        case .fajrFallback:
+            return "fajr"
+        case .quietMode:
+            return "quiet-mode"
+        case .ramadan:
+            return "ramadan"
+        case .fastingIntent:
+            return "fasting"
+        case .tahajjudIntent:
+            return "tahajjud"
+        case .qada:
+            return "qada"
+        case .kaffarah:
+            return "kaffarah"
+        case .vow:
+            return "vow"
+        case .observanceOpportunity(let tag):
+            return "opportunity-\(tag.rawValue)"
+        case .observanceIntended(let tag):
+            return "intended-\(tag.rawValue)"
+        }
+    }
+
+    private static func title(for semantic: NextTenMorningsTagSemantic) -> String {
+        switch semantic {
+        case .fajrFallback:
+            return "Fajr"
+        case .quietMode:
+            return "Quiet mode"
+        case .ramadan:
+            return "Ramadan"
+        case .fastingIntent:
+            return "Fasting"
+        case .tahajjudIntent:
+            return "Tahajjud"
+        case .qada:
+            return "Qada"
+        case .kaffarah:
+            return "Kaffarah"
+        case .vow:
+            return "Vow"
+        case .observanceOpportunity(let tag), .observanceIntended(let tag):
+            return tag.shortTitle
+        }
+    }
+
+    private static func prominence(for semantic: NextTenMorningsTagSemantic) -> NextTenMorningsTagProminence {
+        switch semantic {
+        case .quietMode, .ramadan, .fastingIntent, .tahajjudIntent, .qada, .kaffarah, .vow:
+            return .strong
+        case .observanceOpportunity, .observanceIntended:
+            return .opportunity
+        case .fajrFallback:
+            return .fallback
+        }
+    }
+
+    private static func accessibilityText(for semantic: NextTenMorningsTagSemantic) -> String {
+        switch semantic {
+        case .fajrFallback:
+            return "Fajr morning"
+        case .quietMode:
+            return "Quiet mode"
+        case .ramadan:
+            return "Ramadan morning"
+        case .fastingIntent:
+            return "Fasting intended"
+        case .tahajjudIntent:
+            return "Tahajjud intended"
+        case .qada:
+            return "Qada"
+        case .kaffarah:
+            return "Kaffarah"
+        case .vow:
+            return "Vow"
+        case .observanceOpportunity(let tag):
+            return "\(tag.shortTitle) fasting opportunity"
+        case .observanceIntended(let tag):
+            return tag.shortTitle
+        }
+    }
+}
+
 enum MorningHomePresentation {
+    static func nextTenMorningsSnapshot(
+        from entries: [WakeRowEntry],
+        currentDate: Date = Date(),
+        timeZone: TimeZone = .current,
+        generatedAt: Date = Date(),
+        shawwalSixProgress: ShawwalSixProgressSummary? = nil
+    ) -> NextTenMorningsSnapshot {
+        let rows = entries.prefix(MorningHomeSnapshot.maximumMorningcastCount).enumerated().map { index, entry in
+            nextTenMorningsRowDisplay(
+                for: entry,
+                index: index,
+                currentDate: currentDate,
+                timeZone: timeZone,
+                shawwalSixProgress: shawwalSixProgress
+            )
+        }
+
+        return NextTenMorningsSnapshot(
+            title: NextTenMorningsSnapshot.title,
+            rows: rows,
+            loadingState: rows.isEmpty ? .empty : .ready,
+            generatedAt: generatedAt
+        )
+    }
+
+    static func nextTenMorningsRowDisplay(
+        for entry: WakeRowEntry,
+        index: Int,
+        currentDate: Date = Date(),
+        timeZone: TimeZone = .current,
+        shawwalSixProgress: ShawwalSixProgressSummary? = nil,
+        quietModeState: NextTenMorningsQuietModeState = .inactive
+    ) -> NextTenMorningsRowDisplay {
+        let dateLabel = nextTenMorningsDateLabel(
+            for: entry.schedule.date,
+            index: index,
+            currentDate: currentDate,
+            timeZone: timeZone
+        )
+        let compatibleOpportunityTags = FastIntentEngine.displaySecondaryTags(
+            FastIntentEngine.dateDerivedObservanceTags(
+                for: entry.schedule.date,
+                timeZone: timeZone,
+                includeShawwalPotential: true
+            )
+        )
+        let tagResolution = NextTenMorningsTagResolver.resolve(
+            NextTenMorningsTagResolverInput(
+                date: entry.schedule.date,
+                dateKey: entry.id,
+                resolvedContext: entry.activeDay.resolvedDayContext,
+                tagResult: entry.activeDay.tagResult,
+                compatibleOpportunityTags: compatibleOpportunityTags,
+                quietModeState: quietModeState,
+                shawwalSixProgress: shawwalSixProgress,
+                hasDayOverride: entry.hasDayOverride,
+                tahajjudIntended: entry.activeDay.resolvedDayContext.primaryContext == .tahajjud
+                    || entry.activeDay.effectiveConfig.tahajjudRefinement
+            )
+        )
+        let trailingTime = entry.isEnabled ? entry.schedule.wakeDate : nil
+        let trailingStatusText = entry.isEnabled ? nil : WakePagePresentation.noWakeTrailingText
+        let accessibilityLabel = nextTenMorningsAccessibilityLabel(
+            entry: entry,
+            date: entry.schedule.date,
+            tags: tagResolution.accessibilityTags,
+            trailingTime: trailingTime,
+            trailingStatusText: trailingStatusText,
+            currentDate: currentDate,
+            timeZone: timeZone
+        )
+
+        return NextTenMorningsRowDisplay(
+            id: entry.id,
+            dateKey: entry.id,
+            date: entry.schedule.date,
+            dateLabel: dateLabel,
+            tags: tagResolution.visibleTags,
+            allAccessibilityTags: tagResolution.accessibilityTags,
+            trailingTime: trailingTime,
+            trailingStatusText: trailingStatusText,
+            isInactive: !entry.isEnabled,
+            accessibilityLabel: accessibilityLabel
+        )
+    }
+
     static func heroDisplay(
         entry: WakeRowEntry?,
         permissionSummary: String,
@@ -298,6 +747,110 @@ enum MorningHomePresentation {
         )
     }
 
+    private static func nextTenMorningsDateLabel(
+        for date: Date,
+        index: Int,
+        currentDate: Date,
+        timeZone: TimeZone
+    ) -> String {
+        if index == 0, isTomorrow(date, currentDate: currentDate, timeZone: timeZone) {
+            return Strings.AlarmsTab.tomorrowLabel
+        }
+        if index == 0, isToday(date, currentDate: currentDate, timeZone: timeZone) {
+            return Strings.AlarmsTab.todayLabel
+        }
+        return nextTenMorningsDateFormatter(timeZone: timeZone).string(from: date)
+    }
+
+    private static func nextTenMorningsAccessibilityLabel(
+        entry: WakeRowEntry,
+        date: Date,
+        tags: [NextTenMorningsTagDisplay],
+        trailingTime: Date?,
+        trailingStatusText: String?,
+        currentDate: Date,
+        timeZone: TimeZone
+    ) -> String {
+        var parts: [String] = [
+            nextTenMorningsAccessibilityDateLabel(
+                for: date,
+                currentDate: currentDate,
+                timeZone: timeZone
+            ),
+            nextTenMorningsAccessibilityTagSummary(tags)
+        ]
+
+        if let trailingTime {
+            parts.append("Wake at \(timeFormatter(timeZone: timeZone).string(from: trailingTime))")
+        } else if let trailingStatusText {
+            parts.append(trailingStatusText)
+        }
+
+        if entry.hasDayOverride {
+            parts.append("Adjusted for this date")
+        }
+        if entry.activeDay.decisionLog.latestWakeCapApplied {
+            parts.append("Latest wake cap applied")
+        }
+        if entry.activeDay.decisionLog.plannedWakeState == .fixedWake {
+            parts.append("Fixed wake")
+        }
+
+        parts.append("Double tap for details")
+        return parts.filter { !$0.isEmpty }.joined(separator: ". ") + "."
+    }
+
+    private static func nextTenMorningsAccessibilityTagSummary(_ tags: [NextTenMorningsTagDisplay]) -> String {
+        guard !tags.isEmpty else { return "Fajr morning" }
+        if tags.count == 1 {
+            return tags[0].accessibilityText
+        }
+        if tags.first?.semantic == .fastingIntent {
+            let details = tags.dropFirst().map(\.accessibilityText)
+            if details.isEmpty {
+                return "Fasting intended"
+            }
+            return "Fasting intended for \(details.joined(separator: ", "))"
+        }
+        if tags.first?.semantic == .tahajjudIntent {
+            let details = tags.dropFirst().map(\.accessibilityText)
+            if details.isEmpty {
+                return "Tahajjud intended"
+            }
+            return "Tahajjud intended; \(details.joined(separator: ", "))"
+        }
+        return tags.map(\.accessibilityText).joined(separator: ", ")
+    }
+
+    private static func nextTenMorningsAccessibilityDateLabel(
+        for date: Date,
+        currentDate: Date,
+        timeZone: TimeZone
+    ) -> String {
+        let dateText = nextTenMorningsAccessibilityDateFormatter(timeZone: timeZone).string(from: date)
+        if isToday(date, currentDate: currentDate, timeZone: timeZone) {
+            return "\(Strings.AlarmsTab.todayLabel), \(dateText)"
+        }
+        if isTomorrow(date, currentDate: currentDate, timeZone: timeZone) {
+            return "\(Strings.AlarmsTab.tomorrowLabel), \(dateText)"
+        }
+        return dateText
+    }
+
+    private static func isToday(_ date: Date, currentDate: Date, timeZone: TimeZone) -> Bool {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        return calendar.isDate(date, inSameDayAs: calendar.startOfDay(for: currentDate))
+    }
+
+    private static func isTomorrow(_ date: Date, currentDate: Date, timeZone: TimeZone) -> Bool {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let today = calendar.startOfDay(for: currentDate)
+        let tomorrow = calendar.date(byAdding: .day, value: 1, to: today) ?? today
+        return calendar.isDate(date, inSameDayAs: tomorrow)
+    }
+
     private static func heroStatusText(for entry: WakeRowEntry) -> String {
         if !entry.isEnabled {
             return entry.activeDay.effectiveConfig.skipDay ? "Alarm off" : "No alarm set"
@@ -397,6 +950,22 @@ enum MorningHomePresentation {
     private static func compactDateFormatter(timeZone: TimeZone) -> DateFormatter {
         let formatter = DateFormatter()
         formatter.dateFormat = "MMMM d"
+        formatter.timeZone = timeZone
+        formatter.locale = .current
+        return formatter
+    }
+
+    private static func nextTenMorningsDateFormatter(timeZone: TimeZone) -> DateFormatter {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "EEE, MMM d"
+        formatter.timeZone = timeZone
+        formatter.locale = .current
+        return formatter
+    }
+
+    private static func nextTenMorningsAccessibilityDateFormatter(timeZone: TimeZone) -> DateFormatter {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "EEEE, MMMM d"
         formatter.timeZone = timeZone
         formatter.locale = .current
         return formatter

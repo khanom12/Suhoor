@@ -1152,9 +1152,92 @@ struct ScheduleServiceExtractionTests {
     }
 
     @Test
-    func morningcastForecastNamingIsStable() {
-        #expect(MorningHomeSnapshot.forecastTitle == "10-Day Wake Forecast")
-        #expect(MorningHomeSnapshot.forecastSubtitle == "Next 10 mornings")
+    func nextTenMorningsForecastNamingIsStable() {
+        #expect(MorningHomeSnapshot.forecastTitle == "NEXT 10 MORNINGS")
+
+        let snapshot = MorningHomePresentation.nextTenMorningsSnapshot(from: [])
+        #expect(snapshot.title == "NEXT 10 MORNINGS")
+        #expect(snapshot.loadingState == .empty)
+    }
+
+    @Test
+    func nextTenMorningsRowUsesGregorianDateTagsAndWakeTime() throws {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let seedDate = Self.makeDate(year: 2026, month: 5, day: 1, timeZone: timeZone)
+        let ordinaryDate = Self.nextDateWithoutForecastOpportunity(startingAt: seedDate, timeZone: timeZone)
+        let currentDate = try #require(Self.gregorianCalendar(timeZone: timeZone).date(byAdding: .day, value: -1, to: ordinaryDate))
+        let entry = Self.makeWakeEntry(date: ordinaryDate, timeZone: timeZone)
+
+        let row = MorningHomePresentation.nextTenMorningsRowDisplay(
+            for: entry,
+            index: 0,
+            currentDate: currentDate,
+            timeZone: timeZone
+        )
+
+        #expect(row.dateLabel == "Tomorrow")
+        #expect(row.tags.map(\.title) == ["Fajr"])
+        #expect(row.trailingTime == entry.schedule.wakeDate)
+        #expect(row.trailingStatusText == nil)
+        #expect(row.accessibilityLabel.contains("Fajr morning"))
+        #expect(row.accessibilityLabel.contains("Wake at"))
+        #expect(row.accessibilityLabel.contains("Double tap for details"))
+        #expect(row.accessibilityLabel.contains("30 min before Fajr ends") == false)
+    }
+
+    @Test
+    func nextTenMorningsLaterRowsDoNotUseRamadanDateLabel() throws {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let currentDate = Self.makeDate(year: 2026, month: 4, day: 30, timeZone: timeZone)
+        let laterDate = try #require(Calendar(identifier: .gregorian).date(byAdding: .day, value: 2, to: currentDate))
+        let context = Self.context(primary: .fasting, tags: [.ramadan])
+        let entry = Self.makeWakeEntry(
+            date: laterDate,
+            timeZone: timeZone,
+            context: context,
+            tagResult: Self.tagResult(primary: .ramadanObligatory)
+        )
+
+        let row = MorningHomePresentation.nextTenMorningsRowDisplay(
+            for: entry,
+            index: 1,
+            currentDate: currentDate,
+            timeZone: timeZone
+        )
+
+        #expect(row.dateLabel == "Sat, May 2")
+        #expect(row.dateLabel.contains("Ramadan") == false)
+        #expect(row.tags.map(\.title) == ["Ramadan"])
+    }
+
+    @Test
+    func nextTenMorningsTagDoctrineMatchesForecastSpec() {
+        #expect(Self.nextTenTagTitles() == ["Fajr"])
+        #expect(Self.nextTenTagTitles(primary: .ramadanObligatory, opportunities: [.ashura]) == ["Ramadan"])
+        #expect(Self.nextTenTagTitles(quietModeState: .active, primary: .voluntary, secondary: [.ashura]) == ["Quiet mode"])
+        #expect(Self.nextTenTagTitles(primary: .voluntary, secondary: [.ashura]) == ["Fasting", "Ashura"])
+        #expect(Self.nextTenTagTitles(opportunities: [.ashura]) == ["Ashura"])
+        #expect(Self.nextTenTagTitles(primary: .qadaMakeup, secondary: [.whiteDays]) == ["Fasting", "Qada"])
+        #expect(Self.nextTenTagTitles(opportunities: [.ashura], tahajjudIntended: true) == ["Tahajjud", "Ashura"])
+        #expect(Self.nextTenTagTitles(opportunities: [.mondayThursday]) == ["Fajr"])
+        #expect(Self.nextTenTagTitles(primary: .voluntary, secondary: [.mondayThursday]) == ["Fasting", "Mon/Thu"])
+        #expect(Self.nextTenTagTitles(opportunities: [.whiteDays]) == ["White Days"])
+        #expect(Self.nextTenTagTitles(primary: .voluntary, secondary: [.whiteDays]) == ["Fasting", "White Days"])
+        #expect(Self.nextTenTagTitles(opportunities: [.shawwalSix]) == ["Shawwal 6"])
+        #expect(Self.nextTenTagTitles(opportunities: [.shawwalSix], shawwalComplete: true) == ["Fajr"])
+    }
+
+    @Test
+    func nextTenMorningsTagCapPreservesAccessibilityTags() {
+        let resolution = Self.nextTenTagResolution(
+            primary: .voluntary,
+            secondary: [.arafah, .dhulHijjahFirstNine, .whiteDays],
+            opportunities: []
+        )
+
+        #expect(resolution.visibleTags.map(\.title) == ["Fasting", "Arafah", "Dhul Hijjah"])
+        #expect(resolution.visibleTags.count == 3)
+        #expect(resolution.accessibilityTags.map(\.title) == ["Fasting", "Arafah", "Dhul Hijjah", "White Days"])
     }
 
     @Test
@@ -1877,6 +1960,7 @@ struct ScheduleServiceExtractionTests {
         date: Date,
         timeZone: TimeZone,
         context: ResolvedDayContext = .standard,
+        tagResult: TagComputationResult = .empty,
         skipDay: Bool = false,
         hasDayOverride: Bool = false,
         plannedWakeState: MorningWakeRuleState = .inFajr,
@@ -1960,7 +2044,7 @@ struct ScheduleServiceExtractionTests {
             provenances: [defaultDailyPlanProvenance()],
             isImplicitRamadan: context.supportingTags.contains(.ramadan),
             isExplicitOneOff: hasDayOverride,
-            tagResult: .empty,
+            tagResult: tagResult,
             primaryDisplay: config.primaryDisplay(schedule: schedule),
             sourceSummaryText: "Default Subh morning plan.",
             resolvedDayContext: context,
@@ -1980,6 +2064,155 @@ struct ScheduleServiceExtractionTests {
                 hasDayOverride: hasDayOverride
             )
         )
+    }
+
+    private static func nextTenTagTitles(
+        quietModeState: NextTenMorningsQuietModeState = .inactive,
+        primary: FastPrimaryIntent = .other,
+        secondary: Set<FastSecondaryVirtueTag> = [],
+        opportunities: [FastSecondaryVirtueTag] = [],
+        tahajjudIntended: Bool = false,
+        shawwalComplete: Bool = false
+    ) -> [String] {
+        nextTenTagResolution(
+            quietModeState: quietModeState,
+            primary: primary,
+            secondary: secondary,
+            opportunities: opportunities,
+            tahajjudIntended: tahajjudIntended,
+            shawwalComplete: shawwalComplete
+        ).visibleTags.map(\.title)
+    }
+
+    private static func nextTenTagResolution(
+        quietModeState: NextTenMorningsQuietModeState = .inactive,
+        primary: FastPrimaryIntent = .other,
+        secondary: Set<FastSecondaryVirtueTag> = [],
+        opportunities: [FastSecondaryVirtueTag] = [],
+        tahajjudIntended: Bool = false,
+        shawwalComplete: Bool = false
+    ) -> NextTenMorningsTagResolution {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let date = makeDate(year: 2026, month: 5, day: 1, timeZone: timeZone)
+        return NextTenMorningsTagResolver.resolve(
+            NextTenMorningsTagResolverInput(
+                date: date,
+                dateKey: DateHelpers.dayIdentifier(for: date, timeZone: timeZone),
+                resolvedContext: context(for: primary, secondary: secondary),
+                tagResult: tagResult(primary: primary, secondary: secondary),
+                compatibleOpportunityTags: opportunities,
+                quietModeState: quietModeState,
+                shawwalSixProgress: shawwalComplete
+                    ? ShawwalSixProgressSummary(
+                        completedIntendedShawwalSixCount: 6,
+                        remainingCount: 0,
+                        completedDateKeys: [],
+                        isComplete: true
+                    )
+                    : .incomplete,
+                hasDayOverride: false,
+                tahajjudIntended: tahajjudIntended
+            )
+        )
+    }
+
+    private static func nextDateWithoutForecastOpportunity(
+        startingAt date: Date,
+        timeZone: TimeZone
+    ) -> Date {
+        let calendar = gregorianCalendar(timeZone: timeZone)
+        for offset in 1..<160 {
+            guard let candidate = calendar.date(byAdding: .day, value: offset, to: date) else { continue }
+            let tags = FastIntentEngine.dateDerivedObservanceTags(
+                for: candidate,
+                timeZone: timeZone,
+                includeShawwalPotential: true
+            )
+            if tags.isEmpty,
+               FastIntentEngine.isRamadan(candidate, timeZone: timeZone) == false,
+               FastIntentEngine.isForbiddenToFast(candidate, timeZone: timeZone) == false {
+                return candidate
+            }
+        }
+        Issue.record("Unable to find an ordinary forecast date")
+        return date
+    }
+
+    private static func gregorianCalendar(timeZone: TimeZone) -> Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        return calendar
+    }
+
+    private static func tagResult(
+        primary: FastPrimaryIntent,
+        secondary: Set<FastSecondaryVirtueTag> = []
+    ) -> TagComputationResult {
+        TagComputationResult(
+            computedPrimaryIntent: primary,
+            computedSecondaryTags: secondary,
+            secondaryDetails: [:],
+            suppressedSecondaryTags: []
+        )
+    }
+
+    private static func context(
+        primary: MorningContextType,
+        tags: [DayTag]
+    ) -> ResolvedDayContext {
+        ResolvedDayContext(
+            primaryContext: primary,
+            secondaryContexts: [],
+            supportingTags: tags,
+            explanation: .empty
+        )
+    }
+
+    private static func context(
+        for primary: FastPrimaryIntent,
+        secondary: Set<FastSecondaryVirtueTag>
+    ) -> ResolvedDayContext {
+        let primaryContext: MorningContextType
+        var tags: [DayTag] = []
+
+        switch primary {
+        case .ramadanObligatory:
+            primaryContext = .fasting
+            tags.append(.ramadan)
+        case .qadaMakeup:
+            primaryContext = .qadaFast
+            tags.append(.qada)
+        case .kaffarahExpiation:
+            primaryContext = .fasting
+            tags.append(.kaffarah)
+        case .vowNadhr:
+            primaryContext = .fasting
+            tags.append(.vow)
+        case .voluntary:
+            primaryContext = .sunnahFast
+            tags.append(.voluntary)
+        case .forbidden, .other:
+            primaryContext = .standard
+        }
+
+        for tag in secondary {
+            switch tag {
+            case .shawwalSix:
+                tags.append(.shawwalSix)
+            case .arafah:
+                tags.append(.arafah)
+            case .ashura:
+                tags.append(.ashura)
+            case .whiteDays:
+                tags.append(.whiteDays)
+            case .mondayThursday:
+                tags.append(.mondayThursday)
+            case .dhulHijjahFirstNine:
+                tags.append(.dhulHijjahFirstNine)
+            }
+        }
+
+        return context(primary: primaryContext, tags: tags)
     }
 
     private static func makeDecisionLog(

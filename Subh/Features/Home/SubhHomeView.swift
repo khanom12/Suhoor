@@ -74,7 +74,7 @@ struct SubhHomeView: View {
                             destination = .fajrcast(selectedDateKey: weeklyFajrcast.selectedDay.dateKey)
                         }
 
-                        MorningcastCard(entries: snapshot.morningcast) { entry in
+                        NextTenMorningsCard(entries: snapshot.morningcast) { entry in
                             destination = .day(entry.schedule)
                         }
                     }
@@ -879,28 +879,30 @@ private struct HomeFloatingIconButton: View {
     }
 }
 
-private struct MorningcastCard: View {
+private struct NextTenMorningsCard: View {
     let entries: [WakeRowEntry]
     let onSelect: (WakeRowEntry) -> Void
 
     var body: some View {
+        let forecast = MorningHomePresentation.nextTenMorningsSnapshot(from: entries)
+
         AppGlassSurface(
             variant: .grouped,
             contentPadding: 0
         ) {
             VStack(spacing: 0) {
-                AppSectionHeader(
-                    MorningHomeSnapshot.forecastTitle,
-                    subtitle: MorningHomeSnapshot.forecastSubtitle
-                )
-                .padding(.horizontal, DesignTokens.spacingL)
-                .padding(.top, DesignTokens.spacingM)
-                .padding(.bottom, DesignTokens.spacingS)
+                Text(forecast.title)
+                    .appTextRole(.eyebrow)
+                    .foregroundStyle(WakeGlassTheme.tertiaryText)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, DesignTokens.spacingL)
+                    .padding(.top, DesignTokens.spacingL)
+                    .padding(.bottom, DesignTokens.spacingS)
 
-                AppGroupDivider(inset: DesignTokens.spacingL)
+                NextTenMorningsDivider(inset: DesignTokens.spacingL)
 
-                if entries.isEmpty {
-                    Text("Upcoming mornings will appear once Subh has resolved schedule data.")
+                if forecast.loadingState == .empty {
+                    Text("Wake forecast will appear once times are available.")
                         .font(AppTypography.rowBody)
                         .foregroundStyle(WakeGlassTheme.secondaryText)
                         .fixedSize(horizontal: false, vertical: true)
@@ -908,14 +910,15 @@ private struct MorningcastCard: View {
                         .padding(.horizontal, DesignTokens.spacingL)
                         .padding(.vertical, DesignTokens.spacingM)
                 } else {
-                    ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
-                        MorningcastCompactRow(entry: entry) {
+                    ForEach(Array(forecast.rows.enumerated()), id: \.element.id) { index, row in
+                        NextTenMorningsRow(display: row) {
+                            guard let entry = entries.first(where: { $0.id == row.id }) else { return }
                             onSelect(entry)
                         }
                         .padding(.horizontal, DesignTokens.spacingM)
 
-                        if index < entries.count - 1 {
-                            AppGroupDivider(inset: DesignTokens.spacingM)
+                        if index < forecast.rows.count - 1 {
+                            NextTenMorningsDivider(inset: DesignTokens.spacingM)
                         }
                     }
                 }
@@ -924,43 +927,16 @@ private struct MorningcastCard: View {
     }
 }
 
-private struct MorningcastCompactRow: View {
-    let entry: WakeRowEntry
+private struct NextTenMorningsRow: View {
+    let display: NextTenMorningsRowDisplay
     let onSelect: () -> Void
 
     var body: some View {
-        let display = MorningHomePresentation.morningcastRowDisplay(for: entry)
-
         Button(action: onSelect) {
-            HStack(alignment: .firstTextBaseline, spacing: DesignTokens.spacingM) {
-                VStack(alignment: .leading, spacing: DesignTokens.textSpacingCompact) {
-                    Text(display.title)
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(display.isInactive ? WakeGlassTheme.primaryText.opacity(0.62) : WakeGlassTheme.primaryText.opacity(0.92))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)
-
-                    if let subtitle = display.subtitle {
-                        Text(subtitle)
-                            .font(AppTypography.rowBody)
-                            .foregroundStyle(WakeGlassTheme.secondaryText)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.8)
-                    }
-                }
-
-                Spacer(minLength: DesignTokens.spacingS)
-
-                if let trailingTime = display.trailingTime {
-                    MorningcastTimeLockup(date: trailingTime, isDisabled: display.isInactive)
-                        .fixedSize(horizontal: true, vertical: false)
-                } else if let trailingStatusText = display.trailingStatusText {
-                    Text(trailingStatusText)
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(WakeGlassTheme.secondaryText)
-                        .multilineTextAlignment(.trailing)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+            ViewThatFits(in: .horizontal) {
+                rowContent(tags: display.tags)
+                rowContent(tags: Array(display.tags.prefix(2)))
+                rowContent(tags: Array(display.tags.prefix(1)))
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
@@ -968,7 +944,147 @@ private struct MorningcastCompactRow: View {
             .accessibilityLabel(display.accessibilityLabel)
         }
         .buttonStyle(.plain)
-        .padding(.vertical, DesignTokens.space8)
+        .padding(.vertical, DesignTokens.compactRowVerticalPadding)
+    }
+
+    private func rowContent(tags: [NextTenMorningsTagDisplay]) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: DesignTokens.spacingM) {
+            Text(display.dateLabel)
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(display.isInactive ? WakeGlassTheme.primaryText.opacity(0.62) : WakeGlassTheme.primaryText.opacity(0.92))
+                .lineLimit(1)
+                .minimumScaleFactor(0.78)
+                .frame(minWidth: 76, alignment: .leading)
+
+            NextTenMorningsTagCluster(tags: tags, isDisabled: display.isInactive)
+
+            Spacer(minLength: DesignTokens.spacingS)
+
+            if let trailingTime = display.trailingTime {
+                NextTenMorningsTimeLockup(date: trailingTime, isDisabled: display.isInactive)
+                    .fixedSize(horizontal: true, vertical: false)
+            } else if let trailingStatusText = display.trailingStatusText {
+                Text(trailingStatusText)
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(WakeGlassTheme.secondaryText)
+                    .multilineTextAlignment(.trailing)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+}
+
+private struct NextTenMorningsTagCluster: View {
+    let tags: [NextTenMorningsTagDisplay]
+    let isDisabled: Bool
+
+    var body: some View {
+        tagRow(tags)
+        .fixedSize(horizontal: true, vertical: false)
+    }
+
+    private func tagRow(_ tags: [NextTenMorningsTagDisplay]) -> some View {
+        HStack(spacing: DesignTokens.space6) {
+            ForEach(tags) { tag in
+                NextTenMorningsTagChip(tag: tag, isDisabled: isDisabled)
+            }
+        }
+    }
+}
+
+private struct NextTenMorningsTagChip: View {
+    let tag: NextTenMorningsTagDisplay
+    let isDisabled: Bool
+
+    var body: some View {
+        let base = color(for: tag.semantic)
+        let fillOpacity = fillOpacity(for: tag.prominence)
+        let strokeOpacity = strokeOpacity(for: tag.prominence)
+
+        Text(tag.title)
+            .font(AppTypography.badge)
+            .foregroundStyle(textColor(base: base, prominence: tag.prominence))
+            .lineLimit(1)
+            .padding(.vertical, DesignTokens.compactChipVerticalPadding)
+            .padding(.horizontal, DesignTokens.compactChipHorizontalPadding)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(base.opacity(fillOpacity))
+                    .overlay {
+                        Capsule(style: .continuous)
+                            .stroke(base.opacity(strokeOpacity), lineWidth: 0.8)
+                    }
+            )
+            .opacity(isDisabled ? 0.55 : 1.0)
+            .accessibilityHidden(true)
+    }
+
+    private func color(for semantic: NextTenMorningsTagSemantic) -> Color {
+        switch semantic {
+        case .fajrFallback:
+            return Color.white
+        case .quietMode:
+            return Color.gray
+        case .ramadan:
+            return FastPrimaryIntent.ramadanObligatory.style.color
+        case .fastingIntent:
+            return FastPrimaryIntent.voluntary.style.color
+        case .tahajjudIntent:
+            return Color.purple
+        case .qada:
+            return FastPrimaryIntent.qadaMakeup.style.color
+        case .kaffarah:
+            return FastPrimaryIntent.kaffarahExpiation.style.color
+        case .vow:
+            return FastPrimaryIntent.vowNadhr.style.color
+        case .observanceOpportunity(let tag), .observanceIntended(let tag):
+            return tag.style.color
+        }
+    }
+
+    private func textColor(
+        base: Color,
+        prominence: NextTenMorningsTagProminence
+    ) -> Color {
+        switch prominence {
+        case .fallback:
+            return WakeGlassTheme.secondaryText
+        case .strong, .opportunity:
+            return base
+        }
+    }
+
+    private func fillOpacity(for prominence: NextTenMorningsTagProminence) -> Double {
+        switch prominence {
+        case .strong:
+            return 0.18
+        case .opportunity:
+            return 0.10
+        case .fallback:
+            return 0.07
+        }
+    }
+
+    private func strokeOpacity(for prominence: NextTenMorningsTagProminence) -> Double {
+        switch prominence {
+        case .strong:
+            return 0.34
+        case .opportunity:
+            return 0.22
+        case .fallback:
+            return 0.12
+        }
+    }
+}
+
+private struct NextTenMorningsDivider: View {
+    let inset: CGFloat
+
+    var body: some View {
+        Rectangle()
+            .fill(WakeGlassTheme.divider)
+            .frame(height: 1)
+            .padding(.leading, inset)
     }
 }
 
@@ -1013,7 +1129,7 @@ private struct SubhHomeTimeLockup: View {
     }()
 }
 
-private struct MorningcastTimeLockup: View {
+private struct NextTenMorningsTimeLockup: View {
     let date: Date
     let isDisabled: Bool
 

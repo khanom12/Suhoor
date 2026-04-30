@@ -13,8 +13,7 @@ struct MorningHomeContextFlag: Identifiable, Equatable, Sendable {
 
 struct MorningHomeSnapshot {
     static let maximumMorningcastCount = 10
-    static let forecastTitle = "10-Day Wake Forecast"
-    static let forecastSubtitle = "Next 10 mornings"
+    static let forecastTitle = "NEXT 10 MORNINGS"
     static let mvpCardKinds: [MorningHomeCardKind] = [
         .tomorrowMorning,
         .weeklyFajrcast,
