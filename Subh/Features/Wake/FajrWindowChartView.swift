@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct FajrWindowChartView: View {
     enum LayoutStyle {
@@ -739,7 +740,6 @@ struct FajrWindowChartView: View {
         let dayColumnWidth = max(1, size.width - rightRailWidth - plotMinX)
         let plotWidth = max(1, dayColumnWidth - 1)
         let weekdayRowY = topAxisSpacing + (xAxisLineHeight / 2)
-        let calloutTop = plotTop + plotHeight + plotToCalloutSpacing
         let yAxisLabelWidth = max(32.0, rightRailWidth - 7.0)
         let rightRailMinX = size.width - rightRailWidth
         let yAxisLabelMinX = rightRailMinX + 4.0
@@ -761,6 +761,12 @@ struct FajrWindowChartView: View {
             y: plotFrame.minY,
             width: dayColumnWidth,
             height: plotHeight
+        )
+        let calloutTop = CompactFajrcastGeometry.centeredCalloutTop(
+            plotBottom: plotFrame.maxY,
+            chartBottom: size.height,
+            calloutHeight: calloutHeight,
+            minimumGap: plotToCalloutSpacing
         )
 
         return CompactLayoutMetrics(
@@ -846,46 +852,114 @@ struct FajrWindowChartView: View {
 
     @ViewBuilder
     private func compactBoundaryLabels(in metrics: CompactLayoutMetrics) -> some View {
-        if let labelPoint = chart.renderPoints.first {
-            let labelWidth = min(104, max(84, metrics.rightRailMinX - metrics.plotFrame.minX - 12))
-            let labelHeight = compactBoundaryLabelLineHeight
-            let labelX = metrics.plotFrame.minX + 5 + (labelWidth / 2)
-            let beginY = clampedBoundaryLabelY(
-                yPosition(for: labelPoint.fajrStartMinutes, in: metrics.plotFrame) - (labelHeight / 2) - 2,
-                labelHeight: labelHeight,
-                in: metrics.plotFrame
-            )
-            let endY = clampedBoundaryLabelY(
-                yPosition(for: labelPoint.fajrEndOrBoundaryMinutes, in: metrics.plotFrame) + (labelHeight / 2) + 2,
-                labelHeight: labelHeight,
-                in: metrics.plotFrame
-            )
-
+        if let beginGeometry = compactBoundaryLabelGeometry(
+            title: "Fajr begins",
+            keyPath: \.fajrStartMinutes,
+            placement: .above,
+            in: metrics
+        ) {
             Text("Fajr begins")
                 .font(.system(size: compactBoundaryLabelPointSize, weight: .medium))
                 .foregroundStyle(compactSecondaryTextColor)
                 .lineLimit(1)
-                .frame(width: labelWidth, alignment: .leading)
-                .position(x: labelX, y: beginY)
+                .frame(width: beginGeometry.labelWidth, alignment: .leading)
+                .rotationEffect(.radians(beginGeometry.angleRadians))
+                .position(beginGeometry.center)
+        }
 
+        if let endGeometry = compactBoundaryLabelGeometry(
+            title: "Fajr ends",
+            keyPath: \.fajrEndOrBoundaryMinutes,
+            placement: .below,
+            in: metrics
+        ) {
             Text("Fajr ends")
                 .font(.system(size: compactBoundaryLabelPointSize, weight: .medium))
                 .foregroundStyle(compactSecondaryTextColor)
                 .lineLimit(1)
-                .frame(width: labelWidth, alignment: .leading)
-                .position(x: labelX, y: endY)
+                .frame(width: endGeometry.labelWidth, alignment: .leading)
+                .rotationEffect(.radians(endGeometry.angleRadians))
+                .position(endGeometry.center)
         }
     }
 
-    private func clampedBoundaryLabelY(
-        _ proposedY: CGFloat,
-        labelHeight: CGFloat,
-        in frame: CGRect
-    ) -> CGFloat {
-        min(
-            max(proposedY, frame.minY + labelHeight / 2),
-            frame.maxY - labelHeight / 2
+    private func compactBoundaryLabelGeometry(
+        title: String,
+        keyPath: KeyPath<FajrWindowPoint, Int>,
+        placement: CompactFajrcastGeometry.BoundaryLabelPlacement,
+        in metrics: CompactLayoutMetrics
+    ) -> CompactBoundaryLabelGeometry? {
+        let leadingInset: CGFloat = 5
+        let availableWidth = max(48, metrics.plotFrame.maxX - metrics.plotFrame.minX - (leadingInset * 2))
+        let labelWidth = compactBoundaryLabelWidth(title, maxWidth: availableWidth)
+        let labelHeight = compactBoundaryLabelLineHeight
+        let minCenterX = metrics.plotFrame.minX + leadingInset + labelWidth / 2
+        let maxCenterX = metrics.plotFrame.maxX - leadingInset - labelWidth / 2
+        let preferredCenterX = minCenterX
+        let centerX = min(max(preferredCenterX, minCenterX), max(minCenterX, maxCenterX))
+        let dayStep = metrics.dayColumnFrame.width / CGFloat(max(chart.points.count - 1, 1))
+        let sampleRadius = min(max(12, 0.35 * dayStep), 28)
+        let x0 = min(max(centerX - sampleRadius, metrics.plotFrame.minX), metrics.plotFrame.maxX)
+        let x1 = min(max(centerX + sampleRadius, metrics.plotFrame.minX), metrics.plotFrame.maxX)
+
+        guard
+            let boundaryY = compactBoundaryY(at: centerX, keyPath: keyPath, in: metrics.plotFrame),
+            let y0 = compactBoundaryY(at: x0, keyPath: keyPath, in: metrics.plotFrame),
+            let y1 = compactBoundaryY(at: x1, keyPath: keyPath, in: metrics.plotFrame)
+        else {
+            return nil
+        }
+
+        let angle = CompactFajrcastGeometry.tangentAngleRadians(x0: x0, y0: y0, x1: x1, y1: y1)
+        let normal = CompactFajrcastGeometry.outwardNormal(for: angle, placement: placement)
+        let normalOffset = max(4, 0.25 * labelHeight)
+        let rawCenterY = boundaryY + (normal.y * normalOffset)
+        let centerY = min(
+            max(rawCenterY, metrics.plotFrame.minY + labelHeight / 2),
+            metrics.plotFrame.maxY - labelHeight / 2
         )
+
+        return CompactBoundaryLabelGeometry(
+            center: CGPoint(x: centerX + (normal.x * normalOffset), y: centerY),
+            labelWidth: labelWidth,
+            angleRadians: angle
+        )
+    }
+
+    private func compactBoundaryY(
+        at x: CGFloat,
+        keyPath: KeyPath<FajrWindowPoint, Int>,
+        in frame: CGRect
+    ) -> CGFloat? {
+        let samples = chart.renderPoints
+            .map { point in
+                (
+                    x: xPosition(for: point, in: frame),
+                    y: yPosition(for: point[keyPath: keyPath], in: frame)
+                )
+            }
+            .sorted { $0.x < $1.x }
+
+        guard let first = samples.first else { return nil }
+        guard samples.count > 1 else { return first.y }
+        if x <= first.x { return first.y }
+        if let last = samples.last, x >= last.x { return last.y }
+
+        for pair in zip(samples, samples.dropFirst()) {
+            let left = pair.0
+            let right = pair.1
+            guard x >= left.x, x <= right.x else { continue }
+            let ratio = (x - left.x) / max(1, right.x - left.x)
+            return left.y + ((right.y - left.y) * ratio)
+        }
+
+        return samples.last?.y
+    }
+
+    private func compactBoundaryLabelWidth(_ title: String, maxWidth: CGFloat) -> CGFloat {
+        let font = UIFont.systemFont(ofSize: compactBoundaryLabelPointSize, weight: .medium)
+        let measuredWidth = (title as NSString).size(withAttributes: [.font: font]).width
+        return ceil(min(maxWidth, measuredWidth + 2))
     }
 
     @ViewBuilder
@@ -1251,4 +1325,59 @@ private struct CompactFajrcastChartLayoutProfile {
     func scaled(base: CGFloat) -> CGFloat {
         max(base * 0.88, (base * textScale).rounded(.toNearestOrAwayFromZero))
     }
+}
+
+struct CompactFajrcastGeometry {
+    enum BoundaryLabelPlacement {
+        case above
+        case below
+    }
+
+    static func centeredCalloutTop(
+        plotBottom: CGFloat,
+        chartBottom: CGFloat,
+        calloutHeight: CGFloat,
+        minimumGap: CGFloat
+    ) -> CGFloat {
+        let pocketHeight = chartBottom - plotBottom
+        let centeredGap = (pocketHeight - calloutHeight) / 2
+        return plotBottom + max(minimumGap, centeredGap)
+    }
+
+    static func tangentAngleRadians(
+        x0: CGFloat,
+        y0: CGFloat,
+        x1: CGFloat,
+        y1: CGFloat
+    ) -> CGFloat {
+        atan2(y1 - y0, x1 - x0)
+    }
+
+    static func outwardNormal(
+        for angleRadians: CGFloat,
+        placement: BoundaryLabelPlacement
+    ) -> CGPoint {
+        let dx = cos(angleRadians)
+        let dy = sin(angleRadians)
+        var normal = CGPoint(x: -dy, y: dx)
+
+        switch placement {
+        case .above where normal.y > 0:
+            normal.x *= -1
+            normal.y *= -1
+        case .below where normal.y < 0:
+            normal.x *= -1
+            normal.y *= -1
+        default:
+            break
+        }
+
+        return normal
+    }
+}
+
+private struct CompactBoundaryLabelGeometry {
+    let center: CGPoint
+    let labelWidth: CGFloat
+    let angleRadians: CGFloat
 }

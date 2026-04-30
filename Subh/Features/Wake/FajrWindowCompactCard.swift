@@ -42,7 +42,8 @@ struct WeeklyFajrcastCard: View {
                         accessibilityHint: "Adjust to focus another visible morning."
                     )
                     .padding(.horizontal, horizontalInset)
-                    .padding(.vertical, chartVerticalPadding)
+                    .padding(.top, chartVerticalPadding)
+                    .padding(.bottom, chartBottomPadding)
 
                     dividerLine
                         .padding(.horizontal, horizontalInset)
@@ -165,6 +166,10 @@ struct WeeklyFajrcastCard: View {
 
     private var chartVerticalPadding: CGFloat {
         dynamicTypeSize.isAccessibilitySize ? 8 : 7
+    }
+
+    private var chartBottomPadding: CGFloat {
+        0
     }
 
     private var footerVerticalPadding: CGFloat {

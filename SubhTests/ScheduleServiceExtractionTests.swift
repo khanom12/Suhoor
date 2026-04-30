@@ -1457,6 +1457,41 @@ struct ScheduleServiceExtractionTests {
     }
 
     @Test
+    func compactFajrcastGeometryCentersBottomCalloutInPocket() {
+        let plotBottom: CGFloat = 160
+        let chartBottom: CGFloat = 210
+        let calloutHeight: CGFloat = 40
+        let calloutTop = CompactFajrcastGeometry.centeredCalloutTop(
+            plotBottom: plotBottom,
+            chartBottom: chartBottom,
+            calloutHeight: calloutHeight,
+            minimumGap: 5
+        )
+
+        let topGap = calloutTop - plotBottom
+        let bottomGap = chartBottom - (calloutTop + calloutHeight)
+
+        #expect(abs(topGap - bottomGap) < 0.001)
+        #expect(topGap == 5)
+    }
+
+    @Test
+    func compactFajrcastGeometryUsesBoundaryTangentAndOutwardNormals() {
+        let angle = CompactFajrcastGeometry.tangentAngleRadians(
+            x0: 0,
+            y0: 10,
+            x1: 20,
+            y1: 14
+        )
+        let aboveNormal = CompactFajrcastGeometry.outwardNormal(for: angle, placement: .above)
+        let belowNormal = CompactFajrcastGeometry.outwardNormal(for: angle, placement: .below)
+
+        #expect(angle > 0)
+        #expect(aboveNormal.y < 0)
+        #expect(belowNormal.y > 0)
+    }
+
+    @Test
     func compactFajrcastUsesCenteredVisibleWindow() {
         let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
         let today = Self.makeDate(year: 2026, month: 4, day: 26, hour: 22, minute: 34, timeZone: timeZone)
