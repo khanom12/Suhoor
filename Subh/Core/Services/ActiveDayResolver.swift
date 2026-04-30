@@ -509,6 +509,7 @@ final class ActiveDayResolver {
             defaultWakeRule: defaultWakeRule,
             resolvedWakeRule: resolvedWakeRule,
             wakeRuleWasOverridden: overrideWakeRule != nil,
+            quickWakeModeOverride: override?.quickWakeModeOverride,
             tahajjudRefinement: override?.tahajjudRefinement ?? false,
             suhoorTimeMode: suhoorTimeMode,
             suhoorOffsetMinutes: suhoorOffsetMinutes,

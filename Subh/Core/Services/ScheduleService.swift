@@ -1552,6 +1552,21 @@ final class ScheduleManager: ObservableObject {
         return true
     }
 
+    @discardableResult
+    func selectHeroWakeMode(for date: Date, mode: QuickWakeMode, timeZone: TimeZone = .current) async -> Bool {
+        let normalizedDate = DateHelpers.startOfDay(date, in: timeZone)
+        guard activeDay(for: normalizedDate, timeZone: timeZone) != nil else {
+            return false
+        }
+
+        alarmConfigStore.updateOverride(for: normalizedDate, timeZone: timeZone) { override in
+            WakeStateSelectionResolver.apply(mode, to: &override)
+        }
+
+        await rescheduleDay(normalizedDate, preferCached: false)
+        return true
+    }
+
     private static func persistedHeroWakeAdjustmentMinutes(
         clampedWakeTime: Date,
         date: Date,
@@ -1601,24 +1616,7 @@ final class ScheduleManager: ObservableObject {
     }
 
     private func isEarlyWorshipMorning(_ day: ActiveAlarmDay) -> Bool {
-        let context = day.resolvedDayContext
-        return isFastingMorning(context)
-            || context.primaryContext == .tahajjud
-            || context.secondaryContexts.contains(.tahajjud)
-            || day.effectiveConfig.tahajjudRefinement
-    }
-
-    private func isFastingMorning(_ context: ResolvedDayContext) -> Bool {
-        let fastingContexts: Set<MorningContextType> = [.fasting, .qadaFast, .sunnahFast]
-        if fastingContexts.contains(context.primaryContext) {
-            return true
-        }
-        if context.secondaryContexts.contains(where: { fastingContexts.contains($0) }) {
-            return true
-        }
-
-        let fastingTags: Set<DayTag> = [.ramadan, .qada, .kaffarah, .vow, .voluntary]
-        return context.supportingTags.contains(where: { fastingTags.contains($0) })
+        WakeStateSelectionResolver.isEarlyWorshipMorning(day)
     }
 
     func schedule(for date: Date) -> DaySchedule? {

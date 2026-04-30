@@ -729,6 +729,7 @@ final class AlarmConfigStore: ObservableObject {
             defaultWakeRule: defaultWakeRule,
             resolvedWakeRule: resolvedWakeRule,
             wakeRuleWasOverridden: overrideWakeRule != nil,
+            quickWakeModeOverride: override?.quickWakeModeOverride,
             tahajjudRefinement: override?.tahajjudRefinement ?? false,
             suhoorTimeMode: suhoorTimeMode,
             suhoorOffsetMinutes: effectiveSuhoorOffset,

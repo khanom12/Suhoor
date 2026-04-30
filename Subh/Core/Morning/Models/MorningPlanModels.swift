@@ -51,6 +51,25 @@ enum DefaultWakeState: String, Codable, CaseIterable, Identifiable, Sendable {
     }
 }
 
+enum QuickWakeMode: String, Codable, CaseIterable, Identifiable, Sendable {
+    case fast
+    case fajr
+    case quiet
+
+    var id: String { rawValue }
+
+    var displayTitle: String {
+        switch self {
+        case .fast:
+            return "Fast"
+        case .fajr:
+            return "Fajr"
+        case .quiet:
+            return "Quiet"
+        }
+    }
+}
+
 struct WakeAnchor: Codable, Equatable, Hashable, Sendable {
     let type: WakeAnchorType
     let date: Date

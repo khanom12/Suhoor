@@ -1966,6 +1966,99 @@ struct ScheduleManagerHijriTests {
         #expect((updatedDisplay.wakeWindowPositionRatio ?? 1) < 0.01)
     }
 
+    @Test
+    @MainActor
+    func heroQuickWakeModeSelectionPersistsAndRefreshesSnapshots() async {
+        let suiteName = "ScheduleManagerHijriTests.HeroQuickWakeModeSelection"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        let timeZone = TimeZone.current
+
+        let settingsStore = SuhoorSettingsStore(defaults: defaults)
+        settingsStore.update { draft in
+            draft.isConfigured = true
+            draft.locationMode = .fixed
+            draft.fixedLocation = FixedLocation(latitude: 43.6532, longitude: -79.3832)
+        }
+
+        let alarmConfigStore = AlarmConfigStore(defaultsStore: defaults)
+        let manager = ScheduleManager(
+            settingsStore: settingsStore,
+            locationService: LocationService(),
+            alarmConfigStore: alarmConfigStore,
+            hijriAdjustmentStore: HijriMonthAdjustmentStore(defaults: defaults),
+            cacheStore: ScheduleCacheStore(defaults: defaults)
+        )
+
+        await manager.refreshSchedules(force: true)
+
+        guard let target = manager.currentMorningHomeSnapshot.tomorrow?.activeDay else {
+            Issue.record("Expected a resolved target morning.")
+            return
+        }
+
+        let defaultWakeRule = alarmConfigStore.defaults.defaultWakeRule
+        let selectedFast = await manager.selectHeroWakeMode(for: target.date, mode: .fast, timeZone: timeZone)
+
+        #expect(selectedFast)
+        #expect(alarmConfigStore.defaults.defaultWakeRule == defaultWakeRule)
+
+        guard let fastOverride = alarmConfigStore.override(for: target.date, timeZone: timeZone),
+              let fastDay = manager.activeDay(for: target.date, timeZone: timeZone),
+              let fastDisplay = heroDisplay(for: target.date, manager: manager, timeZone: timeZone) else {
+            Issue.record("Expected the selected Fast mode to persist and re-resolve.")
+            return
+        }
+
+        let expectedFastWake = fastDay.decisionLog.prayerWindow.fajrStart.addingTimeInterval(-30 * 60)
+        let fastPoint = manager.currentMorningHomeSnapshot.weeklyFajrcast.points.first {
+            $0.dateKey == fastDay.dateKey
+        }
+
+        #expect(fastOverride.quickWakeModeOverride == .fast)
+        #expect(fastOverride.skipDay == false)
+        #expect(fastOverride.wakeStateOverride == .preFajr)
+        #expect(fastOverride.wakeAnchorTypeOverride == .fajrStart)
+        #expect(fastOverride.wakeDeltaOverrideMinutes == 30)
+        #expect(fastDay.effectiveConfig.quickWakeModeOverride == .fast)
+        #expect(fastDisplay.selectedQuickWakeMode == .fast)
+        #expect(fastDisplay.fajrWindowVisualMode == .interactiveEarlyWorshipWindow)
+        #expect(fastDisplay.detailText == "Wake up 30 min before Fajr begins")
+        #expect(abs(fastDay.schedule.wakeDate.timeIntervalSince(expectedFastWake)) < 60)
+        #expect(fastPoint?.primaryWake == fastDay.schedule.wakeDate)
+
+        let selectedQuiet = await manager.selectHeroWakeMode(for: target.date, mode: .quiet, timeZone: timeZone)
+
+        #expect(selectedQuiet)
+
+        guard let quietOverride = alarmConfigStore.override(for: target.date, timeZone: timeZone),
+              let quietDay = manager.activeDay(for: target.date, timeZone: timeZone),
+              let quietDisplay = heroDisplay(for: target.date, manager: manager, timeZone: timeZone) else {
+            Issue.record("Expected the selected Quiet mode to persist and re-resolve.")
+            return
+        }
+
+        let quietPoint = manager.currentMorningHomeSnapshot.weeklyFajrcast.points.first {
+            $0.dateKey == quietDay.dateKey
+        }
+        let quietMorningcastEntry = manager.currentMorningHomeSnapshot.morningcast.first {
+            $0.id == quietDay.dateKey
+        }
+
+        #expect(quietOverride.quickWakeModeOverride == .quiet)
+        #expect(quietOverride.skipDay)
+        #expect(quietOverride.suhoorEnabled == false)
+        #expect(quietOverride.reminderEnabled == false)
+        #expect(quietOverride.fajrEnabled == false)
+        #expect(quietDay.effectiveConfig.quickWakeModeOverride == .quiet)
+        #expect(quietDisplay.primaryText == "Quiet mode on")
+        #expect(quietDisplay.detailText == "No alarm will ring for tomorrow")
+        #expect(quietDisplay.fajrWindowVisualMode == .staticWithinFajrWindow)
+        #expect(quietDisplay.wakeAdjustmentEnabled == false)
+        #expect(quietPoint?.isSkipped == true)
+        #expect(quietMorningcastEntry?.config.quickWakeModeOverride == .quiet)
+    }
+
     @MainActor
     private func heroDisplay(
         for date: Date,

@@ -124,6 +124,65 @@ final class MorningHeroFajrAdjusterUITests: XCTestCase {
         XCTAssertEqual(relation.label, "Wake up as Fajr begins")
     }
 
+    func testMorningHeroQuickWakeModeSelectorUpdatesResolvedState() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "--ui-testing-morning-hero-fajr-adjuster",
+            "-AppleLanguages",
+            "(en)",
+            "-AppleLocale",
+            "en_US"
+        ]
+        app.launch()
+
+        let primaryWakeTime = app.descendants(matching: .any)["morningHero.primaryWakeTime"]
+        XCTAssertTrue(primaryWakeTime.waitForExistence(timeout: 12))
+        let initialWakeLabel = primaryWakeTime.label
+
+        let relation = app.descendants(matching: .any)["morningHero.relation"]
+        XCTAssertTrue(relation.waitForExistence(timeout: 4))
+        XCTAssertTrue(relation.label.contains("before Fajr ends"))
+
+        let selector = app.descendants(matching: .any)["morningHero.quickWakeMode"]
+        let fast = app.descendants(matching: .any)["morningHero.quickWakeMode.fast"]
+        let fajr = app.descendants(matching: .any)["morningHero.quickWakeMode.fajr"]
+        let quiet = app.descendants(matching: .any)["morningHero.quickWakeMode.quiet"]
+
+        XCTAssertTrue(selector.waitForExistence(timeout: 4))
+        XCTAssertTrue(fast.exists)
+        XCTAssertTrue(fajr.exists)
+        XCTAssertTrue(quiet.exists)
+        XCTAssertTrue(fajr.label.contains("selected"))
+
+        fast.tap()
+
+        XCTAssertTrue(waitForLabelChange(in: app, identifier: "morningHero.primaryWakeTime", from: initialWakeLabel))
+        XCTAssertTrue(waitForElementLabel(in: app, identifier: "morningHero.relation") {
+            $0.contains("before Fajr begins")
+        })
+        XCTAssertTrue(waitForElementLabel(in: app, identifier: "morningHero.quickWakeMode.fast") {
+            $0.contains("selected")
+        })
+        XCTAssertTrue(app.descendants(matching: .any)["morningHero.fajrWindow.marker"].exists)
+
+        let quietAfterFast = app.descendants(matching: .any)["morningHero.quickWakeMode.quiet"]
+        XCTAssertTrue(quietAfterFast.waitForExistence(timeout: 4))
+        quietAfterFast.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+
+        XCTAssertTrue(waitForElementLabel(in: app, identifier: "morningHero.primaryWakeTime") {
+            $0 == "Quiet mode on"
+        })
+        XCTAssertTrue(waitForElementLabel(in: app, identifier: "morningHero.relation") {
+            $0 == "No alarm will ring for tomorrow"
+        })
+        XCTAssertTrue(waitForElementLabel(in: app, identifier: "morningHero.quickWakeMode.quiet") {
+            $0.contains("selected")
+        })
+        XCTAssertTrue(app.descendants(matching: .any)["morningHero.fajrWindow"].waitForExistence(timeout: 4))
+        XCTAssertTrue(app.descendants(matching: .any)["morningHero.fajrWindow.track"].exists)
+        XCTAssertFalse(app.descendants(matching: .any)["morningHero.fajrWindow.marker"].exists)
+    }
+
     private func waitForLabelChange(
         in app: XCUIApplication,
         identifier: String,
@@ -142,6 +201,27 @@ final class MorningHeroFajrAdjusterUITests: XCTestCase {
         } while Date() < deadline
 
         XCTFail("Expected \(identifier) label to change from \(originalLabel)", file: file, line: line)
+        return false
+    }
+
+    private func waitForElementLabel(
+        in app: XCUIApplication,
+        identifier: String,
+        timeout: TimeInterval = 12,
+        file: StaticString = #filePath,
+        line: UInt = #line,
+        matches predicate: (String) -> Bool
+    ) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        repeat {
+            let element = app.descendants(matching: .any)[identifier]
+            if element.exists, predicate(element.label) {
+                return true
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.2))
+        } while Date() < deadline
+
+        XCTFail("Expected \(identifier) label to match predicate", file: file, line: line)
         return false
     }
 }

@@ -10,4 +10,8 @@ enum MorningHeroUIIdentifier {
     static let fajrWindowTrack = "morningHero.fajrWindow.track"
     static let fajrWindowMarker = "morningHero.fajrWindow.marker"
     static let fajrWindowEndTime = "morningHero.fajrWindow.endTime"
+    static let quickWakeModeSelector = "morningHero.quickWakeMode"
+    static func quickWakeModeSegment(_ mode: QuickWakeMode) -> String {
+        "morningHero.quickWakeMode.\(mode.rawValue)"
+    }
 }

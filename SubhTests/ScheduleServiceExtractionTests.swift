@@ -1077,6 +1077,95 @@ struct ScheduleServiceExtractionTests {
     }
 
     @Test
+    func tomorrowHeroQuickWakeModesDriveHeroAndForecastPresentation() {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let today = Self.makeDate(year: 2026, month: 4, day: 26, timeZone: timeZone)
+        let date = Self.makeDate(year: 2026, month: 4, day: 27, timeZone: timeZone)
+
+        let fajrEntry = Self.makeWakeEntry(date: date, timeZone: timeZone)
+        let fajrDisplay = MorningHomePresentation.heroDisplay(
+            entry: fajrEntry,
+            permissionSummary: "",
+            currentDate: today,
+            timeZone: timeZone
+        )
+
+        #expect(fajrDisplay.selectedQuickWakeMode == .fajr)
+        #expect(fajrDisplay.quickWakeModeOptions.map(\.title) == ["Fast", "Fajr", "Quiet"])
+        #expect(fajrDisplay.quickWakeModeOptions.first(where: { $0.mode == .fajr })?.isSelected == true)
+        #expect(fajrDisplay.primaryTime == fajrEntry.schedule.wakeDate)
+        #expect(fajrDisplay.detailText == "Wake up 30 min before Fajr ends")
+        #expect(fajrDisplay.fajrWindowVisualMode == .interactiveWithinFajrWindow)
+
+        let adjustedFajr = MorningHomePresentation.heroDisplay(
+            adjusting: fajrDisplay,
+            tentativeWakeTime: fajrEntry.activeDay.decisionLog.prayerWindow.fajrStart,
+            timeZone: timeZone
+        )
+        #expect(adjustedFajr.selectedQuickWakeMode == .fajr)
+        #expect(adjustedFajr.quickWakeModeOptions.first(where: { $0.mode == .fajr })?.isSelected == true)
+        #expect(adjustedFajr.detailText == "Wake up as Fajr begins")
+
+        let fastEntry = Self.makeWakeEntry(
+            date: date,
+            timeZone: timeZone,
+            hasDayOverride: true,
+            plannedWakeState: .preFajr,
+            wakeOffsetMinutesFromFajrStart: -30,
+            quickWakeModeOverride: .fast
+        )
+        let fastDisplay = MorningHomePresentation.heroDisplay(
+            entry: fastEntry,
+            permissionSummary: "",
+            currentDate: today,
+            timeZone: timeZone
+        )
+        let fastForecastRow = MorningHomePresentation.nextTenMorningsRowDisplay(
+            for: fastEntry,
+            index: 0,
+            currentDate: today,
+            timeZone: timeZone
+        )
+
+        #expect(fastDisplay.selectedQuickWakeMode == .fast)
+        #expect(fastDisplay.quickWakeModeOptions.first(where: { $0.mode == .fast })?.isSelected == true)
+        #expect(fastDisplay.detailText == "Wake up 30 min before Fajr begins")
+        #expect(fastDisplay.fajrWindowVisualMode == .interactiveEarlyWorshipWindow)
+        #expect(fastDisplay.wakeAdjustmentRelationAnchor == .fajrStart)
+        #expect(fastForecastRow.tags.map(\.title) == ["Fasting"])
+
+        let quietEntry = Self.makeWakeEntry(
+            date: date,
+            timeZone: timeZone,
+            skipDay: true,
+            quickWakeModeOverride: .quiet
+        )
+        let quietDisplay = MorningHomePresentation.heroDisplay(
+            entry: quietEntry,
+            permissionSummary: "",
+            currentDate: today,
+            timeZone: timeZone
+        )
+        let quietForecastRow = MorningHomePresentation.nextTenMorningsRowDisplay(
+            for: quietEntry,
+            index: 0,
+            currentDate: today,
+            timeZone: timeZone
+        )
+
+        #expect(quietDisplay.selectedQuickWakeMode == .quiet)
+        #expect(quietDisplay.quickWakeModeOptions.first(where: { $0.mode == .quiet })?.isSelected == true)
+        #expect(quietDisplay.primaryText == "Quiet mode on")
+        #expect(quietDisplay.detailText == "No alarm will ring for tomorrow")
+        #expect(quietDisplay.wakeWindowIndicatorState == .none)
+        #expect(quietDisplay.wakeWindowIndicatorIconName == nil)
+        #expect(quietDisplay.fajrWindowVisualMode == .staticWithinFajrWindow)
+        #expect(quietDisplay.wakeAdjustmentEnabled == false)
+        #expect(quietDisplay.wakeAdjustmentAccessibilityValue == nil)
+        #expect(quietForecastRow.tags.map(\.title) == ["Quiet mode"])
+    }
+
+    @Test
     func morningHeroWakeAdjustmentMapperClampsAndRounds() {
         let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
         let start = Self.makeDate(year: 2026, month: 4, day: 27, hour: 5, minute: 0, timeZone: timeZone)
@@ -1326,6 +1415,7 @@ struct ScheduleServiceExtractionTests {
                 tagResult: Self.tagResult(primary: .other),
                 compatibleOpportunityTags: [],
                 quietModeState: .inactive,
+                selectedQuickWakeMode: nil,
                 shawwalSixProgress: .incomplete,
                 hasDayOverride: false,
                 tahajjudIntended: false
@@ -2131,7 +2221,8 @@ struct ScheduleServiceExtractionTests {
         providerNotes: String? = nil,
         includeFajrEnd: Bool = true,
         wakeOffsetMinutesFromFajrStart: Int? = nil,
-        fajrStartMinuteOffset: Int = 0
+        fajrStartMinuteOffset: Int = 0,
+        quickWakeModeOverride: QuickWakeMode? = nil
     ) -> WakeRowEntry {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = timeZone
@@ -2161,9 +2252,18 @@ struct ScheduleServiceExtractionTests {
             timeZone: timeZone
         )
         let dateKey = DateHelpers.dayIdentifier(for: start, timeZone: timeZone)
+        let wakeAnchorType: WakeAnchorType
+        switch plannedWakeState {
+        case .fixedWake:
+            wakeAnchorType = .clockTime
+        case .preFajr:
+            wakeAnchorType = .fajrStart
+        case .inFajr, .postFajr:
+            wakeAnchorType = .fajrEnd
+        }
         let wakeRule = MorningWakeRule(
             state: plannedWakeState,
-            anchorType: plannedWakeState == .fixedWake ? .clockTime : .fajrEnd,
+            anchorType: wakeAnchorType,
             deltaMinutes: 30,
             fixedWakeTimeMinutesFromMidnight: plannedWakeState == .fixedWake
                 ? DateHelpers.minutesFromMidnight(for: wake, timeZone: timeZone)
@@ -2180,6 +2280,7 @@ struct ScheduleServiceExtractionTests {
             defaultWakeRule: wakeRule,
             resolvedWakeRule: wakeRule,
             wakeRuleWasOverridden: hasDayOverride,
+            quickWakeModeOverride: quickWakeModeOverride,
             tahajjudRefinement: context.primaryContext == .tahajjud,
             suhoorTimeMode: plannedWakeState == .fixedWake ? .fixedTime : .relativeToFajrMinusMinutes,
             suhoorOffsetMinutes: 30,
@@ -2191,7 +2292,7 @@ struct ScheduleServiceExtractionTests {
             fajrSoundChoice: .adhanSoft,
             iftarDelivery: .off,
             iftarSoundChoice: .adhanSoft,
-            hasOverrides: hasDayOverride || skipDay
+            hasOverrides: hasDayOverride || skipDay || quickWakeModeOverride != nil
         )
         let decisionLog = makeDecisionLog(
             dateKey: dateKey,
@@ -2266,6 +2367,7 @@ struct ScheduleServiceExtractionTests {
                 tagResult: tagResult(primary: primary, secondary: secondary),
                 compatibleOpportunityTags: opportunities,
                 quietModeState: quietModeState,
+                selectedQuickWakeMode: nil,
                 shawwalSixProgress: shawwalComplete
                     ? ShawwalSixProgressSummary(
                         completedIntendedShawwalSixCount: 6,

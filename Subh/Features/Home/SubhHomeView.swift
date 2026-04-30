@@ -58,6 +58,9 @@ struct SubhHomeView: View {
                             currentDate: scheduleManager.currentDate,
                             onCommitWakeAdjustment: { date, wakeTime in
                                 await scheduleManager.commitHeroWakeAdjustment(for: date, wakeTime: wakeTime)
+                            },
+                            onSelectWakeMode: { date, mode in
+                                await scheduleManager.selectHeroWakeMode(for: date, mode: mode)
                             }
                         ) {
                             if let entry = snapshot.tomorrow {
@@ -197,10 +200,12 @@ private struct TomorrowMorningHero: View {
     let locationIconName: String?
     let currentDate: Date
     let onCommitWakeAdjustment: (Date, Date) async -> Bool
+    let onSelectWakeMode: (Date, QuickWakeMode) async -> Bool
     let onOpen: () -> Void
 
     @State private var tentativeWakeTime: Date?
     @State private var isCommittingWakeAdjustment = false
+    @State private var isSelectingWakeMode = false
 
     var body: some View {
         let baseDisplay = MorningHomePresentation.heroDisplay(
@@ -251,6 +256,17 @@ private struct TomorrowMorningHero: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.top, display.fajrWindowVisualMode.rendersRange ? metrics.windowToRelationGap : metrics.primaryToRelationGap)
                 .accessibilityIdentifier(MorningHeroUIIdentifier.relation)
+
+            if !display.quickWakeModeOptions.isEmpty {
+                MorningHeroQuickWakeModeSelector(
+                    options: display.quickWakeModeOptions,
+                    metrics: metrics,
+                    isDisabled: isSelectingWakeMode || isCommittingWakeAdjustment
+                ) { mode in
+                    selectWakeMode(mode)
+                }
+                .padding(.top, metrics.relationToSelectorGap)
+            }
         }
         .frame(maxWidth: metrics.maxContentWidth)
         .padding(.horizontal, DesignTokens.spacingS)
@@ -259,12 +275,13 @@ private struct TomorrowMorningHero: View {
         .frame(maxWidth: .infinity, minHeight: metrics.minHeroRegionHeight, alignment: .center)
         .contentShape(Rectangle())
         .onTapGesture {
-            guard entry != nil, !isCommittingWakeAdjustment else { return }
+            guard entry != nil, !isCommittingWakeAdjustment, !isSelectingWakeMode else { return }
             onOpen()
         }
         .onChange(of: entry?.id) { _, _ in
             tentativeWakeTime = nil
             isCommittingWakeAdjustment = false
+            isSelectingWakeMode = false
         }
         .onChange(of: entry?.schedule.wakeDate) { _, _ in
             if !isCommittingWakeAdjustment {
@@ -370,6 +387,18 @@ private struct TomorrowMorningHero: View {
         }
     }
 
+    private func selectWakeMode(_ mode: QuickWakeMode) {
+        guard let date = entry?.schedule.date else { return }
+        isSelectingWakeMode = true
+        tentativeWakeTime = nil
+        Task {
+            _ = await onSelectWakeMode(date, mode)
+            await MainActor.run {
+                isSelectingWakeMode = false
+            }
+        }
+    }
+
     private func adjustWakeAccessibility(
         display: MorningHomeHeroDisplay,
         direction: AccessibilityAdjustmentDirection
@@ -411,38 +440,38 @@ private struct MorningHeroMetrics {
         switch dynamicTypeSize {
         case .xSmall:
             scale = 0.88
-            minHeroRegionHeight = 236
-            minTextStackHeight = 140
+            minHeroRegionHeight = 294
+            minTextStackHeight = 194
             bottomGapBeforeNextCard = 28
         case .small:
             scale = 0.94
-            minHeroRegionHeight = 242
-            minTextStackHeight = 148
+            minHeroRegionHeight = 302
+            minTextStackHeight = 204
             bottomGapBeforeNextCard = 30
         case .medium:
             scale = 0.98
-            minHeroRegionHeight = 248
-            minTextStackHeight = 154
+            minHeroRegionHeight = 310
+            minTextStackHeight = 212
             bottomGapBeforeNextCard = 32
         case .large:
             scale = 1.00
-            minHeroRegionHeight = 256
-            minTextStackHeight = 162
+            minHeroRegionHeight = 320
+            minTextStackHeight = 222
             bottomGapBeforeNextCard = 36
         case .xLarge:
             scale = 1.08
-            minHeroRegionHeight = 276
-            minTextStackHeight = 180
+            minHeroRegionHeight = 346
+            minTextStackHeight = 250
             bottomGapBeforeNextCard = 38
         case .xxLarge:
             scale = 1.17
-            minHeroRegionHeight = 304
-            minTextStackHeight = 204
+            minHeroRegionHeight = 382
+            minTextStackHeight = 286
             bottomGapBeforeNextCard = 42
         case .xxxLarge:
             scale = 1.28
-            minHeroRegionHeight = 334
-            minTextStackHeight = 232
+            minHeroRegionHeight = 426
+            minTextStackHeight = 328
             bottomGapBeforeNextCard = 46
         case .accessibility1:
             scale = 1.38
@@ -489,6 +518,7 @@ private struct MorningHeroMetrics {
     var primaryToRelationGap: CGFloat { 8 * min(scale, 1.2) }
     var primaryToWindowGap: CGFloat { 8 * min(scale, 1.2) }
     var windowToRelationGap: CGFloat { 12 * min(scale, 1.2) }
+    var relationToSelectorGap: CGFloat { max(12, 14 * min(scale, 1.2)) }
     var primaryRowSpacing: CGFloat { max(7, 8 * scale) }
     var iconVerticalOffset: CGFloat { -1 * scale }
     var verticalBreathing: CGFloat { max(18, (minHeroRegionHeight - minTextStackHeight) / 2) }
@@ -499,6 +529,112 @@ private struct MorningHeroMetrics {
     var rangeEndpointSize: CGFloat { max(8, 9 * scale) }
     var rangeRowSpacing: CGFloat { max(9, 10 * scale) }
     var rangeFallbackSpacing: CGFloat { max(7, 8 * scale) }
+    var quickSelectorLabelSize: CGFloat { 15 * scale }
+    var quickSelectorHeight: CGFloat { max(44, 44 * min(scale, 1.28)) }
+    var quickSelectorWidth: CGFloat { min(maxContentWidth, max(224, 238 * min(scale, 1.22))) }
+    var quickSelectorPadding: CGFloat { max(4, 4 * scale) }
+}
+
+private struct MorningHeroQuickWakeModeSelector: View {
+    let options: [MorningHeroQuickWakeModeOption]
+    let metrics: MorningHeroMetrics
+    let isDisabled: Bool
+    let onSelect: (QuickWakeMode) -> Void
+
+    var body: some View {
+        let segmentWidth = (metrics.quickSelectorWidth - (metrics.quickSelectorPadding * 2))
+            / CGFloat(max(options.count, 1))
+        HStack(spacing: 0) {
+            ForEach(options) { option in
+                MorningHeroQuickWakeModeSegment(
+                    option: option,
+                    metrics: metrics,
+                    width: segmentWidth,
+                    isDisabled: isDisabled,
+                    onSelect: onSelect
+                )
+            }
+        }
+        .padding(metrics.quickSelectorPadding)
+        .frame(width: metrics.quickSelectorWidth)
+        .frame(minHeight: metrics.quickSelectorHeight)
+        .background {
+            Capsule()
+                .fill(Color.white.opacity(0.10))
+                .background(.ultraThinMaterial, in: Capsule())
+                .overlay {
+                    Capsule()
+                        .stroke(
+                            LinearGradient(
+                                colors: [
+                                    Color.white.opacity(0.36),
+                                    Color.white.opacity(0.12)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            lineWidth: 0.9
+                        )
+                }
+                .shadow(color: Color.black.opacity(0.18), radius: 12, x: 0, y: 4)
+        }
+        .opacity(isDisabled ? 0.72 : 1)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Wake mode")
+        .accessibilityIdentifier(MorningHeroUIIdentifier.quickWakeModeSelector)
+    }
+}
+
+private struct MorningHeroQuickWakeModeSegment: View {
+    let option: MorningHeroQuickWakeModeOption
+    let metrics: MorningHeroMetrics
+    let width: CGFloat
+    let isDisabled: Bool
+    let onSelect: (QuickWakeMode) -> Void
+
+    private var textOpacity: Double {
+        option.isSelected ? 0.98 : 0.76
+    }
+
+    private var fontWeight: Font.Weight {
+        option.isSelected ? .semibold : .regular
+    }
+
+    var body: some View {
+        Button {
+            guard !option.isSelected, !isDisabled else { return }
+            onSelect(option.mode)
+        } label: {
+            Text(option.title)
+                .font(.system(size: metrics.quickSelectorLabelSize, weight: fontWeight))
+                .foregroundStyle(WakeGlassTheme.primaryText.opacity(textOpacity))
+                .lineLimit(1)
+                .minimumScaleFactor(0.82)
+                .frame(width: width)
+                .frame(minHeight: metrics.quickSelectorHeight - (metrics.quickSelectorPadding * 2))
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(option.accessibilityLabel)
+        .accessibilityHint(option.accessibilityHint)
+        .accessibilityAddTraits(option.isSelected ? .isSelected : [])
+        .accessibilityIdentifier(MorningHeroUIIdentifier.quickWakeModeSegment(option.mode))
+        .background {
+            if option.isSelected {
+                selectedBackground
+            }
+        }
+    }
+
+    private var selectedBackground: some View {
+        Capsule()
+            .fill(Color.white.opacity(0.26))
+            .overlay {
+                Capsule()
+                    .stroke(Color.white.opacity(0.42), lineWidth: 0.8)
+            }
+            .shadow(color: Color.black.opacity(0.16), radius: 7, x: 0, y: 2)
+    }
 }
 
 private struct SubhHomeHeroTimeLockup: View {

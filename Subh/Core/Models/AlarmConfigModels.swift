@@ -362,6 +362,7 @@ struct DailyAlarmOverride: Codable, Equatable, Identifiable, Sendable {
     var wakeStateOverride: MorningWakeRuleState?
     var wakeAnchorTypeOverride: WakeAnchorType?
     var wakeDeltaOverrideMinutes: Int?
+    var quickWakeModeOverride: QuickWakeMode?
     var fixedWakeTimeOverrideMinutesFromMidnight: Int?
     var bypassLatestWakeCap: Bool?
     var tahajjudRefinement: Bool?
@@ -390,6 +391,7 @@ struct DailyAlarmOverride: Codable, Equatable, Identifiable, Sendable {
         self.wakeStateOverride = nil
         self.wakeAnchorTypeOverride = nil
         self.wakeDeltaOverrideMinutes = nil
+        self.quickWakeModeOverride = nil
         self.fixedWakeTimeOverrideMinutesFromMidnight = nil
         self.bypassLatestWakeCap = nil
         self.tahajjudRefinement = nil
@@ -412,6 +414,7 @@ struct DailyAlarmOverride: Codable, Equatable, Identifiable, Sendable {
         if wakeStateOverride != nil { return true }
         if wakeAnchorTypeOverride != nil { return true }
         if wakeDeltaOverrideMinutes != nil { return true }
+        if quickWakeModeOverride != nil { return true }
         if fixedWakeTimeOverrideMinutesFromMidnight != nil { return true }
         if bypassLatestWakeCap != nil { return true }
         if tahajjudRefinement == true { return true }
@@ -430,6 +433,7 @@ struct DailyAlarmOverride: Codable, Equatable, Identifiable, Sendable {
         wakeStateOverride != nil
             || wakeAnchorTypeOverride != nil
             || wakeDeltaOverrideMinutes != nil
+            || quickWakeModeOverride != nil
             || fixedWakeTimeOverrideMinutesFromMidnight != nil
             || suhoorOffsetOverrideMinutes != nil
             || suhoorTimeOverrideMinutesFromMidnight != nil
@@ -462,6 +466,7 @@ struct EffectiveDailyConfig: Codable, Equatable, Sendable {
     let defaultWakeRule: MorningWakeRule
     let resolvedWakeRule: MorningWakeRule
     let wakeRuleWasOverridden: Bool
+    let quickWakeModeOverride: QuickWakeMode?
     let tahajjudRefinement: Bool
     let suhoorTimeMode: SuhoorTimeMode
     let suhoorOffsetMinutes: Int
@@ -490,6 +495,7 @@ struct EffectiveDailyConfig: Codable, Equatable, Sendable {
         case defaultWakeRule
         case resolvedWakeRule
         case wakeRuleWasOverridden
+        case quickWakeModeOverride
         case tahajjudRefinement
         case suhoorTimeMode
         case suhoorOffsetMinutes
@@ -515,6 +521,7 @@ struct EffectiveDailyConfig: Codable, Equatable, Sendable {
         defaultWakeRule: MorningWakeRule = DefaultAlarmConfig.default.defaultWakeRule,
         resolvedWakeRule: MorningWakeRule = DefaultAlarmConfig.default.defaultWakeRule,
         wakeRuleWasOverridden: Bool = false,
+        quickWakeModeOverride: QuickWakeMode? = nil,
         tahajjudRefinement: Bool = false,
         suhoorTimeMode: SuhoorTimeMode,
         suhoorOffsetMinutes: Int,
@@ -538,6 +545,7 @@ struct EffectiveDailyConfig: Codable, Equatable, Sendable {
         self.defaultWakeRule = defaultWakeRule
         self.resolvedWakeRule = resolvedWakeRule
         self.wakeRuleWasOverridden = wakeRuleWasOverridden
+        self.quickWakeModeOverride = quickWakeModeOverride
         self.tahajjudRefinement = tahajjudRefinement
         self.suhoorTimeMode = suhoorTimeMode
         self.suhoorOffsetMinutes = suhoorOffsetMinutes
@@ -570,6 +578,7 @@ struct EffectiveDailyConfig: Codable, Equatable, Sendable {
             resolvedWakeRule: decodedResolvedWakeRule ?? decodedDefaultWakeRule ?? fallbackWakeRule,
             wakeRuleWasOverridden: try container.decodeIfPresent(Bool.self, forKey: .wakeRuleWasOverridden)
                 ?? false,
+            quickWakeModeOverride: try container.decodeIfPresent(QuickWakeMode.self, forKey: .quickWakeModeOverride),
             tahajjudRefinement: try container.decodeIfPresent(Bool.self, forKey: .tahajjudRefinement)
                 ?? false,
             suhoorTimeMode: try container.decode(SuhoorTimeMode.self, forKey: .suhoorTimeMode),
@@ -598,6 +607,7 @@ struct EffectiveDailyConfig: Codable, Equatable, Sendable {
         try container.encode(defaultWakeRule, forKey: .defaultWakeRule)
         try container.encode(resolvedWakeRule, forKey: .resolvedWakeRule)
         try container.encode(wakeRuleWasOverridden, forKey: .wakeRuleWasOverridden)
+        try container.encodeIfPresent(quickWakeModeOverride, forKey: .quickWakeModeOverride)
         try container.encode(tahajjudRefinement, forKey: .tahajjudRefinement)
         try container.encode(suhoorTimeMode, forKey: .suhoorTimeMode)
         try container.encode(suhoorOffsetMinutes, forKey: .suhoorOffsetMinutes)
