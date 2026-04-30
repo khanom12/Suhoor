@@ -29,6 +29,67 @@ enum WakeStateSelectionResolver {
         isSelectedFast(day) || isIntendedEarlyWorship(day)
     }
 
+    static func underlyingMode(for day: ActiveAlarmDay) -> MorningWakeUnderlyingMode {
+        switch selectedMode(for: day) {
+        case .fast:
+            return .earlyWorship
+        case .fajr:
+            return .fajr
+        case .quiet:
+            if day.effectiveConfig.resolvedWakeRule.state == .preFajr || isIntendedEarlyWorship(day) {
+                return .earlyWorship
+            }
+            return .fajr
+        }
+    }
+
+    static func dayContextKind(for day: ActiveAlarmDay) -> MorningWakeDayContextKind {
+        let context = day.resolvedDayContext
+        let tags = Set(context.supportingTags)
+        let hasTahajjud = context.primaryContext == .tahajjud
+            || context.secondaryContexts.contains(.tahajjud)
+            || day.effectiveConfig.tahajjudRefinement
+        let hasIntendedFast = isFastingMorning(context)
+        let hasFastingOpportunity = tags.contains(.mondayThursday)
+            || tags.contains(.whiteDays)
+            || tags.contains(.arafah)
+            || tags.contains(.ashura)
+            || tags.contains(.dhulHijjahFirstNine)
+            || tags.contains(.shawwalSix)
+
+        if hasTahajjud && hasIntendedFast {
+            return .fastingAndTahajjudIntended
+        }
+        if hasTahajjud {
+            return .tahajjudIntended
+        }
+        if tags.contains(.ramadan) || day.isImplicitRamadan {
+            return .ramadanFasting
+        }
+        if context.primaryContext == .qadaFast || tags.contains(.qada) {
+            return .qadaFastIntended
+        }
+        if context.primaryContext == .sunnahFast {
+            return .sunnahFastIntended
+        }
+        if hasIntendedFast {
+            return .fastingIntended
+        }
+        if selectedMode(for: day) == .fast {
+            return .fastingIntended
+        }
+        if hasFastingOpportunity {
+            return .fastingOpportunity
+        }
+        if context.primaryContext == .specialDay || tags.contains(.eid) || tags.contains(.tashreeq) {
+            return .observanceOnly
+        }
+        if day.effectiveConfig.wakeRuleWasOverridden {
+            return .adjusted
+        }
+        return .ordinary
+    }
+
     static func apply(_ mode: QuickWakeMode, to override: inout DailyAlarmOverride) {
         switch mode {
         case .fast:

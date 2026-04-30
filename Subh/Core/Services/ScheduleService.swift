@@ -1602,14 +1602,12 @@ final class ScheduleManager: ObservableObject {
         timeZone: TimeZone
     ) -> HeroWakeAdjustmentWindow {
         let prayerWindow = day.decisionLog.prayerWindow
-        if isEarlyWorshipMorning(day),
+        let resolvedWakeState = MorningWakeResolutionService.resolve(for: day, timeZone: timeZone)
+        if resolvedWakeState.underlyingWakeMode == .earlyWorship,
            proposedWakeTime <= prayerWindow.fajrStart,
-           let finalThirdStart = EarlyWorshipBoundaryResolver.finalThirdStart(
-               targetFajrStart: prayerWindow.fajrStart,
-               maghrib: prayerWindow.maghrib,
-               timeZone: timeZone
-           ) {
-            return HeroWakeAdjustmentWindow(minTime: finalThirdStart, maxTime: prayerWindow.fajrStart)
+           let minTime = resolvedWakeState.wakeBoundaryResolution.leftBoundaryTime,
+           let maxTime = resolvedWakeState.wakeBoundaryResolution.rightBoundaryTime {
+            return HeroWakeAdjustmentWindow(minTime: minTime, maxTime: maxTime)
         }
 
         return HeroWakeAdjustmentWindow(minTime: prayerWindow.fajrStart, maxTime: fallbackFajrEnd)

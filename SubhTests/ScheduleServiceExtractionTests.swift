@@ -898,7 +898,8 @@ struct ScheduleServiceExtractionTests {
             timeZone: timeZone
         )
 
-        #expect(display.primaryTime == entry.schedule.wakeDate)
+        #expect(display.primaryTime == nil)
+        #expect(display.primaryText == "Wake time unavailable")
         #expect(display.detailText == "Fajr times are not available yet")
         #expect(display.fajrWindowLine == "Fajr times are not available yet")
         #expect(display.fajrBeginDisplayText == nil)
@@ -1156,13 +1157,146 @@ struct ScheduleServiceExtractionTests {
         #expect(quietDisplay.selectedQuickWakeMode == .quiet)
         #expect(quietDisplay.quickWakeModeOptions.first(where: { $0.mode == .quiet })?.isSelected == true)
         #expect(quietDisplay.primaryText == "Quiet mode on")
-        #expect(quietDisplay.detailText == "No alarm will ring for tomorrow")
+        #expect(quietDisplay.detailText == "No wake alarm for tomorrow")
         #expect(quietDisplay.wakeWindowIndicatorState == .none)
         #expect(quietDisplay.wakeWindowIndicatorIconName == nil)
         #expect(quietDisplay.fajrWindowVisualMode == .staticWithinFajrWindow)
         #expect(quietDisplay.wakeAdjustmentEnabled == false)
         #expect(quietDisplay.wakeAdjustmentAccessibilityValue == nil)
         #expect(quietForecastRow.tags.map(\.title) == ["Quiet mode"])
+    }
+
+    @Test
+    func resolvedMorningWakeStateCoversV02SelectionAndBoundaryMatrix() {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let date = Self.makeDate(year: 2026, month: 4, day: 27, timeZone: timeZone)
+
+        let fajr = MorningWakeResolutionService.resolve(
+            for: Self.makeWakeEntry(date: date, timeZone: timeZone).activeDay,
+            timeZone: timeZone
+        )
+
+        #expect(fajr.quickWakeSelection == .fajr)
+        #expect(fajr.underlyingWakeMode == .fajr)
+        #expect(fajr.boundaryRegime == .defaultFajrWindow)
+        #expect(fajr.wakeTimeResolution.origin == .globalDefaultFajrOffset)
+        #expect(fajr.alarmActivation == .active)
+        #expect(fajr.visualMode == .interactiveDefaultFajr)
+        #expect(fajr.copyState.finalRelationText == "Wake up 30 min before Fajr ends")
+
+        let fast = MorningWakeResolutionService.resolve(
+            for: Self.makeWakeEntry(
+                date: date,
+                timeZone: timeZone,
+                plannedWakeState: .preFajr,
+                wakeOffsetMinutesFromFajrStart: -30,
+                quickWakeModeOverride: .fast
+            ).activeDay,
+            timeZone: timeZone
+        )
+
+        #expect(fast.quickWakeSelection == .fast)
+        #expect(fast.dayContext == .fastingIntended)
+        #expect(fast.underlyingWakeMode == .earlyWorship)
+        #expect(fast.boundaryRegime == .earlyWorshipWindow)
+        #expect(fast.wakeBoundaryResolution.finalThirdStart != nil)
+        #expect(fast.wakeTimeResolution.origin == .quickSelectorDefault)
+        #expect(fast.copyState.finalRelationText == "Wake up 30 min before Fajr begins")
+
+        let quietFajr = MorningWakeResolutionService.resolve(
+            for: Self.makeWakeEntry(
+                date: date,
+                timeZone: timeZone,
+                skipDay: true,
+                quickWakeModeOverride: .quiet
+            ).activeDay,
+            timeZone: timeZone
+        )
+
+        #expect(quietFajr.quickWakeSelection == .quiet)
+        #expect(quietFajr.underlyingWakeMode == .fajr)
+        #expect(quietFajr.boundaryRegime == .quietDefaultFajrWindow)
+        #expect(quietFajr.alarmActivation == .quietSuppressed)
+        #expect(quietFajr.scheduleStatus == .notScheduledBecauseQuiet)
+        #expect(quietFajr.visualMode == .staticDefaultFajrQuiet)
+
+        let quietFast = MorningWakeResolutionService.resolve(
+            for: Self.makeWakeEntry(
+                date: date,
+                timeZone: timeZone,
+                skipDay: true,
+                plannedWakeState: .preFajr,
+                wakeOffsetMinutesFromFajrStart: -30,
+                quickWakeModeOverride: .quiet
+            ).activeDay,
+            timeZone: timeZone
+        )
+
+        #expect(quietFast.quickWakeSelection == .quiet)
+        #expect(quietFast.underlyingWakeMode == .earlyWorship)
+        #expect(quietFast.boundaryRegime == .quietEarlyWorshipWindow)
+        #expect(quietFast.visualMode == .staticEarlyWorshipQuiet)
+
+        let opportunityOnly = MorningWakeResolutionService.resolve(
+            for: Self.makeWakeEntry(
+                date: date,
+                timeZone: timeZone,
+                context: ResolvedDayContext(
+                    primaryContext: .standard,
+                    secondaryContexts: [],
+                    supportingTags: [.mondayThursday],
+                    explanation: .empty
+                )
+            ).activeDay,
+            timeZone: timeZone
+        )
+
+        #expect(opportunityOnly.dayContext == .fastingOpportunity)
+        #expect(opportunityOnly.underlyingWakeMode == .fajr)
+        #expect(opportunityOnly.boundaryRegime == .defaultFajrWindow)
+
+        let tahajjud = MorningWakeResolutionService.resolve(
+            for: Self.makeWakeEntry(
+                date: date,
+                timeZone: timeZone,
+                context: ResolvedDayContext(
+                    primaryContext: .tahajjud,
+                    secondaryContexts: [],
+                    supportingTags: [],
+                    explanation: .empty
+                ),
+                wakeOffsetMinutesFromFajrStart: -45
+            ).activeDay,
+            timeZone: timeZone
+        )
+
+        #expect(tahajjud.dayContext == .tahajjudIntended)
+        #expect(tahajjud.underlyingWakeMode == .earlyWorship)
+        #expect(tahajjud.boundaryRegime == .earlyWorshipWindow)
+
+        let adjusted = MorningWakeResolutionService.resolve(
+            for: Self.makeWakeEntry(
+                date: date,
+                timeZone: timeZone,
+                hasDayOverride: true,
+                plannedWakeState: .fixedWake
+            ).activeDay,
+            timeZone: timeZone
+        )
+
+        #expect(adjusted.wakeTimeResolution.origin == .manualDragOverride)
+        #expect(adjusted.underlyingWakeMode == .fajr)
+        #expect(adjusted.dayContext == .adjusted)
+
+        let permissionBlocked = MorningWakeResolutionService.resolve(
+            for: Self.makeWakeEntry(date: date, timeZone: timeZone).activeDay,
+            scheduleStatusOverride: .permissionBlocked,
+            timeZone: timeZone
+        )
+
+        #expect(permissionBlocked.alarmActivation == .active)
+        #expect(permissionBlocked.scheduleStatus == .permissionBlocked)
+        #expect(permissionBlocked.copyState.scheduleWarningText == "Alarm permission needed")
     }
 
     @Test

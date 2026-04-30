@@ -173,7 +173,7 @@ final class MorningHeroFajrAdjusterUITests: XCTestCase {
             $0 == "Quiet mode on"
         })
         XCTAssertTrue(waitForElementLabel(in: app, identifier: "morningHero.relation") {
-            $0 == "No alarm will ring for tomorrow"
+            $0 == "No wake alarm for tomorrow"
         })
         XCTAssertTrue(waitForElementLabel(in: app, identifier: "morningHero.quickWakeMode.quiet") {
             $0.contains("selected")
