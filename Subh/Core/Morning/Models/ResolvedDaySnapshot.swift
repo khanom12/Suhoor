@@ -12,4 +12,5 @@ struct ResolvedDaySnapshot: Sendable {
     let completionRecords: [CompletionRecord]
     let dailyCompletion: DailyCompletionSnapshot
     let completionSummary: String?
+    let resolvedDayPurpose: ResolvedDayPurpose
 }

@@ -157,6 +157,19 @@ enum MorningScheduleResolver {
             resolvedDayContext: resolvedContext,
             completionState: completionState
         )
+        let resolvedDayPurpose = DayPurposeResolver.resolve(
+            date: input.date,
+            dateKey: input.dateKey,
+            provenances: input.provenances,
+            tagResult: input.tagResult,
+            effectiveConfig: input.effectiveConfig,
+            stateSnapshot: input.stateSnapshot,
+            selectedPlan: planSelection.selectedPlan,
+            wakeAnchor: wakeAnchor,
+            wakeResolution: wakeResolution,
+            completionRecords: completionRecords,
+            dailyCompletion: dailyCompletion
+        )
 
         return ResolvedDaySnapshot(
             date: input.date,
@@ -169,7 +182,8 @@ enum MorningScheduleResolver {
             decisionLog: decisionLog,
             completionRecords: completionRecords,
             dailyCompletion: dailyCompletion,
-            completionSummary: completionSummary(from: dailyCompletion)
+            completionSummary: completionSummary(from: dailyCompletion),
+            resolvedDayPurpose: resolvedDayPurpose
         )
     }
 

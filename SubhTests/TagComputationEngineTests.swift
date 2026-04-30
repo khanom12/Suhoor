@@ -1,3 +1,4 @@
+import CoreLocation
 import Foundation
 import Testing
 @testable import Subh
@@ -359,6 +360,117 @@ struct TagComputationEngineTests {
         #expect(result?.computedSecondaryTags.isEmpty == true)
     }
 
+    @Test
+    func dayPurposeMondayOpportunityStaysDefaultFajr() {
+        let timeZone = TimeZone(secondsFromGMT: 0) ?? .current
+        let date = findDate(hijriDay: 12, weekday: 2, timeZone: timeZone)
+        let purpose = resolvePurpose(for: date, timeZone: timeZone)
+
+        #expect(purpose.opportunities.contains { $0.kind == .mondayThursday })
+        #expect(purpose.intention.kind == .defaultFajr)
+        #expect(purpose.requiredActions.contains(.fastCompletion) == false)
+        #expect(hasCredit(purpose, kind: .mondayThursday, type: .opportunityAvailable))
+        #expect(hasCredit(purpose, kind: .mondayThursday, type: .keptDefault))
+        #expect(hasCredit(purpose, kind: .mondayThursday, type: .planned) == false)
+        #expect(hasCredit(purpose, kind: .mondayThursday, type: .missedAfterPlanning) == false)
+    }
+
+    @Test
+    func dayPurposeWhiteDayOpportunityStaysDefaultFajr() {
+        let timeZone = TimeZone(secondsFromGMT: 0) ?? .current
+        let date = makeAdjustedHijriDate(year: 1447, month: .shawwal, day: 13, timeZone: timeZone)
+        let purpose = resolvePurpose(for: date, timeZone: timeZone)
+
+        #expect(purpose.opportunities.contains { $0.kind == .whiteDays })
+        #expect(purpose.intention.kind == .defaultFajr)
+        #expect(hasCredit(purpose, kind: .whiteDays, type: .opportunityAvailable))
+        #expect(hasCredit(purpose, kind: .whiteDays, type: .planned) == false)
+        #expect(hasCredit(purpose, kind: .whiteDays, type: .missedAfterPlanning) == false)
+    }
+
+    @Test
+    func dayPurposeVoluntaryMondayCompletedCreditsMonday() {
+        let timeZone = TimeZone(secondsFromGMT: 0) ?? .current
+        let date = findDate(hijriDay: 12, weekday: 2, timeZone: timeZone)
+        let purpose = resolvePurpose(
+            for: date,
+            selection: FastIntentSelection(primaryIntent: .voluntary, secondaryTags: []),
+            fastStatus: .completed,
+            timeZone: timeZone
+        )
+
+        #expect(purpose.intention.kind == .fast)
+        #expect(purpose.requiredActions.contains(.fastCompletion))
+        #expect(hasCredit(purpose, kind: .mondayThursday, type: .opportunityAvailable))
+        #expect(hasCredit(purpose, kind: .mondayThursday, type: .planned))
+        #expect(hasCredit(purpose, kind: .mondayThursday, type: .completed))
+    }
+
+    @Test
+    func dayPurposeVoluntaryWhiteDayNotCompletedCreditsMissedAfterPlanning() {
+        let timeZone = TimeZone(secondsFromGMT: 0) ?? .current
+        let date = makeAdjustedHijriDate(year: 1447, month: .shawwal, day: 13, timeZone: timeZone)
+        let purpose = resolvePurpose(
+            for: date,
+            selection: FastIntentSelection(primaryIntent: .voluntary, secondaryTags: []),
+            fastStatus: .notCompleted,
+            timeZone: timeZone
+        )
+
+        #expect(purpose.intention.kind == .fast)
+        #expect(hasCredit(purpose, kind: .whiteDays, type: .opportunityAvailable))
+        #expect(hasCredit(purpose, kind: .whiteDays, type: .planned))
+        #expect(hasCredit(purpose, kind: .whiteDays, type: .missedAfterPlanning))
+    }
+
+    @Test
+    func dayPurposeQadaOnWhiteDayDoesNotCreditWhiteDayCompletion() {
+        let timeZone = TimeZone(secondsFromGMT: 0) ?? .current
+        let date = makeAdjustedHijriDate(year: 1447, month: .shawwal, day: 13, timeZone: timeZone)
+        let purpose = resolvePurpose(
+            for: date,
+            selection: FastIntentSelection(primaryIntent: .qadaMakeup, secondaryTags: []),
+            fastStatus: .completed,
+            timeZone: timeZone
+        )
+
+        #expect(purpose.intention.fastIntent?.primaryIntent == .qadaMakeup)
+        #expect(hasCredit(purpose, kind: .whiteDays, type: .opportunityAvailable))
+        #expect(hasCredit(purpose, kind: .qadaAssignable, type: .planned))
+        #expect(hasCredit(purpose, kind: .qadaAssignable, type: .completed))
+        #expect(hasCredit(purpose, kind: .whiteDays, type: .completed) == false)
+    }
+
+    @Test
+    func dayPurposeRamadanAutoPlansFast() {
+        let timeZone = TimeZone(secondsFromGMT: 0) ?? .current
+        let date = makeAdjustedHijriDate(year: 1447, month: .ramadan, day: 10, timeZone: timeZone)
+        let purpose = resolvePurpose(for: date, timeZone: timeZone)
+
+        #expect(purpose.opportunities.contains { $0.kind == .ramadan })
+        #expect(purpose.intention.kind == .fast)
+        #expect(purpose.intention.source == .autoRamadan)
+        #expect(purpose.intention.fastIntent?.primaryIntent == .ramadanObligatory)
+        #expect(hasCredit(purpose, kind: .ramadan, type: .opportunityAvailable))
+        #expect(hasCredit(purpose, kind: .ramadan, type: .planned))
+    }
+
+    @Test
+    func dayPurposeForbiddenFastLogsInvalidCreditOnly() {
+        let timeZone = TimeZone(secondsFromGMT: 0) ?? .current
+        let date = makeAdjustedHijriDate(year: 1447, month: .shawwal, day: 1, timeZone: timeZone)
+        let purpose = resolvePurpose(
+            for: date,
+            fastStatus: .completed,
+            timeZone: timeZone
+        )
+
+        #expect(purpose.opportunities.contains { $0.kind == .eidAlFitr && $0.eligibility == .forbidden })
+        #expect(purpose.intention.kind == .defaultFajr)
+        #expect(hasCredit(purpose, kind: .eidAlFitr, type: .invalidForbiddenFast))
+        #expect(purpose.analyticsCredits.contains { $0.creditType == .completed } == false)
+    }
+
     private func makeHijriDate(year: Int, month: Int, day: Int, timeZone: TimeZone) -> Date {
         var calendar = Calendar(identifier: .islamicCivil)
         calendar.timeZone = timeZone
@@ -421,5 +533,202 @@ struct TagComputationEngineTests {
             calculationMethodName: "Test",
             timeZone: timeZone
         )
+    }
+
+    private func resolvePurpose(
+        for date: Date,
+        selection: FastIntentSelection? = nil,
+        fastStatus: FastCompletionStatus = .notRequired,
+        timeZone: TimeZone
+    ) -> ResolvedDayPurpose {
+        let dateKey = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
+        let selections = selection.map { [dateKey: $0] } ?? [:]
+        let tagResult = TagComputationEngine.result(
+            for: date,
+            seeds: [
+                ActiveTagComputationSeed(
+                    date: date,
+                    dateKey: dateKey,
+                    defaultPrimaryIntent: nil
+                )
+            ],
+            selections: selections,
+            ruleset: .strict,
+            timeZone: timeZone,
+            overrideSelection: selection
+        )
+        let completionRecords = completionRecords(
+            dateKey: dateKey,
+            fastStatus: fastStatus,
+            selection: selection
+        )
+        let qadaEffect = selection?.primaryIntent == .qadaMakeup && fastStatus == .completed
+            ? QadaEffect(
+                countsTowardQada: true,
+                completedDelta: 1,
+                remainingAfterEffect: 0,
+                explanation: "Completed Qada fasts reduce what remains."
+            )
+            : .none
+        let dailyCompletion = DailyCompletionSnapshot(
+            dateKey: dateKey,
+            prayer: .empty,
+            fast: FastCompletionState(
+                status: fastStatus,
+                intentSnapshot: selection.map {
+                    FastIntentSnapshot(primaryIntent: $0.primaryIntent, secondaryTags: $0.secondaryTags)
+                },
+                updatedAt: nil,
+                source: nil
+            ),
+            qadaEffect: qadaEffect,
+            wakeSupport: .none,
+            outstandingAction: nil,
+            isMeaningfullyResolved: true
+        )
+        let selectedPlan = makeMorningPlan()
+        let wakeAnchor = WakeAnchor(type: .fajrEnd, date: date, providerNotes: nil)
+        let wakeResolution = WakeResolutionResult(
+            candidateWakeTime: date,
+            finalWakeTime: date,
+            resolvedWakeState: .inFajr,
+            latestWakeCapMinutesFromMidnight: nil,
+            latestWakeCapApplied: false,
+            latestWakeCapShiftedState: false
+        )
+
+        return DayPurposeResolver.resolve(
+            date: date,
+            dateKey: dateKey,
+            provenances: [],
+            tagResult: tagResult,
+            effectiveConfig: makeEffectiveConfig(for: date),
+            stateSnapshot: makeStateSnapshot(
+                dateKey: dateKey,
+                selectedPlan: selectedPlan,
+                selections: selections,
+                completionRecords: completionRecords,
+                timeZone: timeZone
+            ),
+            selectedPlan: selectedPlan,
+            wakeAnchor: wakeAnchor,
+            wakeResolution: wakeResolution,
+            completionRecords: completionRecords,
+            dailyCompletion: dailyCompletion
+        )
+    }
+
+    private func completionRecords(
+        dateKey: String,
+        fastStatus: FastCompletionStatus,
+        selection: FastIntentSelection?
+    ) -> [CompletionRecord] {
+        guard fastStatus != .notRequired else { return [] }
+        let status: CompletionStatus = fastStatus == .completed ? .completed : .missed
+        var metadata: [String: String] = [:]
+        if let selection {
+            metadata["primaryIntent"] = selection.primaryIntent.rawValue
+        }
+        return [
+            CompletionRecord(
+                id: "\(dateKey).fast",
+                dateKey: dateKey,
+                kind: .fast,
+                status: status,
+                updatedAt: Date(timeIntervalSinceReferenceDate: 0),
+                source: "test",
+                metadata: metadata
+            )
+        ]
+    }
+
+    private func makeEffectiveConfig(for date: Date) -> EffectiveDailyConfig {
+        let defaults = DefaultAlarmConfig.default
+        let settings = AppSettings.default
+        return EffectiveDailyConfig(
+            date: date,
+            defaultsActive: true,
+            skipDay: false,
+            suhoorEnabled: true,
+            reminderEnabled: true,
+            fajrEnabled: true,
+            iftarEnabled: true,
+            defaultWakeRule: defaults.defaultWakeRule,
+            resolvedWakeRule: defaults.defaultWakeRule,
+            wakeRuleWasOverridden: false,
+            tahajjudRefinement: false,
+            suhoorTimeMode: defaults.defaultSuhoorTimeMode,
+            suhoorOffsetMinutes: defaults.defaultSuhoorOffsetMinutes,
+            reminderTimeMode: defaults.defaultReminderTimeMode,
+            reminderMinutesBeforeFajr: defaults.defaultReminderMinutesBeforeFajr,
+            reminderFixedTimeMinutes: defaults.defaultReminderFixedTimeMinutes,
+            suhoorTimeOverrideMinutesFromMidnight: nil,
+            reminderTimeOverrideMinutesFromMidnight: nil,
+            fajrSoundChoice: settings.atFajrSoundSelectionGlobal,
+            iftarDelivery: defaults.defaultIftarDelivery,
+            iftarSoundChoice: defaults.defaultIftarSoundChoice,
+            hasOverrides: false
+        )
+    }
+
+    private func makeMorningPlan() -> MorningPlan {
+        let rule = DefaultAlarmConfig.default.defaultWakeRule
+        return MorningPlan(
+            id: "default-daily",
+            title: "Daily morning plan",
+            kind: .defaultDaily,
+            wakeRule: rule,
+            wakeAnchorType: rule.compatibilityWakeAnchorType,
+            wakeDelta: rule.compatibilityWakeDelta,
+            fixedWakeTimeCompatibilityMinutesFromMidnight: nil,
+            reminderEnabled: true,
+            wakeAlarmEnabled: true,
+            fajrBoundaryNoticeEnabled: true,
+            iftarReminderEnabled: true
+        )
+    }
+
+    private func makeStateSnapshot(
+        dateKey: String,
+        selectedPlan: MorningPlan,
+        selections: [String: FastIntentSelection],
+        completionRecords: [CompletionRecord],
+        timeZone: TimeZone
+    ) -> MorningStateSnapshot {
+        MorningStateSnapshot(
+            settings: .default,
+            defaultConfig: .default,
+            morningPlanState: MorningPlanState(
+                schemaVersion: 2,
+                activationMode: .dailyActive,
+                defaultDailyPlan: selectedPlan,
+                lastMigrationAt: nil
+            ),
+            dateAssignments: selections[dateKey]?.primaryIntent == .qadaMakeup
+                ? [PlanDateAssignment(dateKey: dateKey, planID: "qada-\(dateKey)")]
+                : [],
+            completionRecords: completionRecords,
+            qadaLedgerSnapshot: QadaLedgerSnapshot(
+                trackingStartDateKey: dateKey,
+                baselineOwed: 1,
+                completed: 0,
+                remaining: 1
+            ),
+            coordinate: CLLocationCoordinate2D(latitude: 0, longitude: 0),
+            timeZone: timeZone,
+            locationDescription: "Test",
+            fastTagSelections: selections,
+            overridesByDateKey: [:]
+        )
+    }
+
+    private func hasCredit(
+        _ purpose: ResolvedDayPurpose,
+        kind: ObservanceKind,
+        type: ObservanceCreditType
+    ) -> Bool {
+        purpose.analyticsCredits.contains {
+            $0.kind == kind && $0.creditType == type
+        }
     }
 }
