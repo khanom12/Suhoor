@@ -804,21 +804,21 @@ struct ScheduleServiceExtractionTests {
         #expect(adjustedWithinStartGranularity.detailText == "Wake up as Fajr begins")
         #expect(adjustedWithinStartGranularity.relationTone == .normal)
 
-        let adjustedToElevenBeforeEnd = MorningHomePresentation.heroDisplay(
+        let adjustedToFifteenBeforeEnd = MorningHomePresentation.heroDisplay(
             adjusting: display,
-            tentativeWakeTime: (entry.activeDay.decisionLog.prayerWindow.fajrEnd ?? adjustedWake).addingTimeInterval(-11 * 60),
+            tentativeWakeTime: (entry.activeDay.decisionLog.prayerWindow.fajrEnd ?? adjustedWake).addingTimeInterval(-15 * 60),
             timeZone: timeZone
         )
-        #expect(adjustedToElevenBeforeEnd.detailText == "Wake up 11 min before Fajr ends")
-        #expect(adjustedToElevenBeforeEnd.relationTone == .normal)
+        #expect(adjustedToFifteenBeforeEnd.detailText == "Wake up 15 min before Fajr ends")
+        #expect(adjustedToFifteenBeforeEnd.relationTone == .normal)
 
-        let adjustedToTenBeforeEnd = MorningHomePresentation.heroDisplay(
+        let adjustedToFourteenBeforeEnd = MorningHomePresentation.heroDisplay(
             adjusting: display,
-            tentativeWakeTime: (entry.activeDay.decisionLog.prayerWindow.fajrEnd ?? adjustedWake).addingTimeInterval(-10 * 60),
+            tentativeWakeTime: (entry.activeDay.decisionLog.prayerWindow.fajrEnd ?? adjustedWake).addingTimeInterval(-14 * 60),
             timeZone: timeZone
         )
-        #expect(adjustedToTenBeforeEnd.detailText == "Wake up 10 min before Fajr ends")
-        #expect(adjustedToTenBeforeEnd.relationTone == .urgentRed)
+        #expect(adjustedToFourteenBeforeEnd.detailText == "Wake up 14 min before Fajr ends")
+        #expect(adjustedToFourteenBeforeEnd.relationTone == .urgentRed)
 
         let adjustedToEnd = MorningHomePresentation.heroDisplay(
             adjusting: display,
@@ -912,7 +912,7 @@ struct ScheduleServiceExtractionTests {
     }
 
     @Test
-    func tomorrowHeroHidesV3RangeWhenFastingOrOutOfWindow() {
+    func tomorrowHeroUsesModeAwareRangeForFastingAndOutOfWindowStates() {
         let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
         let date = Self.makeDate(year: 2026, month: 4, day: 27, timeZone: timeZone)
         let ordinarySuhoor = MorningHomePresentation.heroDisplay(
@@ -929,7 +929,7 @@ struct ScheduleServiceExtractionTests {
             permissionSummary: "",
             timeZone: timeZone
         )
-        let fasting = MorningHomePresentation.heroDisplay(
+        let fastingAfterFajrBegins = MorningHomePresentation.heroDisplay(
             entry: Self.makeWakeEntry(
                 date: date,
                 timeZone: timeZone,
@@ -939,6 +939,36 @@ struct ScheduleServiceExtractionTests {
                     supportingTags: [.ramadan],
                     explanation: .empty
                 )
+            ),
+            permissionSummary: "",
+            timeZone: timeZone
+        )
+        let fastingBeforeFajrBegins = MorningHomePresentation.heroDisplay(
+            entry: Self.makeWakeEntry(
+                date: date,
+                timeZone: timeZone,
+                context: ResolvedDayContext(
+                    primaryContext: .fasting,
+                    secondaryContexts: [],
+                    supportingTags: [.ramadan],
+                    explanation: .empty
+                ),
+                wakeOffsetMinutesFromFajrStart: -30
+            ),
+            permissionSummary: "",
+            timeZone: timeZone
+        )
+        let tahajjudBeforeFajrBegins = MorningHomePresentation.heroDisplay(
+            entry: Self.makeWakeEntry(
+                date: date,
+                timeZone: timeZone,
+                context: ResolvedDayContext(
+                    primaryContext: .tahajjud,
+                    secondaryContexts: [],
+                    supportingTags: [],
+                    explanation: .empty
+                ),
+                wakeOffsetMinutesFromFajrStart: -45
             ),
             permissionSummary: "",
             timeZone: timeZone
@@ -981,12 +1011,69 @@ struct ScheduleServiceExtractionTests {
         #expect(atFajrEnd.fajrWindowVisualMode == .interactiveWithinFajrWindow)
         #expect(atFajrEnd.wakeAdjustmentEnabled)
         #expect(atFajrEnd.wakeWindowPositionRatio == 1)
-        #expect(fasting.fajrWindowVisualMode == .hiddenFasting)
-        #expect(fasting.wakeAdjustmentEnabled == false)
+        #expect(fastingAfterFajrBegins.fajrWindowVisualMode == .hiddenOutOfWindow)
+        #expect(fastingAfterFajrBegins.wakeAdjustmentEnabled == false)
+        #expect(fastingBeforeFajrBegins.fajrWindowVisualMode == .interactiveEarlyWorshipWindow)
+        #expect(fastingBeforeFajrBegins.wakeAdjustmentEnabled)
+        #expect(fastingBeforeFajrBegins.leftBoundaryMarkerStyle == .verticalLine)
+        #expect(fastingBeforeFajrBegins.rightBoundaryMarkerStyle == .endpointCircle)
+        #expect(fastingBeforeFajrBegins.detailText == "Wake up 30 min before Fajr begins")
+        #expect(Self.normalizedTimeSpaces(fastingBeforeFajrBegins.fajrEndDisplayText ?? "") == "5:00 AM")
+        #expect(fastingBeforeFajrBegins.fajrWindowAccessibilityText?.contains("Final third of the night begins") == true)
+        #expect(fastingBeforeFajrBegins.wakeAdjustmentAccessibilityValue?.contains("Adjustable between the final third of the night") == true)
+        #expect(tahajjudBeforeFajrBegins.fajrWindowVisualMode == .interactiveEarlyWorshipWindow)
+        #expect(tahajjudBeforeFajrBegins.detailText == "Wake up 45 min before Fajr begins")
         #expect(outOfWindow.fajrWindowVisualMode == .hiddenOutOfWindow)
         #expect(outOfWindow.wakeAdjustmentEnabled == false)
         #expect(outOfWindow.fajrBeginDisplayText != nil)
         #expect(outOfWindow.fajrEndDisplayText != nil)
+    }
+
+    @Test
+    func tomorrowHeroEarlyWorshipAdjusterUsesEndpointCopyAndLiveRelation() {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let date = Self.makeDate(year: 2026, month: 4, day: 27, timeZone: timeZone)
+        let entry = Self.makeWakeEntry(
+            date: date,
+            timeZone: timeZone,
+            context: ResolvedDayContext(
+                primaryContext: .fasting,
+                secondaryContexts: [],
+                supportingTags: [.ramadan],
+                explanation: .empty
+            ),
+            wakeOffsetMinutesFromFajrStart: -30
+        )
+        let display = MorningHomePresentation.heroDisplay(
+            entry: entry,
+            permissionSummary: "",
+            timeZone: timeZone
+        )
+
+        let minTime = display.wakeAdjustmentMinTime ?? entry.schedule.wakeDate
+        let maxTime = display.wakeAdjustmentMaxTime ?? entry.activeDay.decisionLog.prayerWindow.fajrStart
+
+        #expect(display.fajrWindowVisualMode == .interactiveEarlyWorshipWindow)
+        #expect(display.detailText == "Wake up 30 min before Fajr begins")
+        #expect(display.wakeWindowPositionRatio != nil)
+
+        let adjustedToLeft = MorningHomePresentation.heroDisplay(
+            adjusting: display,
+            tentativeWakeTime: minTime,
+            timeZone: timeZone
+        )
+        #expect(adjustedToLeft.detailText == "Wake up for the last third of the night")
+        #expect(adjustedToLeft.relationTone == .normal)
+        #expect(adjustedToLeft.wakeWindowPositionRatio == 0)
+
+        let adjustedToRight = MorningHomePresentation.heroDisplay(
+            adjusting: display,
+            tentativeWakeTime: maxTime,
+            timeZone: timeZone
+        )
+        #expect(adjustedToRight.detailText == "Wake up as Fajr begins")
+        #expect(adjustedToRight.relationTone == .normal)
+        #expect(adjustedToRight.wakeWindowPositionRatio == 1)
     }
 
     @Test

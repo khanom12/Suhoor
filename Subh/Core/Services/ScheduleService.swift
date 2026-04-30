@@ -1518,16 +1518,22 @@ final class ScheduleManager: ObservableObject {
             return false
         }
 
-        let clampedWakeTime = min(max(wakeTime, window.fajrStart), fajrEnd)
-        guard clampedWakeTime >= window.fajrStart, clampedWakeTime <= fajrEnd else {
+        let adjustmentWindow = heroWakeAdjustmentWindow(
+            for: currentDay,
+            proposedWakeTime: wakeTime,
+            fallbackFajrEnd: fajrEnd,
+            timeZone: timeZone
+        )
+        let clampedWakeTime = min(max(wakeTime, adjustmentWindow.minTime), adjustmentWindow.maxTime)
+        guard clampedWakeTime >= adjustmentWindow.minTime, clampedWakeTime <= adjustmentWindow.maxTime else {
             return false
         }
 
         let minutesFromMidnight = Self.persistedHeroWakeAdjustmentMinutes(
             clampedWakeTime: clampedWakeTime,
             date: normalizedDate,
-            fajrStart: window.fajrStart,
-            fajrEnd: fajrEnd,
+            minTime: adjustmentWindow.minTime,
+            maxTime: adjustmentWindow.maxTime,
             timeZone: timeZone
         )
         alarmConfigStore.updateOverride(for: normalizedDate, timeZone: timeZone) { override in
@@ -1549,24 +1555,70 @@ final class ScheduleManager: ObservableObject {
     private static func persistedHeroWakeAdjustmentMinutes(
         clampedWakeTime: Date,
         date: Date,
-        fajrStart: Date,
-        fajrEnd: Date,
+        minTime: Date,
+        maxTime: Date,
         timeZone: TimeZone
     ) -> Int {
         var minutes = DateHelpers.minutesFromMidnight(for: clampedWakeTime, timeZone: timeZone)
         var resolvedWakeTime = DateHelpers.dateFromMidnight(for: date, minutes: minutes, timeZone: timeZone)
 
-        while resolvedWakeTime < fajrStart, minutes < 1439 {
+        while resolvedWakeTime < minTime, minutes < 1439 {
             minutes += 1
             resolvedWakeTime = DateHelpers.dateFromMidnight(for: date, minutes: minutes, timeZone: timeZone)
         }
 
-        while resolvedWakeTime > fajrEnd, minutes > 0 {
+        while resolvedWakeTime > maxTime, minutes > 0 {
             minutes -= 1
             resolvedWakeTime = DateHelpers.dateFromMidnight(for: date, minutes: minutes, timeZone: timeZone)
         }
 
         return minutes
+    }
+
+    private struct HeroWakeAdjustmentWindow {
+        let minTime: Date
+        let maxTime: Date
+    }
+
+    private func heroWakeAdjustmentWindow(
+        for day: ActiveAlarmDay,
+        proposedWakeTime: Date,
+        fallbackFajrEnd: Date,
+        timeZone: TimeZone
+    ) -> HeroWakeAdjustmentWindow {
+        let prayerWindow = day.decisionLog.prayerWindow
+        if isEarlyWorshipMorning(day),
+           proposedWakeTime <= prayerWindow.fajrStart,
+           let finalThirdStart = EarlyWorshipBoundaryResolver.finalThirdStart(
+               targetFajrStart: prayerWindow.fajrStart,
+               maghrib: prayerWindow.maghrib,
+               timeZone: timeZone
+           ) {
+            return HeroWakeAdjustmentWindow(minTime: finalThirdStart, maxTime: prayerWindow.fajrStart)
+        }
+
+        return HeroWakeAdjustmentWindow(minTime: prayerWindow.fajrStart, maxTime: fallbackFajrEnd)
+    }
+
+    private func isEarlyWorshipMorning(_ day: ActiveAlarmDay) -> Bool {
+        let context = day.resolvedDayContext
+        return isFastingMorning(context)
+            || context.primaryContext == .tahajjud
+            || context.secondaryContexts.contains(.tahajjud)
+            || day.effectiveConfig.tahajjudRefinement
+    }
+
+    private func isFastingMorning(_ context: ResolvedDayContext) -> Bool {
+        let fastingContexts: Set<MorningContextType> = [.fasting, .qadaFast, .sunnahFast]
+        if fastingContexts.contains(context.primaryContext) {
+            return true
+        }
+        if context.secondaryContexts.contains(where: { fastingContexts.contains($0) }) {
+            return true
+        }
+
+        let fastingTags: Set<DayTag> = [.ramadan, .qada, .kaffarah, .vow, .voluntary]
+        return context.supportingTags.contains(where: { fastingTags.contains($0) })
     }
 
     func schedule(for date: Date) -> DaySchedule? {
@@ -2299,7 +2351,7 @@ final class ScheduleManager: ObservableObject {
 
     private func updateBootstrapState() {
         #if DEBUG
-        if UITestLaunchConfiguration.usesMorningHeroFajrAdjusterFixture,
+        if UITestFixtureConfigurator.isMorningHeroFajrAdjusterFixtureRequested,
            settingsStore.settings.isConfigured,
            !activeWindowSnapshot.visibleDays.isEmpty {
             bootstrapState = .home

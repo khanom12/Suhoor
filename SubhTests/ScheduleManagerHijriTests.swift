@@ -1882,6 +1882,90 @@ struct ScheduleManagerHijriTests {
         #expect(endDisplay.wakeAdjustmentEnabled)
     }
 
+    @Test
+    @MainActor
+    func heroWakeAdjustmentPersistsEarlyWorshipBoundary() async {
+        let suiteName = "ScheduleManagerHijriTests.HeroEarlyWorshipAdjustment"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        let timeZone = TimeZone.current
+
+        let settingsStore = SuhoorSettingsStore(defaults: defaults)
+        settingsStore.update { draft in
+            draft.isConfigured = true
+            draft.locationMode = .fixed
+            draft.fixedLocation = FixedLocation(latitude: 43.6532, longitude: -79.3832)
+        }
+
+        let alarmConfigStore = AlarmConfigStore(defaultsStore: defaults)
+        let manager = ScheduleManager(
+            settingsStore: settingsStore,
+            locationService: LocationService(),
+            alarmConfigStore: alarmConfigStore,
+            hijriAdjustmentStore: HijriMonthAdjustmentStore(defaults: defaults),
+            cacheStore: ScheduleCacheStore(defaults: defaults)
+        )
+
+        await manager.refreshSchedules(force: true)
+
+        guard let target = manager.currentMorningHomeSnapshot.tomorrow?.activeDay,
+              let finalThirdStart = EarlyWorshipBoundaryResolver.finalThirdStart(
+                  targetFajrStart: target.decisionLog.prayerWindow.fajrStart,
+                  maghrib: target.decisionLog.prayerWindow.maghrib,
+                  timeZone: timeZone
+              ) else {
+            Issue.record("Expected a resolved target morning with final-third start.")
+            return
+        }
+
+        let earlyWake = target.decisionLog.prayerWindow.fajrStart.addingTimeInterval(-30 * 60)
+        alarmConfigStore.updateOverride(for: target.date, timeZone: timeZone) { override in
+            override.wakeStateOverride = .fixedWake
+            override.fixedWakeTimeOverrideMinutesFromMidnight = DateHelpers.minutesFromMidnight(
+                for: earlyWake,
+                timeZone: timeZone
+            )
+            override.tahajjudRefinement = true
+            override.bypassLatestWakeCap = true
+        }
+        await manager.refreshSchedules(force: true)
+
+        guard let earlyDisplay = heroDisplay(for: target.date, manager: manager, timeZone: timeZone) else {
+            Issue.record("Expected an early-worship hero display.")
+            return
+        }
+
+        #expect(earlyDisplay.fajrWindowVisualMode == .interactiveEarlyWorshipWindow)
+        #expect(earlyDisplay.detailText == "Wake up 30 min before Fajr begins")
+
+        let defaultWakeRule = alarmConfigStore.defaults.defaultWakeRule
+        let committed = await manager.commitHeroWakeAdjustment(
+            for: target.date,
+            wakeTime: finalThirdStart,
+            timeZone: timeZone
+        )
+
+        #expect(committed)
+        #expect(alarmConfigStore.defaults.defaultWakeRule == defaultWakeRule)
+
+        guard let updated = manager.activeDay(for: target.date, timeZone: timeZone),
+              let updatedDisplay = heroDisplay(for: target.date, manager: manager, timeZone: timeZone),
+              let override = alarmConfigStore.override(for: target.date, timeZone: timeZone) else {
+            Issue.record("Expected persisted early-worship override.")
+            return
+        }
+
+        let persistedMinutes = override.fixedWakeTimeOverrideMinutesFromMidnight
+        #expect(persistedMinutes != nil)
+        #expect(override.wakeStateOverride == .fixedWake)
+        #expect(override.bypassLatestWakeCap == true)
+        #expect(updated.schedule.wakeDate >= finalThirdStart)
+        #expect(updated.schedule.wakeDate.timeIntervalSince(finalThirdStart) < 60)
+        #expect(updatedDisplay.fajrWindowVisualMode == .interactiveEarlyWorshipWindow)
+        #expect(updatedDisplay.detailText == "Wake up for the last third of the night")
+        #expect((updatedDisplay.wakeWindowPositionRatio ?? 1) < 0.01)
+    }
+
     @MainActor
     private func heroDisplay(
         for date: Date,

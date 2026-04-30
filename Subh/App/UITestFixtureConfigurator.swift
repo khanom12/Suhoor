@@ -4,6 +4,7 @@ import Foundation
 enum UITestFixtureConfigurator {
     static var isMorningHeroFajrAdjusterFixtureRequested: Bool {
         UITestLaunchConfiguration.usesMorningHeroFajrAdjusterFixture
+            || UITestLaunchConfiguration.usesMorningHeroEarlyWorshipAdjusterFixture
     }
 
     static func resetPersistentStateIfNeeded() {
@@ -50,6 +51,16 @@ enum UITestFixtureConfigurator {
         let today = calendar.startOfDay(for: timeProvider.now())
         guard let tomorrow = calendar.date(byAdding: .day, value: 1, to: today) else { return }
         alarmConfigStore.addSingleDaySource(tomorrow, timeZone: calendar.timeZone)
+
+        guard UITestLaunchConfiguration.usesMorningHeroEarlyWorshipAdjusterFixture else { return }
+
+        alarmConfigStore.updateOverride(for: tomorrow, timeZone: calendar.timeZone) { override in
+            override.wakeStateOverride = .preFajr
+            override.wakeAnchorTypeOverride = .fajrStart
+            override.wakeDeltaOverrideMinutes = 30
+            override.tahajjudRefinement = true
+            override.bypassLatestWakeCap = true
+        }
     }
 }
 #endif

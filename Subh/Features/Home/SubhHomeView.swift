@@ -588,6 +588,8 @@ private struct FajrWindowRangeVisual: View {
                 ratio: display.wakeWindowPositionRatio,
                 indicatorState: display.wakeWindowIndicatorState,
                 indicatorIconName: display.wakeWindowIndicatorIconName,
+                leftBoundaryMarkerStyle: display.leftBoundaryMarkerStyle,
+                rightBoundaryMarkerStyle: display.rightBoundaryMarkerStyle,
                 visualMode: display.fajrWindowVisualMode,
                 minTime: display.wakeAdjustmentMinTime,
                 maxTime: display.wakeAdjustmentMaxTime,
@@ -617,6 +619,8 @@ private struct FajrWindowRangeVisual: View {
                 ratio: display.wakeWindowPositionRatio,
                 indicatorState: display.wakeWindowIndicatorState,
                 indicatorIconName: display.wakeWindowIndicatorIconName,
+                leftBoundaryMarkerStyle: display.leftBoundaryMarkerStyle,
+                rightBoundaryMarkerStyle: display.rightBoundaryMarkerStyle,
                 visualMode: display.fajrWindowVisualMode,
                 minTime: display.wakeAdjustmentMinTime,
                 maxTime: display.wakeAdjustmentMaxTime,
@@ -659,6 +663,8 @@ private struct FajrWindowRangeTrack: View {
     let ratio: Double?
     let indicatorState: MorningHeroWakeWindowIndicatorState
     let indicatorIconName: String?
+    let leftBoundaryMarkerStyle: MorningHeroBoundaryMarkerStyle
+    let rightBoundaryMarkerStyle: MorningHeroBoundaryMarkerStyle
     let visualMode: MorningHeroFajrWindowVisualMode
     let minTime: Date?
     let maxTime: Date?
@@ -672,7 +678,7 @@ private struct FajrWindowRangeTrack: View {
             let width = proxy.size.width
             let centerY = proxy.size.height / 2
 
-            if visualMode == .interactiveWithinFajrWindow {
+            if visualMode.isInteractive {
                 trackContent(width: width, centerY: centerY)
                     .highPriorityGesture(
                         DragGesture(minimumDistance: 0)
@@ -693,7 +699,7 @@ private struct FajrWindowRangeTrack: View {
         ZStack(alignment: .leading) {
             trackAccessibilityElement(width: width, centerY: centerY)
 
-            endpoint(x: 0, y: centerY)
+            boundaryMarker(style: leftBoundaryMarkerStyle, x: 0, y: centerY)
 
             Capsule()
                 .fill(Color.white.opacity(0.20))
@@ -714,7 +720,7 @@ private struct FajrWindowRangeTrack: View {
                 .frame(height: max(1.5, metrics.rangeTrackHeight * 0.52))
                 .position(x: width / 2, y: centerY)
 
-            endpoint(x: width, y: centerY)
+            boundaryMarker(style: rightBoundaryMarkerStyle, x: width, y: centerY)
 
             if let ratio, indicatorState != .none, indicatorState != .unavailable {
                 marker(ratio: ratio, width: width, centerY: centerY)
@@ -733,16 +739,35 @@ private struct FajrWindowRangeTrack: View {
             .accessibilityIdentifier(MorningHeroUIIdentifier.fajrWindowTrack)
     }
 
-    private func endpoint(x: CGFloat, y: CGFloat) -> some View {
-        Circle()
-            .fill(Color.white.opacity(0.84))
-            .overlay {
-                Circle()
-                    .stroke(Color.white.opacity(0.36), lineWidth: 1)
-            }
-            .shadow(color: Color.black.opacity(0.14), radius: 2, x: 0, y: 1)
-            .frame(width: metrics.rangeEndpointSize, height: metrics.rangeEndpointSize)
-            .position(x: x, y: y)
+    @ViewBuilder
+    private func boundaryMarker(style: MorningHeroBoundaryMarkerStyle, x: CGFloat, y: CGFloat) -> some View {
+        switch style {
+        case .endpointCircle:
+            Circle()
+                .fill(Color.white.opacity(0.84))
+                .overlay {
+                    Circle()
+                        .stroke(Color.white.opacity(0.36), lineWidth: 1)
+                }
+                .shadow(color: Color.black.opacity(0.14), radius: 2, x: 0, y: 1)
+                .frame(width: metrics.rangeEndpointSize, height: metrics.rangeEndpointSize)
+                .position(x: x, y: y)
+        case .verticalLine:
+            Capsule()
+                .fill(Color.white.opacity(0.84))
+                .overlay {
+                    Capsule()
+                        .stroke(Color.white.opacity(0.28), lineWidth: 1)
+                }
+                .shadow(color: Color.black.opacity(0.14), radius: 2, x: 0, y: 1)
+                .frame(
+                    width: max(2, metrics.rangeEndpointSize * 0.32),
+                    height: max(metrics.rangeEndpointSize * 1.8, metrics.rangeTrackHeight * 3.2)
+                )
+                .position(x: x, y: y)
+        case .none:
+            EmptyView()
+        }
     }
 
     private func marker(ratio: Double, width: CGFloat, centerY: CGFloat) -> some View {

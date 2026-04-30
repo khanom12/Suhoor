@@ -3,10 +3,15 @@ import Foundation
 #if DEBUG
 enum UITestLaunchConfiguration {
     static let morningHeroFajrAdjusterArgument = "--ui-testing-morning-hero-fajr-adjuster"
+    static let morningHeroEarlyWorshipAdjusterArgument = "--ui-testing-morning-hero-early-worship-adjuster"
     static let fixedNowArgumentPrefix = "--ui-testing-fixed-now="
 
     static var usesMorningHeroFajrAdjusterFixture: Bool {
         ProcessInfo.processInfo.arguments.contains(morningHeroFajrAdjusterArgument)
+    }
+
+    static var usesMorningHeroEarlyWorshipAdjusterFixture: Bool {
+        ProcessInfo.processInfo.arguments.contains(morningHeroEarlyWorshipAdjusterArgument)
     }
 
     static var fixedNow: Date? {
@@ -28,6 +33,7 @@ enum UITestLaunchConfiguration {
 
     static var suppressesFastingCalendarContext: Bool {
         usesMorningHeroFajrAdjusterFixture
+            || usesMorningHeroEarlyWorshipAdjusterFixture
     }
 
     private static var fixedNowFormatter: ISO8601DateFormatter {
