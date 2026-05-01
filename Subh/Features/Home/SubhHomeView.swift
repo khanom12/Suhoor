@@ -42,7 +42,7 @@ struct SubhHomeView: View {
         let weeklyFajrcast = weeklyFajrcastSnapshot
 
         NavigationStack {
-            ZStack {
+            ZStack(alignment: .topTrailing) {
                 AppPageBackground()
                     .ignoresSafeArea()
 
@@ -87,13 +87,12 @@ struct SubhHomeView: View {
                     .padding(.top, DesignTokens.spacingXL + DesignTokens.spacingL)
                     .padding(.bottom, 104)
                 }
-            }
-            .toolbar(.hidden, for: .navigationBar)
-            .safeAreaInset(edge: .bottom) {
+
                 HomeSettingsFloatingControl {
                     presentSettings()
                 }
             }
+            .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(item: $destination) { destination in
                 switch destination {
                 case .day(let schedule):
@@ -760,7 +759,7 @@ private struct MorningHeroQuickWakeModeSelector: View {
         .frame(minHeight: metrics.quickSelectorHeight)
         .background {
             AppGlassSurface(
-                variant: WakeGlassTheme.surfaceVariant,
+                variant: WakeGlassTheme.homeSurfaceVariant,
                 cornerRadius: metrics.quickSelectorHeight / 2,
                 contentPadding: 0,
                 maxWidth: metrics.quickSelectorWidth,
@@ -1531,18 +1530,13 @@ private struct HomeSettingsFloatingControl: View {
     let onOpenSettings: () -> Void
 
     var body: some View {
-        HStack {
-            Spacer()
-
-            HomeFloatingIconButton(
-                systemName: "gearshape",
-                accessibilityLabel: "Settings",
-                action: onOpenSettings
-            )
-        }
-        .padding(.horizontal, DesignTokens.spacingL)
-        .padding(.top, DesignTokens.spacingS)
-        .padding(.bottom, DesignTokens.spacingS)
+        HomeFloatingIconButton(
+            systemName: "gearshape",
+            accessibilityLabel: "Settings",
+            action: onOpenSettings
+        )
+        .padding(.trailing, DesignTokens.spacingL)
+        .padding(.top, DesignTokens.spacingXL)
     }
 }
 
@@ -1558,16 +1552,17 @@ private struct HomeFloatingIconButton: View {
                 .foregroundStyle(WakeGlassTheme.primaryText)
                 .frame(width: 48, height: 48)
                 .background {
-                    Circle()
-                        .fill(.thinMaterial)
-                        .overlay {
-                            Circle().fill(Color.white.opacity(0.20))
-                        }
-                        .overlay {
-                            Circle().stroke(Color.white.opacity(0.36), lineWidth: 1)
+                    AppGlassSurface(
+                        variant: WakeGlassTheme.homeSurfaceVariant,
+                        cornerRadius: 24,
+                        contentPadding: 0,
+                        maxWidth: 48,
+                        alignment: .center
+                    ) {
+                        Color.clear
+                            .frame(width: 48, height: 48)
                         }
                 }
-                .shadow(color: Color.black.opacity(0.14), radius: 14, x: 0, y: 6)
         }
         .buttonStyle(.plain)
         .accessibilityLabel(accessibilityLabel)
@@ -1582,7 +1577,7 @@ private struct NextTenMorningsCard: View {
         let forecast = MorningHomePresentation.nextTenMorningsSnapshot(from: entries)
 
         AppGlassSurface(
-            variant: .grouped,
+            variant: WakeGlassTheme.homeSurfaceVariant,
             contentPadding: 0
         ) {
             VStack(spacing: 0) {

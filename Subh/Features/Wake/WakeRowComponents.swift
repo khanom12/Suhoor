@@ -2,6 +2,7 @@ import SwiftUI
 
 enum WakeGlassTheme {
     static let surfaceVariant: AppGlassSurfaceVariant = .grouped
+    static let homeSurfaceVariant: AppGlassSurfaceVariant = .homeGrouped
     static let primaryText = Color.white
     static let secondaryText = Color.white.opacity(0.70)
     static let tertiaryText = Color.white.opacity(0.50)

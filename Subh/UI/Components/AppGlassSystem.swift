@@ -12,6 +12,7 @@ enum AppGlassSurfaceVariant {
     case quiet
     case tinted
     case grouped
+    case homeGrouped
 }
 
 enum AppGlassProminence {
@@ -58,22 +59,46 @@ struct AppGlassStyle {
             return baseStyle(cornerRadius: 22, padding: 14)
         case (.grouped, _):
             return baseStyle(cornerRadius: 20, padding: 0)
+        case (.homeGrouped, _):
+            return homeGroupedStyle(cornerRadius: 20, padding: 0)
         }
     }
 
-    private static func baseStyle(cornerRadius: CGFloat, padding: CGFloat) -> AppGlassStyle {
+    private static func baseStyle(
+        cornerRadius: CGFloat,
+        padding: CGFloat,
+        fallbackMaterial: Material = .thinMaterial,
+        baseOverlayOpacity: Double = 0.012,
+        tintOpacity: Double = 0.018,
+        strokeOpacity: Double = 0.06,
+        nativeGlassKind: NativeGlassKind = .clear
+    ) -> AppGlassStyle {
         AppGlassStyle(
             cornerRadius: cornerRadius,
             padding: padding,
-            fallbackMaterial: .thinMaterial,
-            baseOverlayOpacity: 0.012,
+            fallbackMaterial: fallbackMaterial,
+            baseOverlayOpacity: baseOverlayOpacity,
             warmOverlayOpacity: 0.0,
-            tintOpacity: 0.018,
-            strokeOpacityLight: 0.06,
-            strokeOpacityDark: 0.06,
+            tintOpacity: tintOpacity,
+            strokeOpacityLight: strokeOpacity,
+            strokeOpacityDark: strokeOpacity,
             ambientShadow: ShadowStyle(y: 4, blur: 8, opacity: 0.015),
             contactShadow: ShadowStyle(y: 1, blur: 3, opacity: 0.01),
-            nativeGlassKind: .clear
+            nativeGlassKind: nativeGlassKind
+        )
+    }
+
+    private static func homeGroupedStyle(cornerRadius: CGFloat, padding: CGFloat) -> AppGlassStyle {
+        let frostBoost = 1.125
+
+        return baseStyle(
+            cornerRadius: cornerRadius,
+            padding: padding,
+            fallbackMaterial: .regularMaterial,
+            baseOverlayOpacity: 0.012 * frostBoost,
+            tintOpacity: 0.018 * frostBoost,
+            strokeOpacity: 0.06 * frostBoost,
+            nativeGlassKind: .regular
         )
     }
 }

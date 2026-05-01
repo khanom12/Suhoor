@@ -15,7 +15,7 @@ struct WeeklyFajrcastCard: View {
     var body: some View {
         Button(action: openIfChartIsIdle) {
             AppGlassSurface(
-                variant: .grouped,
+                variant: WakeGlassTheme.homeSurfaceVariant,
                 contentPadding: 0
             ) {
                 VStack(spacing: 0) {
