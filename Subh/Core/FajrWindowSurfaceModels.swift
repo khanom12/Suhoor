@@ -163,6 +163,26 @@ struct FajrWindowCompactSummarySnapshot: Equatable, Sendable {
     let secondaryText: String?
 }
 
+struct FajrWindowLiveWakeAdjustment: Equatable, Sendable {
+    enum Source: String, Equatable, Sendable {
+        case heroWakeSlider
+        case accessibilityAdjustment
+        case other
+    }
+
+    enum Phase: String, Equatable, Sendable {
+        case changing
+        case ended
+        case committed
+        case cancelled
+    }
+
+    let dateKey: String
+    let provisionalWakeTime: Date
+    let source: Source
+    let phase: Phase
+}
+
 struct FajrWindowCompactSelectedDaySnapshot: Equatable, Sendable {
     let dateKey: String
     let relativeLabel: String
@@ -327,6 +347,7 @@ struct FajrWindowDataset: Equatable, Sendable {
 struct FajrWindowCompactSnapshot: Equatable, Sendable {
     let period: FajrWindowPeriod
     let anchorDateKey: String?
+    let liveWakeAdjustment: FajrWindowLiveWakeAdjustment?
     let chart: FajrWindowChartSnapshot
     let compactInsight: String
     let summary: FajrWindowCompactSummarySnapshot
@@ -344,6 +365,7 @@ struct FajrWindowCompactSnapshot: Equatable, Sendable {
     static let empty = FajrWindowCompactSnapshot(
         period: .sevenDays,
         anchorDateKey: nil,
+        liveWakeAdjustment: nil,
         chart: FajrWindowChartSnapshot(
             period: .sevenDays,
             activeOverlay: .myWake,

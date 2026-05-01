@@ -16,15 +16,13 @@ struct WeeklyFajrcastCard: View {
         Button(action: openIfChartIsIdle) {
             AppGlassSurface(
                 variant: .grouped,
-                tint: .black,
-                tintOpacityMultiplier: 4.5,
                 contentPadding: 0
             ) {
                 VStack(spacing: 0) {
                     header
                         .padding(.horizontal, horizontalInset)
-                        .padding(.top, headerVerticalPadding)
-                        .padding(.bottom, headerVerticalPadding)
+                        .padding(.top, headerTopPadding)
+                        .padding(.bottom, headerBottomPadding)
 
                     dividerLine
                         .padding(.horizontal, horizontalInset)
@@ -75,11 +73,11 @@ struct WeeklyFajrcastCard: View {
     }
 
     private var header: some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .center, spacing: 12) {
             Text("WEEKLY FAJRCAST")
-                .font(.system(size: titlePointSize, weight: .regular))
-                .foregroundStyle(titleColor)
-                .padding(.top, headerTitleTopInset)
+                .appTextRole(.eyebrow)
+                .foregroundStyle(WakeGlassTheme.tertiaryText)
+                .lineLimit(1)
 
             Spacer(minLength: 0)
 
@@ -94,7 +92,7 @@ struct WeeklyFajrcastCard: View {
                         .fill(WakeGlassTheme.divider)
                 )
         }
-        .frame(height: monthTagHeight, alignment: .top)
+        .frame(minHeight: monthTagHeight, alignment: .center)
     }
 
     private var footer: some View {
@@ -157,11 +155,15 @@ struct WeeklyFajrcastCard: View {
     }
 
     private var horizontalInset: CGFloat {
-        dynamicTypeSize.isAccessibilitySize ? 18 : 21
+        DesignTokens.spacingL
     }
 
-    private var headerVerticalPadding: CGFloat {
-        dynamicTypeSize.isAccessibilitySize ? 8 : 6
+    private var headerTopPadding: CGFloat {
+        DesignTokens.spacingL
+    }
+
+    private var headerBottomPadding: CGFloat {
+        DesignTokens.spacingS
     }
 
     private var chartVerticalPadding: CGFloat {
@@ -197,20 +199,12 @@ struct WeeklyFajrcastCard: View {
         }
     }
 
-    private var headerTitleTopInset: CGFloat {
-        dynamicTypeSize.isAccessibilitySize ? 6 : 5
-    }
-
     private var monthTagWidth: CGFloat {
         layoutProfile.monthTagWidth
     }
 
     private var monthTagHeight: CGFloat {
         layoutProfile.monthTagHeight
-    }
-
-    private var titlePointSize: CGFloat {
-        layoutProfile.scaled(base: 12)
     }
 
     private var monthTagPointSize: CGFloat {
@@ -223,10 +217,6 @@ struct WeeklyFajrcastCard: View {
 
     private var footerSecondaryPointSize: CGFloat {
         layoutProfile.scaled(base: 13)
-    }
-
-    private var titleColor: Color {
-        WakeGlassTheme.tertiaryText
     }
 
     private var monthTagColor: Color {
@@ -317,16 +307,45 @@ struct WeeklyFajrcastCard: View {
     }
 
     private func singleDatePillText(for date: Date) -> String {
-        gregorianSingleDate(date)
+        gregorianWeekdayDate(date)
     }
 
-    private func gregorianSingleDate(_ date: Date) -> String {
+    private func gregorianWeekdayDate(_ date: Date) -> String {
         let components = gregorianCalendar.dateComponents([.month, .day], from: date)
         guard components.month != nil, let day = components.day else {
             return "This day"
         }
 
-        return "\(gregorianMonthName(for: date)) \(day)"
+        let weekdayFormatter = DateFormatter()
+        weekdayFormatter.dateFormat = "EEEE"
+        weekdayFormatter.calendar = gregorianCalendar
+        weekdayFormatter.timeZone = .current
+        weekdayFormatter.locale = .current
+
+        let dayText = Locale.current.language.languageCode?.identifier == "en"
+            ? ordinalDay(day)
+            : "\(day)"
+        return "\(weekdayFormatter.string(from: date)), \(gregorianMonthName(for: date)) \(dayText)"
+    }
+
+    private func ordinalDay(_ day: Int) -> String {
+        let ones = day % 10
+        let tens = (day / 10) % 10
+
+        if tens == 1 {
+            return "\(day)th"
+        }
+
+        switch ones {
+        case 1:
+            return "\(day)st"
+        case 2:
+            return "\(day)nd"
+        case 3:
+            return "\(day)rd"
+        default:
+            return "\(day)th"
+        }
     }
 
     private var gregorianCalendar: Calendar {
@@ -390,9 +409,13 @@ private struct WeeklyFajrcastCardLayoutProfile {
 
     var monthTagWidth: CGFloat {
         let font = UIFont.systemFont(ofSize: scaled(base: 12), weight: .regular)
-        let referenceWidth = ("September 30–October 6" as NSString).size(
-            withAttributes: [.font: font]
-        ).width
+        let references = [
+            "September 30–October 6",
+            "Wednesday, September 30th"
+        ]
+        let referenceWidth = references
+            .map { ($0 as NSString).size(withAttributes: [.font: font]).width }
+            .max() ?? 0
         return ceil(max(196, referenceWidth + 30))
     }
 

@@ -147,10 +147,19 @@ struct FajrWindowSurfaceProvider {
         dataset: FajrWindowDataset,
         anchorDateKey: String? = nil,
         selectedDateKey: String? = nil,
+        liveWakeAdjustment: FajrWindowLiveWakeAdjustment? = nil,
         now: Date = Date(),
         timeZone: TimeZone = .current
     ) -> FajrWindowCompactSnapshot {
-        let points = projectedPoints(rows: dataset.rows, overlayLookup: [:])
+        let effectiveLiveWakeAdjustment = liveWakeAdjustment.flatMap { adjustment in
+            dataset.rows.contains(where: { $0.dateKey == adjustment.dateKey }) ? adjustment : nil
+        }
+        let rows = compactRows(
+            from: dataset.rows,
+            applying: effectiveLiveWakeAdjustment,
+            timeZone: timeZone
+        )
+        let points = projectedPoints(rows: rows, overlayLookup: [:])
         let selectedPoint = compactSelectedPoint(
             from: points,
             selectedDateKey: selectedDateKey,
@@ -166,10 +175,10 @@ struct FajrWindowSurfaceProvider {
             xAxisLabels: dataset.xAxisLabels
         )
         let summary = buildCompactSummary(
-            rows: dataset.rows,
+            rows: rows,
             timeZone: timeZone
         )
-        let compactInsight = compactSecondarySummaryLine(rows: dataset.rows, timeZone: timeZone)
+        let compactInsight = compactSecondarySummaryLine(rows: rows, timeZone: timeZone)
             ?? dataset.compactInsight
         let selectedDay = selectedPoint.map {
             buildCompactSelectedDaySnapshot(
@@ -191,10 +200,62 @@ struct FajrWindowSurfaceProvider {
         return FajrWindowCompactSnapshot(
             period: dataset.period,
             anchorDateKey: anchorDateKey ?? compactAnchorPoint(from: points)?.dateKey ?? selectedPoint?.dateKey,
+            liveWakeAdjustment: effectiveLiveWakeAdjustment,
             chart: chart,
             compactInsight: compactInsight,
             summary: summary,
             selectedDay: selectedDay
+        )
+    }
+
+    private func compactRows(
+        from rows: [FajrWindowDatasetRow],
+        applying liveWakeAdjustment: FajrWindowLiveWakeAdjustment?,
+        timeZone: TimeZone
+    ) -> [FajrWindowDatasetRow] {
+        guard let liveWakeAdjustment,
+              liveWakeAdjustment.phase == .changing,
+              rows.contains(where: { $0.dateKey == liveWakeAdjustment.dateKey })
+        else {
+            return rows
+        }
+
+        return rows.map { row in
+            guard row.dateKey == liveWakeAdjustment.dateKey else { return row }
+            return compactRow(row, applyingWake: liveWakeAdjustment.provisionalWakeTime, timeZone: timeZone)
+        }
+    }
+
+    private func compactRow(
+        _ row: FajrWindowDatasetRow,
+        applyingWake wakeTime: Date,
+        timeZone: TimeZone
+    ) -> FajrWindowDatasetRow {
+        FajrWindowDatasetRow(
+            dayOrdinal: row.dayOrdinal,
+            date: row.date,
+            dateKey: row.dateKey,
+            shortLabel: row.shortLabel,
+            mediumLabel: row.mediumLabel,
+            longLabel: row.longLabel,
+            monthLabel: row.monthLabel,
+            fajrStart: row.fajrStart,
+            fajrEndOrBoundary: row.fajrEndOrBoundary,
+            boundaryTruth: row.boundaryTruth,
+            primaryWake: wakeTime,
+            saferWake: row.saferWake,
+            fajrStartMinutes: row.fajrStartMinutes,
+            fajrEndOrBoundaryMinutes: row.fajrEndOrBoundaryMinutes,
+            primaryWakeMinutes: minutesFromMidnight(for: wakeTime, timeZone: timeZone),
+            saferWakeMinutes: row.saferWakeMinutes,
+            bufferBeforeBoundaryMinutes: Int(round(row.fajrEndOrBoundary.timeIntervalSince(wakeTime) / 60)),
+            isSkipped: row.isSkipped,
+            isOverride: row.isOverride,
+            isSpecialDay: row.isSpecialDay,
+            isFastingContext: row.isFastingContext,
+            isTahajjudContext: row.isTahajjudContext,
+            contextTags: row.contextTags,
+            relationText: row.relationText
         )
     }
 

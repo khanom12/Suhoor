@@ -36,6 +36,7 @@ struct SubhHomeView: View {
     @State private var settingsPath = NavigationPath()
     @State private var isShowingSettings = false
     @State private var weeklyFajrcastFocusedDateKey: String?
+    @State private var heroWakeAdjustment: FajrWindowLiveWakeAdjustment?
 
     var body: some View {
         let weeklyFajrcast = weeklyFajrcastSnapshot
@@ -61,7 +62,8 @@ struct SubhHomeView: View {
                             },
                             onSelectWakeMode: { date, mode in
                                 await scheduleManager.selectHeroWakeMode(for: date, mode: mode)
-                            }
+                            },
+                            onPreviewWakeAdjustment: previewHeroWakeAdjustment
                         ) {
                             if let entry = snapshot.tomorrow {
                                 destination = .day(entry.schedule)
@@ -121,6 +123,9 @@ struct SubhHomeView: View {
         .onReceive(appNavigator.$latestRequest.compactMap { $0 }) { request in
             handle(request.intent)
         }
+        .onChange(of: snapshot.tomorrow?.id) { _, _ in
+            heroWakeAdjustment = nil
+        }
     }
 
     private var snapshot: MorningHomeSnapshot {
@@ -128,14 +133,23 @@ struct SubhHomeView: View {
     }
 
     private var weeklyFajrcastSnapshot: FajrWindowCompactSnapshot {
-        guard let weeklyFajrcastFocusedDateKey else {
+        let liveWakeAdjustment = visibleHeroWakeAdjustment
+
+        guard weeklyFajrcastFocusedDateKey != nil || liveWakeAdjustment != nil else {
             return snapshot.weeklyFajrcast
         }
 
         return scheduleManager.fajrWindowCompactSnapshot(
             anchorDateKey: snapshot.weeklyFajrcast.anchorDateKey,
-            focusedDateKey: weeklyFajrcastFocusedDateKey
+            focusedDateKey: weeklyFajrcastFocusedDateKey,
+            liveWakeAdjustment: liveWakeAdjustment
         )
+    }
+
+    private var visibleHeroWakeAdjustment: FajrWindowLiveWakeAdjustment? {
+        guard let heroWakeAdjustment else { return nil }
+        let visibleKeys = Set(snapshot.weeklyFajrcast.points.map(\.dateKey))
+        return visibleKeys.contains(heroWakeAdjustment.dateKey) ? heroWakeAdjustment : nil
     }
 
     private func selectWeeklyFajrcastDate(_ dateKey: String) {
@@ -165,6 +179,21 @@ struct SubhHomeView: View {
         guard nextIndex != selectedIndex else { return }
 
         selectWeeklyFajrcastDate(compactSnapshot.points[nextIndex].dateKey)
+    }
+
+    private func previewHeroWakeAdjustment(date: Date, wakeTime: Date?) {
+        guard let wakeTime else {
+            heroWakeAdjustment = nil
+            return
+        }
+
+        let dateKey = DateHelpers.dayIdentifier(for: date, timeZone: .current)
+        heroWakeAdjustment = FajrWindowLiveWakeAdjustment(
+            dateKey: dateKey,
+            provisionalWakeTime: wakeTime,
+            source: .heroWakeSlider,
+            phase: .changing
+        )
     }
 
     private func handle(_ intent: AppNavigationIntent) {
@@ -226,6 +255,7 @@ private struct TomorrowMorningHero: View {
     let currentDate: Date
     let onCommitWakeAdjustment: (Date, Date) async -> Bool
     let onSelectWakeMode: (Date, QuickWakeMode) async -> Bool
+    let onPreviewWakeAdjustment: (Date, Date?) -> Void
     let onOpen: () -> Void
 
     @State private var tentativeWakeTime: Date?
@@ -280,6 +310,9 @@ private struct TomorrowMorningHero: View {
                 )
                     .onWakeAdjustmentChanged { wakeTime in
                         tentativeWakeTime = wakeTime
+                        if let date = entry?.schedule.date {
+                            onPreviewWakeAdjustment(date, wakeTime)
+                        }
                     }
                     .onWakeAdjustmentEnded { wakeTime in
                         commitWakeAdjustment(wakeTime)
@@ -327,12 +360,18 @@ private struct TomorrowMorningHero: View {
             onOpen()
         }
         .onChange(of: entry?.id) { _, _ in
+            if let date = entry?.schedule.date {
+                onPreviewWakeAdjustment(date, nil)
+            }
             tentativeWakeTime = nil
             isCommittingWakeAdjustment = false
             isSelectingWakeMode = false
         }
         .onChange(of: entry?.schedule.wakeDate) { _, _ in
             if !isCommittingWakeAdjustment {
+                if let date = entry?.schedule.date {
+                    onPreviewWakeAdjustment(date, nil)
+                }
                 tentativeWakeTime = nil
             }
         }
@@ -414,10 +453,12 @@ private struct TomorrowMorningHero: View {
     private func commitWakeAdjustment(_ wakeTime: Date) {
         guard let date = entry?.schedule.date else { return }
         tentativeWakeTime = wakeTime
+        onPreviewWakeAdjustment(date, wakeTime)
         isCommittingWakeAdjustment = true
         Task {
             _ = await onCommitWakeAdjustment(date, wakeTime)
             await MainActor.run {
+                onPreviewWakeAdjustment(date, nil)
                 tentativeWakeTime = nil
                 isCommittingWakeAdjustment = false
             }
@@ -429,6 +470,7 @@ private struct TomorrowMorningHero: View {
         withAnimation(heroModeAnimation) {
             isSelectingWakeMode = true
             tentativeWakeTime = nil
+            onPreviewWakeAdjustment(date, nil)
         }
         Task {
             _ = await onSelectWakeMode(date, mode)
@@ -467,6 +509,9 @@ private struct TomorrowMorningHero: View {
         let adjusted = Calendar.current.date(byAdding: .minute, value: minuteDelta, to: current) ?? current
         let clamped = min(max(adjusted, minTime), maxTime)
         tentativeWakeTime = clamped
+        if let date = entry?.schedule.date {
+            onPreviewWakeAdjustment(date, clamped)
+        }
         commitWakeAdjustment(clamped)
     }
 }

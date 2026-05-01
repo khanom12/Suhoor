@@ -855,7 +855,7 @@ struct FajrWindowChartView: View {
         if let beginGeometry = compactBoundaryLabelGeometry(
             title: "Fajr begins",
             keyPath: \.fajrStartMinutes,
-            placement: compactFajrBeginBoundaryLabelPlacement,
+            placement: compactFajrBeginBoundaryLabelPlacement(in: metrics),
             in: metrics
         ) {
             Text("Fajr begins")
@@ -883,8 +883,25 @@ struct FajrWindowChartView: View {
         }
     }
 
-    private var compactFajrBeginBoundaryLabelPlacement: CompactFajrcastGeometry.BoundaryLabelPlacement {
-        compactWakePatternPlacesMarkersBeforeFajr ? .below : .above
+    private func compactFajrBeginBoundaryLabelPlacement(
+        in metrics: CompactLayoutMetrics
+    ) -> CompactFajrcastGeometry.BoundaryLabelPlacement {
+        if compactWakePatternPlacesMarkersBeforeFajr {
+            return .below
+        }
+
+        guard let aboveGeometry = compactBoundaryLabelGeometry(
+            title: "Fajr begins",
+            keyPath: \.fajrStartMinutes,
+            placement: .above,
+            in: metrics
+        ) else {
+            return .above
+        }
+
+        return compactBoundaryLabelCollidesWithLeftMarkerLane(aboveGeometry, in: metrics)
+            ? .below
+            : .above
     }
 
     private var compactWakePatternPlacesMarkersBeforeFajr: Bool {
@@ -904,6 +921,48 @@ struct FajrWindowChartView: View {
         }.count
 
         return preFajrCount > activeVisiblePoints.count / 2
+    }
+
+    private func compactBoundaryLabelCollidesWithLeftMarkerLane(
+        _ geometry: CompactBoundaryLabelGeometry,
+        in metrics: CompactLayoutMetrics
+    ) -> Bool {
+        let labelBounds = CompactFajrcastGeometry.rotatedBoundingRect(
+            center: geometry.center,
+            labelWidth: geometry.labelWidth,
+            labelHeight: compactBoundaryLabelLineHeight,
+            angleRadians: geometry.angleRadians
+        ).insetBy(dx: -6, dy: -6)
+        let checkedColumnLimit = dynamicTypeSize.isAccessibilitySize || dynamicTypeSize == .xxxLarge ? 2 : 1
+
+        return markerPoints.contains { point in
+            guard point.dayOrdinal <= checkedColumnLimit else { return false }
+            let markerCenter = CGPoint(
+                x: xPosition(for: point, in: metrics.plotFrame),
+                y: yPosition(for: point.primaryWakeMinutes, in: metrics.plotFrame)
+            )
+            let markerRadius = compactMarkerCollisionRadius(for: point)
+            let markerBounds = CGRect(
+                x: markerCenter.x - markerRadius,
+                y: markerCenter.y - markerRadius,
+                width: markerRadius * 2,
+                height: markerRadius * 2
+            )
+
+            return labelBounds.intersects(markerBounds)
+        }
+    }
+
+    private func compactMarkerCollisionRadius(for point: FajrWindowPoint) -> CGFloat {
+        if point.dateKey == chart.selectedDateKey {
+            return max(8, compactMarkerPointSize * 0.75)
+        }
+
+        if point.isSkipped {
+            return max(7, compactSkippedMarkerPointSize * 0.75)
+        }
+
+        return max(6, compactInactiveMarkerSize * 0.75)
     }
 
     private func compactBoundaryLabelGeometry(
@@ -1472,6 +1531,26 @@ struct CompactFajrcastGeometry {
         return CGSize(
             width: ((labelWidth * cosine) + (labelHeight * sine)) / 2,
             height: ((labelWidth * sine) + (labelHeight * cosine)) / 2
+        )
+    }
+
+    static func rotatedBoundingRect(
+        center: CGPoint,
+        labelWidth: CGFloat,
+        labelHeight: CGFloat,
+        angleRadians: CGFloat
+    ) -> CGRect {
+        let halfExtents = rotatedHalfExtents(
+            labelWidth: labelWidth,
+            labelHeight: labelHeight,
+            angleRadians: angleRadians
+        )
+
+        return CGRect(
+            x: center.x - halfExtents.width,
+            y: center.y - halfExtents.height,
+            width: halfExtents.width * 2,
+            height: halfExtents.height * 2
         )
     }
 

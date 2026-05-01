@@ -2071,6 +2071,89 @@ struct ScheduleServiceExtractionTests {
     }
 
     @Test
+    func compactFajrcastAppliesLiveWakeAdjustmentToVisibleDay() {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let monday = Self.makeDate(year: 2026, month: 4, day: 27, timeZone: timeZone)
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let activeDays = (0..<7).map { offset in
+            Self.makeWakeEntry(
+                date: calendar.date(byAdding: .day, value: offset, to: monday) ?? monday,
+                timeZone: timeZone
+            ).activeDay
+        }
+        let focusedDay = activeDays[3]
+        let provisionalWake = Self.makeDate(year: 2026, month: 4, day: 30, hour: 3, minute: 42, timeZone: timeZone)
+        let provisionalMinutes = DateHelpers.minutesFromMidnight(for: provisionalWake, timeZone: timeZone)
+        let provider = FajrWindowSurfaceProvider()
+        let dataset = provider.buildDataset(
+            period: .sevenDays,
+            activeDays: activeDays,
+            overrideDateKeys: [],
+            timeZone: timeZone
+        )
+
+        let snapshot = provider.compactSnapshot(
+            dataset: dataset,
+            anchorDateKey: focusedDay.dateKey,
+            selectedDateKey: focusedDay.dateKey,
+            liveWakeAdjustment: FajrWindowLiveWakeAdjustment(
+                dateKey: focusedDay.dateKey,
+                provisionalWakeTime: provisionalWake,
+                source: .heroWakeSlider,
+                phase: .changing
+            ),
+            now: monday,
+            timeZone: timeZone
+        )
+        let focusedPoint = snapshot.chart.points.first { $0.dateKey == focusedDay.dateKey }
+
+        #expect(snapshot.liveWakeAdjustment?.dateKey == focusedDay.dateKey)
+        #expect(focusedPoint?.primaryWake == provisionalWake)
+        #expect(focusedPoint?.primaryWakeMinutes == provisionalMinutes)
+        #expect(snapshot.selectedDay.timeMain == "3:42")
+        #expect(snapshot.chart.compactYTicks.first?.minutes ?? 0 <= provisionalMinutes)
+        #expect(snapshot.points.map(\.dateKey) == activeDays.map(\.dateKey))
+    }
+
+    @Test
+    func compactFajrcastIgnoresLiveWakeAdjustmentOutsideVisibleWindow() {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let monday = Self.makeDate(year: 2026, month: 4, day: 27, timeZone: timeZone)
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let activeDays = (0..<7).map { offset in
+            Self.makeWakeEntry(
+                date: calendar.date(byAdding: .day, value: offset, to: monday) ?? monday,
+                timeZone: timeZone
+            ).activeDay
+        }
+        let provider = FajrWindowSurfaceProvider()
+        let dataset = provider.buildDataset(
+            period: .sevenDays,
+            activeDays: activeDays,
+            overrideDateKeys: [],
+            timeZone: timeZone
+        )
+
+        let snapshot = provider.compactSnapshot(
+            dataset: dataset,
+            selectedDateKey: activeDays[3].dateKey,
+            liveWakeAdjustment: FajrWindowLiveWakeAdjustment(
+                dateKey: "2026-05-20",
+                provisionalWakeTime: Self.makeDate(year: 2026, month: 5, day: 20, hour: 3, minute: 42, timeZone: timeZone),
+                source: .heroWakeSlider,
+                phase: .changing
+            ),
+            now: monday,
+            timeZone: timeZone
+        )
+
+        #expect(snapshot.liveWakeAdjustment == nil)
+        #expect(snapshot.points.map(\.primaryWake) == activeDays.map(\.schedule.wakeDate))
+    }
+
+    @Test
     func compactFajrcastGeometryCentersBottomCalloutInPocket() {
         let plotBottom: CGFloat = 160
         let chartBottom: CGFloat = 210
@@ -2103,6 +2186,41 @@ struct ScheduleServiceExtractionTests {
         #expect(angle > 0)
         #expect(aboveNormal.y < 0)
         #expect(belowNormal.y > 0)
+    }
+
+    @Test
+    func compactFajrcastGeometryComputesRotatedBoundingRect() {
+        let rect = CompactFajrcastGeometry.rotatedBoundingRect(
+            center: CGPoint(x: 40, y: 50),
+            labelWidth: 40,
+            labelHeight: 10,
+            angleRadians: .pi / 4
+        )
+
+        #expect(rect.minX < 40)
+        #expect(rect.maxX > 40)
+        #expect(rect.minY < 50)
+        #expect(rect.maxY > 50)
+        #expect(rect.width > 30)
+        #expect(rect.height > 10)
+    }
+
+    @Test
+    func compactFajrcastGeometryCanClampPointToInsetBounds() {
+        let bounds = CompactFajrcastGeometry.insetBounds(
+            for: CGRect(x: 0, y: 0, width: 100, height: 80),
+            halfExtents: CGSize(width: 12, height: 6),
+            clearance: 6
+        )
+        let clamped = CompactFajrcastGeometry.clamped(
+            CGPoint(x: -20, y: 100),
+            inside: bounds
+        )
+
+        #expect(bounds.minX == 18)
+        #expect(bounds.minY == 12)
+        #expect(clamped.x == bounds.minX)
+        #expect(clamped.y == bounds.maxY)
     }
 
     @Test

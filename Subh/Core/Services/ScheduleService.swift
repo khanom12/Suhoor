@@ -348,6 +348,7 @@ final class ScheduleManager: ObservableObject {
     func fajrWindowCompactSnapshot(
         anchorDateKey: String? = nil,
         focusedDateKey: String? = nil,
+        liveWakeAdjustment: FajrWindowLiveWakeAdjustment? = nil,
         timeZone: TimeZone = .current
     ) -> FajrWindowCompactSnapshot {
         PerformanceTrace.measure("fajrcast.compact.build") {
@@ -373,6 +374,7 @@ final class ScheduleManager: ObservableObject {
                 dataset: dataset,
                 anchorDateKey: resolvedAnchorDateKey,
                 selectedDateKey: resolvedFocusedDateKey,
+                liveWakeAdjustment: liveWakeAdjustment,
                 now: timeProvider.now(),
                 timeZone: timeZone
             )
