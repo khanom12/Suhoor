@@ -89,17 +89,7 @@ struct AppGlassStyle {
     }
 
     private static func homeGroupedStyle(cornerRadius: CGFloat, padding: CGFloat) -> AppGlassStyle {
-        let frostBoost = 1.125
-
-        return baseStyle(
-            cornerRadius: cornerRadius,
-            padding: padding,
-            fallbackMaterial: .regularMaterial,
-            baseOverlayOpacity: 0.012 * frostBoost,
-            tintOpacity: 0.018 * frostBoost,
-            strokeOpacity: 0.06 * frostBoost,
-            nativeGlassKind: .regular
-        )
+        baseStyle(cornerRadius: cornerRadius, padding: padding)
     }
 }
 
