@@ -759,25 +759,17 @@ private struct MorningHeroQuickWakeModeSelector: View {
         .frame(width: metrics.quickSelectorWidth)
         .frame(minHeight: metrics.quickSelectorHeight)
         .background {
-            Capsule()
-                .fill(Color.white.opacity(0.035))
-                .background(.thinMaterial, in: Capsule())
-                .overlay {
-                    Capsule().fill(Color.white.opacity(0.018))
-                }
-                .overlay(alignment: .top) {
-                    Capsule()
-                        .fill(Color.white.opacity(0.10))
-                        .frame(height: max(1, metrics.quickSelectorHeight * 0.34))
-                        .blur(radius: 10)
-                        .padding(.horizontal, 10)
-                        .offset(y: -metrics.quickSelectorHeight * 0.22)
-                }
-                .overlay {
-                    Capsule()
-                        .stroke(Color.white.opacity(0.11), lineWidth: 1)
-                }
-                .shadow(color: Color.black.opacity(0.035), radius: 8, x: 0, y: 3)
+            AppGlassSurface(
+                variant: WakeGlassTheme.surfaceVariant,
+                cornerRadius: metrics.quickSelectorHeight / 2,
+                contentPadding: 0,
+                maxWidth: metrics.quickSelectorWidth,
+                alignment: .center
+            ) {
+                Color.clear
+                    .frame(width: metrics.quickSelectorWidth)
+                    .frame(minHeight: metrics.quickSelectorHeight)
+            }
         }
         .opacity(isDisabled ? 0.72 : 1)
         .accessibilityElement(children: .contain)

@@ -81,6 +81,7 @@ struct AppGlassStyle {
 struct AppGlassSurface<Content: View>: View {
     let variant: AppGlassSurfaceVariant
     let prominence: AppGlassProminence
+    let cornerRadiusOverride: CGFloat?
     let tint: Color?
     let tintOpacityMultiplier: Double
     let contentPadding: CGFloat?
@@ -93,6 +94,7 @@ struct AppGlassSurface<Content: View>: View {
     init(
         variant: AppGlassSurfaceVariant = .standard,
         prominence: AppGlassProminence = .regular,
+        cornerRadius: CGFloat? = nil,
         tint: Color? = nil,
         tintOpacityMultiplier: Double = 1,
         contentPadding: CGFloat? = nil,
@@ -102,6 +104,7 @@ struct AppGlassSurface<Content: View>: View {
     ) {
         self.variant = variant
         self.prominence = prominence
+        self.cornerRadiusOverride = cornerRadius
         self.tint = tint
         self.tintOpacityMultiplier = tintOpacityMultiplier
         self.contentPadding = contentPadding
@@ -112,7 +115,7 @@ struct AppGlassSurface<Content: View>: View {
 
     var body: some View {
         let style = AppGlassStyle.make(variant: variant, prominence: prominence)
-        let cornerRadius = style.cornerRadius
+        let cornerRadius = cornerRadiusOverride ?? style.cornerRadius
         let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
         let padding = contentPadding ?? style.padding
 
