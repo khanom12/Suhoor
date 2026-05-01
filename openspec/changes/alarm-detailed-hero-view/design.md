@@ -11,9 +11,10 @@ The detail screen is a single hero-like surface:
 3. Relative wake description.
 4. Wake adjustment slider for active wake modes.
 5. `Fajr | Early | Quiet` mode selector using the Home hero visual language.
-6. A compact purpose control only when Early needs purpose, limited to Fast or Tahajjud.
-7. A compact fast-type control only for Early + Fast, locked to Ramadan fast during Ramadan.
-8. A compact audio control for active modes, distinguishing wake alarm and Fajr adhan without exposing delivery plumbing.
+6. One liquid-glass context card below the hero for day significance and any mode-specific controls.
+7. A compact purpose control in the context card only when Early needs purpose, limited to Fast or Tahajjud.
+8. A compact fast-purpose control in the context card only for Early + Fast, locked to Ramadan fast during Ramadan.
+9. A single Fajr-adhan-after-wake toggle only for non-Ramadan Early + Fast.
 
 The screen keeps the same app background and liquid-glass treatment as the home screen so it reads as one product surface.
 
@@ -27,11 +28,11 @@ The screen keeps the same app background and liquid-glass treatment as the home 
 ## Purpose Handling
 `Early` replaces the older user-facing `Fast` label in this detail surface because the state may represent fasting or Tahajjud. The selectable purpose set is intentionally small: Fast and Tahajjud. Legacy combined purpose data may still decode, but the UI must not present Fast + Tahajjud as an option.
 
-## Fast Type Handling
-When Early is for Fast, the screen presents the date's strongest fasting opportunity as the default fast type. Ramadan is locked. Non-Ramadan dates can choose a date-specific override such as Qada fast, Voluntary fast, or Other fast without changing global observance settings.
+## Fast Purpose Handling
+When Early is for Fast, the screen presents all applicable fasting opportunities for the selected date as the default fast purpose. If there are no opportunities, the default is Voluntary fast. Ramadan is locked to Ramadan fast. Non-Ramadan dates can choose a date-specific override such as Qada fast, Voluntary fast, or Other fast without changing global observance settings.
 
 ## Audio Handling
-The detail screen edits only date-specific wake alarm and Fajr adhan behavior. It maps compact UI choices onto the existing per-day `suhoorEnabled` and `fajrEnabled` override fields, then lets the existing resolver/scheduler regenerate events. It does not introduce a parallel audio delivery pipeline and it does not surface AlarmKit or notification fallback details.
+The detail screen does not expose broad audio choice UI in v3. The only user-editable audio-related control is a date-specific `Fajr adhan at Fajr begins` toggle for non-Ramadan Early + Fast. It maps onto the existing per-day Fajr boundary event field and lets the existing resolver/scheduler regenerate events. Selecting Fajr adhan as the Fajr-mode wake sound must still leave the wake alarm enabled; Quiet is the only mode that turns the wake alarm off.
 
 ## Quiet and Ramadan
 Quiet mode uses `Quiet Mode` as the primary display and keeps the hero layout stable by reserving the slider region. Outside Ramadan, Quiet suppresses wake and Fajr audio for the date. During Ramadan, Quiet suppresses the pre-Fajr wake alarm while preserving the Fajr adhan.

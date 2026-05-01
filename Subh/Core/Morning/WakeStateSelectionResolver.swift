@@ -113,9 +113,9 @@ enum WakeStateSelectionResolver {
             override.quickWakeModeOverride = .fajr
             override.earlyWakePurposeOverride = nil
             override.alarmDetailFastTypeOverride = nil
-            override.suhoorEnabled = false
+            override.suhoorEnabled = true
             override.reminderEnabled = false
-            override.fajrEnabled = true
+            override.fajrEnabled = false
             override.alarmDetailAudioPlanOverride = .fajrAdhan
             override.iftarEnabled = nil
             override.wakeStateOverride = .inFajr

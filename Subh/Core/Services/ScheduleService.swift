@@ -1571,6 +1571,9 @@ final class ScheduleManager: ObservableObject {
                     Self.applyAlarmDetailAudioPlan(.wakeAlarmAndFajrAdhan, to: &override, locksFajrAdhan: true)
                 }
             }
+            if mode == .fajr, isRamadan {
+                override.fajrEnabled = true
+            }
             if mode == .quiet, isRamadan {
                 override.skipDay = false
                 override.suhoorEnabled = false
@@ -1658,6 +1661,30 @@ final class ScheduleManager: ObservableObject {
     }
 
     @discardableResult
+    func setAlarmDetailFajrAdhanAfterWake(
+        for date: Date,
+        isEnabled: Bool,
+        timeZone: TimeZone = .current
+    ) async -> Bool {
+        let normalizedDate = DateHelpers.startOfDay(date, in: timeZone)
+        guard let day = activeDay(for: normalizedDate, timeZone: timeZone),
+              !Self.isRamadanAlarmDetailDay(day),
+              WakeStateSelectionResolver.selectedMode(for: day) == .fast else {
+            return false
+        }
+
+        alarmConfigStore.updateOverride(for: normalizedDate, timeZone: timeZone) { override in
+            WakeStateSelectionResolver.apply(.fast, to: &override)
+            override.earlyWakePurposeOverride = .fast
+            override.tahajjudRefinement = false
+            Self.applyAlarmDetailAudioPlan(isEnabled ? .wakeAlarmAndFajrAdhan : .wakeAlarm, to: &override)
+        }
+
+        await rescheduleDay(normalizedDate, preferCached: false)
+        return true
+    }
+
+    @discardableResult
     func resetAlarmDetailOverride(for date: Date, timeZone: TimeZone = .current) async -> Bool {
         let normalizedDate = DateHelpers.startOfDay(date, in: timeZone)
         alarmConfigStore.removeOverride(for: normalizedDate, timeZone: timeZone)
@@ -1675,9 +1702,9 @@ final class ScheduleManager: ObservableObject {
 
         switch resolvedPlan {
         case .fajrAdhan:
-            override.suhoorEnabled = false
+            override.suhoorEnabled = true
             override.reminderEnabled = false
-            override.fajrEnabled = true
+            override.fajrEnabled = locksFajrAdhan
         case .wakeAlarm:
             override.suhoorEnabled = true
             override.reminderEnabled = true

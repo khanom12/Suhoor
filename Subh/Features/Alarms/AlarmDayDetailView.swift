@@ -13,7 +13,7 @@ struct AlarmDayDetailView: View {
     @State private var isSelectingWakeMode = false
     @State private var isSelectingPurpose = false
     @State private var isSelectingFastType = false
-    @State private var isSelectingAudio = false
+    @State private var isTogglingFajrAdhan = false
     @State private var isResettingOverride = false
     @Namespace private var quickSelectorHighlight
 
@@ -28,7 +28,7 @@ struct AlarmDayDetailView: View {
                 .ignoresSafeArea()
 
             ScrollView {
-                detailHero
+                detailContent
                     .padding(.horizontal, DesignTokens.spacingM)
                     .padding(.top, DesignTokens.spacingXL + DesignTokens.spacingL)
                     .padding(.bottom, 104)
@@ -44,7 +44,7 @@ struct AlarmDayDetailView: View {
             isSelectingWakeMode = false
             isSelectingPurpose = false
             isSelectingFastType = false
-            isSelectingAudio = false
+            isTogglingFajrAdhan = false
             isResettingOverride = false
         }
         .onChange(of: currentSchedule.wakeDate) { _, _ in
@@ -54,17 +54,64 @@ struct AlarmDayDetailView: View {
         }
     }
 
-    private var detailHero: some View {
-        let baseDisplay = heroDisplay
-        let display = tentativeWakeTime.map {
-            MorningHomePresentation.heroDisplay(adjusting: baseDisplay, tentativeWakeTime: $0, timeZone: timeZone)
-        } ?? baseDisplay
+    private var detailContent: some View {
         let metrics = MorningHeroMetrics(dynamicTypeSize: dynamicTypeSize)
+        let display = displayedHeroDisplay
         let purpose = wakeEntry.flatMap { AlarmDayDetailPresentation.purpose(for: $0) }
         let fastType = wakeEntry.flatMap { AlarmDayDetailPresentation.fastType(for: $0, purpose: purpose) }
-        let audio = wakeEntry.flatMap { AlarmDayDetailPresentation.audio(for: $0, display: display) }
-        let showsSlider = shouldShowWakeSlider(display)
+        let fajrAdhan = wakeEntry.flatMap { AlarmDayDetailPresentation.fajrAdhanSetting(for: $0, purpose: purpose) }
+        let context = wakeEntry.flatMap {
+            AlarmDayDetailPresentation.context(
+                for: $0,
+                display: display,
+                purpose: purpose,
+                fastType: fastType,
+                fajrAdhan: fajrAdhan,
+                showsReset: hasDateOverride
+            )
+        }
 
+        return VStack(alignment: .center, spacing: DesignTokens.spacingM) {
+            detailHero(
+                display: display,
+                metrics: metrics,
+                purpose: purpose,
+                fastType: fastType,
+                fajrAdhan: fajrAdhan
+            )
+
+            if let context {
+                contextCard(context, metrics: metrics)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+        .animation(heroModeAnimation, value: context)
+    }
+
+    private var detailHero: some View {
+        let metrics = MorningHeroMetrics(dynamicTypeSize: dynamicTypeSize)
+        let display = displayedHeroDisplay
+        let purpose = wakeEntry.flatMap { AlarmDayDetailPresentation.purpose(for: $0) }
+        let fastType = wakeEntry.flatMap { AlarmDayDetailPresentation.fastType(for: $0, purpose: purpose) }
+        let fajrAdhan = wakeEntry.flatMap { AlarmDayDetailPresentation.fajrAdhanSetting(for: $0, purpose: purpose) }
+
+        return detailHero(
+            display: display,
+            metrics: metrics,
+            purpose: purpose,
+            fastType: fastType,
+            fajrAdhan: fajrAdhan
+        )
+    }
+
+    private func detailHero(
+        display: MorningHomeHeroDisplay,
+        metrics: MorningHeroMetrics,
+        purpose: AlarmDetailPurposePresentation?,
+        fastType: AlarmDetailFastPurposePresentation?,
+        fajrAdhan: AlarmDetailFajrAdhanPresentation?
+    ) -> some View {
+        let showsSlider = shouldShowWakeSlider(display)
         return VStack(alignment: .center, spacing: 0) {
             dateLine(metrics: metrics)
 
@@ -89,7 +136,7 @@ struct AlarmDayDetailView: View {
                 }
                 .padding(.top, metrics.primaryToWindowGap)
             } else {
-                quietSliderRegion(display: display, audio: audio, metrics: metrics)
+                quietSliderRegion(display: display, fajrAdhan: fajrAdhan, metrics: metrics)
                     .padding(.top, metrics.primaryToWindowGap)
             }
 
@@ -113,26 +160,6 @@ struct AlarmDayDetailView: View {
                 }
                 .padding(.top, metrics.relationToSelectorGap)
             }
-
-            if let purpose {
-                purposeChip(purpose, metrics: metrics)
-                    .padding(.top, max(10, 10 * min(metrics.scale, 1.2)))
-            }
-
-            if let fastType {
-                fastTypeChip(fastType, metrics: metrics)
-                    .padding(.top, max(8, 8 * min(metrics.scale, 1.2)))
-            }
-
-            if let audio, !AlarmDayDetailPresentation.isQuiet(display) {
-                audioChip(audio, metrics: metrics)
-                    .padding(.top, max(8, 8 * min(metrics.scale, 1.2)))
-            }
-
-            if hasDateOverride {
-                resetOverrideButton(metrics: metrics)
-                    .padding(.top, max(12, 12 * min(metrics.scale, 1.2)))
-            }
         }
         .frame(maxWidth: metrics.maxContentWidth)
         .padding(.horizontal, DesignTokens.spacingS)
@@ -145,7 +172,7 @@ struct AlarmDayDetailView: View {
             display: display,
             purpose: purpose,
             fastType: fastType,
-            audio: audio
+            fajrAdhan: fajrAdhan
         ))
     }
 
@@ -177,6 +204,13 @@ struct AlarmDayDetailView: View {
         )
     }
 
+    private var displayedHeroDisplay: MorningHomeHeroDisplay {
+        let baseDisplay = heroDisplay
+        return tentativeWakeTime.map {
+            MorningHomePresentation.heroDisplay(adjusting: baseDisplay, tentativeWakeTime: $0, timeZone: timeZone)
+        } ?? baseDisplay
+    }
+
     private var dateLineText: String {
         AlarmDayDetailPresentation.dateLine(for: currentSchedule.date, timeZone: timeZone)
     }
@@ -190,7 +224,7 @@ struct AlarmDayDetailView: View {
             || isCommittingWakeAdjustment
             || isSelectingPurpose
             || isSelectingFastType
-            || isSelectingAudio
+            || isTogglingFajrAdhan
             || isResettingOverride
     }
 
@@ -243,10 +277,10 @@ struct AlarmDayDetailView: View {
 
     private func quietSliderRegion(
         display: MorningHomeHeroDisplay,
-        audio: AlarmDetailAudioPresentation?,
+        fajrAdhan: AlarmDetailFajrAdhanPresentation?,
         metrics: MorningHeroMetrics
     ) -> some View {
-        Text(audio?.lockedNote ?? "No wake alarm")
+        Text(fajrAdhan?.lockedNote ?? "No wake alarm")
             .font(.system(size: max(13, metrics.fajrWindowSize * 0.92), weight: .regular))
             .foregroundStyle(WakeGlassTheme.secondaryText.opacity(0.92))
             .multilineTextAlignment(.center)
@@ -256,8 +290,103 @@ struct AlarmDayDetailView: View {
             .frame(maxWidth: .infinity, alignment: .center)
             .frame(minHeight: metrics.rangeRowHeight)
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel(audio?.lockedNote ?? "No wake alarm for this date")
+            .accessibilityLabel(fajrAdhan?.lockedNote ?? "No wake alarm for this date")
             .accessibilityIdentifier("alarmDetail.quietSliderRegion")
+    }
+
+    private func contextCard(
+        _ context: AlarmDetailContextPresentation,
+        metrics: MorningHeroMetrics
+    ) -> some View {
+        AppGlassSurface(
+            variant: WakeGlassTheme.homeSurfaceVariant,
+            contentPadding: 16,
+            maxWidth: metrics.maxContentWidth,
+            alignment: .leading
+        ) {
+            VStack(alignment: .leading, spacing: 14) {
+                if let significance = context.significance {
+                    contextSection(title: significance.title) {
+                        chipFlow(significance.items)
+                    }
+                }
+
+                if let purpose = context.purpose {
+                    contextDividerIfNeeded(after: context.significance != nil)
+                    contextSection(title: "Early purpose") {
+                        purposeChip(purpose, metrics: metrics)
+                    }
+                }
+
+                if let fastType = context.fastType {
+                    contextDividerIfNeeded(after: context.significance != nil || context.purpose != nil)
+                    contextSection(title: "Selected purpose") {
+                        VStack(alignment: .leading, spacing: 10) {
+                            fastTypeChip(fastType, metrics: metrics)
+                            if !fastType.selectedOpportunityTitles.isEmpty {
+                                chipFlow(fastType.selectedOpportunityTitles)
+                            }
+                        }
+                    }
+                }
+
+                if let fajrAdhan = context.fajrAdhan {
+                    contextDividerIfNeeded(after: context.significance != nil || context.purpose != nil || context.fastType != nil)
+                    fajrAdhanToggle(fajrAdhan, metrics: metrics)
+                }
+
+                if context.showsReset {
+                    contextDividerIfNeeded(after: context.significance != nil || context.purpose != nil || context.fastType != nil || context.fajrAdhan != nil)
+                    resetOverrideButton(metrics: metrics)
+                }
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("alarmDetail.contextCard")
+    }
+
+    private func contextSection<Content: View>(
+        title: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(WakeGlassTheme.tertiaryText)
+                .textCase(.uppercase)
+                .tracking(0.4)
+            content()
+        }
+    }
+
+    @ViewBuilder
+    private func contextDividerIfNeeded(after condition: Bool) -> some View {
+        if condition {
+            Rectangle()
+                .fill(WakeGlassTheme.divider)
+                .frame(height: 1)
+        }
+    }
+
+    private func chipFlow(_ items: [String]) -> some View {
+        FlowLayout(spacing: 8) {
+            ForEach(items, id: \.self) { item in
+                Text(item)
+                    .font(.footnote.weight(.medium))
+                    .foregroundStyle(WakeGlassTheme.primaryText.opacity(0.9))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.78)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background {
+                        Capsule()
+                            .fill(WakeGlassTheme.chipFill)
+                            .overlay {
+                                Capsule().stroke(WakeGlassTheme.chipStroke, lineWidth: 1)
+                            }
+                    }
+            }
+        }
     }
 
     @ViewBuilder
@@ -289,17 +418,17 @@ struct AlarmDayDetailView: View {
 
     @ViewBuilder
     private func fastTypeChip(
-        _ fastType: AlarmDetailFastTypePresentation,
+        _ fastType: AlarmDetailFastPurposePresentation,
         metrics: MorningHeroMetrics
     ) -> some View {
         if fastType.isLocked {
             detailChipLabel(
-                label: "Fast type:",
+                label: "Fast purpose:",
                 value: fastType.title,
                 metrics: metrics,
                 isLocked: true,
                 showsMenuIndicator: false,
-                accessibilityLabel: "Fast type: \(fastType.title), locked"
+                accessibilityLabel: "Fast purpose: \(fastType.title), locked"
             )
         } else {
             Menu {
@@ -324,12 +453,12 @@ struct AlarmDayDetailView: View {
                 }
             } label: {
                 detailChipLabel(
-                    label: "Fast type:",
+                    label: "Fast purpose:",
                     value: fastType.title,
                     metrics: metrics,
                     isLocked: false,
                     showsMenuIndicator: true,
-                    accessibilityLabel: "Fast type: \(fastType.title)"
+                    accessibilityLabel: "Fast purpose: \(fastType.title)"
                 )
             }
             .buttonStyle(.plain)
@@ -337,45 +466,29 @@ struct AlarmDayDetailView: View {
         }
     }
 
-    @ViewBuilder
-    private func audioChip(
-        _ audio: AlarmDetailAudioPresentation,
+    private func fajrAdhanToggle(
+        _ fajrAdhan: AlarmDetailFajrAdhanPresentation,
         metrics: MorningHeroMetrics
     ) -> some View {
-        if audio.isLocked {
-            detailChipLabel(
-                label: "Audio:",
-                value: audio.title,
-                metrics: metrics,
-                isLocked: true,
-                showsMenuIndicator: false,
-                accessibilityLabel: "Audio: \(audio.title), locked"
-            )
-        } else {
-            Menu {
-                ForEach(audio.options) { option in
-                    Button {
-                        selectAudio(option.plan)
-                    } label: {
-                        Label(
-                            option.title,
-                            systemImage: audio.selection == option.plan ? "checkmark" : "circle"
-                        )
-                    }
-                }
-            } label: {
-                detailChipLabel(
-                    label: "Audio:",
-                    value: audio.title,
-                    metrics: metrics,
-                    isLocked: false,
-                    showsMenuIndicator: true,
-                    accessibilityLabel: "Audio: \(audio.title)"
-                )
+        Toggle(isOn: Binding(
+            get: { fajrAdhan.isEnabled },
+            set: { toggleFajrAdhan($0) }
+        )) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Fajr adhan at Fajr begins")
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(WakeGlassTheme.primaryText.opacity(0.92))
+                Text(fajrAdhan.subtitle)
+                    .font(.footnote)
+                    .foregroundStyle(WakeGlassTheme.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            .buttonStyle(.plain)
-            .disabled(controlsAreBusy)
         }
+        .toggleStyle(.switch)
+        .disabled(fajrAdhan.isLocked || controlsAreBusy)
+        .accessibilityLabel("Fajr adhan at Fajr begins")
+        .accessibilityValue(fajrAdhan.isEnabled ? "On" : "Off")
+        .accessibilityHint(fajrAdhan.isLocked ? "Locked for Ramadan." : "Toggles only the later Fajr adhan for this date.")
     }
 
     private func purposeChipLabel(
@@ -541,17 +654,17 @@ struct AlarmDayDetailView: View {
         }
     }
 
-    private func selectAudio(_ audioPlan: AlarmDetailAudioPlan) {
+    private func toggleFajrAdhan(_ isEnabled: Bool) {
         let date = currentSchedule.date
         withAnimation(heroModeAnimation) {
-            isSelectingAudio = true
+            isTogglingFajrAdhan = true
             tentativeWakeTime = nil
         }
         Task {
-            _ = await scheduleManager.selectAlarmDetailAudioPlan(for: date, audioPlan: audioPlan, timeZone: timeZone)
+            _ = await scheduleManager.setAlarmDetailFajrAdhanAfterWake(for: date, isEnabled: isEnabled, timeZone: timeZone)
             await MainActor.run {
                 withAnimation(heroModeAnimation) {
-                    isSelectingAudio = false
+                    isTogglingFajrAdhan = false
                 }
             }
         }
@@ -610,26 +723,40 @@ struct AlarmDetailPurposePresentation: Equatable {
     let selection: EarlyWakePurposeOverride?
 }
 
-struct AlarmDetailFastTypePresentation: Equatable {
+struct AlarmDetailFastPurposePresentation: Equatable {
     let title: String
     let defaultOptionTitle: String
+    let selectedOpportunityTitles: [String]
     let isLocked: Bool
     let selection: AlarmDetailFastTypeOverride?
 }
 
-struct AlarmDetailAudioOption: Identifiable, Equatable {
-    let plan: AlarmDetailAudioPlan
+struct AlarmDetailDaySignificancePresentation: Equatable {
     let title: String
-
-    var id: AlarmDetailAudioPlan { plan }
+    let items: [String]
 }
 
-struct AlarmDetailAudioPresentation: Equatable {
-    let title: String
+struct AlarmDetailFajrAdhanPresentation: Equatable {
+    let isEnabled: Bool
     let isLocked: Bool
-    let selection: AlarmDetailAudioPlan
-    let options: [AlarmDetailAudioOption]
+    let subtitle: String
     let lockedNote: String?
+}
+
+struct AlarmDetailContextPresentation: Equatable {
+    let significance: AlarmDetailDaySignificancePresentation?
+    let purpose: AlarmDetailPurposePresentation?
+    let fastType: AlarmDetailFastPurposePresentation?
+    let fajrAdhan: AlarmDetailFajrAdhanPresentation?
+    let showsReset: Bool
+
+    var hasContent: Bool {
+        significance != nil
+            || purpose != nil
+            || fastType != nil
+            || fajrAdhan != nil
+            || showsReset
+    }
 }
 
 enum AlarmDayDetailPresentation {
@@ -695,88 +822,107 @@ enum AlarmDayDetailPresentation {
     static func fastType(
         for entry: WakeRowEntry,
         purpose: AlarmDetailPurposePresentation?
-    ) -> AlarmDetailFastTypePresentation? {
+    ) -> AlarmDetailFastPurposePresentation? {
         guard purpose?.selection == .fast else { return nil }
 
         if isRamadan(entry) {
-            return AlarmDetailFastTypePresentation(
+            return AlarmDetailFastPurposePresentation(
                 title: "Ramadan fast",
                 defaultOptionTitle: "Ramadan fast",
+                selectedOpportunityTitles: ["Ramadan fast"],
                 isLocked: true,
                 selection: nil
             )
         }
 
         if let override = entry.activeDay.effectiveConfig.alarmDetailFastTypeOverride {
-            let defaultTitle = defaultFastTypeTitle(for: entry)
-            return AlarmDetailFastTypePresentation(
+            let defaultTitle = defaultFastPurposeTitle(for: entry)
+            return AlarmDetailFastPurposePresentation(
                 title: override.displayTitle,
-                defaultOptionTitle: "Use \(defaultTitle)",
+                defaultOptionTitle: defaultTitle,
+                selectedOpportunityTitles: [],
                 isLocked: false,
                 selection: override
             )
         }
 
-        let title = defaultFastTypeTitle(for: entry)
-        return AlarmDetailFastTypePresentation(
+        let opportunities = fastingOpportunityTitles(for: entry)
+        let title = opportunities.isEmpty ? "Voluntary fast" : "Today's opportunities"
+        return AlarmDetailFastPurposePresentation(
             title: title,
-            defaultOptionTitle: "Use \(title)",
+            defaultOptionTitle: title,
+            selectedOpportunityTitles: opportunities,
             isLocked: false,
             selection: nil
         )
     }
 
-    static func audio(
+    static func fajrAdhanSetting(
         for entry: WakeRowEntry,
-        display: MorningHomeHeroDisplay
-    ) -> AlarmDetailAudioPresentation? {
+        purpose: AlarmDetailPurposePresentation?
+    ) -> AlarmDetailFajrAdhanPresentation? {
         let selectedMode = WakeStateSelectionResolver.selectedMode(for: entry.activeDay)
         let isRamadan = isRamadan(entry)
 
         if selectedMode == .quiet {
             guard isRamadan else { return nil }
-            return AlarmDetailAudioPresentation(
-                title: "Fajr adhan remains on",
+            return AlarmDetailFajrAdhanPresentation(
+                isEnabled: true,
                 isLocked: true,
-                selection: .fajrAdhan,
-                options: [],
+                subtitle: "Locked on for Ramadan.",
                 lockedNote: "Fajr adhan remains on for Ramadan"
             )
         }
 
-        let configuredSelection = entry.activeDay.effectiveConfig.alarmDetailAudioPlanOverride
-        let selection = normalizedAudioSelection(
-            configuredSelection,
-            mode: selectedMode,
-            isRamadan: isRamadan
-        )
-
-        if isRamadan && selectedMode == .fast {
-            return AlarmDetailAudioPresentation(
-                title: audioTitle(for: .wakeAlarmAndFajrAdhan, mode: selectedMode),
+        if isRamadan {
+            return selectedMode == .fast ? AlarmDetailFajrAdhanPresentation(
+                isEnabled: true,
                 isLocked: true,
-                selection: .wakeAlarmAndFajrAdhan,
-                options: [],
+                subtitle: "Locked on for Ramadan.",
                 lockedNote: "Fajr adhan stays on for Ramadan"
-            )
+            ) : nil
         }
 
-        let options = audioOptions(mode: selectedMode, isRamadan: isRamadan)
-        return AlarmDetailAudioPresentation(
-            title: audioTitle(for: selection, mode: selectedMode),
+        guard selectedMode == .fast, purpose?.selection == .fast else { return nil }
+        let isEnabled = entry.activeDay.effectiveConfig.alarmDetailAudioPlanOverride != .wakeAlarm
+        return AlarmDetailFajrAdhanPresentation(
+            isEnabled: isEnabled,
             isLocked: false,
-            selection: selection,
-            options: options,
-            lockedNote: isRamadan ? "Fajr adhan stays on for Ramadan" : nil
+            subtitle: isEnabled
+                ? "Keep the Fajr adhan after the pre-Fajr wake."
+                : "Only the pre-Fajr wake alarm will ring.",
+            lockedNote: nil
         )
+    }
+
+    static func context(
+        for entry: WakeRowEntry,
+        display: MorningHomeHeroDisplay,
+        purpose: AlarmDetailPurposePresentation?,
+        fastType: AlarmDetailFastPurposePresentation?,
+        fajrAdhan: AlarmDetailFajrAdhanPresentation?,
+        showsReset: Bool
+    ) -> AlarmDetailContextPresentation? {
+        let significance = daySignificance(for: entry)
+        let selectedMode = WakeStateSelectionResolver.selectedMode(for: entry.activeDay)
+        let showPurpose = selectedMode == .fast ? purpose : nil
+        let showFastType = selectedMode == .fast && purpose?.selection == .fast ? fastType : nil
+        let presentation = AlarmDetailContextPresentation(
+            significance: significance,
+            purpose: showPurpose,
+            fastType: showFastType,
+            fajrAdhan: fajrAdhan,
+            showsReset: showsReset
+        )
+        return presentation.hasContent ? presentation : nil
     }
 
     static func accessibilitySummary(
         dateLine: String,
         display: MorningHomeHeroDisplay,
         purpose: AlarmDetailPurposePresentation?,
-        fastType: AlarmDetailFastTypePresentation?,
-        audio: AlarmDetailAudioPresentation?
+        fastType: AlarmDetailFastPurposePresentation?,
+        fajrAdhan: AlarmDetailFajrAdhanPresentation?
     ) -> String {
         var parts = [dateLine]
         if isQuiet(display) {
@@ -789,10 +935,10 @@ enum AlarmDayDetailPresentation {
             parts.append("Purpose: \(purpose.title)")
         }
         if let fastType {
-            parts.append("Fast type: \(fastType.title)")
+            parts.append("Fast purpose: \(fastType.title)")
         }
-        if let audio {
-            parts.append("Audio: \(audio.title)")
+        if let fajrAdhan {
+            parts.append("Fajr adhan at Fajr begins: \(fajrAdhan.isEnabled ? "On" : "Off")")
         }
         return parts.joined(separator: ". ")
     }
@@ -834,7 +980,20 @@ enum AlarmDayDetailPresentation {
             || entry.activeDay.resolvedDayContext.supportingTags.contains(.ramadan)
     }
 
-    private static func defaultFastTypeTitle(for entry: WakeRowEntry) -> String {
+    private static func daySignificance(for entry: WakeRowEntry) -> AlarmDetailDaySignificancePresentation? {
+        if isRamadan(entry) {
+            return AlarmDetailDaySignificancePresentation(title: "Day significance", items: ["Ramadan"])
+        }
+        let opportunities = fastingOpportunityTitles(for: entry)
+        guard !opportunities.isEmpty else { return nil }
+        return AlarmDetailDaySignificancePresentation(title: "Fasting opportunities", items: opportunities)
+    }
+
+    private static func defaultFastPurposeTitle(for entry: WakeRowEntry) -> String {
+        let opportunities = fastingOpportunityTitles(for: entry)
+        if !opportunities.isEmpty {
+            return "Today's opportunities"
+        }
         let context = entry.activeDay.resolvedDayContext
         let tags = Set(context.supportingTags)
         if context.primaryContext == .qadaFast || tags.contains(.qada) {
@@ -844,6 +1003,18 @@ enum AlarmDayDetailPresentation {
             return opportunity
         }
         return "Voluntary fast"
+    }
+
+    private static func fastingOpportunityTitles(for entry: WakeRowEntry) -> [String] {
+        let tags = Set(entry.activeDay.resolvedDayContext.supportingTags)
+        var titles: [String] = []
+        if tags.contains(.arafah) { titles.append("Arafah fast") }
+        if tags.contains(.ashura) { titles.append("Ashura fast") }
+        if tags.contains(.dhulHijjahFirstNine) { titles.append("Dhul Hijjah fast") }
+        if tags.contains(.whiteDays) { titles.append("White Days fast") }
+        if tags.contains(.shawwalSix) { titles.append("Shawwal Six fast") }
+        if tags.contains(.mondayThursday) { titles.append(weekdayFastTitle(for: entry.activeDay.date)) }
+        return titles
     }
 
     private static func fastingOpportunityTitle(from tags: Set<DayTag>) -> String? {
@@ -857,66 +1028,15 @@ enum AlarmDayDetailPresentation {
         return nil
     }
 
-    private static func normalizedAudioSelection(
-        _ configuredSelection: AlarmDetailAudioPlan?,
-        mode: QuickWakeMode,
-        isRamadan: Bool
-    ) -> AlarmDetailAudioPlan {
-        if isRamadan && mode == .fast {
-            return .wakeAlarmAndFajrAdhan
-        }
-
-        let defaultSelection: AlarmDetailAudioPlan = mode == .fajr ? .fajrAdhan : .wakeAlarmAndFajrAdhan
-        let selection = configuredSelection ?? defaultSelection
-        if isRamadan && selection == .wakeAlarm {
-            return .wakeAlarmAndFajrAdhan
-        }
-        if mode == .fast && selection == .fajrAdhan {
-            return .wakeAlarmAndFajrAdhan
-        }
-        return selection
-    }
-
-    private static func audioOptions(
-        mode: QuickWakeMode,
-        isRamadan: Bool
-    ) -> [AlarmDetailAudioOption] {
-        switch mode {
-        case .fajr:
-            let plans: [AlarmDetailAudioPlan] = isRamadan
-                ? [.fajrAdhan, .wakeAlarmAndFajrAdhan]
-                : [.fajrAdhan, .wakeAlarm, .wakeAlarmAndFajrAdhan]
-            return plans.map { AlarmDetailAudioOption(plan: $0, title: audioTitle(for: $0, mode: mode)) }
-        case .fast:
-            let plans: [AlarmDetailAudioPlan] = isRamadan
-                ? [.wakeAlarmAndFajrAdhan]
-                : [.wakeAlarmAndFajrAdhan, .wakeAlarm]
-            return plans.map { AlarmDetailAudioOption(plan: $0, title: audioTitle(for: $0, mode: mode)) }
-        case .quiet:
-            return []
-        }
-    }
-
-    private static func audioTitle(for plan: AlarmDetailAudioPlan, mode: QuickWakeMode) -> String {
-        switch (mode, plan) {
-        case (.fajr, .fajrAdhan):
-            return "Fajr adhan"
-        case (.fajr, .wakeAlarm):
-            return "Wake alarm"
-        case (.fajr, .wakeAlarmAndFajrAdhan):
-            return "Both"
-        case (.fast, .wakeAlarmAndFajrAdhan):
-            return "Wake alarm + Fajr adhan"
-        case (.fast, .wakeAlarm):
-            return "Wake alarm only"
-        case (.fast, .fajrAdhan):
-            return "Wake alarm + Fajr adhan"
-        case (.quiet, .fajrAdhan):
-            return "Fajr adhan remains on"
-        case (.quiet, .wakeAlarm):
-            return "No wake alarm"
-        case (.quiet, .wakeAlarmAndFajrAdhan):
-            return "Fajr adhan remains on"
+    private static func weekdayFastTitle(for date: Date) -> String {
+        let weekday = Calendar.current.component(.weekday, from: date)
+        switch weekday {
+        case 2:
+            return "Monday fast"
+        case 5:
+            return "Thursday fast"
+        default:
+            return "Monday / Thursday fast"
         }
     }
 

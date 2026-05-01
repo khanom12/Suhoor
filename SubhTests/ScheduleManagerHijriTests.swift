@@ -2050,15 +2050,15 @@ struct ScheduleManagerHijriTests {
             fastType: .qada,
             timeZone: timeZone
         )
-        let selectedWakeOnlyAudio = await manager.selectAlarmDetailAudioPlan(
+        let disabledFajrAdhan = await manager.setAlarmDetailFajrAdhanAfterWake(
             for: target.date,
-            audioPlan: .wakeAlarm,
+            isEnabled: false,
             timeZone: timeZone
         )
 
         #expect(selectedFastPurpose)
         #expect(selectedFastType)
-        #expect(selectedWakeOnlyAudio)
+        #expect(disabledFajrAdhan)
         #expect(alarmConfigStore.override(for: target.date, timeZone: timeZone)?.earlyWakePurposeOverride == .fast)
         #expect(alarmConfigStore.override(for: target.date, timeZone: timeZone)?.alarmDetailFastTypeOverride == .qada)
         #expect(alarmConfigStore.override(for: target.date, timeZone: timeZone)?.alarmDetailAudioPlanOverride == .wakeAlarm)
@@ -2099,6 +2099,21 @@ struct ScheduleManagerHijriTests {
         if let quietMorningcastEntry {
             #expect(quietMorningcastEntry.config.quickWakeModeOverride == .quiet || quietMorningcastEntry.config.skipDay)
         }
+
+        let selectedFajr = await manager.selectHeroWakeMode(for: target.date, mode: .fajr, timeZone: timeZone)
+        #expect(selectedFajr)
+        guard let fajrOverride = alarmConfigStore.override(for: target.date, timeZone: timeZone),
+              let fajrDay = manager.activeDay(for: target.date, timeZone: timeZone) else {
+            Issue.record("Expected the selected Fajr mode to persist and re-resolve.")
+            return
+        }
+
+        #expect(fajrOverride.quickWakeModeOverride == .fajr)
+        #expect(fajrOverride.alarmDetailAudioPlanOverride == .fajrAdhan)
+        #expect(fajrOverride.skipDay == false)
+        #expect(fajrOverride.suhoorEnabled == true)
+        #expect(fajrOverride.reminderEnabled == false)
+        #expect(fajrDay.scheduledEvents.contains { $0.type == .wakeAlarm })
     }
 
     @MainActor
