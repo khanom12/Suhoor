@@ -70,6 +70,10 @@ struct SubhHomeView: View {
                             }
                         }
 
+                        NextTenMorningsCard(entries: snapshot.morningcast) { entry in
+                            destination = .day(entry.schedule)
+                        }
+
                         WeeklyFajrcastCard(
                             snapshot: weeklyFajrcast,
                             onSelectDateKey: selectWeeklyFajrcastDate,
@@ -77,10 +81,6 @@ struct SubhHomeView: View {
                             onMoveSelection: moveWeeklyFajrcastSelection
                         ) {
                             destination = .fajrcast(selectedDateKey: weeklyFajrcast.selectedDay.dateKey)
-                        }
-
-                        NextTenMorningsCard(entries: snapshot.morningcast) { entry in
-                            destination = .day(entry.schedule)
                         }
                     }
                     .padding(.horizontal, DesignTokens.spacingM)
