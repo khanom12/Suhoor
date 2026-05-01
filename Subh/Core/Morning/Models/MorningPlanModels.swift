@@ -70,6 +70,54 @@ enum QuickWakeMode: String, Codable, CaseIterable, Identifiable, Sendable {
     }
 }
 
+enum EarlyWakePurposeOverride: String, Codable, CaseIterable, Identifiable, Sendable {
+    case fast
+    case tahajjud
+    case fastAndTahajjud
+
+    static let allCases: [EarlyWakePurposeOverride] = [.fast, .tahajjud]
+
+    var id: String { rawValue }
+
+    var displayTitle: String {
+        switch self {
+        case .fast:
+            return "Fast"
+        case .tahajjud:
+            return "Tahajjud"
+        case .fastAndTahajjud:
+            return "Fast + Tahajjud"
+        }
+    }
+}
+
+enum AlarmDetailFastTypeOverride: String, Codable, CaseIterable, Identifiable, Sendable {
+    case qada
+    case voluntary
+    case other
+
+    var id: String { rawValue }
+
+    var displayTitle: String {
+        switch self {
+        case .qada:
+            return "Qada fast"
+        case .voluntary:
+            return "Voluntary fast"
+        case .other:
+            return "Other fast"
+        }
+    }
+}
+
+enum AlarmDetailAudioPlan: String, Codable, CaseIterable, Identifiable, Sendable {
+    case fajrAdhan
+    case wakeAlarm
+    case wakeAlarmAndFajrAdhan
+
+    var id: String { rawValue }
+}
+
 struct WakeAnchor: Codable, Equatable, Hashable, Sendable {
     let type: WakeAnchorType
     let date: Date

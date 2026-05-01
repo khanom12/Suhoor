@@ -98,6 +98,7 @@ enum WakeStateSelectionResolver {
             override.suhoorEnabled = true
             override.reminderEnabled = true
             override.fajrEnabled = true
+            override.alarmDetailAudioPlanOverride = .wakeAlarmAndFajrAdhan
             override.iftarEnabled = nil
             override.wakeStateOverride = .preFajr
             override.wakeAnchorTypeOverride = .fajrStart
@@ -110,9 +111,12 @@ enum WakeStateSelectionResolver {
         case .fajr:
             override.skipDay = false
             override.quickWakeModeOverride = .fajr
-            override.suhoorEnabled = true
-            override.reminderEnabled = true
+            override.earlyWakePurposeOverride = nil
+            override.alarmDetailFastTypeOverride = nil
+            override.suhoorEnabled = false
+            override.reminderEnabled = false
             override.fajrEnabled = true
+            override.alarmDetailAudioPlanOverride = .fajrAdhan
             override.iftarEnabled = nil
             override.wakeStateOverride = .inFajr
             override.wakeAnchorTypeOverride = .fajrEnd
@@ -125,6 +129,9 @@ enum WakeStateSelectionResolver {
         case .quiet:
             override.skipDay = true
             override.quickWakeModeOverride = .quiet
+            override.earlyWakePurposeOverride = nil
+            override.alarmDetailFastTypeOverride = nil
+            override.alarmDetailAudioPlanOverride = nil
             override.suhoorEnabled = false
             override.reminderEnabled = false
             override.fajrEnabled = false

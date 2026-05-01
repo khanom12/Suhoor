@@ -1170,6 +1170,231 @@ struct ScheduleServiceExtractionTests {
     }
 
     @Test
+    func alarmDayDetailPresentationUsesHeroStateWithoutDiagnostics() {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let today = Self.makeDate(year: 2026, month: 4, day: 30, timeZone: timeZone)
+        let date = Self.makeDate(year: 2026, month: 5, day: 1, timeZone: timeZone)
+
+        let dateLine = AlarmDayDetailPresentation.dateLine(
+            for: date,
+            timeZone: timeZone,
+            hijriDateTextProvider: { _, _ in "14 Dhul Qi'dah" }
+        )
+        #expect(dateLine == "Friday, May 1 · 14 Dhul Qi'dah")
+
+        let fajrEntry = Self.makeWakeEntry(date: date, timeZone: timeZone)
+        let fajrDisplay = MorningHomePresentation.heroDisplay(
+            entry: fajrEntry,
+            permissionSummary: "",
+            locationDisplayText: dateLine,
+            currentDate: today,
+            timeZone: timeZone
+        )
+        #expect(fajrDisplay.locationText == dateLine)
+        #expect(AlarmDayDetailPresentation.modeOptions(for: fajrDisplay).map(\.title) == ["Early", "Fajr", "Quiet"])
+        #expect(AlarmDayDetailPresentation.purpose(for: fajrEntry) == nil)
+        #expect(AlarmDayDetailPresentation.relationText(for: fajrDisplay) == "Wake up 30 min before Fajr ends")
+        #expect(AlarmDayDetailPresentation.audio(for: fajrEntry, display: fajrDisplay)?.title == "Fajr adhan")
+        #expect(AlarmDayDetailPresentation.audio(for: fajrEntry, display: fajrDisplay)?.options.map(\.title) == [
+            "Fajr adhan",
+            "Wake alarm",
+            "Both"
+        ])
+
+        let quietEntry = Self.makeWakeEntry(
+            date: date,
+            timeZone: timeZone,
+            skipDay: true,
+            quickWakeModeOverride: .quiet
+        )
+        let quietDisplay = MorningHomePresentation.heroDisplay(
+            entry: quietEntry,
+            permissionSummary: "",
+            locationDisplayText: dateLine,
+            currentDate: today,
+            timeZone: timeZone
+        )
+        #expect(AlarmDayDetailPresentation.isQuiet(quietDisplay))
+        #expect(AlarmDayDetailPresentation.relationText(for: quietDisplay) == "No wake alarm for this date")
+        #expect(AlarmDayDetailPresentation.purpose(for: quietEntry) == nil)
+        #expect(AlarmDayDetailPresentation.accessibilitySummary(
+            dateLine: dateLine,
+            display: quietDisplay,
+            purpose: nil,
+            fastType: nil,
+            audio: AlarmDayDetailPresentation.audio(for: quietEntry, display: quietDisplay)
+        ).contains("Quiet Mode. No wake alarm for this date"))
+
+        let ramadanQuietEntry = Self.makeWakeEntry(
+            date: date,
+            timeZone: timeZone,
+            context: ResolvedDayContext(
+                primaryContext: .fasting,
+                secondaryContexts: [],
+                supportingTags: [.ramadan],
+                explanation: .empty
+            ),
+            quickWakeModeOverride: .quiet,
+            alarmDetailAudioPlanOverride: .fajrAdhan
+        )
+        let ramadanQuietDisplay = MorningHomePresentation.heroDisplay(
+            entry: ramadanQuietEntry,
+            permissionSummary: "",
+            locationDisplayText: dateLine,
+            currentDate: today,
+            timeZone: timeZone
+        )
+        #expect(AlarmDayDetailPresentation.isQuiet(ramadanQuietDisplay))
+        #expect(AlarmDayDetailPresentation.audio(for: ramadanQuietEntry, display: ramadanQuietDisplay)?.title == "Fajr adhan remains on")
+        #expect(AlarmDayDetailPresentation.audio(for: ramadanQuietEntry, display: ramadanQuietDisplay)?.isLocked == true)
+    }
+
+    @Test
+    func alarmDayDetailPurposeCoversEarlyRamadanTahajjudAndFastingOpportunities() {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let date = Self.makeDate(year: 2026, month: 5, day: 1, timeZone: timeZone)
+
+        let ramadan = Self.makeWakeEntry(
+            date: date,
+            timeZone: timeZone,
+            context: ResolvedDayContext(
+                primaryContext: .fasting,
+                secondaryContexts: [],
+                supportingTags: [.ramadan],
+                explanation: .empty
+            ),
+            plannedWakeState: .preFajr,
+            wakeOffsetMinutesFromFajrStart: -30,
+            quickWakeModeOverride: .fast
+        )
+        Self.expectAlarmDetailPurpose(
+            AlarmDayDetailPresentation.purpose(for: ramadan),
+            title: "Fast",
+            isLocked: true,
+            selection: .fast
+        )
+        Self.expectAlarmDetailFastType(
+            AlarmDayDetailPresentation.fastType(
+                for: ramadan,
+                purpose: AlarmDayDetailPresentation.purpose(for: ramadan)
+            ),
+            title: "Ramadan fast",
+            defaultOptionTitle: "Ramadan fast",
+            isLocked: true
+        )
+        #expect(AlarmDayDetailPresentation.audio(for: ramadan, display: MorningHomePresentation.heroDisplay(
+            entry: ramadan,
+            permissionSummary: "",
+            locationDisplayText: "",
+            currentDate: date,
+            timeZone: timeZone
+        ))?.title == "Wake alarm + Fajr adhan")
+
+        let tahajjud = Self.makeWakeEntry(
+            date: date,
+            timeZone: timeZone,
+            context: ResolvedDayContext(
+                primaryContext: .tahajjud,
+                secondaryContexts: [],
+                supportingTags: [],
+                explanation: .empty
+            ),
+            plannedWakeState: .preFajr,
+            wakeOffsetMinutesFromFajrStart: -45,
+            quickWakeModeOverride: .fast
+        )
+        Self.expectAlarmDetailPurpose(
+            AlarmDayDetailPresentation.purpose(for: tahajjud),
+            title: "Tahajjud",
+            isLocked: false,
+            selection: .tahajjud
+        )
+
+        let fastWithTahajjudContext = Self.makeWakeEntry(
+            date: date,
+            timeZone: timeZone,
+            context: ResolvedDayContext(
+                primaryContext: .fasting,
+                secondaryContexts: [.tahajjud],
+                supportingTags: [.voluntary],
+                explanation: .empty
+            ),
+            plannedWakeState: .preFajr,
+            wakeOffsetMinutesFromFajrStart: -45,
+            quickWakeModeOverride: .fast
+        )
+        Self.expectAlarmDetailPurpose(
+            AlarmDayDetailPresentation.purpose(for: fastWithTahajjudContext),
+            title: "Fast",
+            isLocked: false,
+            selection: .fast
+        )
+
+        let whiteDays = Self.makeWakeEntry(
+            date: date,
+            timeZone: timeZone,
+            context: ResolvedDayContext(
+                primaryContext: .standard,
+                secondaryContexts: [],
+                supportingTags: [.whiteDays],
+                explanation: .empty
+            ),
+            plannedWakeState: .preFajr,
+            wakeOffsetMinutesFromFajrStart: -30,
+            quickWakeModeOverride: .fast
+        )
+        Self.expectAlarmDetailPurpose(
+            AlarmDayDetailPresentation.purpose(for: whiteDays),
+            title: "Fast",
+            isLocked: false,
+            selection: .fast
+        )
+        Self.expectAlarmDetailFastType(
+            AlarmDayDetailPresentation.fastType(
+                for: whiteDays,
+                purpose: AlarmDayDetailPresentation.purpose(for: whiteDays)
+            ),
+            title: "White Days fast",
+            defaultOptionTitle: "Use White Days fast",
+            isLocked: false
+        )
+
+        let selectedFastAndTahajjud = Self.makeWakeEntry(
+            date: date,
+            timeZone: timeZone,
+            plannedWakeState: .preFajr,
+            wakeOffsetMinutesFromFajrStart: -45,
+            quickWakeModeOverride: .fast,
+            earlyWakePurposeOverride: .fastAndTahajjud
+        )
+        Self.expectAlarmDetailPurpose(
+            AlarmDayDetailPresentation.purpose(for: selectedFastAndTahajjud),
+            title: "Fast",
+            isLocked: false,
+            selection: .fast
+        )
+
+        let selectedOtherFast = Self.makeWakeEntry(
+            date: date,
+            timeZone: timeZone,
+            plannedWakeState: .preFajr,
+            wakeOffsetMinutesFromFajrStart: -30,
+            quickWakeModeOverride: .fast,
+            alarmDetailFastTypeOverride: .other
+        )
+        Self.expectAlarmDetailFastType(
+            AlarmDayDetailPresentation.fastType(
+                for: selectedOtherFast,
+                purpose: AlarmDayDetailPresentation.purpose(for: selectedOtherFast)
+            ),
+            title: "Other fast",
+            defaultOptionTitle: "Use Voluntary fast",
+            isLocked: false,
+            selection: .other
+        )
+    }
+
+    @Test
     func resolvedMorningWakeStateCoversV02SelectionAndBoundaryMatrix() {
         let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
         let date = Self.makeDate(year: 2026, month: 4, day: 27, timeZone: timeZone)
@@ -2446,6 +2671,30 @@ struct ScheduleServiceExtractionTests {
         value.replacingOccurrences(of: "\u{202F}", with: " ")
     }
 
+    private static func expectAlarmDetailPurpose(
+        _ purpose: AlarmDetailPurposePresentation?,
+        title: String,
+        isLocked: Bool,
+        selection: EarlyWakePurposeOverride? = nil
+    ) {
+        #expect(purpose?.title == title)
+        #expect(purpose?.isLocked == isLocked)
+        #expect(purpose?.selection?.rawValue == selection?.rawValue)
+    }
+
+    private static func expectAlarmDetailFastType(
+        _ fastType: AlarmDetailFastTypePresentation?,
+        title: String,
+        defaultOptionTitle: String,
+        isLocked: Bool,
+        selection: AlarmDetailFastTypeOverride? = nil
+    ) {
+        #expect(fastType?.title == title)
+        #expect(fastType?.defaultOptionTitle == defaultOptionTitle)
+        #expect(fastType?.isLocked == isLocked)
+        #expect(fastType?.selection?.rawValue == selection?.rawValue)
+    }
+
     private static func makeSchedule(for date: Date, timeZone: TimeZone) -> DaySchedule {
         let dayStart = DateHelpers.startOfDay(date, in: timeZone)
         let fajr = dayStart.addingTimeInterval(5 * 60 * 60)
@@ -2500,7 +2749,10 @@ struct ScheduleServiceExtractionTests {
         includeFajrEnd: Bool = true,
         wakeOffsetMinutesFromFajrStart: Int? = nil,
         fajrStartMinuteOffset: Int = 0,
-        quickWakeModeOverride: QuickWakeMode? = nil
+        quickWakeModeOverride: QuickWakeMode? = nil,
+        earlyWakePurposeOverride: EarlyWakePurposeOverride? = nil,
+        alarmDetailFastTypeOverride: AlarmDetailFastTypeOverride? = nil,
+        alarmDetailAudioPlanOverride: AlarmDetailAudioPlan? = nil
     ) -> WakeRowEntry {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = timeZone
@@ -2559,6 +2811,9 @@ struct ScheduleServiceExtractionTests {
             resolvedWakeRule: wakeRule,
             wakeRuleWasOverridden: hasDayOverride,
             quickWakeModeOverride: quickWakeModeOverride,
+            earlyWakePurposeOverride: earlyWakePurposeOverride,
+            alarmDetailFastTypeOverride: alarmDetailFastTypeOverride,
+            alarmDetailAudioPlanOverride: alarmDetailAudioPlanOverride,
             tahajjudRefinement: context.primaryContext == .tahajjud,
             suhoorTimeMode: plannedWakeState == .fixedWake ? .fixedTime : .relativeToFajrMinusMinutes,
             suhoorOffsetMinutes: 30,
@@ -2570,7 +2825,12 @@ struct ScheduleServiceExtractionTests {
             fajrSoundChoice: .adhanSoft,
             iftarDelivery: .off,
             iftarSoundChoice: .adhanSoft,
-            hasOverrides: hasDayOverride || skipDay || quickWakeModeOverride != nil
+            hasOverrides: hasDayOverride
+                || skipDay
+                || quickWakeModeOverride != nil
+                || earlyWakePurposeOverride != nil
+                || alarmDetailFastTypeOverride != nil
+                || alarmDetailAudioPlanOverride != nil
         )
         let decisionLog = makeDecisionLog(
             dateKey: dateKey,

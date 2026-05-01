@@ -1557,16 +1557,140 @@ final class ScheduleManager: ObservableObject {
     @discardableResult
     func selectHeroWakeMode(for date: Date, mode: QuickWakeMode, timeZone: TimeZone = .current) async -> Bool {
         let normalizedDate = DateHelpers.startOfDay(date, in: timeZone)
-        guard activeDay(for: normalizedDate, timeZone: timeZone) != nil else {
+        guard let day = activeDay(for: normalizedDate, timeZone: timeZone) else {
             return false
         }
+        let isRamadan = Self.isRamadanAlarmDetailDay(day)
 
         alarmConfigStore.updateOverride(for: normalizedDate, timeZone: timeZone) { override in
             WakeStateSelectionResolver.apply(mode, to: &override)
+            if mode == .fast {
+                override.earlyWakePurposeOverride = .fast
+                if isRamadan {
+                    override.alarmDetailFastTypeOverride = nil
+                    Self.applyAlarmDetailAudioPlan(.wakeAlarmAndFajrAdhan, to: &override, locksFajrAdhan: true)
+                }
+            }
+            if mode == .quiet, isRamadan {
+                override.skipDay = false
+                override.suhoorEnabled = false
+                override.reminderEnabled = false
+                override.fajrEnabled = true
+                override.iftarEnabled = nil
+                override.alarmDetailAudioPlanOverride = .fajrAdhan
+            }
         }
 
         await rescheduleDay(normalizedDate, preferCached: false)
         return true
+    }
+
+    @discardableResult
+    func selectAlarmDetailEarlyPurpose(
+        for date: Date,
+        purpose: EarlyWakePurposeOverride,
+        timeZone: TimeZone = .current
+    ) async -> Bool {
+        let normalizedDate = DateHelpers.startOfDay(date, in: timeZone)
+        guard let day = activeDay(for: normalizedDate, timeZone: timeZone) else {
+            return false
+        }
+        let isRamadan = Self.isRamadanAlarmDetailDay(day)
+        let normalizedPurpose: EarlyWakePurposeOverride = purpose == .tahajjud ? .tahajjud : .fast
+
+        alarmConfigStore.updateOverride(for: normalizedDate, timeZone: timeZone) { override in
+            WakeStateSelectionResolver.apply(.fast, to: &override)
+            override.earlyWakePurposeOverride = isRamadan ? .fast : normalizedPurpose
+            override.alarmDetailFastTypeOverride = normalizedPurpose == .fast ? override.alarmDetailFastTypeOverride : nil
+            override.tahajjudRefinement = normalizedPurpose == .tahajjud
+            Self.applyAlarmDetailAudioPlan(.wakeAlarmAndFajrAdhan, to: &override, locksFajrAdhan: isRamadan)
+        }
+
+        await rescheduleDay(normalizedDate, preferCached: false)
+        return true
+    }
+
+    @discardableResult
+    func selectAlarmDetailFastType(
+        for date: Date,
+        fastType: AlarmDetailFastTypeOverride?,
+        timeZone: TimeZone = .current
+    ) async -> Bool {
+        let normalizedDate = DateHelpers.startOfDay(date, in: timeZone)
+        guard let day = activeDay(for: normalizedDate, timeZone: timeZone),
+              !Self.isRamadanAlarmDetailDay(day) else {
+            return false
+        }
+
+        alarmConfigStore.updateOverride(for: normalizedDate, timeZone: timeZone) { override in
+            WakeStateSelectionResolver.apply(.fast, to: &override)
+            override.earlyWakePurposeOverride = .fast
+            override.alarmDetailFastTypeOverride = fastType
+            override.tahajjudRefinement = false
+            Self.applyAlarmDetailAudioPlan(override.alarmDetailAudioPlanOverride ?? .wakeAlarmAndFajrAdhan, to: &override)
+        }
+
+        await rescheduleDay(normalizedDate, preferCached: false)
+        return true
+    }
+
+    @discardableResult
+    func selectAlarmDetailAudioPlan(
+        for date: Date,
+        audioPlan: AlarmDetailAudioPlan,
+        timeZone: TimeZone = .current
+    ) async -> Bool {
+        let normalizedDate = DateHelpers.startOfDay(date, in: timeZone)
+        guard let day = activeDay(for: normalizedDate, timeZone: timeZone) else {
+            return false
+        }
+        let isRamadan = Self.isRamadanAlarmDetailDay(day)
+        let mode = WakeStateSelectionResolver.selectedMode(for: day)
+        guard mode != .quiet else { return false }
+
+        alarmConfigStore.updateOverride(for: normalizedDate, timeZone: timeZone) { override in
+            let resolvedPlan = isRamadan && audioPlan == .wakeAlarm ? .wakeAlarmAndFajrAdhan : audioPlan
+            Self.applyAlarmDetailAudioPlan(resolvedPlan, to: &override, locksFajrAdhan: isRamadan)
+        }
+
+        await rescheduleDay(normalizedDate, preferCached: false)
+        return true
+    }
+
+    @discardableResult
+    func resetAlarmDetailOverride(for date: Date, timeZone: TimeZone = .current) async -> Bool {
+        let normalizedDate = DateHelpers.startOfDay(date, in: timeZone)
+        alarmConfigStore.removeOverride(for: normalizedDate, timeZone: timeZone)
+        await rescheduleDay(normalizedDate, preferCached: false)
+        return true
+    }
+
+    private static func applyAlarmDetailAudioPlan(
+        _ plan: AlarmDetailAudioPlan,
+        to override: inout DailyAlarmOverride,
+        locksFajrAdhan: Bool = false
+    ) {
+        let resolvedPlan = locksFajrAdhan && plan == .wakeAlarm ? .wakeAlarmAndFajrAdhan : plan
+        override.alarmDetailAudioPlanOverride = resolvedPlan
+
+        switch resolvedPlan {
+        case .fajrAdhan:
+            override.suhoorEnabled = false
+            override.reminderEnabled = false
+            override.fajrEnabled = true
+        case .wakeAlarm:
+            override.suhoorEnabled = true
+            override.reminderEnabled = true
+            override.fajrEnabled = locksFajrAdhan
+        case .wakeAlarmAndFajrAdhan:
+            override.suhoorEnabled = true
+            override.reminderEnabled = true
+            override.fajrEnabled = true
+        }
+    }
+
+    private static func isRamadanAlarmDetailDay(_ day: ActiveAlarmDay) -> Bool {
+        day.isImplicitRamadan || day.resolvedDayContext.supportingTags.contains(.ramadan)
     }
 
     private static func persistedHeroWakeAdjustmentMinutes(

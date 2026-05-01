@@ -363,6 +363,9 @@ struct DailyAlarmOverride: Codable, Equatable, Identifiable, Sendable {
     var wakeAnchorTypeOverride: WakeAnchorType?
     var wakeDeltaOverrideMinutes: Int?
     var quickWakeModeOverride: QuickWakeMode?
+    var earlyWakePurposeOverride: EarlyWakePurposeOverride?
+    var alarmDetailFastTypeOverride: AlarmDetailFastTypeOverride?
+    var alarmDetailAudioPlanOverride: AlarmDetailAudioPlan?
     var fixedWakeTimeOverrideMinutesFromMidnight: Int?
     var bypassLatestWakeCap: Bool?
     var tahajjudRefinement: Bool?
@@ -392,6 +395,9 @@ struct DailyAlarmOverride: Codable, Equatable, Identifiable, Sendable {
         self.wakeAnchorTypeOverride = nil
         self.wakeDeltaOverrideMinutes = nil
         self.quickWakeModeOverride = nil
+        self.earlyWakePurposeOverride = nil
+        self.alarmDetailFastTypeOverride = nil
+        self.alarmDetailAudioPlanOverride = nil
         self.fixedWakeTimeOverrideMinutesFromMidnight = nil
         self.bypassLatestWakeCap = nil
         self.tahajjudRefinement = nil
@@ -415,6 +421,9 @@ struct DailyAlarmOverride: Codable, Equatable, Identifiable, Sendable {
         if wakeAnchorTypeOverride != nil { return true }
         if wakeDeltaOverrideMinutes != nil { return true }
         if quickWakeModeOverride != nil { return true }
+        if earlyWakePurposeOverride != nil { return true }
+        if alarmDetailFastTypeOverride != nil { return true }
+        if alarmDetailAudioPlanOverride != nil { return true }
         if fixedWakeTimeOverrideMinutesFromMidnight != nil { return true }
         if bypassLatestWakeCap != nil { return true }
         if tahajjudRefinement == true { return true }
@@ -434,6 +443,9 @@ struct DailyAlarmOverride: Codable, Equatable, Identifiable, Sendable {
             || wakeAnchorTypeOverride != nil
             || wakeDeltaOverrideMinutes != nil
             || quickWakeModeOverride != nil
+            || earlyWakePurposeOverride != nil
+            || alarmDetailFastTypeOverride != nil
+            || alarmDetailAudioPlanOverride != nil
             || fixedWakeTimeOverrideMinutesFromMidnight != nil
             || suhoorOffsetOverrideMinutes != nil
             || suhoorTimeOverrideMinutesFromMidnight != nil
@@ -467,6 +479,9 @@ struct EffectiveDailyConfig: Codable, Equatable, Sendable {
     let resolvedWakeRule: MorningWakeRule
     let wakeRuleWasOverridden: Bool
     let quickWakeModeOverride: QuickWakeMode?
+    let earlyWakePurposeOverride: EarlyWakePurposeOverride?
+    let alarmDetailFastTypeOverride: AlarmDetailFastTypeOverride?
+    let alarmDetailAudioPlanOverride: AlarmDetailAudioPlan?
     let tahajjudRefinement: Bool
     let suhoorTimeMode: SuhoorTimeMode
     let suhoorOffsetMinutes: Int
@@ -496,6 +511,9 @@ struct EffectiveDailyConfig: Codable, Equatable, Sendable {
         case resolvedWakeRule
         case wakeRuleWasOverridden
         case quickWakeModeOverride
+        case earlyWakePurposeOverride
+        case alarmDetailFastTypeOverride
+        case alarmDetailAudioPlanOverride
         case tahajjudRefinement
         case suhoorTimeMode
         case suhoorOffsetMinutes
@@ -522,6 +540,9 @@ struct EffectiveDailyConfig: Codable, Equatable, Sendable {
         resolvedWakeRule: MorningWakeRule = DefaultAlarmConfig.default.defaultWakeRule,
         wakeRuleWasOverridden: Bool = false,
         quickWakeModeOverride: QuickWakeMode? = nil,
+        earlyWakePurposeOverride: EarlyWakePurposeOverride? = nil,
+        alarmDetailFastTypeOverride: AlarmDetailFastTypeOverride? = nil,
+        alarmDetailAudioPlanOverride: AlarmDetailAudioPlan? = nil,
         tahajjudRefinement: Bool = false,
         suhoorTimeMode: SuhoorTimeMode,
         suhoorOffsetMinutes: Int,
@@ -546,6 +567,9 @@ struct EffectiveDailyConfig: Codable, Equatable, Sendable {
         self.resolvedWakeRule = resolvedWakeRule
         self.wakeRuleWasOverridden = wakeRuleWasOverridden
         self.quickWakeModeOverride = quickWakeModeOverride
+        self.earlyWakePurposeOverride = earlyWakePurposeOverride
+        self.alarmDetailFastTypeOverride = alarmDetailFastTypeOverride
+        self.alarmDetailAudioPlanOverride = alarmDetailAudioPlanOverride
         self.tahajjudRefinement = tahajjudRefinement
         self.suhoorTimeMode = suhoorTimeMode
         self.suhoorOffsetMinutes = suhoorOffsetMinutes
@@ -579,6 +603,9 @@ struct EffectiveDailyConfig: Codable, Equatable, Sendable {
             wakeRuleWasOverridden: try container.decodeIfPresent(Bool.self, forKey: .wakeRuleWasOverridden)
                 ?? false,
             quickWakeModeOverride: try container.decodeIfPresent(QuickWakeMode.self, forKey: .quickWakeModeOverride),
+            earlyWakePurposeOverride: try container.decodeIfPresent(EarlyWakePurposeOverride.self, forKey: .earlyWakePurposeOverride),
+            alarmDetailFastTypeOverride: try container.decodeIfPresent(AlarmDetailFastTypeOverride.self, forKey: .alarmDetailFastTypeOverride),
+            alarmDetailAudioPlanOverride: try container.decodeIfPresent(AlarmDetailAudioPlan.self, forKey: .alarmDetailAudioPlanOverride),
             tahajjudRefinement: try container.decodeIfPresent(Bool.self, forKey: .tahajjudRefinement)
                 ?? false,
             suhoorTimeMode: try container.decode(SuhoorTimeMode.self, forKey: .suhoorTimeMode),
@@ -608,6 +635,9 @@ struct EffectiveDailyConfig: Codable, Equatable, Sendable {
         try container.encode(resolvedWakeRule, forKey: .resolvedWakeRule)
         try container.encode(wakeRuleWasOverridden, forKey: .wakeRuleWasOverridden)
         try container.encodeIfPresent(quickWakeModeOverride, forKey: .quickWakeModeOverride)
+        try container.encodeIfPresent(earlyWakePurposeOverride, forKey: .earlyWakePurposeOverride)
+        try container.encodeIfPresent(alarmDetailFastTypeOverride, forKey: .alarmDetailFastTypeOverride)
+        try container.encodeIfPresent(alarmDetailAudioPlanOverride, forKey: .alarmDetailAudioPlanOverride)
         try container.encode(tahajjudRefinement, forKey: .tahajjudRefinement)
         try container.encode(suhoorTimeMode, forKey: .suhoorTimeMode)
         try container.encode(suhoorOffsetMinutes, forKey: .suhoorOffsetMinutes)

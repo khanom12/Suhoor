@@ -455,7 +455,7 @@ private struct TomorrowMorningHero: View {
     }
 }
 
-private struct MorningHeroMetrics {
+struct MorningHeroMetrics {
     let scale: CGFloat
     let minHeroRegionHeight: CGFloat
     let minTextStackHeight: CGFloat
@@ -564,7 +564,7 @@ private struct MorningHeroMetrics {
     var quickSelectorPadding: CGFloat { max(4, 4 * scale) }
 }
 
-private struct MorningHeroPrimaryWakeRow: View {
+struct MorningHeroPrimaryWakeRow: View {
     let display: MorningHomeHeroDisplay
     let metrics: MorningHeroMetrics
     let rollsActiveWakeTime: Bool
@@ -640,7 +640,7 @@ private struct MorningHeroRelationContent: Equatable {
     let tone: MorningHeroRelationTone
 }
 
-private struct MorningHeroFadingRelationText: View {
+struct MorningHeroFadingRelationText: View {
     let text: String
     let tone: MorningHeroRelationTone
     let metrics: MorningHeroMetrics
@@ -719,7 +719,7 @@ private struct MorningHeroFadingRelationText: View {
     }
 }
 
-private struct MorningHeroQuickWakeModeSelector: View {
+struct MorningHeroQuickWakeModeSelector: View {
     let options: [MorningHeroQuickWakeModeOption]
     let metrics: MorningHeroMetrics
     let highlightNamespace: Namespace.ID
@@ -943,7 +943,7 @@ private struct SubhHomeHeroTimeLockup: View {
     }()
 }
 
-private struct FajrWindowRangeVisual: View {
+struct FajrWindowRangeVisual: View {
     let display: MorningHomeHeroDisplay
     let metrics: MorningHeroMetrics
     let reduceMotion: Bool
