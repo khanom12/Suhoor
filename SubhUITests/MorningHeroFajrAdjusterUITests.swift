@@ -189,6 +189,58 @@ final class MorningHeroFajrAdjusterUITests: XCTestCase {
         XCTAssertTrue(app.descendants(matching: .any)["morningHero.fajrWindow"].waitForExistence(timeout: 4))
         XCTAssertTrue(app.descendants(matching: .any)["morningHero.fajrWindow.track"].exists)
         XCTAssertFalse(app.descendants(matching: .any)["morningHero.fajrWindow.marker"].exists)
+
+        let quietWakeLabel = primaryWakeTime.label
+        let fajrAfterQuiet = app.descendants(matching: .any)["morningHero.quickWakeMode.fajr"]
+        XCTAssertTrue(fajrAfterQuiet.waitForExistence(timeout: 4))
+        fajrAfterQuiet.tap()
+
+        XCTAssertTrue(waitForLabelChange(in: app, identifier: "morningHero.primaryWakeTime", from: quietWakeLabel))
+        XCTAssertTrue(waitForElementLabel(in: app, identifier: "morningHero.relation") {
+            $0.contains("before Fajr ends")
+        })
+        XCTAssertTrue(waitForElementLabel(in: app, identifier: "morningHero.quickWakeMode.fajr") {
+            $0.contains("selected")
+        })
+        XCTAssertTrue(app.descendants(matching: .any)["morningHero.fajrWindow.marker"].waitForExistence(timeout: 4))
+
+        let fajrWakeAfterQuiet = primaryWakeTime.label
+        let fastAfterQuietFajr = app.descendants(matching: .any)["morningHero.quickWakeMode.fast"]
+        XCTAssertTrue(fastAfterQuietFajr.waitForExistence(timeout: 4))
+        fastAfterQuietFajr.tap()
+
+        XCTAssertTrue(waitForLabelChange(in: app, identifier: "morningHero.primaryWakeTime", from: fajrWakeAfterQuiet))
+        XCTAssertTrue(waitForElementLabel(in: app, identifier: "morningHero.relation") {
+            $0.contains("before Fajr begins")
+        })
+        XCTAssertTrue(waitForElementLabel(in: app, identifier: "morningHero.quickWakeMode.fast") {
+            $0.contains("selected")
+        })
+
+        let quietAfterFastAgain = app.descendants(matching: .any)["morningHero.quickWakeMode.quiet"]
+        XCTAssertTrue(quietAfterFastAgain.waitForExistence(timeout: 4))
+        quietAfterFastAgain.tap()
+        XCTAssertTrue(waitForElementLabel(in: app, identifier: "morningHero.primaryWakeTime") {
+            $0 == "Quiet mode"
+        })
+
+        let fastAfterSecondQuiet = app.descendants(matching: .any)["morningHero.quickWakeMode.fast"]
+        XCTAssertTrue(fastAfterSecondQuiet.waitForExistence(timeout: 4))
+        fastAfterSecondQuiet.tap()
+        XCTAssertTrue(waitForLabelChange(in: app, identifier: "morningHero.primaryWakeTime", from: "Quiet mode"))
+        XCTAssertTrue(waitForElementLabel(in: app, identifier: "morningHero.relation") {
+            $0.contains("before Fajr begins")
+        })
+
+        let fastWakeAfterQuiet = primaryWakeTime.label
+        let fajrAfterQuietFast = app.descendants(matching: .any)["morningHero.quickWakeMode.fajr"]
+        XCTAssertTrue(fajrAfterQuietFast.waitForExistence(timeout: 4))
+        fajrAfterQuietFast.tap()
+
+        XCTAssertTrue(waitForLabelChange(in: app, identifier: "morningHero.primaryWakeTime", from: fastWakeAfterQuiet))
+        XCTAssertTrue(waitForElementLabel(in: app, identifier: "morningHero.relation") {
+            $0.contains("before Fajr ends")
+        })
     }
 
     private func waitForLabelChange(

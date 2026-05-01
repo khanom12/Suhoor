@@ -1361,6 +1361,28 @@ struct ScheduleServiceExtractionTests {
     }
 
     @Test
+    func morningHeroRangeMarkerHandoffUsesExpectedQuickModeDirections() {
+        #expect(
+            MorningHeroRangeMarkerHandoff.sequence(
+                from: .interactiveWithinFajrWindow,
+                to: .interactiveEarlyWorshipWindow
+            ) == MorningHeroRangeMarkerHandoff(exitRatio: 0, entryRatio: 1)
+        )
+        #expect(
+            MorningHeroRangeMarkerHandoff.sequence(
+                from: .interactiveEarlyWorshipWindow,
+                to: .interactiveWithinFajrWindow
+            ) == MorningHeroRangeMarkerHandoff(exitRatio: 1, entryRatio: 0)
+        )
+        #expect(
+            MorningHeroRangeMarkerHandoff.sequence(
+                from: .staticEarlyWorshipWindow,
+                to: .interactiveWithinFajrWindow
+            ) == nil
+        )
+    }
+
+    @Test
     func tomorrowHeroNamesMeaningfulMorningStates() {
         let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
         let date = Self.makeDate(year: 2026, month: 4, day: 27, timeZone: timeZone)
