@@ -261,16 +261,20 @@ struct AppPageBackground: View {
 
 struct AppHomeContrastOverlay: View {
     var body: some View {
-        LinearGradient(
-            stops: [
-                .init(color: Color.black.opacity(0.68), location: 0.00),
-                .init(color: Color.black.opacity(0.42), location: 0.26),
-                .init(color: Color.black.opacity(0.18), location: 0.58),
-                .init(color: Color.black.opacity(0.06), location: 1.00)
-            ],
-            startPoint: .top,
-            endPoint: .bottom
-        )
+        ZStack {
+            Color.black.opacity(0.25)
+
+            LinearGradient(
+                stops: [
+                    .init(color: Color.black.opacity(0.68), location: 0.00),
+                    .init(color: Color.black.opacity(0.42), location: 0.26),
+                    .init(color: Color.black.opacity(0.18), location: 0.58),
+                    .init(color: Color.black.opacity(0.06), location: 1.00)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        }
     }
 }
 
