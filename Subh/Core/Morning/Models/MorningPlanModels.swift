@@ -91,21 +91,50 @@ enum EarlyWakePurposeOverride: String, Codable, CaseIterable, Identifiable, Send
     }
 }
 
-enum AlarmDetailFastTypeOverride: String, Codable, CaseIterable, Identifiable, Sendable {
-    case qada
-    case voluntary
+enum AlarmDetailFastTypeOverride: String, Codable, Identifiable, Sendable {
     case other
+    case voluntary
+    case qada
+    case vowNadhr
+    case kaffarah
+
+    static let allCases: [AlarmDetailFastTypeOverride] = [
+        .voluntary,
+        .qada,
+        .vowNadhr,
+        .kaffarah,
+        .other
+    ]
 
     var id: String { rawValue }
 
     var displayTitle: String {
         switch self {
-        case .qada:
-            return "Qada fast"
-        case .voluntary:
-            return "Voluntary fast"
         case .other:
             return "Other fast"
+        case .voluntary:
+            return "Voluntary fast"
+        case .qada:
+            return "Qada fast"
+        case .vowNadhr:
+            return "Vow / Nadhr fast"
+        case .kaffarah:
+            return "Kaffarah fast"
+        }
+    }
+
+    var primaryIntent: FastPrimaryIntent {
+        switch self {
+        case .other:
+            return .other
+        case .voluntary:
+            return .voluntary
+        case .qada:
+            return .qadaMakeup
+        case .vowNadhr:
+            return .vowNadhr
+        case .kaffarah:
+            return .kaffarahExpiation
         }
     }
 }

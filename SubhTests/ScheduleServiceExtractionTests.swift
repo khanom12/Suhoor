@@ -1195,14 +1195,17 @@ struct ScheduleServiceExtractionTests {
         #expect(AlarmDayDetailPresentation.purpose(for: fajrEntry) == nil)
         #expect(AlarmDayDetailPresentation.relationText(for: fajrDisplay) == "Wake up 30 min before Fajr ends")
         #expect(AlarmDayDetailPresentation.fajrAdhanSetting(for: fajrEntry, purpose: nil) == nil)
-        #expect(AlarmDayDetailPresentation.context(
+        let fajrContext = AlarmDayDetailPresentation.context(
             for: fajrEntry,
             display: fajrDisplay,
             purpose: nil,
             fastType: nil,
             fajrAdhan: nil,
             showsReset: false
-        ) == nil)
+        )
+        #expect(fajrContext.summary == "There are no fasting opportunities for this date. You can still choose an early fasting wake for a Voluntary, Qada, Vow, Kaffarah, or Other fast.")
+        #expect(fajrContext.significance == nil)
+        #expect(fajrContext.hasContent)
 
         let quietEntry = Self.makeWakeEntry(
             date: date,
@@ -1218,6 +1221,9 @@ struct ScheduleServiceExtractionTests {
             timeZone: timeZone
         )
         #expect(AlarmDayDetailPresentation.isQuiet(quietDisplay))
+        let quietDetailDisplay = AlarmDayDetailPresentation.detailHeroDisplay(quietDisplay)
+        #expect(quietDetailDisplay.primaryText == "Quiet Mode")
+        #expect(quietDetailDisplay.wakeIconName == "moon.fill")
         #expect(AlarmDayDetailPresentation.relationText(for: quietDisplay) == "No wake alarm for this date")
         #expect(AlarmDayDetailPresentation.purpose(for: quietEntry) == nil)
         #expect(AlarmDayDetailPresentation.accessibilitySummary(
@@ -1227,6 +1233,14 @@ struct ScheduleServiceExtractionTests {
             fastType: nil,
             fajrAdhan: AlarmDayDetailPresentation.fajrAdhanSetting(for: quietEntry, purpose: nil)
         ).contains("Quiet Mode. No wake alarm for this date"))
+        #expect(AlarmDayDetailPresentation.context(
+            for: quietEntry,
+            display: quietDisplay,
+            purpose: nil,
+            fastType: nil,
+            fajrAdhan: nil,
+            showsReset: false
+        ).summary == "You are on Quiet Mode for this date.")
 
         let ramadanQuietEntry = Self.makeWakeEntry(
             date: date,
@@ -1286,8 +1300,23 @@ struct ScheduleServiceExtractionTests {
             title: "Ramadan fast",
             defaultOptionTitle: "Ramadan fast",
             isLocked: true,
-            selectedOpportunityTitles: ["Ramadan fast"]
+            selectedOpportunityTitles: ["Ramadan fast"],
+            options: ["Ramadan fast"]
         )
+        #expect(AlarmDayDetailPresentation.context(
+            for: ramadan,
+            display: MorningHomePresentation.heroDisplay(
+                entry: ramadan,
+                permissionSummary: "",
+                locationDisplayText: "",
+                currentDate: date,
+                timeZone: timeZone
+            ),
+            purpose: AlarmDayDetailPresentation.purpose(for: ramadan),
+            fastType: AlarmDayDetailPresentation.fastType(for: ramadan, purpose: AlarmDayDetailPresentation.purpose(for: ramadan)),
+            fajrAdhan: AlarmDayDetailPresentation.fajrAdhanSetting(for: ramadan, purpose: AlarmDayDetailPresentation.purpose(for: ramadan)),
+            showsReset: false
+        ).summary == "You are waking early for Ramadan.")
         #expect(AlarmDayDetailPresentation.fajrAdhanSetting(
             for: ramadan,
             purpose: AlarmDayDetailPresentation.purpose(for: ramadan)
@@ -1312,6 +1341,20 @@ struct ScheduleServiceExtractionTests {
             isLocked: false,
             selection: .tahajjud
         )
+        #expect(AlarmDayDetailPresentation.context(
+            for: tahajjud,
+            display: MorningHomePresentation.heroDisplay(
+                entry: tahajjud,
+                permissionSummary: "",
+                locationDisplayText: "",
+                currentDate: date,
+                timeZone: timeZone
+            ),
+            purpose: AlarmDayDetailPresentation.purpose(for: tahajjud),
+            fastType: AlarmDayDetailPresentation.fastType(for: tahajjud, purpose: AlarmDayDetailPresentation.purpose(for: tahajjud)),
+            fajrAdhan: AlarmDayDetailPresentation.fajrAdhanSetting(for: tahajjud, purpose: AlarmDayDetailPresentation.purpose(for: tahajjud)),
+            showsReset: false
+        ).summary == "You are waking early for Tahajjud. There are no fasting opportunities for this date.")
 
         let fastWithTahajjudContext = Self.makeWakeEntry(
             date: date,
@@ -1360,9 +1403,10 @@ struct ScheduleServiceExtractionTests {
             title: "Today's opportunities",
             defaultOptionTitle: "Today's opportunities",
             isLocked: false,
-            selectedOpportunityTitles: ["White Days fast"]
+            selectedOpportunityTitles: ["White Days fast"],
+            options: ["Today's opportunities", "Voluntary fast", "Qada fast", "Vow / Nadhr fast", "Kaffarah fast", "Other fast"]
         )
-        #expect(AlarmDayDetailPresentation.context(
+        let whiteDaysContext = AlarmDayDetailPresentation.context(
             for: whiteDays,
             display: MorningHomePresentation.heroDisplay(
                 entry: whiteDays,
@@ -1375,7 +1419,9 @@ struct ScheduleServiceExtractionTests {
             fastType: AlarmDayDetailPresentation.fastType(for: whiteDays, purpose: AlarmDayDetailPresentation.purpose(for: whiteDays)),
             fajrAdhan: AlarmDayDetailPresentation.fajrAdhanSetting(for: whiteDays, purpose: AlarmDayDetailPresentation.purpose(for: whiteDays)),
             showsReset: false
-        )?.significance?.items == ["White Days fast"])
+        )
+        #expect(whiteDaysContext.summary == "You are waking early to fast. Today's fasting opportunities will apply by default.")
+        #expect(whiteDaysContext.significance?.items == ["White Days fast"])
 
         let multipleOpportunities = Self.makeWakeEntry(
             date: date,
@@ -1389,7 +1435,7 @@ struct ScheduleServiceExtractionTests {
             plannedWakeState: .inFajr,
             quickWakeModeOverride: .fajr
         )
-        #expect(AlarmDayDetailPresentation.context(
+        let multipleContext = AlarmDayDetailPresentation.context(
             for: multipleOpportunities,
             display: MorningHomePresentation.heroDisplay(
                 entry: multipleOpportunities,
@@ -1402,7 +1448,9 @@ struct ScheduleServiceExtractionTests {
             fastType: nil,
             fajrAdhan: nil,
             showsReset: false
-        )?.significance?.items == ["White Days fast", "Shawwal Six fast", "Monday / Thursday fast"])
+        )
+        #expect(multipleContext.summary == "This day has fasting opportunities: White Days fast, Shawwal Six fast, and Monday / Thursday fast.")
+        #expect(multipleContext.significance?.items == ["White Days fast", "Shawwal Six fast", "Monday / Thursday fast"])
 
         let selectedFastAndTahajjud = Self.makeWakeEntry(
             date: date,
@@ -1436,8 +1484,14 @@ struct ScheduleServiceExtractionTests {
             defaultOptionTitle: "Voluntary fast",
             isLocked: false,
             selection: .other,
-            selectedOpportunityTitles: []
+            selectedOpportunityTitles: [],
+            options: ["Voluntary fast", "Qada fast", "Vow / Nadhr fast", "Kaffarah fast", "Other fast"]
         )
+        let voluntaryOptionCount = AlarmDayDetailPresentation.fastType(
+            for: selectedOtherFast,
+            purpose: AlarmDayDetailPresentation.purpose(for: selectedOtherFast)
+        )?.options.filter { $0.title == "Voluntary fast" }.count
+        #expect(voluntaryOptionCount == 1)
     }
 
     @Test
@@ -2734,13 +2788,17 @@ struct ScheduleServiceExtractionTests {
         defaultOptionTitle: String,
         isLocked: Bool,
         selection: AlarmDetailFastTypeOverride? = nil,
-        selectedOpportunityTitles: [String] = []
+        selectedOpportunityTitles: [String] = [],
+        options: [String]? = nil
     ) {
         #expect(fastType?.title == title)
         #expect(fastType?.defaultOptionTitle == defaultOptionTitle)
         #expect(fastType?.isLocked == isLocked)
         #expect(fastType?.selection?.rawValue == selection?.rawValue)
         #expect(fastType?.selectedOpportunityTitles == selectedOpportunityTitles)
+        if let options {
+            #expect(fastType?.options.map(\.title) == options)
+        }
     }
 
     private static func makeSchedule(for date: Date, timeZone: TimeZone) -> DaySchedule {

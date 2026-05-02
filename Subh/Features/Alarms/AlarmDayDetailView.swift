@@ -36,7 +36,7 @@ struct AlarmDayDetailView: View {
         }
         .toolbarBackground(.clear, for: .navigationBar)
         .toolbarBackgroundVisibility(.visible, for: .navigationBar)
-        .navigationTitle(GregorianDateFormatter.shared.cardString(for: schedule.date))
+        .navigationTitle("Detailed Daily View")
         .navigationBarTitleDisplayMode(.inline)
         .onChange(of: wakeEntry?.id) { _, _ in
             tentativeWakeTime = nil
@@ -56,11 +56,11 @@ struct AlarmDayDetailView: View {
 
     private var detailContent: some View {
         let metrics = MorningHeroMetrics(dynamicTypeSize: dynamicTypeSize)
-        let display = displayedHeroDisplay
+        let display = AlarmDayDetailPresentation.detailHeroDisplay(displayedHeroDisplay)
         let purpose = wakeEntry.flatMap { AlarmDayDetailPresentation.purpose(for: $0) }
         let fastType = wakeEntry.flatMap { AlarmDayDetailPresentation.fastType(for: $0, purpose: purpose) }
         let fajrAdhan = wakeEntry.flatMap { AlarmDayDetailPresentation.fajrAdhanSetting(for: $0, purpose: purpose) }
-        let context = wakeEntry.flatMap {
+        let context = wakeEntry.map {
             AlarmDayDetailPresentation.context(
                 for: $0,
                 display: display,
@@ -69,7 +69,14 @@ struct AlarmDayDetailView: View {
                 fajrAdhan: fajrAdhan,
                 showsReset: hasDateOverride
             )
-        }
+        } ?? AlarmDetailContextPresentation(
+            summary: "Wake details are not available for this date yet.",
+            significance: nil,
+            purpose: nil,
+            fastType: nil,
+            fajrAdhan: nil,
+            showsReset: false
+        )
 
         return VStack(alignment: .center, spacing: DesignTokens.spacingM) {
             detailHero(
@@ -80,17 +87,15 @@ struct AlarmDayDetailView: View {
                 fajrAdhan: fajrAdhan
             )
 
-            if let context {
-                contextCard(context, metrics: metrics)
-                    .transition(.opacity.combined(with: .move(edge: .top)))
-            }
+            contextCard(context, metrics: metrics)
+                .transition(.opacity.combined(with: .move(edge: .top)))
         }
         .animation(heroModeAnimation, value: context)
     }
 
     private var detailHero: some View {
         let metrics = MorningHeroMetrics(dynamicTypeSize: dynamicTypeSize)
-        let display = displayedHeroDisplay
+        let display = AlarmDayDetailPresentation.detailHeroDisplay(displayedHeroDisplay)
         let purpose = wakeEntry.flatMap { AlarmDayDetailPresentation.purpose(for: $0) }
         let fastType = wakeEntry.flatMap { AlarmDayDetailPresentation.fastType(for: $0, purpose: purpose) }
         let fajrAdhan = wakeEntry.flatMap { AlarmDayDetailPresentation.fajrAdhanSetting(for: $0, purpose: purpose) }
@@ -113,7 +118,10 @@ struct AlarmDayDetailView: View {
     ) -> some View {
         let showsSlider = shouldShowWakeSlider(display)
         return VStack(alignment: .center, spacing: 0) {
+            heroTopAlignmentSlot(metrics: metrics)
+
             dateLine(metrics: metrics)
+                .padding(.top, metrics.dateToRelativeGap)
 
             primaryWakeRow(display: display, metrics: metrics)
                 .padding(.top, metrics.relativeToPrimaryGap)
@@ -164,7 +172,7 @@ struct AlarmDayDetailView: View {
         .frame(maxWidth: metrics.maxContentWidth)
         .padding(.horizontal, DesignTokens.spacingS)
         .padding(.top, metrics.verticalBreathing)
-        .padding(.bottom, metrics.verticalBreathing)
+        .padding(.bottom, metrics.verticalBreathing + metrics.bottomGapBeforeNextCard - DesignTokens.spacingL)
         .frame(maxWidth: .infinity, minHeight: metrics.minHeroRegionHeight, alignment: .center)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(AlarmDayDetailPresentation.accessibilitySummary(
@@ -234,6 +242,12 @@ struct AlarmDayDetailView: View {
             : .easeInOut(duration: 0.22)
     }
 
+    private func heroTopAlignmentSlot(metrics: MorningHeroMetrics) -> some View {
+        Color.clear
+            .frame(height: metrics.relationRowHeight)
+            .accessibilityHidden(true)
+    }
+
     private func dateLine(metrics: MorningHeroMetrics) -> some View {
         Text(dateLineText)
             .font(.system(size: metrics.dateLineSize, weight: .regular))
@@ -242,6 +256,7 @@ struct AlarmDayDetailView: View {
             .lineLimit(nil)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .center)
+            .frame(minHeight: metrics.relativeLabelSize * 1.18)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(dateLineText)
             .accessibilityIdentifier("alarmDetail.dateLine")
@@ -252,27 +267,13 @@ struct AlarmDayDetailView: View {
         display: MorningHomeHeroDisplay,
         metrics: MorningHeroMetrics
     ) -> some View {
-        if AlarmDayDetailPresentation.isQuiet(display) {
-            Text("Quiet Mode")
-                .font(AppTypography.timeDisplayFont(size: metrics.quietWakeStateSize, weight: .regular))
-                .foregroundStyle(WakeGlassTheme.primaryText)
-                .multilineTextAlignment(.center)
-                .lineLimit(1)
-                .minimumScaleFactor(0.74)
-                .frame(maxWidth: .infinity, alignment: .center)
-                .frame(height: metrics.primaryRowHeight)
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel("Quiet Mode")
-                .accessibilityIdentifier("alarmDetail.primaryWakeTime")
-        } else {
-            MorningHeroPrimaryWakeRow(
-                display: display,
-                metrics: metrics,
-                rollsActiveWakeTime: tentativeWakeTime == nil,
-                reduceMotion: reduceMotion
-            )
-            .accessibilityIdentifier("alarmDetail.primaryWakeTime")
-        }
+        MorningHeroPrimaryWakeRow(
+            display: display,
+            metrics: metrics,
+            rollsActiveWakeTime: tentativeWakeTime == nil,
+            reduceMotion: reduceMotion
+        )
+        .accessibilityIdentifier("alarmDetail.primaryWakeTime")
     }
 
     private func quietSliderRegion(
@@ -305,7 +306,14 @@ struct AlarmDayDetailView: View {
             alignment: .leading
         ) {
             VStack(alignment: .leading, spacing: 14) {
+                Text(context.summary)
+                    .font(.subheadline)
+                    .foregroundStyle(WakeGlassTheme.primaryText.opacity(0.92))
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("alarmDetail.contextSummary")
+
                 if let significance = context.significance {
+                    contextDividerIfNeeded(after: true)
                     contextSection(title: significance.title) {
                         chipFlow(significance.items)
                     }
@@ -432,22 +440,13 @@ struct AlarmDayDetailView: View {
             )
         } else {
             Menu {
-                Button {
-                    selectFastType(nil)
-                } label: {
-                    Label(
-                        fastType.defaultOptionTitle,
-                        systemImage: fastType.selection == nil ? "checkmark" : "circle"
-                    )
-                }
-
-                ForEach(AlarmDetailFastTypeOverride.allCases) { option in
+                ForEach(fastType.options) { option in
                     Button {
-                        selectFastType(option)
+                        selectFastType(option.selection)
                     } label: {
                         Label(
-                            option.displayTitle,
-                            systemImage: fastType.selection == option ? "checkmark" : "circle"
+                            option.title,
+                            systemImage: fastType.selection == option.selection ? "checkmark" : "circle"
                         )
                     }
                 }
@@ -576,7 +575,7 @@ struct AlarmDayDetailView: View {
         Button {
             resetOverride()
         } label: {
-            Text("Use usual plan")
+            Text("Reset date changes")
                 .font(.system(size: max(12, metrics.quickSelectorLabelSize * 0.82), weight: .regular))
                 .foregroundStyle(WakeGlassTheme.secondaryText.opacity(0.86))
                 .padding(.horizontal, 10)
@@ -584,7 +583,7 @@ struct AlarmDayDetailView: View {
         }
         .buttonStyle(.plain)
         .disabled(controlsAreBusy)
-        .accessibilityIdentifier("alarmDetail.useUsualPlan")
+        .accessibilityIdentifier("alarmDetail.resetDateChanges")
     }
 
     private func shouldShowWakeSlider(_ display: MorningHomeHeroDisplay) -> Bool {
@@ -727,8 +726,16 @@ struct AlarmDetailFastPurposePresentation: Equatable {
     let title: String
     let defaultOptionTitle: String
     let selectedOpportunityTitles: [String]
+    let options: [AlarmDetailFastPurposeOption]
     let isLocked: Bool
     let selection: AlarmDetailFastTypeOverride?
+}
+
+struct AlarmDetailFastPurposeOption: Identifiable, Equatable {
+    let selection: AlarmDetailFastTypeOverride?
+    let title: String
+
+    var id: String { selection?.rawValue ?? "__default" }
 }
 
 struct AlarmDetailDaySignificancePresentation: Equatable {
@@ -744,6 +751,7 @@ struct AlarmDetailFajrAdhanPresentation: Equatable {
 }
 
 struct AlarmDetailContextPresentation: Equatable {
+    let summary: String
     let significance: AlarmDetailDaySignificancePresentation?
     let purpose: AlarmDetailPurposePresentation?
     let fastType: AlarmDetailFastPurposePresentation?
@@ -751,7 +759,8 @@ struct AlarmDetailContextPresentation: Equatable {
     let showsReset: Bool
 
     var hasContent: Bool {
-        significance != nil
+        !summary.isEmpty
+            || significance != nil
             || purpose != nil
             || fastType != nil
             || fajrAdhan != nil
@@ -760,6 +769,46 @@ struct AlarmDetailContextPresentation: Equatable {
 }
 
 enum AlarmDayDetailPresentation {
+    static func detailHeroDisplay(_ display: MorningHomeHeroDisplay) -> MorningHomeHeroDisplay {
+        guard isQuiet(display), display.primaryText != "Quiet Mode" else {
+            return display
+        }
+        return MorningHomeHeroDisplay(
+            locationText: display.locationText,
+            locationIconName: display.locationIconName,
+            title: display.title,
+            dateLine: display.dateLine,
+            wakeState: display.wakeState,
+            primaryTime: display.primaryTime,
+            primaryText: "Quiet Mode",
+            wakeIconName: display.wakeIconName,
+            statusText: display.statusText,
+            detailText: display.detailText,
+            relationTone: display.relationTone,
+            fajrWindowLine: display.fajrWindowLine,
+            fajrBeginDisplayText: display.fajrBeginDisplayText,
+            fajrEndDisplayText: display.fajrEndDisplayText,
+            wakeWindowPositionRatio: display.wakeWindowPositionRatio,
+            wakeWindowIndicatorState: display.wakeWindowIndicatorState,
+            wakeWindowIndicatorIconName: display.wakeWindowIndicatorIconName,
+            leftBoundaryMarkerStyle: display.leftBoundaryMarkerStyle,
+            rightBoundaryMarkerStyle: display.rightBoundaryMarkerStyle,
+            fajrWindowVisualMode: display.fajrWindowVisualMode,
+            fajrWindowAccessibilityText: display.fajrWindowAccessibilityText,
+            wakeAdjustmentEnabled: display.wakeAdjustmentEnabled,
+            wakeAdjustmentMinTime: display.wakeAdjustmentMinTime,
+            wakeAdjustmentMaxTime: display.wakeAdjustmentMaxTime,
+            wakeAdjustmentFajrEndTime: display.wakeAdjustmentFajrEndTime,
+            wakeAdjustmentStepMinutes: display.wakeAdjustmentStepMinutes,
+            wakeAdjustmentRelationAnchor: display.wakeAdjustmentRelationAnchor,
+            wakeAdjustmentAccessibilityValue: display.wakeAdjustmentAccessibilityValue,
+            selectedQuickWakeMode: display.selectedQuickWakeMode,
+            quickWakeModeOptions: display.quickWakeModeOptions,
+            chipTitles: display.chipTitles,
+            accessibilityLabel: display.accessibilityLabel
+        )
+    }
+
     static func dateLine(
         for date: Date,
         timeZone: TimeZone,
@@ -830,6 +879,7 @@ enum AlarmDayDetailPresentation {
                 title: "Ramadan fast",
                 defaultOptionTitle: "Ramadan fast",
                 selectedOpportunityTitles: ["Ramadan fast"],
+                options: [AlarmDetailFastPurposeOption(selection: nil, title: "Ramadan fast")],
                 isLocked: true,
                 selection: nil
             )
@@ -841,6 +891,7 @@ enum AlarmDayDetailPresentation {
                 title: override.displayTitle,
                 defaultOptionTitle: defaultTitle,
                 selectedOpportunityTitles: [],
+                options: fastPurposeOptions(defaultTitle: defaultTitle),
                 isLocked: false,
                 selection: override
             )
@@ -852,6 +903,7 @@ enum AlarmDayDetailPresentation {
             title: title,
             defaultOptionTitle: title,
             selectedOpportunityTitles: opportunities,
+            options: fastPurposeOptions(defaultTitle: title),
             isLocked: false,
             selection: nil
         )
@@ -902,19 +954,24 @@ enum AlarmDayDetailPresentation {
         fastType: AlarmDetailFastPurposePresentation?,
         fajrAdhan: AlarmDetailFajrAdhanPresentation?,
         showsReset: Bool
-    ) -> AlarmDetailContextPresentation? {
+    ) -> AlarmDetailContextPresentation {
         let significance = daySignificance(for: entry)
         let selectedMode = WakeStateSelectionResolver.selectedMode(for: entry.activeDay)
         let showPurpose = selectedMode == .fast ? purpose : nil
         let showFastType = selectedMode == .fast && purpose?.selection == .fast ? fastType : nil
-        let presentation = AlarmDetailContextPresentation(
+        return AlarmDetailContextPresentation(
+            summary: contextSummary(
+                for: entry,
+                display: display,
+                selectedMode: selectedMode,
+                purpose: purpose
+            ),
             significance: significance,
             purpose: showPurpose,
             fastType: showFastType,
             fajrAdhan: fajrAdhan,
             showsReset: showsReset
         )
-        return presentation.hasContent ? presentation : nil
     }
 
     static func accessibilitySummary(
@@ -989,20 +1046,70 @@ enum AlarmDayDetailPresentation {
         return AlarmDetailDaySignificancePresentation(title: "Fasting opportunities", items: opportunities)
     }
 
+    private static func contextSummary(
+        for entry: WakeRowEntry,
+        display: MorningHomeHeroDisplay,
+        selectedMode: QuickWakeMode,
+        purpose: AlarmDetailPurposePresentation?
+    ) -> String {
+        let opportunities = fastingOpportunityTitles(for: entry)
+        let opportunityList = sentenceList(opportunities)
+
+        if selectedMode == .quiet || isQuiet(display) {
+            return "You are on Quiet Mode for this date."
+        }
+
+        if isRamadan(entry) {
+            if selectedMode == .fast {
+                return "You are waking early for Ramadan."
+            }
+            return "This is a Ramadan date."
+        }
+
+        switch selectedMode {
+        case .fajr:
+            if opportunities.isEmpty {
+                return "There are no fasting opportunities for this date. You can still choose an early fasting wake for a Voluntary, Qada, Vow, Kaffarah, or Other fast."
+            }
+            return "This day has fasting opportunities: \(opportunityList)."
+        case .fast:
+            if purpose?.selection == .tahajjud {
+                if opportunities.isEmpty {
+                    return "You are waking early for Tahajjud. There are no fasting opportunities for this date."
+                }
+                return "You are waking early for Tahajjud. This day also has fasting opportunities: \(opportunityList)."
+            }
+            if opportunities.isEmpty {
+                return "You are waking early to fast. This will be saved as a Voluntary fast unless you choose another fast type."
+            }
+            return "You are waking early to fast. Today's fasting opportunities will apply by default."
+        case .quiet:
+            return "You are on Quiet Mode for this date."
+        }
+    }
+
     private static func defaultFastPurposeTitle(for entry: WakeRowEntry) -> String {
         let opportunities = fastingOpportunityTitles(for: entry)
         if !opportunities.isEmpty {
             return "Today's opportunities"
         }
-        let context = entry.activeDay.resolvedDayContext
-        let tags = Set(context.supportingTags)
-        if context.primaryContext == .qadaFast || tags.contains(.qada) {
-            return "Qada fast"
-        }
-        if let opportunity = fastingOpportunityTitle(from: tags) {
-            return opportunity
-        }
         return "Voluntary fast"
+    }
+
+    private static func fastPurposeOptions(defaultTitle: String) -> [AlarmDetailFastPurposeOption] {
+        var seenTitles: Set<String> = []
+        var options: [AlarmDetailFastPurposeOption] = []
+
+        func append(selection: AlarmDetailFastTypeOverride?, title: String) {
+            guard seenTitles.insert(title).inserted else { return }
+            options.append(AlarmDetailFastPurposeOption(selection: selection, title: title))
+        }
+
+        append(selection: nil, title: defaultTitle)
+        AlarmDetailFastTypeOverride.allCases.forEach { option in
+            append(selection: option, title: option.displayTitle)
+        }
+        return options
     }
 
     private static func fastingOpportunityTitles(for entry: WakeRowEntry) -> [String] {
@@ -1017,17 +1124,6 @@ enum AlarmDayDetailPresentation {
         return titles
     }
 
-    private static func fastingOpportunityTitle(from tags: Set<DayTag>) -> String? {
-        if tags.contains(.ramadan) { return "Ramadan fast" }
-        if tags.contains(.arafah) { return "Arafah fast" }
-        if tags.contains(.ashura) { return "Ashura fast" }
-        if tags.contains(.dhulHijjahFirstNine) { return "Dhul Hijjah fast" }
-        if tags.contains(.whiteDays) { return "White Days fast" }
-        if tags.contains(.shawwalSix) { return "Shawwal fast" }
-        if tags.contains(.mondayThursday) { return "Monday / Thursday fast" }
-        return nil
-    }
-
     private static func weekdayFastTitle(for date: Date) -> String {
         let weekday = Calendar.current.component(.weekday, from: date)
         switch weekday {
@@ -1037,6 +1133,20 @@ enum AlarmDayDetailPresentation {
             return "Thursday fast"
         default:
             return "Monday / Thursday fast"
+        }
+    }
+
+    private static func sentenceList(_ items: [String]) -> String {
+        switch items.count {
+        case 0:
+            return ""
+        case 1:
+            return items[0]
+        case 2:
+            return "\(items[0]) and \(items[1])"
+        default:
+            let head = items.dropLast().joined(separator: ", ")
+            return "\(head), and \(items[items.count - 1])"
         }
     }
 

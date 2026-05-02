@@ -39,3 +39,8 @@ Quiet mode uses `Quiet Mode` as the primary display and keeps the hero layout st
 
 ## Accessibility
 The hero exposes a concise accessibility summary. The date line includes both calendars, the slider supports standard adjustment actions, the mode selector exposes selected state, and Quiet mode clearly announces that no wake alarm will ring for the date.
+
+## v4 Alignment
+The detail screen title is `Detailed Daily View`; the selected date belongs in the hero, not the navigation title. The detail hero keeps the Home hero's vertical rhythm by reserving the Home location-line slot and placing the Gregorian/Hijri date in the Home relative-day slot immediately above the primary wake display. The primary wake row uses the shared Home row so the Quiet Mode moon icon remains visible.
+
+The context card is always present and begins with a plain sentence describing the selected mode/day before any chips or controls. Reset language must avoid the old usual-plan wording. Fast-purpose options come from the app's supported fast-purpose taxonomy and are de-duplicated so `Voluntary fast` never appears twice.

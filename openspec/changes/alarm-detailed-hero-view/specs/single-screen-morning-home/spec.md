@@ -6,7 +6,11 @@ The system SHALL present a selected Morningcast day detail as a focused hero-sty
 #### Scenario: User opens a Morningcast day
 - **GIVEN** the user is viewing the next 10 Morningcast list
 - **WHEN** the user opens a specific day
-- **THEN** the detail screen SHALL show the selected Gregorian date and Hijri date separated by a centered dot
+- **THEN** the navigation title SHALL read "Detailed Daily View"
+- **AND** the detail screen SHALL show the selected Gregorian date and Hijri date separated by a centered dot in the hero
+- **AND** the selected date SHALL NOT be used as the navigation title
+- **AND** the hero date line SHALL occupy the Home hero relative-day slot immediately above the primary wake display
+- **AND** the primary wake display SHALL remain vertically aligned with the Home hero primary wake display
 - **AND** the detail screen SHALL show the primary wake time or a quiet state
 - **AND** the detail screen SHALL show boundary-relative wake text for active wake modes
 - **AND** the detail screen SHALL NOT show location in the date line
@@ -27,6 +31,7 @@ The system SHALL present a selected Morningcast day detail as a focused hero-sty
 - **GIVEN** the selected day is in Quiet mode
 - **WHEN** the detail screen renders
 - **THEN** the primary display SHALL read "Quiet Mode"
+- **AND** the Quiet Mode moon icon SHALL remain visible using the Home hero primary row behavior
 - **AND** the relative text SHALL clearly indicate that no wake alarm will ring for this date
 - **AND** the wake adjustment slider region SHALL remain visually stable while becoming inactive or fixed-height
 - **AND** purpose controls SHALL be hidden
@@ -43,6 +48,8 @@ The system SHALL present a selected Morningcast day detail as a focused hero-sty
 - **THEN** the context card SHALL show a compact fast-purpose control
 - **AND** all applicable fasting opportunities for that date SHALL be selected by default when opportunities exist
 - **AND** Voluntary fast SHALL be selected by default when no opportunity exists
+- **AND** the fast-purpose menu SHALL use the existing app fast-purpose taxonomy, including Voluntary, Qada, Vow / Nadhr, Kaffarah, and Other fast types
+- **AND** the fast-purpose menu SHALL NOT show duplicate titles, including duplicate "Voluntary fast" rows
 - **AND** user-selected fast-purpose overrides SHALL persist only for that date
 
 #### Scenario: Fasting opportunities exist
@@ -50,6 +57,14 @@ The system SHALL present a selected Morningcast day detail as a focused hero-sty
 - **WHEN** the detail screen renders in Fajr, Early, or Quiet mode
 - **THEN** the context card SHALL show the relevant fasting opportunities
 - **AND** those opportunities SHALL remain informational unless the user selects Early and Fast
+
+#### Scenario: Context card leads with a sentence
+- **GIVEN** the selected day detail is visible
+- **WHEN** the context card renders
+- **THEN** the context card SHALL always be present below the hero selector
+- **AND** its first text SHALL be a sentence describing the current mode or day
+- **AND** Quiet mode card copy SHALL begin with "You are on Quiet Mode for this date."
+- **AND** the context card SHALL NOT show the old usual-plan reset wording
 
 #### Scenario: Ramadan behavior is shown
 - **GIVEN** the selected day is Ramadan

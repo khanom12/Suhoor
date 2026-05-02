@@ -35,3 +35,13 @@
 - [x] 5.5 Fix Fajr-mode alarm semantics so Fajr adhan audio does not disable the wake alarm; Quiet remains the only alarm-off mode.
 - [x] 5.6 Add/update focused tests for v3 Fajr, Early Fast opportunities, override, Tahajjud, Quiet, Ramadan Early, Ramadan Fajr, and Ramadan Quiet states.
 - [x] 5.7 Re-run OpenSpec validation plus focused Swift test/build checks, then commit and push.
+
+## 6. v4 Alignment and Fast Purpose Taxonomy
+
+- [x] 6.1 Update OpenSpec artifacts for v4 title, hero alignment, always-present sentence-led context card, and fast-purpose taxonomy requirements.
+- [x] 6.2 Change the navigation title to `Detailed Daily View` and keep the selected date inside the hero.
+- [x] 6.3 Align the detail hero with the Home hero vertical rhythm, placing the date in the relative-day slot and preserving the Quiet Mode moon icon.
+- [x] 6.4 Make the context card always present, sentence-led, and free of the old usual-plan reset wording.
+- [x] 6.5 Expand fast-purpose overrides to the existing app taxonomy, de-duplicate menu rows, and preserve date-specific persistence.
+- [x] 6.6 Add/update focused coverage for sentence copy, Quiet Mode icon/title semantics, fast-purpose options, duplicate prevention, and Ramadan locking.
+- [x] 6.7 Re-run OpenSpec validation plus focused Swift test/build checks, then commit and push.
