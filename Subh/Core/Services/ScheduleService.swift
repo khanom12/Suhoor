@@ -1539,15 +1539,11 @@ final class ScheduleManager: ObservableObject {
             timeZone: timeZone
         )
         alarmConfigStore.updateOverride(for: normalizedDate, timeZone: timeZone) { override in
-            override.skipDay = false
-            override.suhoorEnabled = true
-            override.wakeStateOverride = .fixedWake
-            override.wakeAnchorTypeOverride = nil
-            override.wakeDeltaOverrideMinutes = nil
-            override.fixedWakeTimeOverrideMinutesFromMidnight = minutesFromMidnight
-            override.suhoorOffsetOverrideMinutes = nil
-            override.suhoorTimeOverrideMinutesFromMidnight = nil
-            override.bypassLatestWakeCap = true
+            MorningDateIntentReducer.commitWakeAdjustment(
+                minutesFromMidnight: minutesFromMidnight,
+                override: &override,
+                now: timeProvider.now()
+            )
         }
 
         await rescheduleDay(normalizedDate, preferCached: false)
@@ -1563,29 +1559,63 @@ final class ScheduleManager: ObservableObject {
         let isRamadan = Self.isRamadanAlarmDetailDay(day)
 
         alarmConfigStore.updateOverride(for: normalizedDate, timeZone: timeZone) { override in
-            WakeStateSelectionResolver.apply(mode, to: &override)
-            if mode == .fast {
-                override.earlyWakePurposeOverride = .fast
-                if isRamadan {
-                    override.alarmDetailFastTypeOverride = nil
-                    Self.applyAlarmDetailAudioPlan(.wakeAlarmAndFajrAdhan, to: &override, locksFajrAdhan: true)
-                }
-            }
-            if mode == .fajr, isRamadan {
-                override.fajrEnabled = true
-            }
-            if mode == .quiet, isRamadan {
-                override.skipDay = false
-                override.suhoorEnabled = false
-                override.reminderEnabled = false
-                override.fajrEnabled = true
-                override.iftarEnabled = nil
-                override.alarmDetailAudioPlanOverride = .fajrAdhan
+            MorningDateIntentReducer.selectWakeMode(
+                mode,
+                for: day,
+                override: &override,
+                now: timeProvider.now()
+            )
+            if mode == .fast, isRamadan {
+                override.alarmDetailFastTypeOverride = nil
+                MorningDateIntentReducer.applyAlarmDetailAudioPlan(
+                    .wakeAlarmAndFajrAdhan,
+                    to: &override,
+                    locksFajrAdhan: true
+                )
             }
         }
 
         await rescheduleDay(normalizedDate, preferCached: false)
         return true
+    }
+
+    @discardableResult
+    func selectWakeMode(dateKey: String, mode: QuickWakeMode, timeZone: TimeZone = .current) async -> Bool {
+        guard let day = activeWindowSnapshot.byDateKey[dateKey] else {
+            return false
+        }
+        return await selectHeroWakeMode(for: day.date, mode: mode, timeZone: timeZone)
+    }
+
+    func previewWakeAdjustment(dateKey: String, proposedWakeTime: Date, timeZone: TimeZone = .current) -> Date? {
+        guard let day = activeWindowSnapshot.byDateKey[dateKey],
+              let fajrEnd = day.decisionLog.prayerWindow.fajrEnd else {
+            return nil
+        }
+
+        let adjustmentWindow = heroWakeAdjustmentWindow(
+            for: day,
+            proposedWakeTime: proposedWakeTime,
+            fallbackFajrEnd: fajrEnd,
+            timeZone: timeZone
+        )
+        return min(max(proposedWakeTime, adjustmentWindow.minTime), adjustmentWindow.maxTime)
+    }
+
+    @discardableResult
+    func commitWakeAdjustment(dateKey: String, finalWakeTime: Date, timeZone: TimeZone = .current) async -> Bool {
+        guard let day = activeWindowSnapshot.byDateKey[dateKey] else {
+            return false
+        }
+        return await commitHeroWakeAdjustment(for: day.date, wakeTime: finalWakeTime, timeZone: timeZone)
+    }
+
+    @discardableResult
+    func restoreDefaultWake(dateKey: String, timeZone: TimeZone = .current) async -> Bool {
+        guard let day = activeWindowSnapshot.byDateKey[dateKey] else {
+            return false
+        }
+        return await resetAlarmDetailOverride(for: day.date, timeZone: timeZone)
     }
 
     @discardableResult
@@ -1599,14 +1629,14 @@ final class ScheduleManager: ObservableObject {
             return false
         }
         let isRamadan = Self.isRamadanAlarmDetailDay(day)
-        let normalizedPurpose: EarlyWakePurposeOverride = purpose == .tahajjud ? .tahajjud : .fast
 
         alarmConfigStore.updateOverride(for: normalizedDate, timeZone: timeZone) { override in
-            WakeStateSelectionResolver.apply(.fast, to: &override)
-            override.earlyWakePurposeOverride = isRamadan ? .fast : normalizedPurpose
-            override.alarmDetailFastTypeOverride = normalizedPurpose == .fast ? override.alarmDetailFastTypeOverride : nil
-            override.tahajjudRefinement = normalizedPurpose == .tahajjud
-            Self.applyAlarmDetailAudioPlan(.wakeAlarmAndFajrAdhan, to: &override, locksFajrAdhan: isRamadan)
+            MorningDateIntentReducer.selectEarlyPurpose(
+                purpose,
+                isRamadan: isRamadan,
+                override: &override,
+                now: timeProvider.now()
+            )
         }
 
         await rescheduleDay(normalizedDate, preferCached: false)
@@ -1629,11 +1659,11 @@ final class ScheduleManager: ObservableObject {
             : fastType
 
         alarmConfigStore.updateOverride(for: normalizedDate, timeZone: timeZone) { override in
-            WakeStateSelectionResolver.apply(.fast, to: &override)
-            override.earlyWakePurposeOverride = .fast
-            override.alarmDetailFastTypeOverride = normalizedFastType
-            override.tahajjudRefinement = false
-            Self.applyAlarmDetailAudioPlan(override.alarmDetailAudioPlanOverride ?? .wakeAlarmAndFajrAdhan, to: &override)
+            MorningDateIntentReducer.selectFastPurpose(
+                normalizedFastType,
+                override: &override,
+                now: timeProvider.now()
+            )
         }
 
         await rescheduleDay(normalizedDate, preferCached: false)
@@ -1655,8 +1685,12 @@ final class ScheduleManager: ObservableObject {
         guard mode != .quiet else { return false }
 
         alarmConfigStore.updateOverride(for: normalizedDate, timeZone: timeZone) { override in
-            let resolvedPlan = isRamadan && audioPlan == .wakeAlarm ? .wakeAlarmAndFajrAdhan : audioPlan
-            Self.applyAlarmDetailAudioPlan(resolvedPlan, to: &override, locksFajrAdhan: isRamadan)
+            MorningDateIntentReducer.selectAudioPlan(
+                audioPlan,
+                isRamadan: isRamadan,
+                override: &override,
+                now: timeProvider.now()
+            )
         }
 
         await rescheduleDay(normalizedDate, preferCached: false)
@@ -1677,10 +1711,11 @@ final class ScheduleManager: ObservableObject {
         }
 
         alarmConfigStore.updateOverride(for: normalizedDate, timeZone: timeZone) { override in
-            WakeStateSelectionResolver.apply(.fast, to: &override)
-            override.earlyWakePurposeOverride = .fast
-            override.tahajjudRefinement = false
-            Self.applyAlarmDetailAudioPlan(isEnabled ? .wakeAlarmAndFajrAdhan : .wakeAlarm, to: &override)
+            MorningDateIntentReducer.toggleFajrAdhanAtFajrBegins(
+                enabled: isEnabled,
+                override: &override,
+                now: timeProvider.now()
+            )
         }
 
         await rescheduleDay(normalizedDate, preferCached: false)
@@ -1690,33 +1725,14 @@ final class ScheduleManager: ObservableObject {
     @discardableResult
     func resetAlarmDetailOverride(for date: Date, timeZone: TimeZone = .current) async -> Bool {
         let normalizedDate = DateHelpers.startOfDay(date, in: timeZone)
-        alarmConfigStore.removeOverride(for: normalizedDate, timeZone: timeZone)
+        alarmConfigStore.updateOverride(for: normalizedDate, timeZone: timeZone) { override in
+            MorningDateIntentReducer.restoreDefaultWake(
+                override: &override,
+                now: timeProvider.now()
+            )
+        }
         await rescheduleDay(normalizedDate, preferCached: false)
         return true
-    }
-
-    private static func applyAlarmDetailAudioPlan(
-        _ plan: AlarmDetailAudioPlan,
-        to override: inout DailyAlarmOverride,
-        locksFajrAdhan: Bool = false
-    ) {
-        let resolvedPlan = locksFajrAdhan && plan == .wakeAlarm ? .wakeAlarmAndFajrAdhan : plan
-        override.alarmDetailAudioPlanOverride = resolvedPlan
-
-        switch resolvedPlan {
-        case .fajrAdhan:
-            override.suhoorEnabled = true
-            override.reminderEnabled = false
-            override.fajrEnabled = locksFajrAdhan
-        case .wakeAlarm:
-            override.suhoorEnabled = true
-            override.reminderEnabled = true
-            override.fajrEnabled = locksFajrAdhan
-        case .wakeAlarmAndFajrAdhan:
-            override.suhoorEnabled = true
-            override.reminderEnabled = true
-            override.fajrEnabled = true
-        }
     }
 
     private static func isRamadanAlarmDetailDay(_ day: ActiveAlarmDay) -> Bool {

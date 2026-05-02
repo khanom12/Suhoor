@@ -1645,6 +1645,7 @@ struct ScheduleServiceExtractionTests {
         #expect(fajr.alarmActivation == .active)
         #expect(fajr.visualMode == .interactiveDefaultFajr)
         #expect(fajr.copyState.finalRelationText == "Wake up 30 min before Fajr ends")
+        #expect(fajr.copyState.relationTone == .normal)
 
         let fast = MorningWakeResolutionService.resolve(
             for: Self.makeWakeEntry(
@@ -1664,6 +1665,21 @@ struct ScheduleServiceExtractionTests {
         #expect(fast.wakeBoundaryResolution.finalThirdStart != nil)
         #expect(fast.wakeTimeResolution.origin == .quickSelectorDefault)
         #expect(fast.copyState.finalRelationText == "Wake up 30 min before Fajr begins")
+        #expect(fast.copyState.relationTone == .normal)
+
+        let fajrAdhanWakeAudio = MorningWakeResolutionService.resolve(
+            for: Self.makeWakeEntry(
+                date: date,
+                timeZone: timeZone,
+                quickWakeModeOverride: .fajr,
+                alarmDetailAudioPlanOverride: .fajrAdhan
+            ).activeDay,
+            timeZone: timeZone
+        )
+
+        #expect(fajrAdhanWakeAudio.quickWakeSelection == .fajr)
+        #expect(fajrAdhanWakeAudio.alarmActivation == .active)
+        #expect(fajrAdhanWakeAudio.scheduleStatus != .notScheduledBecauseQuiet)
 
         let quietFajr = MorningWakeResolutionService.resolve(
             for: Self.makeWakeEntry(
@@ -1760,6 +1776,127 @@ struct ScheduleServiceExtractionTests {
         #expect(permissionBlocked.alarmActivation == .active)
         #expect(permissionBlocked.scheduleStatus == .permissionBlocked)
         #expect(permissionBlocked.copyState.scheduleWarningText == "Alarm permission needed")
+    }
+
+    @Test
+    func morningPlanResolverUsesEarlyWakeOnlyForFastIntentions() {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let date = Self.makeDate(year: 2026, month: 5, day: 1, timeZone: timeZone)
+        let dateKey = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
+        let defaultRule = MorningWakeRule(state: .inFajr, anchorType: .fajrEnd, deltaMinutes: 30)
+        let defaultPlan = MorningPlan(
+            id: "default-daily",
+            title: "Daily morning plan",
+            kind: .defaultDaily,
+            wakeRule: defaultRule,
+            wakeAnchorType: .fajrEnd,
+            wakeDelta: WakeDelta(relation: .before, minutes: 30),
+            fixedWakeTimeCompatibilityMinutesFromMidnight: nil,
+            reminderEnabled: false,
+            wakeAlarmEnabled: true,
+            fajrBoundaryNoticeEnabled: false,
+            iftarReminderEnabled: false
+        )
+        let planState = MorningPlanState(
+            schemaVersion: 2,
+            activationMode: .dailyActive,
+            defaultDailyPlan: defaultPlan,
+            lastMigrationAt: nil
+        )
+        let config = Self.makeWakeEntry(date: date, timeZone: timeZone).activeDay.effectiveConfig
+
+        let opportunityOnly = MorningPlanResolver.resolve(
+            dateKey: dateKey,
+            provenances: [],
+            effectiveConfig: config,
+            tagResult: TagComputationResult(
+                computedPrimaryIntent: .other,
+                computedSecondaryTags: [.whiteDays],
+                secondaryDetails: [:],
+                suppressedSecondaryTags: []
+            ),
+            morningPlanState: planState
+        )
+        let qada = MorningPlanResolver.resolve(
+            dateKey: dateKey,
+            provenances: [],
+            effectiveConfig: config,
+            tagResult: TagComputationResult(
+                computedPrimaryIntent: .qadaMakeup,
+                computedSecondaryTags: [.whiteDays],
+                secondaryDetails: [:],
+                suppressedSecondaryTags: [.whiteDays]
+            ),
+            morningPlanState: planState
+        )
+        let ramadan = MorningPlanResolver.resolve(
+            dateKey: dateKey,
+            provenances: [],
+            effectiveConfig: config,
+            tagResult: TagComputationResult(
+                computedPrimaryIntent: .ramadanObligatory,
+                computedSecondaryTags: [],
+                secondaryDetails: [:],
+                suppressedSecondaryTags: []
+            ),
+            morningPlanState: planState
+        )
+
+        #expect(opportunityOnly.selectedPlan.wakeRule.state == .inFajr)
+        #expect(opportunityOnly.selectedPlan.wakeRule.anchorType == .fajrEnd)
+        #expect(qada.selectedPlan.kind == .qadaAssignment)
+        #expect(qada.selectedPlan.wakeRule.state == .preFajr)
+        #expect(qada.selectedPlan.wakeRule.anchorType == .fajrStart)
+        #expect(ramadan.selectedPlan.wakeRule.state == .preFajr)
+        #expect(ramadan.selectedPlan.wakeRule.anchorType == .fajrStart)
+    }
+
+    @Test
+    func swiftUIViewFilesDoNotOwnMorningResolutionOrScheduling() throws {
+        let repoRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let featuresRoot = repoRoot.appendingPathComponent("Subh/Features")
+        let viewFiles = FileManager.default
+            .enumerator(at: featuresRoot, includingPropertiesForKeys: nil)?
+            .compactMap { $0 as? URL }
+            .filter { $0.lastPathComponent.hasSuffix("View.swift") } ?? []
+        let forbiddenPatterns = [
+            "EarlyWorshipBoundaryResolver.finalThirdStart",
+            "DailyAlarmOverride(",
+            ".updateOverride(",
+            ".scheduleDay(",
+            ".cancelDay(",
+            "NotificationScheduler(",
+            "AlarmScheduler(",
+            "AlarmKitScheduler("
+        ]
+
+        let violations = try viewFiles.flatMap { file -> [String] in
+            let contents = try String(contentsOf: file, encoding: .utf8)
+            return forbiddenPatterns
+                .filter { contents.contains($0) }
+                .map { "\(file.lastPathComponent): \($0)" }
+        }
+
+        #expect(violations.isEmpty, "SwiftUI view ownership violations: \(violations.joined(separator: ", "))")
+    }
+
+    @Test
+    func finalThirdUsesRealInstantsAcrossDstBoundary() throws {
+        let timeZone = try #require(TimeZone(identifier: "America/New_York"))
+        let maghrib = Self.makeDate(year: 2026, month: 3, day: 7, hour: 18, minute: 0, timeZone: timeZone)
+        let fajr = Self.makeDate(year: 2026, month: 3, day: 8, hour: 5, minute: 30, timeZone: timeZone)
+        let finalThird = try #require(EarlyWorshipBoundaryResolver.finalThirdStart(
+            targetFajrStart: fajr,
+            maghrib: maghrib,
+            timeZone: timeZone
+        ))
+        let nightDuration = fajr.timeIntervalSince(maghrib)
+
+        #expect(finalThird > maghrib)
+        #expect(finalThird < fajr)
+        #expect(abs(finalThird.timeIntervalSince(fajr) + nightDuration / 3) < 1)
     }
 
     @Test

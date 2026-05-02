@@ -310,6 +310,15 @@ enum DayIntentionResolver {
             )
         }
 
+        if let overrideIntention = overrideIntention(
+            dateKey: dateKey,
+            opportunities: opportunities,
+            tagResult: tagResult,
+            effectiveConfig: effectiveConfig
+        ) {
+            return overrideIntention
+        }
+
         if overrides.tahajjudDateKeys.contains(dateKey) {
             return ResolvedDayIntention(
                 kind: .tahajjud,
@@ -338,6 +347,47 @@ enum DayIntentionResolver {
         case .forbidden, .other:
             return false
         }
+    }
+
+    private static func overrideIntention(
+        dateKey: String,
+        opportunities: [ObservanceOpportunity],
+        tagResult: TagComputationResult,
+        effectiveConfig: EffectiveDailyConfig
+    ) -> ResolvedDayIntention? {
+        if effectiveConfig.earlyWakePurposeOverride == .tahajjud || effectiveConfig.tahajjudRefinement {
+            return ResolvedDayIntention(
+                kind: .tahajjud,
+                source: .userDateOverride,
+                selectedOpportunityIDs: [],
+                fastIntent: nil,
+                suppressesPrompts: false,
+                explanation: "Tahajjud is selected for this morning without adding fast completion pressure."
+            )
+        }
+
+        guard effectiveConfig.quickWakeModeOverride == .fast
+            || effectiveConfig.earlyWakePurposeOverride == .fast
+            || effectiveConfig.earlyWakePurposeOverride == .fastAndTahajjud
+            || effectiveConfig.alarmDetailFastTypeOverride != nil
+        else {
+            return nil
+        }
+
+        let primaryIntent = effectiveConfig.alarmDetailFastTypeOverride?.primaryIntent ?? FastPrimaryIntent.voluntary
+        let selection = FastIntentSelection(primaryIntent: primaryIntent, secondaryTags: [])
+        return ResolvedDayIntention(
+            kind: .fast,
+            source: .userDateOverride,
+            selectedOpportunityIDs: selectedOpportunityIDs(
+                for: selection,
+                opportunities: opportunities,
+                tagResult: tagResult
+            ),
+            fastIntent: selection,
+            suppressesPrompts: false,
+            explanation: "A date-specific fast wake purpose is selected for this morning."
+        )
     }
 
     private static func hasOpportunity(_ kind: ObservanceKind, in opportunities: [ObservanceOpportunity]) -> Bool {

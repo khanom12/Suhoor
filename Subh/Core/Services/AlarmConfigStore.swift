@@ -730,6 +730,7 @@ final class AlarmConfigStore: ObservableObject {
             resolvedWakeRule: resolvedWakeRule,
             wakeRuleWasOverridden: overrideWakeRule != nil,
             quickWakeModeOverride: override?.quickWakeModeOverride,
+            underlyingWakeModeBeforeQuiet: override?.underlyingWakeModeBeforeQuiet,
             earlyWakePurposeOverride: override?.earlyWakePurposeOverride,
             alarmDetailFastTypeOverride: override?.alarmDetailFastTypeOverride,
             alarmDetailAudioPlanOverride: override?.alarmDetailAudioPlanOverride,

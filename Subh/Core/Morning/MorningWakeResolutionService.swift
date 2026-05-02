@@ -418,7 +418,12 @@ enum MorningWakeResolutionService {
             underlyingMode: underlyingMode,
             boundary: boundary
         )
-        let tone = relationTone(wakeTime: wake, boundary: boundary)
+        let tone = relationTone(
+            wakeTime: wake,
+            underlyingMode: underlyingMode,
+            activation: activation,
+            boundary: boundary
+        )
         let accessibility = [
             "\(selection.displayTitle) wake selected",
             "Alarm at \(formatter.string(from: wake))",
@@ -469,8 +474,13 @@ enum MorningWakeResolutionService {
 
     private static func relationTone(
         wakeTime: Date,
+        underlyingMode: MorningWakeUnderlyingMode,
+        activation: AlarmActivation,
         boundary: WakeBoundaryResolution
     ) -> WakeCopyTone {
+        guard underlyingMode == .fajr, activation == .active else {
+            return .normal
+        }
         guard let fajrEnds = boundary.fajrEnds else {
             return .normal
         }

@@ -63,6 +63,16 @@ enum IftarAudibleMode: String, Codable, Sendable {
     case adhan
 }
 
+enum DailyAlarmOverrideSource: String, Codable, CaseIterable, Identifiable, Sendable {
+    case heroQuickMode
+    case heroWakeAdjustment
+    case alarmDetail
+    case restoreDefault
+    case migration
+
+    var id: String { rawValue }
+}
+
 struct IftarDeliverySelection: Codable, Equatable, Sendable {
     var notification: Bool
     var alarm: Bool
@@ -363,12 +373,17 @@ struct DailyAlarmOverride: Codable, Equatable, Identifiable, Sendable {
     var wakeAnchorTypeOverride: WakeAnchorType?
     var wakeDeltaOverrideMinutes: Int?
     var quickWakeModeOverride: QuickWakeMode?
+    var underlyingWakeModeBeforeQuiet: QuickWakeMode?
     var earlyWakePurposeOverride: EarlyWakePurposeOverride?
     var alarmDetailFastTypeOverride: AlarmDetailFastTypeOverride?
     var alarmDetailAudioPlanOverride: AlarmDetailAudioPlan?
     var fixedWakeTimeOverrideMinutesFromMidnight: Int?
+    var wakeTimeOriginOverride: WakeTimeOrigin?
     var bypassLatestWakeCap: Bool?
     var tahajjudRefinement: Bool?
+    var selectedOpportunityIDs: Set<String>?
+    var fajrAdhanAtFajrBeginsOverride: Bool?
+    var quietOverlay: Bool?
     var suhoorOffsetOverrideMinutes: Int?
     var reminderOffsetOverrideMinutes: Int?
     var suhoorTimeOverrideMinutesFromMidnight: Int?
@@ -376,6 +391,9 @@ struct DailyAlarmOverride: Codable, Equatable, Identifiable, Sendable {
     var fajrSoundOverride: SoundChoice?
     var iftarDeliveryOverride: IftarDeliverySelection?
     var iftarSoundOverride: SoundChoice?
+    var createdAt: Date?
+    var updatedAt: Date?
+    var overrideSource: DailyAlarmOverrideSource?
     var notes: String?
 
     var id: String { dateKey }
@@ -395,12 +413,17 @@ struct DailyAlarmOverride: Codable, Equatable, Identifiable, Sendable {
         self.wakeAnchorTypeOverride = nil
         self.wakeDeltaOverrideMinutes = nil
         self.quickWakeModeOverride = nil
+        self.underlyingWakeModeBeforeQuiet = nil
         self.earlyWakePurposeOverride = nil
         self.alarmDetailFastTypeOverride = nil
         self.alarmDetailAudioPlanOverride = nil
         self.fixedWakeTimeOverrideMinutesFromMidnight = nil
+        self.wakeTimeOriginOverride = nil
         self.bypassLatestWakeCap = nil
         self.tahajjudRefinement = nil
+        self.selectedOpportunityIDs = nil
+        self.fajrAdhanAtFajrBeginsOverride = nil
+        self.quietOverlay = nil
         self.suhoorOffsetOverrideMinutes = nil
         self.reminderOffsetOverrideMinutes = nil
         self.suhoorTimeOverrideMinutesFromMidnight = nil
@@ -408,6 +431,9 @@ struct DailyAlarmOverride: Codable, Equatable, Identifiable, Sendable {
         self.fajrSoundOverride = nil
         self.iftarDeliveryOverride = nil
         self.iftarSoundOverride = nil
+        self.createdAt = nil
+        self.updatedAt = nil
+        self.overrideSource = nil
         self.notes = nil
     }
 
@@ -421,12 +447,17 @@ struct DailyAlarmOverride: Codable, Equatable, Identifiable, Sendable {
         if wakeAnchorTypeOverride != nil { return true }
         if wakeDeltaOverrideMinutes != nil { return true }
         if quickWakeModeOverride != nil { return true }
+        if quickWakeModeOverride == .quiet && underlyingWakeModeBeforeQuiet != nil { return true }
         if earlyWakePurposeOverride != nil { return true }
         if alarmDetailFastTypeOverride != nil { return true }
         if alarmDetailAudioPlanOverride != nil { return true }
         if fixedWakeTimeOverrideMinutesFromMidnight != nil { return true }
+        if wakeTimeOriginOverride != nil { return true }
         if bypassLatestWakeCap != nil { return true }
         if tahajjudRefinement == true { return true }
+        if selectedOpportunityIDs?.isEmpty == false { return true }
+        if fajrAdhanAtFajrBeginsOverride != nil { return true }
+        if quietOverlay == true { return true }
         if suhoorOffsetOverrideMinutes != nil { return true }
         if reminderOffsetOverrideMinutes != nil { return true }
         if suhoorTimeOverrideMinutesFromMidnight != nil { return true }
@@ -447,6 +478,7 @@ struct DailyAlarmOverride: Codable, Equatable, Identifiable, Sendable {
             || alarmDetailFastTypeOverride != nil
             || alarmDetailAudioPlanOverride != nil
             || fixedWakeTimeOverrideMinutesFromMidnight != nil
+            || wakeTimeOriginOverride != nil
             || suhoorOffsetOverrideMinutes != nil
             || suhoorTimeOverrideMinutesFromMidnight != nil
     }
@@ -479,6 +511,7 @@ struct EffectiveDailyConfig: Codable, Equatable, Sendable {
     let resolvedWakeRule: MorningWakeRule
     let wakeRuleWasOverridden: Bool
     let quickWakeModeOverride: QuickWakeMode?
+    let underlyingWakeModeBeforeQuiet: QuickWakeMode?
     let earlyWakePurposeOverride: EarlyWakePurposeOverride?
     let alarmDetailFastTypeOverride: AlarmDetailFastTypeOverride?
     let alarmDetailAudioPlanOverride: AlarmDetailAudioPlan?
@@ -511,6 +544,7 @@ struct EffectiveDailyConfig: Codable, Equatable, Sendable {
         case resolvedWakeRule
         case wakeRuleWasOverridden
         case quickWakeModeOverride
+        case underlyingWakeModeBeforeQuiet
         case earlyWakePurposeOverride
         case alarmDetailFastTypeOverride
         case alarmDetailAudioPlanOverride
@@ -540,6 +574,7 @@ struct EffectiveDailyConfig: Codable, Equatable, Sendable {
         resolvedWakeRule: MorningWakeRule = DefaultAlarmConfig.default.defaultWakeRule,
         wakeRuleWasOverridden: Bool = false,
         quickWakeModeOverride: QuickWakeMode? = nil,
+        underlyingWakeModeBeforeQuiet: QuickWakeMode? = nil,
         earlyWakePurposeOverride: EarlyWakePurposeOverride? = nil,
         alarmDetailFastTypeOverride: AlarmDetailFastTypeOverride? = nil,
         alarmDetailAudioPlanOverride: AlarmDetailAudioPlan? = nil,
@@ -567,6 +602,7 @@ struct EffectiveDailyConfig: Codable, Equatable, Sendable {
         self.resolvedWakeRule = resolvedWakeRule
         self.wakeRuleWasOverridden = wakeRuleWasOverridden
         self.quickWakeModeOverride = quickWakeModeOverride
+        self.underlyingWakeModeBeforeQuiet = underlyingWakeModeBeforeQuiet
         self.earlyWakePurposeOverride = earlyWakePurposeOverride
         self.alarmDetailFastTypeOverride = alarmDetailFastTypeOverride
         self.alarmDetailAudioPlanOverride = alarmDetailAudioPlanOverride
@@ -603,6 +639,10 @@ struct EffectiveDailyConfig: Codable, Equatable, Sendable {
             wakeRuleWasOverridden: try container.decodeIfPresent(Bool.self, forKey: .wakeRuleWasOverridden)
                 ?? false,
             quickWakeModeOverride: try container.decodeIfPresent(QuickWakeMode.self, forKey: .quickWakeModeOverride),
+            underlyingWakeModeBeforeQuiet: try container.decodeIfPresent(
+                QuickWakeMode.self,
+                forKey: .underlyingWakeModeBeforeQuiet
+            ),
             earlyWakePurposeOverride: try container.decodeIfPresent(EarlyWakePurposeOverride.self, forKey: .earlyWakePurposeOverride),
             alarmDetailFastTypeOverride: try container.decodeIfPresent(AlarmDetailFastTypeOverride.self, forKey: .alarmDetailFastTypeOverride),
             alarmDetailAudioPlanOverride: try container.decodeIfPresent(AlarmDetailAudioPlan.self, forKey: .alarmDetailAudioPlanOverride),
@@ -635,6 +675,7 @@ struct EffectiveDailyConfig: Codable, Equatable, Sendable {
         try container.encode(resolvedWakeRule, forKey: .resolvedWakeRule)
         try container.encode(wakeRuleWasOverridden, forKey: .wakeRuleWasOverridden)
         try container.encodeIfPresent(quickWakeModeOverride, forKey: .quickWakeModeOverride)
+        try container.encodeIfPresent(underlyingWakeModeBeforeQuiet, forKey: .underlyingWakeModeBeforeQuiet)
         try container.encodeIfPresent(earlyWakePurposeOverride, forKey: .earlyWakePurposeOverride)
         try container.encodeIfPresent(alarmDetailFastTypeOverride, forKey: .alarmDetailFastTypeOverride)
         try container.encodeIfPresent(alarmDetailAudioPlanOverride, forKey: .alarmDetailAudioPlanOverride)

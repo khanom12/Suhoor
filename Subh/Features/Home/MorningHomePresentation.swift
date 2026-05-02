@@ -810,7 +810,6 @@ enum MorningHomePresentation {
             wakeTime: clampedWake,
             minTime: minTime,
             maxTime: maxTime,
-            fajrEnd: fajrEndForUrgency,
             visualMode: display.fajrWindowVisualMode
         )
         let detailText = relation.text
@@ -1130,8 +1129,7 @@ enum MorningHomePresentation {
             return activeEarlyWorshipWakeRelation(
                 wakeTime: entry.schedule.wakeDate,
                 finalThirdStart: finalThirdStart,
-                fajrStart: prayerWindow.fajrStart,
-                fajrEnd: fajrEnd
+                fajrStart: prayerWindow.fajrStart
             )
         }
         return activeHeroWakeRelation(
@@ -1358,19 +1356,17 @@ enum MorningHomePresentation {
     private static func activeEarlyWorshipWakeRelation(
         wakeTime: Date,
         finalThirdStart: Date,
-        fajrStart: Date,
-        fajrEnd: Date
+        fajrStart: Date
     ) -> RelationDisplay {
-        let tone = urgentRelationTone(wakeTime: wakeTime, fajrEnd: fajrEnd)
         if isEndpoint(wakeTime, finalThirdStart) {
-            return RelationDisplay(text: "Wake up for the last third of the night", tone: tone)
+            return RelationDisplay(text: "Wake up for the last third of the night", tone: .normal)
         }
         if isEndpoint(wakeTime, fajrStart) {
-            return RelationDisplay(text: "Wake up as Fajr begins", tone: tone)
+            return RelationDisplay(text: "Wake up as Fajr begins", tone: .normal)
         }
 
         let minutes = Int(round(fajrStart.timeIntervalSince(wakeTime) / 60))
-        return RelationDisplay(text: "Wake up \(minutes) min before Fajr begins", tone: tone)
+        return RelationDisplay(text: "Wake up \(minutes) min before Fajr begins", tone: .normal)
     }
 
     private static func isEndpoint(_ lhs: Date, _ rhs: Date) -> Bool {
@@ -1787,14 +1783,6 @@ enum MorningHomePresentation {
         WakeStateSelectionResolver.isEarlyWorshipMorning(entry.activeDay)
     }
 
-    private static func finalThirdStart(for window: DailyPrayerWindow, timeZone: TimeZone) -> Date? {
-        EarlyWorshipBoundaryResolver.finalThirdStart(
-            targetFajrStart: window.fajrStart,
-            maghrib: window.maghrib,
-            timeZone: timeZone
-        )
-    }
-
     private static func adjustmentRelationAnchor(for entry: WakeRowEntry) -> WakeAnchorType {
         let anchor = entry.activeDay.decisionLog.resolvedAnchor.type
         switch anchor {
@@ -1833,15 +1821,13 @@ enum MorningHomePresentation {
         wakeTime: Date,
         minTime: Date,
         maxTime: Date,
-        fajrEnd: Date,
         visualMode: MorningHeroFajrWindowVisualMode
     ) -> RelationDisplay {
         if visualMode.isEarlyWorship {
             return activeEarlyWorshipWakeRelation(
                 wakeTime: wakeTime,
                 finalThirdStart: minTime,
-                fajrStart: maxTime,
-                fajrEnd: fajrEnd
+                fajrStart: maxTime
             )
         }
 

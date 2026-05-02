@@ -2083,9 +2083,12 @@ struct ScheduleManagerHijriTests {
         }
 
         #expect(quietOverride.quickWakeModeOverride == .quiet)
-        #expect(quietOverride.earlyWakePurposeOverride == nil)
-        #expect(quietOverride.alarmDetailFastTypeOverride == nil)
-        #expect(quietOverride.alarmDetailAudioPlanOverride == nil)
+        #expect(quietOverride.underlyingWakeModeBeforeQuiet == .fast)
+        #expect(quietOverride.earlyWakePurposeOverride == .fast)
+        #expect(quietOverride.alarmDetailFastTypeOverride == .qada)
+        #expect(quietOverride.alarmDetailAudioPlanOverride == .wakeAlarm)
+        #expect(quietOverride.fajrAdhanAtFajrBeginsOverride == false)
+        #expect(quietOverride.quietOverlay == true)
         #expect(quietOverride.skipDay)
         #expect(quietOverride.suhoorEnabled == false)
         #expect(quietOverride.reminderEnabled == false)
@@ -2099,6 +2102,25 @@ struct ScheduleManagerHijriTests {
         if let quietMorningcastEntry {
             #expect(quietMorningcastEntry.config.quickWakeModeOverride == .quiet || quietMorningcastEntry.config.skipDay)
         }
+
+        let restoredFast = await manager.selectHeroWakeMode(for: target.date, mode: .fast, timeZone: timeZone)
+        #expect(restoredFast)
+        guard let restoredFastOverride = alarmConfigStore.override(for: target.date, timeZone: timeZone),
+              let restoredFastDay = manager.activeDay(for: target.date, timeZone: timeZone) else {
+            Issue.record("Expected Fast mode to restore after Quiet.")
+            return
+        }
+
+        #expect(restoredFastOverride.quickWakeModeOverride == .fast)
+        #expect(restoredFastOverride.underlyingWakeModeBeforeQuiet == nil)
+        #expect(restoredFastOverride.earlyWakePurposeOverride == .fast)
+        #expect(restoredFastOverride.alarmDetailFastTypeOverride == .qada)
+        #expect(restoredFastOverride.alarmDetailAudioPlanOverride == .wakeAlarm)
+        #expect(restoredFastOverride.fajrAdhanAtFajrBeginsOverride == false)
+        #expect(restoredFastOverride.skipDay == false)
+        #expect(restoredFastDay.effectiveConfig.quickWakeModeOverride == .fast)
+        #expect(restoredFastDay.scheduledEvents.contains { $0.type == .wakeAlarm })
+        #expect(restoredFastDay.scheduledEvents.contains { $0.type == .fajrBoundaryNotice && $0.deliveryKinds.isEmpty })
 
         let selectedFajr = await manager.selectHeroWakeMode(for: target.date, mode: .fajr, timeZone: timeZone)
         #expect(selectedFajr)
