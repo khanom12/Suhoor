@@ -14,7 +14,7 @@ struct FlowLayout: Layout {
         var lineHeight: CGFloat = 0
 
         for subview in subviews {
-            let size = subview.sizeThatFits(.unspecified)
+            let size = measuredSize(for: subview, maxWidth: maxWidth)
             if lineWidth + size.width > maxWidth {
                 height += lineHeight + spacing
                 lineWidth = 0
@@ -33,7 +33,7 @@ struct FlowLayout: Layout {
         var lineHeight: CGFloat = 0
 
         for subview in subviews {
-            let size = subview.sizeThatFits(.unspecified)
+            let size = measuredSize(for: subview, maxWidth: bounds.width)
             if x + size.width > bounds.maxX {
                 x = bounds.minX
                 y += lineHeight + spacing
@@ -43,5 +43,13 @@ struct FlowLayout: Layout {
             x += size.width + spacing
             lineHeight = max(lineHeight, size.height)
         }
+    }
+
+    private func measuredSize(for subview: LayoutSubview, maxWidth: CGFloat) -> CGSize {
+        let ideal = subview.sizeThatFits(.unspecified)
+        guard ideal.width > maxWidth else {
+            return ideal
+        }
+        return subview.sizeThatFits(ProposedViewSize(width: maxWidth, height: nil))
     }
 }
