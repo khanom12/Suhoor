@@ -1624,11 +1624,14 @@ final class ScheduleManager: ObservableObject {
               !Self.isRamadanAlarmDetailDay(day) else {
             return false
         }
+        let normalizedFastType = fastType == .voluntary && Self.hasAlarmDetailFastingOpportunities(day)
+            ? nil
+            : fastType
 
         alarmConfigStore.updateOverride(for: normalizedDate, timeZone: timeZone) { override in
             WakeStateSelectionResolver.apply(.fast, to: &override)
             override.earlyWakePurposeOverride = .fast
-            override.alarmDetailFastTypeOverride = fastType
+            override.alarmDetailFastTypeOverride = normalizedFastType
             override.tahajjudRefinement = false
             Self.applyAlarmDetailAudioPlan(override.alarmDetailAudioPlanOverride ?? .wakeAlarmAndFajrAdhan, to: &override)
         }
@@ -1718,6 +1721,17 @@ final class ScheduleManager: ObservableObject {
 
     private static func isRamadanAlarmDetailDay(_ day: ActiveAlarmDay) -> Bool {
         day.isImplicitRamadan || day.resolvedDayContext.supportingTags.contains(.ramadan)
+    }
+
+    private static func hasAlarmDetailFastingOpportunities(_ day: ActiveAlarmDay) -> Bool {
+        let tags = Set(day.resolvedDayContext.supportingTags)
+        return tags.contains(.arafah)
+            || tags.contains(.ashura)
+            || tags.contains(.dhulHijjahFirstNine)
+            || tags.contains(.whiteDays)
+            || tags.contains(.shawwalSix)
+            || tags.contains(.mondayThursday)
+            || day.tagResult.computedSecondaryTags.isEmpty == false
     }
 
     private static func persistedHeroWakeAdjustmentMinutes(

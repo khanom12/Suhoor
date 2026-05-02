@@ -45,3 +45,14 @@
 - [x] 6.5 Expand fast-purpose overrides to the existing app taxonomy, de-duplicate menu rows, and preserve date-specific persistence.
 - [x] 6.6 Add/update focused coverage for sentence copy, Quiet Mode icon/title semantics, fast-purpose options, duplicate prevention, and Ramadan locking.
 - [x] 6.7 Re-run OpenSpec validation plus focused Swift test/build checks, then commit and push.
+
+## 7. v5 Detail Copy, Chips, and Anchor Tightening
+
+- [x] 7.1 Update OpenSpec artifacts for v5 title, fixed wake-time anchor, Sunnah opportunity copy, inline chips, and Voluntary return semantics.
+- [x] 7.2 Change the navigation title to `Detailed View for the Day`.
+- [x] 7.3 Tighten detail hero spacing so the date uses the Home relative-day slot without shifting the primary wake anchor below Home.
+- [x] 7.4 Render context-card opportunity tags as inline, color-coded chips integrated with sentence copy in Fajr, Early, and Quiet modes.
+- [x] 7.5 Update mode-specific copy for no-opportunity, Quiet Mode no-alarm, Early + Fast defaults, Tahajjud, and explicit fast-purpose overrides.
+- [x] 7.6 Make Voluntary fast clear explicit fast-purpose overrides and return to opportunity chips when opportunities exist, without duplicate Voluntary rows or chips.
+- [x] 7.7 Add/update focused tests for v5 copy, chips, Monday/Thursday display, override replacement, Voluntary return, Quiet copy, and Ramadan locking.
+- [x] 7.8 Re-run OpenSpec validation plus focused Swift test/build checks.

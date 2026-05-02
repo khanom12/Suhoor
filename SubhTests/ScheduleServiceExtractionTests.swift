@@ -1203,7 +1203,8 @@ struct ScheduleServiceExtractionTests {
             fajrAdhan: nil,
             showsReset: false
         )
-        #expect(fajrContext.summary == "There are no fasting opportunities for this date. You can still choose an early fasting wake for a Voluntary, Qada, Vow, Kaffarah, or Other fast.")
+        #expect(fajrContext.summary == "There are no Sunnah fasting opportunities for this day. You can still choose Early to plan a Voluntary, Qada, Vow, Kaffarah, or Other fast.")
+        #expect(fajrContext.sentenceChips.isEmpty)
         #expect(fajrContext.significance == nil)
         #expect(fajrContext.hasContent)
 
@@ -1240,7 +1241,7 @@ struct ScheduleServiceExtractionTests {
             fastType: nil,
             fajrAdhan: nil,
             showsReset: false
-        ).summary == "You are on Quiet Mode for this date.")
+        ).summary == "Quiet Mode is on for this date. No alarm will ring. There are no Sunnah fasting opportunities for this day.")
 
         let ramadanQuietEntry = Self.makeWakeEntry(
             date: date,
@@ -1354,7 +1355,7 @@ struct ScheduleServiceExtractionTests {
             fastType: AlarmDayDetailPresentation.fastType(for: tahajjud, purpose: AlarmDayDetailPresentation.purpose(for: tahajjud)),
             fajrAdhan: AlarmDayDetailPresentation.fajrAdhanSetting(for: tahajjud, purpose: AlarmDayDetailPresentation.purpose(for: tahajjud)),
             showsReset: false
-        ).summary == "You are waking early for Tahajjud. There are no fasting opportunities for this date.")
+        ).summary == "You are waking early for Tahajjud. There are no Sunnah fasting opportunities for this day.")
 
         let fastWithTahajjudContext = Self.makeWakeEntry(
             date: date,
@@ -1420,8 +1421,80 @@ struct ScheduleServiceExtractionTests {
             fajrAdhan: AlarmDayDetailPresentation.fajrAdhanSetting(for: whiteDays, purpose: AlarmDayDetailPresentation.purpose(for: whiteDays)),
             showsReset: false
         )
-        #expect(whiteDaysContext.summary == "You are waking early to fast. Today's fasting opportunities will apply by default.")
+        #expect(whiteDaysContext.summary == "You are waking early to fast. This fast will use today's Sunnah opportunities by default: White Days fast.")
+        #expect(whiteDaysContext.sentencePrefix == "You are waking early to fast. This fast will use today's Sunnah opportunities by default:")
+        #expect(whiteDaysContext.sentenceChips.map(\.title) == ["White Days fast"])
         #expect(whiteDaysContext.significance?.items == ["White Days fast"])
+
+        let whiteDaysQada = Self.makeWakeEntry(
+            date: date,
+            timeZone: timeZone,
+            context: ResolvedDayContext(
+                primaryContext: .standard,
+                secondaryContexts: [],
+                supportingTags: [.whiteDays],
+                explanation: .empty
+            ),
+            plannedWakeState: .preFajr,
+            wakeOffsetMinutesFromFajrStart: -30,
+            quickWakeModeOverride: .fast,
+            alarmDetailFastTypeOverride: .qada
+        )
+        Self.expectAlarmDetailFastType(
+            AlarmDayDetailPresentation.fastType(
+                for: whiteDaysQada,
+                purpose: AlarmDayDetailPresentation.purpose(for: whiteDaysQada)
+            ),
+            title: "Qada fast",
+            defaultOptionTitle: "Today's opportunities",
+            isLocked: false,
+            selection: .qada,
+            selectedOpportunityTitles: [],
+            options: ["Today's opportunities", "Voluntary fast", "Qada fast", "Vow / Nadhr fast", "Kaffarah fast", "Other fast"]
+        )
+        let whiteDaysQadaContext = AlarmDayDetailPresentation.context(
+            for: whiteDaysQada,
+            display: MorningHomePresentation.heroDisplay(
+                entry: whiteDaysQada,
+                permissionSummary: "",
+                locationDisplayText: "",
+                currentDate: date,
+                timeZone: timeZone
+            ),
+            purpose: AlarmDayDetailPresentation.purpose(for: whiteDaysQada),
+            fastType: AlarmDayDetailPresentation.fastType(for: whiteDaysQada, purpose: AlarmDayDetailPresentation.purpose(for: whiteDaysQada)),
+            fajrAdhan: AlarmDayDetailPresentation.fajrAdhanSetting(for: whiteDaysQada, purpose: AlarmDayDetailPresentation.purpose(for: whiteDaysQada)),
+            showsReset: false
+        )
+        #expect(whiteDaysQadaContext.summary == "You are waking early for Qada fast.")
+        #expect(whiteDaysQadaContext.sentenceChips.map(\.title) == ["Qada fast"])
+
+        let whiteDaysVoluntaryReturn = Self.makeWakeEntry(
+            date: date,
+            timeZone: timeZone,
+            context: ResolvedDayContext(
+                primaryContext: .standard,
+                secondaryContexts: [],
+                supportingTags: [.whiteDays],
+                explanation: .empty
+            ),
+            plannedWakeState: .preFajr,
+            wakeOffsetMinutesFromFajrStart: -30,
+            quickWakeModeOverride: .fast,
+            alarmDetailFastTypeOverride: .voluntary
+        )
+        Self.expectAlarmDetailFastType(
+            AlarmDayDetailPresentation.fastType(
+                for: whiteDaysVoluntaryReturn,
+                purpose: AlarmDayDetailPresentation.purpose(for: whiteDaysVoluntaryReturn)
+            ),
+            title: "Today's opportunities",
+            defaultOptionTitle: "Today's opportunities",
+            isLocked: false,
+            selection: nil,
+            selectedOpportunityTitles: ["White Days fast"],
+            options: ["Today's opportunities", "Voluntary fast", "Qada fast", "Vow / Nadhr fast", "Kaffarah fast", "Other fast"]
+        )
 
         let multipleOpportunities = Self.makeWakeEntry(
             date: date,
@@ -1449,8 +1522,69 @@ struct ScheduleServiceExtractionTests {
             fajrAdhan: nil,
             showsReset: false
         )
-        #expect(multipleContext.summary == "This day has fasting opportunities: White Days fast, Shawwal Six fast, and Monday / Thursday fast.")
+        #expect(multipleContext.summary == "This day has Sunnah fasting opportunities: White Days fast, Shawwal Six fast, and Monday / Thursday fast.")
+        #expect(multipleContext.sentenceChips.map(\.title) == ["White Days fast", "Shawwal Six fast", "Monday / Thursday fast"])
         #expect(multipleContext.significance?.items == ["White Days fast", "Shawwal Six fast", "Monday / Thursday fast"])
+
+        let monday = Self.makeDate(year: 2026, month: 5, day: 4, timeZone: timeZone)
+        let mondayOpportunity = Self.makeWakeEntry(
+            date: monday,
+            timeZone: timeZone,
+            context: ResolvedDayContext(
+                primaryContext: .standard,
+                secondaryContexts: [],
+                supportingTags: [.mondayThursday],
+                explanation: .empty
+            ),
+            plannedWakeState: .inFajr,
+            quickWakeModeOverride: .fajr
+        )
+        let mondayContext = AlarmDayDetailPresentation.context(
+            for: mondayOpportunity,
+            display: MorningHomePresentation.heroDisplay(
+                entry: mondayOpportunity,
+                permissionSummary: "",
+                locationDisplayText: "",
+                currentDate: monday,
+                timeZone: timeZone
+            ),
+            purpose: nil,
+            fastType: nil,
+            fajrAdhan: nil,
+            showsReset: false
+        )
+        #expect(mondayContext.summary == "This day has Sunnah fasting opportunities: Monday fast.")
+        #expect(mondayContext.sentenceChips.map(\.title) == ["Monday fast"])
+
+        let thursday = Self.makeDate(year: 2026, month: 5, day: 7, timeZone: timeZone)
+        let thursdayQuiet = Self.makeWakeEntry(
+            date: thursday,
+            timeZone: timeZone,
+            context: ResolvedDayContext(
+                primaryContext: .standard,
+                secondaryContexts: [],
+                supportingTags: [.mondayThursday],
+                explanation: .empty
+            ),
+            skipDay: true,
+            quickWakeModeOverride: .quiet
+        )
+        let thursdayQuietContext = AlarmDayDetailPresentation.context(
+            for: thursdayQuiet,
+            display: MorningHomePresentation.heroDisplay(
+                entry: thursdayQuiet,
+                permissionSummary: "",
+                locationDisplayText: "",
+                currentDate: thursday,
+                timeZone: timeZone
+            ),
+            purpose: nil,
+            fastType: nil,
+            fajrAdhan: nil,
+            showsReset: false
+        )
+        #expect(thursdayQuietContext.summary == "Quiet Mode is on for this date. No alarm will ring. This day has Sunnah fasting opportunities: Thursday fast.")
+        #expect(thursdayQuietContext.sentenceChips.map(\.title) == ["Thursday fast"])
 
         let selectedFastAndTahajjud = Self.makeWakeEntry(
             date: date,

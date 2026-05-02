@@ -30,13 +30,13 @@ struct AlarmDayDetailView: View {
             ScrollView {
                 detailContent
                     .padding(.horizontal, DesignTokens.spacingM)
-                    .padding(.top, DesignTokens.spacingXL + DesignTokens.spacingL)
+                    .padding(.top, 0)
                     .padding(.bottom, 104)
             }
         }
         .toolbarBackground(.clear, for: .navigationBar)
         .toolbarBackgroundVisibility(.visible, for: .navigationBar)
-        .navigationTitle("Detailed Daily View")
+        .navigationTitle("Detailed View for the Day")
         .navigationBarTitleDisplayMode(.inline)
         .onChange(of: wakeEntry?.id) { _, _ in
             tentativeWakeTime = nil
@@ -71,6 +71,9 @@ struct AlarmDayDetailView: View {
             )
         } ?? AlarmDetailContextPresentation(
             summary: "Wake details are not available for this date yet.",
+            sentencePrefix: "Wake details are not available for this date yet.",
+            sentenceChips: [],
+            sentenceSuffix: "",
             significance: nil,
             purpose: nil,
             fastType: nil,
@@ -253,10 +256,10 @@ struct AlarmDayDetailView: View {
             .font(.system(size: metrics.dateLineSize, weight: .regular))
             .foregroundStyle(WakeGlassTheme.secondaryText.opacity(0.92))
             .multilineTextAlignment(.center)
-            .lineLimit(nil)
-            .fixedSize(horizontal: false, vertical: true)
+            .lineLimit(1)
+            .minimumScaleFactor(dynamicTypeSize.isAccessibilitySize ? 0.62 : 0.72)
             .frame(maxWidth: .infinity, alignment: .center)
-            .frame(minHeight: metrics.relativeLabelSize * 1.18)
+            .frame(height: metrics.relationRowHeight)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(dateLineText)
             .accessibilityIdentifier("alarmDetail.dateLine")
@@ -306,16 +309,13 @@ struct AlarmDayDetailView: View {
             alignment: .leading
         ) {
             VStack(alignment: .leading, spacing: 14) {
-                Text(context.summary)
-                    .font(.subheadline)
-                    .foregroundStyle(WakeGlassTheme.primaryText.opacity(0.92))
-                    .fixedSize(horizontal: false, vertical: true)
+                contextSentence(context)
                     .accessibilityIdentifier("alarmDetail.contextSummary")
 
                 if let significance = context.significance {
                     contextDividerIfNeeded(after: true)
                     contextSection(title: significance.title) {
-                        chipFlow(significance.items)
+                        chipFlow(significance.chips)
                     }
                 }
 
@@ -331,8 +331,8 @@ struct AlarmDayDetailView: View {
                     contextSection(title: "Selected purpose") {
                         VStack(alignment: .leading, spacing: 10) {
                             fastTypeChip(fastType, metrics: metrics)
-                            if !fastType.selectedOpportunityTitles.isEmpty {
-                                chipFlow(fastType.selectedOpportunityTitles)
+                            if !fastType.selectedOpportunityChips.isEmpty {
+                                chipFlow(fastType.selectedOpportunityChips)
                             }
                         }
                     }
@@ -379,21 +379,69 @@ struct AlarmDayDetailView: View {
     private func chipFlow(_ items: [String]) -> some View {
         FlowLayout(spacing: 8) {
             ForEach(items, id: \.self) { item in
-                Text(item)
-                    .font(.footnote.weight(.medium))
-                    .foregroundStyle(WakeGlassTheme.primaryText.opacity(0.9))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.78)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background {
-                        Capsule()
-                            .fill(WakeGlassTheme.chipFill)
-                            .overlay {
-                                Capsule().stroke(WakeGlassTheme.chipStroke, lineWidth: 1)
-                            }
+                detailChip(AlarmDetailChipPresentation(title: item, style: .neutral))
+            }
+        }
+    }
+
+    private func chipFlow(_ chips: [AlarmDetailChipPresentation]) -> some View {
+        FlowLayout(spacing: 8) {
+            ForEach(chips) { chip in
+                detailChip(chip)
+            }
+        }
+    }
+
+    private func contextSentence(_ context: AlarmDetailContextPresentation) -> some View {
+        FlowLayout(spacing: 6) {
+            if !context.sentencePrefix.isEmpty {
+                Text(context.sentencePrefix)
+                    .font(.subheadline)
+                    .foregroundStyle(WakeGlassTheme.primaryText.opacity(0.92))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            ForEach(context.sentenceChips) { chip in
+                detailChip(chip)
+            }
+            if !context.sentenceSuffix.isEmpty {
+                Text(context.sentenceSuffix)
+                    .font(.subheadline)
+                    .foregroundStyle(WakeGlassTheme.primaryText.opacity(0.92))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(context.summary)
+    }
+
+    private func detailChip(_ chip: AlarmDetailChipPresentation) -> some View {
+        let tint = chipTint(chip.style)
+        return Text(chip.title)
+            .font(.footnote.weight(.medium))
+            .foregroundStyle(tint.opacity(0.95))
+            .lineLimit(1)
+            .minimumScaleFactor(0.78)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background {
+                Capsule()
+                    .fill(tint.opacity(0.16))
+                    .overlay {
+                        Capsule().stroke(tint.opacity(0.36), lineWidth: 1)
                     }
             }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(chip.title)
+    }
+
+    private func chipTint(_ style: AlarmDetailChipStyle) -> Color {
+        switch style {
+        case .primary(let intent):
+            return intent.style.color
+        case .opportunity(let tag):
+            return tag.style.color
+        case .neutral:
+            return WakeGlassTheme.primaryText
         }
     }
 
@@ -639,12 +687,19 @@ struct AlarmDayDetailView: View {
 
     private func selectFastType(_ fastType: AlarmDetailFastTypeOverride?) {
         let date = currentSchedule.date
+        let normalizedFastType: AlarmDetailFastTypeOverride? = if fastType == .voluntary,
+            let wakeEntry,
+            !AlarmDayDetailPresentation.fastingOpportunityChips(for: wakeEntry).isEmpty {
+            nil
+        } else {
+            fastType
+        }
         withAnimation(heroModeAnimation) {
             isSelectingFastType = true
             tentativeWakeTime = nil
         }
         Task {
-            _ = await scheduleManager.selectAlarmDetailFastType(for: date, fastType: fastType, timeZone: timeZone)
+            _ = await scheduleManager.selectAlarmDetailFastType(for: date, fastType: normalizedFastType, timeZone: timeZone)
             await MainActor.run {
                 withAnimation(heroModeAnimation) {
                     isSelectingFastType = false
@@ -725,10 +780,14 @@ struct AlarmDetailPurposePresentation: Equatable {
 struct AlarmDetailFastPurposePresentation: Equatable {
     let title: String
     let defaultOptionTitle: String
-    let selectedOpportunityTitles: [String]
+    let selectedOpportunityChips: [AlarmDetailChipPresentation]
     let options: [AlarmDetailFastPurposeOption]
     let isLocked: Bool
     let selection: AlarmDetailFastTypeOverride?
+
+    var selectedOpportunityTitles: [String] {
+        selectedOpportunityChips.map(\.title)
+    }
 }
 
 struct AlarmDetailFastPurposeOption: Identifiable, Equatable {
@@ -740,7 +799,11 @@ struct AlarmDetailFastPurposeOption: Identifiable, Equatable {
 
 struct AlarmDetailDaySignificancePresentation: Equatable {
     let title: String
-    let items: [String]
+    let chips: [AlarmDetailChipPresentation]
+
+    var items: [String] {
+        chips.map(\.title)
+    }
 }
 
 struct AlarmDetailFajrAdhanPresentation: Equatable {
@@ -752,6 +815,9 @@ struct AlarmDetailFajrAdhanPresentation: Equatable {
 
 struct AlarmDetailContextPresentation: Equatable {
     let summary: String
+    let sentencePrefix: String
+    let sentenceChips: [AlarmDetailChipPresentation]
+    let sentenceSuffix: String
     let significance: AlarmDetailDaySignificancePresentation?
     let purpose: AlarmDetailPurposePresentation?
     let fastType: AlarmDetailFastPurposePresentation?
@@ -765,6 +831,32 @@ struct AlarmDetailContextPresentation: Equatable {
             || fastType != nil
             || fajrAdhan != nil
             || showsReset
+    }
+}
+
+struct AlarmDetailChipPresentation: Identifiable, Equatable {
+    let title: String
+    let style: AlarmDetailChipStyle
+
+    var id: String {
+        "\(style.id)-\(title)"
+    }
+}
+
+enum AlarmDetailChipStyle: Equatable {
+    case primary(FastPrimaryIntent)
+    case opportunity(FastSecondaryVirtueTag)
+    case neutral
+
+    var id: String {
+        switch self {
+        case .primary(let intent):
+            return "primary-\(intent.rawValue)"
+        case .opportunity(let tag):
+            return "opportunity-\(tag.rawValue)"
+        case .neutral:
+            return "neutral"
+        }
     }
 }
 
@@ -878,31 +970,34 @@ enum AlarmDayDetailPresentation {
             return AlarmDetailFastPurposePresentation(
                 title: "Ramadan fast",
                 defaultOptionTitle: "Ramadan fast",
-                selectedOpportunityTitles: ["Ramadan fast"],
+                selectedOpportunityChips: [
+                    AlarmDetailChipPresentation(title: "Ramadan fast", style: .primary(.ramadanObligatory))
+                ],
                 options: [AlarmDetailFastPurposeOption(selection: nil, title: "Ramadan fast")],
                 isLocked: true,
                 selection: nil
             )
         }
 
-        if let override = entry.activeDay.effectiveConfig.alarmDetailFastTypeOverride {
+        let opportunities = fastingOpportunityChips(for: entry)
+        if let override = entry.activeDay.effectiveConfig.alarmDetailFastTypeOverride,
+           !(override == .voluntary && !opportunities.isEmpty) {
             let defaultTitle = defaultFastPurposeTitle(for: entry)
             return AlarmDetailFastPurposePresentation(
                 title: override.displayTitle,
                 defaultOptionTitle: defaultTitle,
-                selectedOpportunityTitles: [],
+                selectedOpportunityChips: [],
                 options: fastPurposeOptions(defaultTitle: defaultTitle),
                 isLocked: false,
                 selection: override
             )
         }
 
-        let opportunities = fastingOpportunityTitles(for: entry)
         let title = opportunities.isEmpty ? "Voluntary fast" : "Today's opportunities"
         return AlarmDetailFastPurposePresentation(
             title: title,
             defaultOptionTitle: title,
-            selectedOpportunityTitles: opportunities,
+            selectedOpportunityChips: opportunities,
             options: fastPurposeOptions(defaultTitle: title),
             isLocked: false,
             selection: nil
@@ -959,13 +1054,18 @@ enum AlarmDayDetailPresentation {
         let selectedMode = WakeStateSelectionResolver.selectedMode(for: entry.activeDay)
         let showPurpose = selectedMode == .fast ? purpose : nil
         let showFastType = selectedMode == .fast && purpose?.selection == .fast ? fastType : nil
+        let sentence = contextSentence(
+            for: entry,
+            display: display,
+            selectedMode: selectedMode,
+            purpose: purpose,
+            fastType: fastType
+        )
         return AlarmDetailContextPresentation(
-            summary: contextSummary(
-                for: entry,
-                display: display,
-                selectedMode: selectedMode,
-                purpose: purpose
-            ),
+            summary: sentence.summary,
+            sentencePrefix: sentence.prefix,
+            sentenceChips: sentence.chips,
+            sentenceSuffix: sentence.suffix,
             significance: significance,
             purpose: showPurpose,
             fastType: showFastType,
@@ -1039,57 +1139,111 @@ enum AlarmDayDetailPresentation {
 
     private static func daySignificance(for entry: WakeRowEntry) -> AlarmDetailDaySignificancePresentation? {
         if isRamadan(entry) {
-            return AlarmDetailDaySignificancePresentation(title: "Day significance", items: ["Ramadan"])
+            return AlarmDetailDaySignificancePresentation(
+                title: "Day significance",
+                chips: [AlarmDetailChipPresentation(title: "Ramadan", style: .primary(.ramadanObligatory))]
+            )
         }
-        let opportunities = fastingOpportunityTitles(for: entry)
+        let opportunities = fastingOpportunityChips(for: entry)
         guard !opportunities.isEmpty else { return nil }
-        return AlarmDetailDaySignificancePresentation(title: "Fasting opportunities", items: opportunities)
+        return AlarmDetailDaySignificancePresentation(title: "Sunnah opportunities", chips: opportunities)
     }
 
-    private static func contextSummary(
+    private static func contextSentence(
         for entry: WakeRowEntry,
         display: MorningHomeHeroDisplay,
         selectedMode: QuickWakeMode,
-        purpose: AlarmDetailPurposePresentation?
-    ) -> String {
-        let opportunities = fastingOpportunityTitles(for: entry)
-        let opportunityList = sentenceList(opportunities)
+        purpose: AlarmDetailPurposePresentation?,
+        fastType: AlarmDetailFastPurposePresentation?
+    ) -> (summary: String, prefix: String, chips: [AlarmDetailChipPresentation], suffix: String) {
+        let opportunities = fastingOpportunityChips(for: entry)
+        let opportunityList = sentenceList(opportunities.map(\.title))
+
+        func sentence(_ text: String) -> (String, String, [AlarmDetailChipPresentation], String) {
+            (text, text, [], "")
+        }
+
+        func opportunitySentence(
+            prefix: String,
+            noOpportunityText: String,
+            suffix: String = "."
+        ) -> (String, String, [AlarmDetailChipPresentation], String) {
+            guard !opportunities.isEmpty else {
+                return sentence(noOpportunityText)
+            }
+            return ("\(prefix) \(opportunityList)\(suffix)", prefix, opportunities, suffix)
+        }
 
         if selectedMode == .quiet || isQuiet(display) {
-            return "You are on Quiet Mode for this date."
+            if opportunities.isEmpty {
+                return sentence("Quiet Mode is on for this date. No alarm will ring. There are no Sunnah fasting opportunities for this day.")
+            }
+            return (
+                "Quiet Mode is on for this date. No alarm will ring. This day has Sunnah fasting opportunities: \(opportunityList).",
+                "Quiet Mode is on for this date. No alarm will ring. This day has Sunnah fasting opportunities:",
+                opportunities,
+                "."
+            )
         }
 
         if isRamadan(entry) {
             if selectedMode == .fast {
-                return "You are waking early for Ramadan."
+                return sentence("You are waking early for Ramadan.")
             }
-            return "This is a Ramadan date."
+            return sentence("This is a Ramadan date.")
         }
 
         switch selectedMode {
         case .fajr:
-            if opportunities.isEmpty {
-                return "There are no fasting opportunities for this date. You can still choose an early fasting wake for a Voluntary, Qada, Vow, Kaffarah, or Other fast."
-            }
-            return "This day has fasting opportunities: \(opportunityList)."
+            return opportunitySentence(
+                prefix: "This day has Sunnah fasting opportunities:",
+                noOpportunityText: "There are no Sunnah fasting opportunities for this day. You can still choose Early to plan a Voluntary, Qada, Vow, Kaffarah, or Other fast."
+            )
         case .fast:
             if purpose?.selection == .tahajjud {
-                if opportunities.isEmpty {
-                    return "You are waking early for Tahajjud. There are no fasting opportunities for this date."
-                }
-                return "You are waking early for Tahajjud. This day also has fasting opportunities: \(opportunityList)."
+                return opportunitySentence(
+                    prefix: "You are waking early for Tahajjud. This day also has Sunnah fasting opportunities:",
+                    noOpportunityText: "You are waking early for Tahajjud. There are no Sunnah fasting opportunities for this day."
+                )
+            }
+            if let fastType,
+               let override = fastType.selection,
+               override != .voluntary {
+                let chip = AlarmDetailChipPresentation(
+                    title: override.displayTitle,
+                    style: .primary(override.primaryIntent)
+                )
+                return (
+                    "You are waking early for \(override.displayTitle).",
+                    "You are waking early for",
+                    [chip],
+                    "."
+                )
             }
             if opportunities.isEmpty {
-                return "You are waking early to fast. This will be saved as a Voluntary fast unless you choose another fast type."
+                return sentence("You are waking early to fast. This will be saved as a Voluntary fast unless you choose another fast type.")
             }
-            return "You are waking early to fast. Today's fasting opportunities will apply by default."
+            return (
+                "You are waking early to fast. This fast will use today's Sunnah opportunities by default: \(opportunityList).",
+                "You are waking early to fast. This fast will use today's Sunnah opportunities by default:",
+                opportunities,
+                "."
+            )
         case .quiet:
-            return "You are on Quiet Mode for this date."
+            if opportunities.isEmpty {
+                return sentence("Quiet Mode is on for this date. No alarm will ring. There are no Sunnah fasting opportunities for this day.")
+            }
+            return (
+                "Quiet Mode is on for this date. No alarm will ring. This day has Sunnah fasting opportunities: \(opportunityList).",
+                "Quiet Mode is on for this date. No alarm will ring. This day has Sunnah fasting opportunities:",
+                opportunities,
+                "."
+            )
         }
     }
 
     private static func defaultFastPurposeTitle(for entry: WakeRowEntry) -> String {
-        let opportunities = fastingOpportunityTitles(for: entry)
+        let opportunities = fastingOpportunityChips(for: entry)
         if !opportunities.isEmpty {
             return "Today's opportunities"
         }
@@ -1112,16 +1266,34 @@ enum AlarmDayDetailPresentation {
         return options
     }
 
-    private static func fastingOpportunityTitles(for entry: WakeRowEntry) -> [String] {
+    static func fastingOpportunityChips(for entry: WakeRowEntry) -> [AlarmDetailChipPresentation] {
         let tags = Set(entry.activeDay.resolvedDayContext.supportingTags)
-        var titles: [String] = []
-        if tags.contains(.arafah) { titles.append("Arafah fast") }
-        if tags.contains(.ashura) { titles.append("Ashura fast") }
-        if tags.contains(.dhulHijjahFirstNine) { titles.append("Dhul Hijjah fast") }
-        if tags.contains(.whiteDays) { titles.append("White Days fast") }
-        if tags.contains(.shawwalSix) { titles.append("Shawwal Six fast") }
-        if tags.contains(.mondayThursday) { titles.append(weekdayFastTitle(for: entry.activeDay.date)) }
-        return titles
+        let computedSecondaryTags = entry.activeDay.tagResult.computedSecondaryTags
+        var chips: [AlarmDetailChipPresentation] = []
+
+        func has(_ dayTag: DayTag, _ secondaryTag: FastSecondaryVirtueTag) -> Bool {
+            tags.contains(dayTag) || computedSecondaryTags.contains(secondaryTag)
+        }
+
+        if has(.arafah, .arafah) {
+            chips.append(AlarmDetailChipPresentation(title: "Arafah fast", style: .opportunity(.arafah)))
+        }
+        if has(.ashura, .ashura) {
+            chips.append(AlarmDetailChipPresentation(title: "Ashura fast", style: .opportunity(.ashura)))
+        }
+        if has(.dhulHijjahFirstNine, .dhulHijjahFirstNine) {
+            chips.append(AlarmDetailChipPresentation(title: "Dhul Hijjah fast", style: .opportunity(.dhulHijjahFirstNine)))
+        }
+        if has(.whiteDays, .whiteDays) {
+            chips.append(AlarmDetailChipPresentation(title: "White Days fast", style: .opportunity(.whiteDays)))
+        }
+        if has(.shawwalSix, .shawwalSix) {
+            chips.append(AlarmDetailChipPresentation(title: "Shawwal Six fast", style: .opportunity(.shawwalSix)))
+        }
+        if has(.mondayThursday, .mondayThursday) {
+            chips.append(AlarmDetailChipPresentation(title: weekdayFastTitle(for: entry.activeDay.date), style: .opportunity(.mondayThursday)))
+        }
+        return chips
     }
 
     private static func weekdayFastTitle(for date: Date) -> String {

@@ -44,3 +44,10 @@ The hero exposes a concise accessibility summary. The date line includes both ca
 The detail screen title is `Detailed Daily View`; the selected date belongs in the hero, not the navigation title. The detail hero keeps the Home hero's vertical rhythm by reserving the Home location-line slot and placing the Gregorian/Hijri date in the Home relative-day slot immediately above the primary wake display. The primary wake row uses the shared Home row so the Quiet Mode moon icon remains visible.
 
 The context card is always present and begins with a plain sentence describing the selected mode/day before any chips or controls. Reset language must avoid the old usual-plan wording. Fast-purpose options come from the app's supported fast-purpose taxonomy and are de-duplicated so `Voluntary fast` never appears twice.
+
+## v5 Detail Alignment
+The detail screen title is `Detailed View for the Day`. The wake time remains the fixed vertical anchor and must visually match the Home hero on the same device, orientation, Dynamic Type size, and safe-area context. The Gregorian/Hijri date uses the Home hero's existing relative-day slot and must not add a separate stack that pushes the wake display down.
+
+The context card uses sentence-led copy with inline, color-coded chips for Sunnah fasting opportunities. Fajr, Early, and Quiet modes all state whether opportunities exist. No-opportunity copy uses `There are no Sunnah fasting opportunities for this day.` Quiet Mode copy also states that no alarm will ring.
+
+Fast-purpose defaults and overrides are explicit: when opportunity chips exist, Early + Fast defaults to those opportunities. Qada, Vow / Nadhr, Kaffarah, and Other replace the opportunity chips with the selected-purpose chip. Selecting Voluntary fast clears the explicit override and returns to the day's opportunity set when opportunities exist. Duplicate `Voluntary fast` options or chips are prohibited.
