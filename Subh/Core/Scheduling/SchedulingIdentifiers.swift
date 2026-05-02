@@ -45,10 +45,36 @@ struct SchedulingIdentifiers {
         "\(event.id).\(deliveryKind.rawValue)"
     }
 
+    static func identifier(
+        for event: ScheduledEvent,
+        deliveryKind: ScheduleEventKind,
+        channel: AlarmDeliveryChannel
+    ) -> String {
+        switch channel {
+        case .notification:
+            return identifier(for: event, deliveryKind: deliveryKind)
+        case .alarmKit:
+            return "\(identifier(for: event, deliveryKind: deliveryKind)).alarmKit"
+        }
+    }
+
     static func alarmID(
         for event: ScheduledEvent,
         deliveryKind: ScheduleEventKind
     ) -> UUID {
         DateHelpers.stableUUID(from: identifier(for: event, deliveryKind: deliveryKind))
+    }
+
+    static func alarmID(
+        for event: ScheduledEvent,
+        deliveryKind: ScheduleEventKind,
+        channel: AlarmDeliveryChannel
+    ) -> UUID {
+        switch channel {
+        case .notification:
+            return alarmID(for: event, deliveryKind: deliveryKind)
+        case .alarmKit:
+            return DateHelpers.stableUUID(from: identifier(for: event, deliveryKind: deliveryKind, channel: channel))
+        }
     }
 }

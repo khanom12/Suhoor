@@ -274,6 +274,8 @@ struct SettingsRootView: View {
         switch scheduleManager.schedulingMode {
         case .alarmKit:
             return "AlarmKit"
+        case .mixed:
+            return "Mixed"
         case .notifications:
             return "Notification fallback"
         case .none:

@@ -312,7 +312,16 @@ enum SoundChoice: String, Codable, CaseIterable, Identifiable, Sendable {
 enum SchedulingMode: String, Codable, Sendable {
     case alarmKit
     case notifications
+    case mixed
     case none
+
+    var usesAlarmKit: Bool {
+        self == .alarmKit || self == .mixed
+    }
+
+    var usesNotifications: Bool {
+        self == .notifications || self == .mixed
+    }
 }
 
 enum LocationMode: String, Codable, CaseIterable, Identifiable, Sendable {

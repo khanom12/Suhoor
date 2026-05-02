@@ -40,6 +40,13 @@ struct SchedulingIdentifierSet: Equatable, Sendable {
             for deliveryKind in event.deliveryKinds {
                 notificationIdentifiers.append(SchedulingIdentifiers.identifier(for: event, deliveryKind: deliveryKind))
                 alarmIdentifiers.append(SchedulingIdentifiers.alarmID(for: event, deliveryKind: deliveryKind))
+                alarmIdentifiers.append(
+                    SchedulingIdentifiers.alarmID(
+                        for: event,
+                        deliveryKind: deliveryKind,
+                        channel: .alarmKit
+                    )
+                )
             }
         }
 
@@ -55,7 +62,10 @@ struct SchedulingIdentifierSet: Equatable, Sendable {
     ) -> SchedulingIdentifierSet {
         SchedulingIdentifierSet(
             notificationIdentifiers: [SchedulingIdentifiers.identifier(for: event, deliveryKind: deliveryKind)],
-            alarmIdentifiers: [SchedulingIdentifiers.alarmID(for: event, deliveryKind: deliveryKind)]
+            alarmIdentifiers: [
+                SchedulingIdentifiers.alarmID(for: event, deliveryKind: deliveryKind),
+                SchedulingIdentifiers.alarmID(for: event, deliveryKind: deliveryKind, channel: .alarmKit)
+            ]
         )
     }
 

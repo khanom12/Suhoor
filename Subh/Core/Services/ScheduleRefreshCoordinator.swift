@@ -7,6 +7,15 @@ enum ScheduleRefreshReason: Equatable, Sendable {
     case locationUpdated
     case timeChanged
     case timeZoneChanged
+    case notificationPermissionChanged
+    case alarmKitPermissionChanged
+    case prayerCalculationChanged
+    case hijriAdjustmentChanged
+    case dateSpecificWakeChanged
+    case wakeModeChanged
+    case fastPurposeChanged
+    case horizonRollover
+    case identifierMigration
     case manual
 }
 
@@ -122,6 +131,24 @@ extension ScheduleRefreshReason {
             return "timeChanged"
         case .timeZoneChanged:
             return "timeZoneChanged"
+        case .notificationPermissionChanged:
+            return "notificationPermissionChanged"
+        case .alarmKitPermissionChanged:
+            return "alarmKitPermissionChanged"
+        case .prayerCalculationChanged:
+            return "prayerCalculationChanged"
+        case .hijriAdjustmentChanged:
+            return "hijriAdjustmentChanged"
+        case .dateSpecificWakeChanged:
+            return "dateSpecificWakeChanged"
+        case .wakeModeChanged:
+            return "wakeModeChanged"
+        case .fastPurposeChanged:
+            return "fastPurposeChanged"
+        case .horizonRollover:
+            return "horizonRollover"
+        case .identifierMigration:
+            return "identifierMigration"
         case .manual:
             return "manual"
         }
@@ -131,7 +158,20 @@ extension ScheduleRefreshReason {
         switch self {
         case .appLaunch, .foreground:
             return true
-        case .settingsChanged, .locationUpdated, .timeChanged, .timeZoneChanged, .manual:
+        case .settingsChanged,
+             .locationUpdated,
+             .timeChanged,
+             .timeZoneChanged,
+             .notificationPermissionChanged,
+             .alarmKitPermissionChanged,
+             .prayerCalculationChanged,
+             .hijriAdjustmentChanged,
+             .dateSpecificWakeChanged,
+             .wakeModeChanged,
+             .fastPurposeChanged,
+             .horizonRollover,
+             .identifierMigration,
+             .manual:
             return false
         }
     }
@@ -140,11 +180,21 @@ extension ScheduleRefreshReason {
         switch self {
         case .appLaunch, .foreground, .manual:
             return 0
-        case .settingsChanged:
+        case .settingsChanged,
+             .prayerCalculationChanged,
+             .hijriAdjustmentChanged,
+             .dateSpecificWakeChanged,
+             .wakeModeChanged,
+             .fastPurposeChanged:
             return 200_000_000
         case .locationUpdated:
             return 100_000_000
-        case .timeChanged, .timeZoneChanged:
+        case .timeChanged,
+             .timeZoneChanged,
+             .notificationPermissionChanged,
+             .alarmKitPermissionChanged,
+             .horizonRollover,
+             .identifierMigration:
             return 0
         }
     }

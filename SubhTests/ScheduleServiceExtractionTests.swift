@@ -57,6 +57,16 @@ struct ScheduleServiceExtractionTests {
     }
 
     @Test
+    func refreshReasonsCoverDeliveryReliabilityTriggers() {
+        #expect(ScheduleRefreshReason.notificationPermissionChanged.diagnosticLabel == "notificationPermissionChanged")
+        #expect(ScheduleRefreshReason.alarmKitPermissionChanged.diagnosticLabel == "alarmKitPermissionChanged")
+        #expect(ScheduleRefreshReason.timeZoneChanged.debounceDurationNanoseconds == 0)
+        #expect(ScheduleRefreshReason.identifierMigration.debounceDurationNanoseconds == 0)
+        #expect(ScheduleRefreshReason.dateSpecificWakeChanged.isLifecycleRefresh == false)
+        #expect(ScheduleRefreshReason.fastPurposeChanged.isLifecycleRefresh == false)
+    }
+
+    @Test
     func performanceTraceRecorderCapturesNamedOperations() {
         PerformanceTraceRecorder.shared.reset()
 
@@ -519,6 +529,7 @@ struct ScheduleServiceExtractionTests {
         #expect(identifiers.alarmIdentifiers.contains(SchedulingIdentifiers.alarmID(for: schedule, kind: .wake)))
         #expect(identifiers.alarmIdentifiers.contains(SchedulingIdentifiers.legacyAlarmID(for: schedule, kind: .wake)))
         #expect(identifiers.alarmIdentifiers.contains(SchedulingIdentifiers.legacyAlarmIDV1(for: schedule, kind: .wake)))
+        #expect(identifiers.alarmIdentifiers.contains(DateHelpers.stableUUID(from: "\(schedule.id).wakeAlarm.wake.alarmKit")))
     }
 
     @Test
@@ -543,9 +554,90 @@ struct ScheduleServiceExtractionTests {
         let cancelled = routineScheduler.cancelledIdentifierSets[0]
         #expect(cancelled.notificationIdentifiers.contains(SchedulingIdentifiers.legacyDailyIdentifierV1(for: activeDay.schedule, kind: .wake)))
         #expect(cancelled.alarmIdentifiers.contains(SchedulingIdentifiers.legacyAlarmIDV1(for: activeDay.schedule, kind: .wake)))
+        #expect(cancelled.alarmIdentifiers.contains(SchedulingIdentifiers.alarmID(for: activeDay.scheduledEvents[0], deliveryKind: .wake, channel: .alarmKit)))
         #expect(routineScheduler.scheduledEventIdentifiers == [
             SchedulingIdentifiers.identifier(for: activeDay.scheduledEvents[0], deliveryKind: .wake)
         ])
+    }
+
+    @Test
+    func deliveryPlanUsesNotificationsFallbackForActiveFastWhenAlarmKitUnavailable() {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let now = Self.makeDate(year: 2026, month: 5, day: 1, hour: 0, timeZone: timeZone)
+        let activeDay = Self.makeSchedulerActiveDay(
+            date: now.addingTimeInterval(2 * 24 * 60 * 60),
+            timeZone: timeZone
+        )
+        let snapshot = ActiveAlarmWindowSnapshot(
+            generatedAt: now,
+            visibleDays: [activeDay],
+            scheduledDays: [activeDay],
+            visibleHorizonDays: 7,
+            scheduledHorizonDays: 7
+        )
+
+        let plan = DeliveryReconciliation.plan(
+            snapshot: snapshot,
+            settings: .default,
+            mode: .notifications,
+            now: now
+        )
+
+        #expect(plan.mode == .notifications)
+        #expect(plan.expectedDeliveries.count == 1)
+        #expect(plan.expectedDeliveries.first?.channel == .notification)
+        #expect(plan.skippedDeliveries.isEmpty)
+    }
+
+    @Test
+    func deliveryPlanSupportsMixedAlarmKitWakeAndNotificationCues() {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let now = Self.makeDate(year: 2026, month: 5, day: 1, hour: 0, timeZone: timeZone)
+        let activeDay = Self.makeSchedulerActiveDayWithSecondaryEvents(
+            date: now.addingTimeInterval(2 * 24 * 60 * 60),
+            timeZone: timeZone
+        )
+        let snapshot = ActiveAlarmWindowSnapshot(
+            generatedAt: now,
+            visibleDays: [activeDay],
+            scheduledDays: [activeDay],
+            visibleHorizonDays: 7,
+            scheduledHorizonDays: 7
+        )
+
+        let plan = DeliveryReconciliation.plan(
+            snapshot: snapshot,
+            settings: .default,
+            mode: .mixed,
+            now: now
+        )
+
+        #expect(plan.isMixed)
+        #expect(plan.expectedDeliveries.first { $0.deliveryKind == .wake }?.channel == .alarmKit)
+        #expect(plan.expectedDeliveries.first { $0.deliveryKind == .reminder }?.channel == .notification)
+        #expect(plan.expectedDeliveries.first { $0.deliveryKind == .boundary }?.channel == .notification)
+    }
+
+    @Test
+    @MainActor
+    func alarmSchedulerMixedModeRoutesWakeToAlarmKitAndCueToNotifications() async {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let activeDay = Self.makeSchedulerActiveDayWithSecondaryEvents(
+            date: DateHelpers.startOfDay(Date().addingTimeInterval(2 * 24 * 60 * 60), in: timeZone),
+            timeZone: timeZone
+        )
+        let routineScheduler = RecordingRoutineScheduler()
+        let scheduler = AlarmScheduler(routineScheduler: routineScheduler)
+
+        let scheduled = await scheduler.scheduleDay(
+            day: activeDay,
+            settings: .default,
+            mode: .mixed
+        )
+
+        #expect(scheduled)
+        #expect(routineScheduler.scheduledEventIdentifiers.count == 3)
+        #expect(routineScheduler.scheduledCanUseAlarmKit == [false, false, true])
     }
 
     @Test
@@ -604,6 +696,133 @@ struct ScheduleServiceExtractionTests {
 
         #expect(report.mismatchedAlarmIdentifiers == [alarmID])
         #expect(report.hasWarnings)
+    }
+
+    @Test
+    func deliveryReconciliationReportsUnexpectedDuplicateAndVerificationUnavailable() {
+        let now = Date()
+        let expected = Self.expectedDelivery(
+            identifier: "expected.one",
+            alarmIDSeed: "alarm.one",
+            fireDate: now.addingTimeInterval(600),
+            channel: .notification
+        )
+        let unexpectedAlarmID = DateHelpers.stableUUID(from: "unexpected.alarm")
+
+        let report = DeliveryReconciliation.report(
+            mode: .mixed,
+            generatedAt: now,
+            expectedDeliveries: [expected],
+            pendingNotifications: [
+                PendingNotificationDelivery(identifier: "expected.one", fireDate: expected.fireDate),
+                PendingNotificationDelivery(identifier: "stale.extra", fireDate: now.addingTimeInterval(900)),
+                PendingNotificationDelivery(identifier: "stale.extra", fireDate: now.addingTimeInterval(900))
+            ],
+            pendingAlarms: [
+                ScheduledAlarmDelivery(id: unexpectedAlarmID, fireDate: now.addingTimeInterval(900))
+            ],
+            alarmKitVerificationAvailable: false
+        )
+
+        #expect(report.unexpectedNotificationIdentifiers == ["stale.extra"])
+        #expect(report.duplicateNotificationIdentifiers == ["stale.extra"])
+        #expect(report.unexpectedAlarmIdentifiers == [unexpectedAlarmID])
+        #expect(report.issues.contains { $0.category == .unexpectedExtra })
+        #expect(report.issues.contains { $0.category == .duplicate })
+    }
+
+    @Test
+    func deliveryReconciliationMarksAlarmKitVerificationUnavailableInsteadOfMissing() {
+        let now = Date()
+        let alarmID = DateHelpers.stableUUID(from: "alarmkit.expected")
+        let expected = Self.expectedDelivery(
+            identifier: "notification.unused",
+            alarmID: alarmID,
+            fireDate: now.addingTimeInterval(600),
+            channel: .alarmKit
+        )
+
+        let report = DeliveryReconciliation.report(
+            mode: .alarmKit,
+            generatedAt: now,
+            expectedDeliveries: [expected],
+            pendingNotifications: [],
+            pendingAlarms: [],
+            alarmKitVerificationAvailable: false
+        )
+
+        #expect(report.missingAlarmIdentifiers.isEmpty)
+        #expect(report.issues.contains { $0.category == .verificationUnavailable })
+        #expect(report.summaryText.contains("Verification limited"))
+    }
+
+    @Test
+    func deliveryPlanSkipsPastEventsWithoutMissingWarning() {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let now = Self.makeDate(year: 2026, month: 5, day: 3, hour: 12, timeZone: timeZone)
+        let activeDay = Self.makeSchedulerActiveDay(
+            date: Self.makeDate(year: 2026, month: 5, day: 1, timeZone: timeZone),
+            timeZone: timeZone
+        )
+        let snapshot = ActiveAlarmWindowSnapshot(
+            generatedAt: now,
+            visibleDays: [activeDay],
+            scheduledDays: [activeDay],
+            visibleHorizonDays: 7,
+            scheduledHorizonDays: 7
+        )
+
+        let report = DeliveryReconciliation.report(
+            snapshot: snapshot,
+            settings: .default,
+            mode: .notifications,
+            now: now,
+            pendingNotifications: [],
+            pendingAlarms: []
+        )
+
+        #expect(report.expectedDeliveries.isEmpty)
+        #expect(report.missingNotificationIdentifiers.isEmpty)
+        #expect(report.skippedDeliveries.contains { $0.reason == .skippedPast })
+        #expect(report.issues.contains { $0.category == .skippedPast })
+    }
+
+    @Test
+    func alarmDeliveryLedgerRecordsLocalSummaryWithoutDiagnosticIdentifierLeak() {
+        let defaults = UserDefaults(suiteName: "alarm-ledger-\(UUID().uuidString)") ?? .standard
+        let store = AlarmDeliveryLedgerStore(defaults: defaults)
+        store.clear()
+
+        store.record(
+            AlarmDeliveryLedgerEntry(
+                timestamp: Date(timeIntervalSince1970: 1_777_777_777),
+                action: .reconciliation,
+                dateKey: nil,
+                eventID: nil,
+                eventType: nil,
+                deliveryKind: nil,
+                fireDate: nil,
+                channel: SchedulingMode.mixed.rawValue,
+                platformIdentifier: "raw-platform-identifier-should-stay-out-of-diagnostics",
+                permissionMode: "Mixed",
+                wakeRuleSignature: "rule:fajr-end-30",
+                refreshReason: ScheduleRefreshReason.foreground.diagnosticLabel,
+                result: "Scheduled",
+                message: "expected=2 matched=2 missing=0 failed=0"
+            )
+        )
+
+        let entries = store.entries()
+        #expect(entries.count == 1)
+        #expect(entries.first?.message == "expected=2 matched=2 missing=0 failed=0")
+
+        let diagnostics = store.diagnosticsText()
+        #expect(diagnostics.contains("reconciliation"))
+        #expect(diagnostics.contains("Scheduled"))
+        #expect(!diagnostics.contains("raw-platform-identifier-should-stay-out-of-diagnostics"))
+        #expect(!diagnostics.contains("expected=2 matched=2"))
+
+        store.clear()
     }
 
     @Test
@@ -1869,7 +2088,11 @@ struct ScheduleServiceExtractionTests {
             ".cancelDay(",
             "NotificationScheduler(",
             "AlarmScheduler(",
-            "AlarmKitScheduler("
+            "AlarmKitScheduler(",
+            "SchedulingIdentifiers.",
+            "UNUserNotificationCenter.current().pendingNotificationRequests",
+            ".pendingNotificationRequests()",
+            "AlarmManager.shared"
         ]
 
         let violations = try viewFiles.flatMap { file -> [String] in
@@ -2917,6 +3140,7 @@ struct ScheduleServiceExtractionTests {
     private final class RecordingRoutineScheduler: RoutineScheduling {
         var cancelledIdentifierSets: [SchedulingIdentifierSet] = []
         var scheduledEventIdentifiers: [String] = []
+        var scheduledCanUseAlarmKit: [Bool] = []
         var cancelledEventIdentifiers: [String] = []
         var cancelAllUpcomingDays: [Int] = []
 
@@ -2930,6 +3154,7 @@ struct ScheduleServiceExtractionTests {
             now: Date
         ) async -> Bool {
             scheduledEventIdentifiers.append(identifier)
+            scheduledCanUseAlarmKit.append(canUseAlarmKit)
             return true
         }
 
@@ -2980,6 +3205,53 @@ struct ScheduleServiceExtractionTests {
             sourceSummaryText: activeDay.sourceSummaryText,
             resolvedDayContext: activeDay.resolvedDayContext,
             scheduledEvents: [event],
+            decisionLog: activeDay.decisionLog,
+            dailyCompletion: activeDay.dailyCompletion
+        )
+    }
+
+    private static func makeSchedulerActiveDayWithSecondaryEvents(date: Date, timeZone: TimeZone) -> ActiveAlarmDay {
+        let activeDay = makeSchedulerActiveDay(date: date, timeZone: timeZone)
+        let reminder = ScheduledEvent(
+            id: "\(activeDay.dateKey).wakeReminder",
+            type: .wakeReminder,
+            dateKey: activeDay.dateKey,
+            fireDate: activeDay.schedule.wakeDate.addingTimeInterval(-10 * 60),
+            relativeTo: .wakeAlarm(offsetMinutes: -10),
+            isUserVisible: true,
+            affectsCompletion: false,
+            deliveryKinds: [.reminder],
+            soundRole: .reminder,
+            wakeSessionID: "\(activeDay.dateKey).wake-session",
+            wakeSessionRole: .companion
+        )
+        let boundary = ScheduledEvent(
+            id: "\(activeDay.dateKey).fajrBoundaryNotice",
+            type: .fajrBoundaryNotice,
+            dateKey: activeDay.dateKey,
+            fireDate: activeDay.schedule.fajrDate,
+            relativeTo: .prayerBoundary(boundary: .fajrStart, offsetMinutes: 0),
+            isUserVisible: true,
+            affectsCompletion: false,
+            deliveryKinds: [.boundary],
+            soundRole: .fajrStart,
+            wakeSessionID: "\(activeDay.dateKey).wake-session",
+            wakeSessionRole: .checkpoint
+        )
+
+        return ActiveAlarmDay(
+            date: activeDay.date,
+            dateKey: activeDay.dateKey,
+            schedule: activeDay.schedule,
+            effectiveConfig: activeDay.effectiveConfig,
+            provenances: activeDay.provenances,
+            isImplicitRamadan: activeDay.isImplicitRamadan,
+            isExplicitOneOff: activeDay.isExplicitOneOff,
+            tagResult: activeDay.tagResult,
+            primaryDisplay: activeDay.primaryDisplay,
+            sourceSummaryText: activeDay.sourceSummaryText,
+            resolvedDayContext: activeDay.resolvedDayContext,
+            scheduledEvents: activeDay.scheduledEvents + [reminder, boundary],
             decisionLog: activeDay.decisionLog,
             dailyCompletion: activeDay.dailyCompletion
         )

@@ -80,6 +80,8 @@ struct PermissionsReliabilityView: View {
         switch scheduleManager.schedulingMode {
         case .alarmKit:
             return Strings.SettingsReliability.alarmKitModeTitle
+        case .mixed:
+            return "Mixed delivery"
         case .notifications:
             return Strings.SettingsReliability.notificationsModeTitle
         case .none:
@@ -91,6 +93,8 @@ struct PermissionsReliabilityView: View {
         switch scheduleManager.schedulingMode {
         case .alarmKit:
             return Strings.SettingsReliability.alarmKitModeMessage
+        case .mixed:
+            return "Wake alarms use AlarmKit where available. Secondary cues use notifications."
         case .notifications:
             return Strings.SettingsReliability.notificationsModeMessage
         case .none:
@@ -101,6 +105,8 @@ struct PermissionsReliabilityView: View {
     private var modeSystemImage: String {
         switch scheduleManager.schedulingMode {
         case .alarmKit:
+            return "alarm.waves.left.and.right"
+        case .mixed:
             return "alarm.waves.left.and.right"
         case .notifications:
             return "bell.badge"
@@ -134,6 +140,8 @@ struct PermissionsReliabilityView: View {
         switch scheduleManager.schedulingMode {
         case .alarmKit:
             return "AlarmKit"
+        case .mixed:
+            return "Mixed"
         case .notifications:
             return "Notification fallback"
         case .none:

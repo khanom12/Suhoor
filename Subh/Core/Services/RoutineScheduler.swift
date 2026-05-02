@@ -174,9 +174,14 @@ final class RoutineScheduler: RoutineScheduling {
                 schedule: schedule,
                 settings: settings
             )
+            let alarmID = SchedulingIdentifiers.alarmID(
+                for: event,
+                deliveryKind: deliveryKind,
+                channel: .alarmKit
+            )
             if FeatureFlags.useAlarmCoordinatorForScheduling, let alarmCoordinator {
                 let scheduled = await alarmCoordinator.scheduleAlarm(
-                    id: SchedulingIdentifiers.alarmID(for: event, deliveryKind: deliveryKind),
+                    id: alarmID,
                     kind: deliveryKind,
                     date: event.fireDate,
                     label: settings.label,
@@ -196,7 +201,7 @@ final class RoutineScheduler: RoutineScheduling {
             } else if let alarmKitScheduler {
                 do {
                     try await alarmKitScheduler.scheduleAlarm(
-                        id: SchedulingIdentifiers.alarmID(for: event, deliveryKind: deliveryKind),
+                        id: alarmID,
                         kind: deliveryKind,
                         date: event.fireDate,
                         label: settings.label,

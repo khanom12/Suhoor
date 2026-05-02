@@ -1476,7 +1476,7 @@ final class ScheduleManager: ObservableObject {
         schedules = activeWindowSnapshot.visibleDays.map(\.schedule)
 
         let settings = settingsStore.settings
-        let canUseAlarmKit = await alarmKitAvailableAndAuthorized()
+        let mode = await effectiveSchedulingChannel()
         if activeWindowSnapshot.scheduledDays.contains(where: { $0.dateKey == key }) {
             Logging.diagnostics.debug(
                 "[toggle] scheduleDay \(key, privacy: .public) suhoor=\(updatedDay.effectiveConfig.suhoorEnabled, privacy: .public) reminder=\(updatedDay.effectiveConfig.reminderEnabled, privacy: .public) fajr=\(updatedDay.effectiveConfig.fajrEnabled, privacy: .public)"
@@ -1484,12 +1484,21 @@ final class ScheduleManager: ObservableObject {
             _ = await alarmScheduler.scheduleDay(
                 day: updatedDay,
                 settings: settings,
-                canUseAlarmKit: canUseAlarmKit
+                mode: mode
             )
         } else {
             Logging.diagnostics.debug("[toggle] cancelDay \(key, privacy: .public) via schedule window")
             await alarmScheduler.cancelDay(day: updatedDay)
         }
+
+        await runAlarmPipelineDiagnostics(
+            snapshot: activeWindowSnapshot,
+            settings: settings,
+            mode: mode,
+            schedulingStatus: statusText,
+            now: timeProvider.now(),
+            reason: "rescheduleDay"
+        )
 
         lastUpdated = timeProvider.now()
         activeTagSelectionRevision = usesLegacyContexts ? fastTagStore.currentRevision : -1
@@ -1992,6 +2001,14 @@ final class ScheduleManager: ObservableObject {
             granted = await requestNotificationAuthorization()
         }
         await refreshPermissionSummary()
+        switch kind {
+        case .location:
+            requestRefresh(reason: .locationUpdated)
+        case .alarmKit:
+            requestRefresh(reason: .alarmKitPermissionChanged)
+        case .notifications:
+            requestRefresh(reason: .notificationPermissionChanged)
+        }
         return granted
     }
 
@@ -2012,10 +2029,15 @@ final class ScheduleManager: ObservableObject {
     }
 
     func effectiveSchedulingChannel() async -> SchedulingMode {
-        if await permissionState(for: .alarmKit) == .authorized {
+        let alarmKitState = await permissionState(for: .alarmKit)
+        let notificationState = await permissionState(for: .notifications)
+        if alarmKitState == .authorized, notificationState == .authorized {
+            return .mixed
+        }
+        if alarmKitState == .authorized {
             return .alarmKit
         }
-        if await permissionState(for: .notifications) == .authorized {
+        if notificationState == .authorized {
             return .notifications
         }
         return .none
@@ -2497,7 +2519,7 @@ final class ScheduleManager: ObservableObject {
     }
 
     private func alarmKitAvailableAndAuthorized() async -> Bool {
-        await effectiveSchedulingChannel() == .alarmKit
+        await effectiveSchedulingChannel().usesAlarmKit
     }
 
     private func buildPermissionSnapshot() async -> PermissionSnapshot {
@@ -2509,6 +2531,8 @@ final class ScheduleManager: ObservableObject {
         switch mode {
         case .alarmKit:
             modeText = "AlarmKit"
+        case .mixed:
+            modeText = "Mixed"
         case .notifications:
             modeText = "Notifications"
         case .none:
@@ -2567,7 +2591,8 @@ final class ScheduleManager: ObservableObject {
             mode: mode,
             now: now,
             pendingNotifications: await notificationScheduler.pendingDeliveries(),
-            pendingAlarms: pendingAlarmKitDeliveries(for: mode)
+            pendingAlarms: pendingAlarmKitDeliveries(for: mode),
+            alarmKitVerificationAvailable: alarmKitVerificationAvailable(for: mode)
         )
         lastDeliveryReconciliationReport = report.deliveryReport
 
@@ -2593,7 +2618,7 @@ final class ScheduleManager: ObservableObject {
     }
 
     private func pendingAlarmKitDeliveries(for mode: SchedulingMode) -> [ScheduledAlarmDelivery] {
-        guard mode == .alarmKit else { return [] }
+        guard mode.usesAlarmKit else { return [] }
         #if targetEnvironment(simulator)
         return []
         #else
@@ -2601,6 +2626,18 @@ final class ScheduleManager: ObservableObject {
             return alarmKitScheduler.scheduledAlarmDeliveries()
         }
         return []
+        #endif
+    }
+
+    private func alarmKitVerificationAvailable(for mode: SchedulingMode) -> Bool {
+        guard mode.usesAlarmKit else { return true }
+        #if targetEnvironment(simulator)
+        return false
+        #else
+        if #available(iOS 26.0, *), alarmKitScheduler != nil {
+            return true
+        }
+        return false
         #endif
     }
 
@@ -2630,7 +2667,7 @@ final class ScheduleManager: ObservableObject {
             wakeRuleSignature: wakeRuleSignature,
             refreshReason: reason,
             result: report.summaryText,
-            message: "expected=\(report.expectedDeliveryCount) pendingNotifications=\(report.pendingNotificationCount) pendingAlarms=\(report.pendingAlarmCount)"
+            message: "expected=\(report.expectedDeliveryCount) matched=\(report.matchedCount) missing=\(report.missingCount) failed=\(report.failedCount) pendingNotifications=\(report.pendingNotificationCount) pendingAlarms=\(report.pendingAlarmCount)"
         )
         let entries = [summaryEntry] + report.expectedDeliveries.map { delivery in
             let platformIdentifier: String
@@ -3073,7 +3110,9 @@ enum AlarmPipelineDiagnostics {
         mode: SchedulingMode,
         now: Date,
         pendingNotifications: [PendingNotificationDelivery] = [],
-        pendingAlarms: [ScheduledAlarmDelivery] = []
+        pendingAlarms: [ScheduledAlarmDelivery] = [],
+        alarmKitVerificationAvailable: Bool = true,
+        notificationVerificationAvailable: Bool = true
     ) -> AlarmPipelineDiagnosticsReport {
         guard settings.isEnabled, mode != .none else {
             let deliveryReport = DeliveryReconciliation.report(
@@ -3081,7 +3120,9 @@ enum AlarmPipelineDiagnostics {
                 generatedAt: now,
                 expectedDeliveries: [],
                 pendingNotifications: pendingNotifications,
-                pendingAlarms: pendingAlarms
+                pendingAlarms: pendingAlarms,
+                alarmKitVerificationAvailable: alarmKitVerificationAvailable,
+                notificationVerificationAvailable: notificationVerificationAvailable
             )
             return AlarmPipelineDiagnosticsReport(
                 expectedDeliveryCount: 0,
@@ -3100,7 +3141,9 @@ enum AlarmPipelineDiagnostics {
             mode: mode,
             now: now,
             pendingNotifications: pendingNotifications,
-            pendingAlarms: pendingAlarms
+            pendingAlarms: pendingAlarms,
+            alarmKitVerificationAvailable: alarmKitVerificationAvailable,
+            notificationVerificationAvailable: notificationVerificationAvailable
         )
 
         return AlarmPipelineDiagnosticsReport(

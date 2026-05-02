@@ -20,10 +20,24 @@ final class AlarmScheduler {
         canUseAlarmKit: Bool,
         cancelWindowDays: Int
     ) async -> Bool {
+        await scheduleAll(
+            days: days,
+            settings: settings,
+            mode: canUseAlarmKit ? .alarmKit : .notifications,
+            cancelWindowDays: cancelWindowDays
+        )
+    }
+
+    func scheduleAll(
+        days: [ActiveAlarmDay],
+        settings: AppSettings,
+        mode: SchedulingMode,
+        cancelWindowDays: Int
+    ) async -> Bool {
         let nextPlans = buildPlannedEvents(
             days: days,
             settings: settings,
-            canUseAlarmKit: canUseAlarmKit
+            mode: mode
         )
 
         if lastPlannedEvents.isEmpty {
@@ -42,6 +56,18 @@ final class AlarmScheduler {
         settings: AppSettings,
         canUseAlarmKit: Bool
     ) async -> Bool {
+        await scheduleDay(
+            day: day,
+            settings: settings,
+            mode: canUseAlarmKit ? .alarmKit : .notifications
+        )
+    }
+
+    func scheduleDay(
+        day: ActiveAlarmDay,
+        settings: AppSettings,
+        mode: SchedulingMode
+    ) async -> Bool {
         if lastPlannedEvents.values.contains(where: { $0.dayID == day.id }) == false {
             await routineScheduler.cancelIdentifiers(
                 SchedulingIdentifierSet.forSchedule(day.schedule, events: day.scheduledEvents)
@@ -50,7 +76,7 @@ final class AlarmScheduler {
         let nextPlans = buildPlannedEvents(
             days: [day],
             settings: settings,
-            canUseAlarmKit: canUseAlarmKit
+            mode: mode
         )
         return await reconcile(
             to: nextPlans,
@@ -122,7 +148,7 @@ final class AlarmScheduler {
     private func buildPlannedEvents(
         days: [ActiveAlarmDay],
         settings: AppSettings,
-        canUseAlarmKit: Bool
+        mode: SchedulingMode
     ) -> [String: PlannedScheduledEvent] {
         let now = Date()
         var plans: [String: PlannedScheduledEvent] = [:]
@@ -132,15 +158,16 @@ final class AlarmScheduler {
 
             for event in day.scheduledEvents where event.fireDate > now {
                 for deliveryKind in event.deliveryKinds {
-                    let channel: PlannedScheduledEvent.Channel
-                    if deliveryKind == .iftarNotification {
-                        channel = .notification
-                    } else {
-                        channel = canUseAlarmKit ? .alarmKit : .notification
+                    guard let channel = plannedChannel(for: event, deliveryKind: deliveryKind, mode: mode) else {
+                        continue
                     }
 
                     let plan = PlannedScheduledEvent(
-                        planID: SchedulingIdentifiers.identifier(for: event, deliveryKind: deliveryKind),
+                        planID: SchedulingIdentifiers.identifier(
+                            for: event,
+                            deliveryKind: deliveryKind,
+                            channel: .notification
+                        ),
                         dayID: day.id,
                         kind: deliveryKind,
                         channel: channel,
@@ -175,6 +202,37 @@ final class AlarmScheduler {
             deliveryKind: plan.kind,
             schedule: plan.schedule
         )
+    }
+
+    private func plannedChannel(
+        for event: ScheduledEvent,
+        deliveryKind: ScheduleEventKind,
+        mode: SchedulingMode
+    ) -> PlannedScheduledEvent.Channel? {
+        switch mode {
+        case .none:
+            return nil
+        case .notifications:
+            return .notification
+        case .alarmKit:
+            if deliveryKind == .iftarNotification {
+                return .notification
+            }
+            if event.fajrStartBehavior == .takeoverIfUnresolvedOtherwiseCue,
+               deliveryKind == .boundary {
+                return nil
+            }
+            return .alarmKit
+        case .mixed:
+            if event.fajrStartBehavior == .takeoverIfUnresolvedOtherwiseCue,
+               deliveryKind == .boundary {
+                return nil
+            }
+            if deliveryKind == .wake || deliveryKind == .iftarAlarm || deliveryKind == .iftarAdhan {
+                return .alarmKit
+            }
+            return .notification
+        }
     }
 }
 

@@ -38,7 +38,7 @@ enum SchedulingReconciler {
         let scheduled = await alarmScheduler.scheduleAll(
             days: snapshot.scheduledDays,
             settings: settings,
-            canUseAlarmKit: requestedMode == .alarmKit,
+            mode: requestedMode,
             cancelWindowDays: snapshot.scheduledHorizonDays
         )
         return SchedulingReconciliationResult(
