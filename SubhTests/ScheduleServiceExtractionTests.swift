@@ -341,6 +341,13 @@ struct ScheduleServiceExtractionTests {
         ])
         #expect(snapshotResult.scheduledDays.count == 1)
         #expect(snapshotResult.scheduledDays.first?.dateKey == DateHelpers.dayIdentifier(for: date, timeZone: timeZone))
+
+        let planningWindow = snapshotResult.planningWindowSnapshot
+        #expect(planningWindow.visibleDateKeys == snapshotResult.visibleDays.map(\.dateKey))
+        #expect(planningWindow.activeScheduledDateKeys == snapshotResult.scheduledDays.map(\.dateKey))
+        #expect(planningWindow.visibleOnlyDateKeys == [
+            DateHelpers.dayIdentifier(for: date.addingTimeInterval(24 * 60 * 60), timeZone: timeZone)
+        ])
     }
 
     @Test
@@ -586,6 +593,34 @@ struct ScheduleServiceExtractionTests {
         #expect(plan.mode == .notifications)
         #expect(plan.expectedDeliveries.count == 1)
         #expect(plan.expectedDeliveries.first?.channel == .notification)
+        #expect(plan.skippedDeliveries.isEmpty)
+    }
+
+    @Test
+    func deliveryPlanDoesNotScheduleVisibleOnlyRows() {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let now = Self.makeDate(year: 2026, month: 5, day: 1, hour: 0, timeZone: timeZone)
+        let visibleOnlyDay = Self.makeSchedulerActiveDay(
+            date: now.addingTimeInterval(2 * 24 * 60 * 60),
+            timeZone: timeZone
+        )
+        let snapshot = ActiveAlarmWindowSnapshot(
+            generatedAt: now,
+            visibleDays: [visibleOnlyDay],
+            scheduledDays: [],
+            visibleHorizonDays: 7,
+            scheduledHorizonDays: 0
+        )
+
+        let plan = DeliveryReconciliation.plan(
+            snapshot: snapshot,
+            settings: .default,
+            mode: .notifications,
+            now: now
+        )
+
+        #expect(snapshot.planningWindowSnapshot.visibleOnlyDateKeys == [visibleOnlyDay.dateKey])
+        #expect(plan.expectedDeliveries.isEmpty)
         #expect(plan.skippedDeliveries.isEmpty)
     }
 

@@ -2216,6 +2216,12 @@ final class ScheduleManager: ObservableObject {
                 fastTagStore.removeSelection(for: oldDate, timeZone: timeZone)
             }
 
+            let reviewState = PlanningReviewState(
+                kind: .movedByHijriAdjustment,
+                oldDateKey: oldKey,
+                newDateKey: newKey,
+                message: "\(source.origin.label) moved because the Hijri calendar was adjusted."
+            )
             changes.append(
                 HijriAdjustmentChange(
                     id: UUID(),
@@ -2225,7 +2231,9 @@ final class ScheduleManager: ObservableObject {
                     oldDateKey: oldKey,
                     newDateKey: newKey,
                     sourceLabel: source.origin.label,
-                    timestamp: Date()
+                    timestamp: Date(),
+                    intentAnchor: source.intentAnchor,
+                    reviewState: reviewState
                 )
             )
         }
@@ -3200,6 +3208,35 @@ struct ActiveAlarmWindowSnapshot: Codable, Equatable, Sendable {
             visibleHorizonDays: visibleHorizonDays,
             scheduledHorizonDays: scheduledHorizonDays
         )
+    }
+
+    var planningWindowSnapshot: PlanningWindowSnapshot {
+        PlanningWindowSnapshot(
+            generatedAt: generatedAt,
+            knowledgeDateKeys: visibleDays.map(\.dateKey),
+            visibleDateKeys: visibleDays.map(\.dateKey),
+            editableDateKeys: visibleDays.map(\.dateKey),
+            activeScheduledDateKeys: scheduledDays.map(\.dateKey),
+            historicalDateKeys: [],
+            displayHorizonDays: visibleHorizonDays,
+            activeScheduledHorizonDays: scheduledHorizonDays
+        )
+    }
+}
+
+struct PlanningWindowSnapshot: Codable, Equatable, Sendable {
+    let generatedAt: Date
+    let knowledgeDateKeys: [String]
+    let visibleDateKeys: [String]
+    let editableDateKeys: [String]
+    let activeScheduledDateKeys: [String]
+    let historicalDateKeys: [String]
+    let displayHorizonDays: Int
+    let activeScheduledHorizonDays: Int
+
+    var visibleOnlyDateKeys: [String] {
+        let scheduled = Set(activeScheduledDateKeys)
+        return visibleDateKeys.filter { !scheduled.contains($0) }
     }
 }
 

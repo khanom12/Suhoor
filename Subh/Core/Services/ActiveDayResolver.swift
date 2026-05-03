@@ -414,7 +414,8 @@ final class ActiveDayResolver {
             label: ScheduledDateSourceOrigin.defaultDailyPlan.label,
             stopSeriesLabel: ScheduledDateSourceOrigin.defaultDailyPlan.stopSeriesLabel,
             isExplicitOneOff: ScheduledDateSourceOrigin.defaultDailyPlan.isExplicitOneOff,
-            sourceOrigin: .defaultDailyPlan
+            sourceOrigin: .defaultDailyPlan,
+            intentAnchor: .defaultSetting(ruleID: ScheduledDateSourceOrigin.defaultDailyPlan.planningRuleID)
         )
     }
 

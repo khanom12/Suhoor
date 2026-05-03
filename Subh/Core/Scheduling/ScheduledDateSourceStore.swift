@@ -4,7 +4,7 @@ final class ScheduledDateSourceStore {
     private let defaults: UserDefaults
     private let storageKey = "Suhoor.ScheduledDateSources"
     private let migrationKey = "Suhoor.ScheduledDateSourcesMigrationVersion"
-    private let currentMigrationVersion = 4
+    private let currentMigrationVersion = 5
     private let persistence = DebouncedPersistenceController(
         label: "com.suhoor.app.scheduled-date-sources",
         delay: 0.2

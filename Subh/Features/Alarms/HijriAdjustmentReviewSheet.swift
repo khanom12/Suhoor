@@ -19,6 +19,11 @@ struct HijriAdjustmentReviewSheet: View {
                         Text(change.sourceLabel)
                             .font(AppTypography.rowBody)
                             .foregroundStyle(.secondary)
+                        if let reviewState = change.reviewState {
+                            Text(reviewState.message)
+                                .font(AppTypography.rowBody)
+                                .foregroundStyle(.secondary)
+                        }
                     }
                     .padding(.vertical, DesignTokens.textSpacingTight)
                 }

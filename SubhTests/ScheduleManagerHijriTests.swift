@@ -330,6 +330,11 @@ struct ScheduleManagerHijriTests {
 
         let pending = changeStore.pendingChanges()
         #expect(pending.isEmpty == false)
+        #expect(pending.first?.intentAnchor?.kind == .observance)
+        #expect(pending.first?.intentAnchor?.observanceID == IslamicQuickAddKind.nextWhiteDays.rawValue)
+        #expect(pending.first?.reviewState?.kind == .movedByHijriAdjustment)
+        #expect(pending.first?.reviewState?.oldDateKey == DateHelpers.dayIdentifier(for: oldDate, timeZone: timeZone))
+        #expect(pending.first?.reviewState?.newDateKey == DateHelpers.dayIdentifier(for: newDate, timeZone: timeZone))
     }
 
     @Test

@@ -9,6 +9,32 @@ struct HijriAdjustmentChange: Codable, Equatable, Identifiable, Sendable {
     let newDateKey: String
     let sourceLabel: String
     let timestamp: Date
+    let intentAnchor: MorningIntentAnchor?
+    let reviewState: PlanningReviewState?
+
+    init(
+        id: UUID,
+        hijriYear: Int,
+        month: HijriMonth,
+        day: Int,
+        oldDateKey: String,
+        newDateKey: String,
+        sourceLabel: String,
+        timestamp: Date,
+        intentAnchor: MorningIntentAnchor? = nil,
+        reviewState: PlanningReviewState? = nil
+    ) {
+        self.id = id
+        self.hijriYear = hijriYear
+        self.month = month
+        self.day = day
+        self.oldDateKey = oldDateKey
+        self.newDateKey = newDateKey
+        self.sourceLabel = sourceLabel
+        self.timestamp = timestamp
+        self.intentAnchor = intentAnchor
+        self.reviewState = reviewState
+    }
 }
 
 final class HijriAdjustmentChangeStore {

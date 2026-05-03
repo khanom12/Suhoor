@@ -125,7 +125,10 @@ struct ScheduledDateSourceResolver {
                         label: source.origin.label,
                         stopSeriesLabel: source.origin.stopSeriesLabel,
                         isExplicitOneOff: source.origin.isExplicitOneOff,
-                        sourceOrigin: source.origin
+                        sourceOrigin: source.origin,
+                        intentAnchor: source.intentAnchor,
+                        calendarSnapshotAtCreation: source.calendarSnapshotAtCreation,
+                        reviewState: source.reviewState
                     )
                 )
             }
@@ -153,7 +156,12 @@ struct ScheduledDateSourceResolver {
                         label: ScheduledDateSourceOrigin.defaultRamadan.label,
                         stopSeriesLabel: nil,
                         isExplicitOneOff: false,
-                        sourceOrigin: .defaultRamadan
+                        sourceOrigin: .defaultRamadan,
+                        intentAnchor: .hijriMonthWindow(
+                            month: .ramadan,
+                            year: nil,
+                            ruleID: ScheduledDateSourceOrigin.defaultRamadan.planningRuleID
+                        )
                     )
                 )
             }
@@ -410,7 +418,10 @@ struct ScheduledDateSourceResolver {
                     label: source.origin.label,
                     stopSeriesLabel: source.origin.stopSeriesLabel,
                     isExplicitOneOff: source.origin.isExplicitOneOff,
-                    sourceOrigin: source.origin
+                    sourceOrigin: source.origin,
+                    intentAnchor: source.intentAnchor,
+                    calendarSnapshotAtCreation: source.calendarSnapshotAtCreation,
+                    reviewState: source.reviewState
                 )
 
                 if var existing = byKey[key] {
@@ -445,7 +456,12 @@ struct ScheduledDateSourceResolver {
                     label: ScheduledDateSourceOrigin.defaultRamadan.label,
                     stopSeriesLabel: nil,
                     isExplicitOneOff: false,
-                    sourceOrigin: .defaultRamadan
+                    sourceOrigin: .defaultRamadan,
+                    intentAnchor: .hijriMonthWindow(
+                        month: .ramadan,
+                        year: nil,
+                        ruleID: ScheduledDateSourceOrigin.defaultRamadan.planningRuleID
+                    )
                 )
 
                 if var existing = byKey[key] {
