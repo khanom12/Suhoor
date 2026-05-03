@@ -1573,6 +1573,9 @@ private struct NextTenMorningsCard: View {
     let entries: [WakeRowEntry]
     let onSelect: (WakeRowEntry) -> Void
 
+    @State private var isExpanded = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
         let forecast = MorningHomePresentation.nextTenMorningsSnapshot(from: entries)
 
@@ -1581,39 +1584,64 @@ private struct NextTenMorningsCard: View {
             contentPadding: 0
         ) {
             VStack(spacing: 0) {
-                Text(forecast.title)
-                    .appTextRole(.eyebrow)
-                    .foregroundStyle(WakeGlassTheme.tertiaryText)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                Button {
+                    withAnimation(expansionAnimation) {
+                        isExpanded.toggle()
+                    }
+                } label: {
+                    HStack(spacing: DesignTokens.spacingS) {
+                        Text(forecast.title)
+                            .appTextRole(.eyebrow)
+                            .foregroundStyle(WakeGlassTheme.tertiaryText)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+
+                        Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(WakeGlassTheme.tertiaryText)
+                            .accessibilityHidden(true)
+                    }
                     .padding(.horizontal, DesignTokens.spacingL)
                     .padding(.top, DesignTokens.spacingL)
                     .padding(.bottom, DesignTokens.spacingS)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Next 10 Mornings")
+                .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
+                .accessibilityHint(isExpanded ? "Double-tap to collapse." : "Double-tap to expand.")
+                .accessibilityIdentifier("nextTenMornings.header")
 
-                NextTenMorningsDivider(inset: DesignTokens.spacingL)
+                if isExpanded {
+                    NextTenMorningsDivider(inset: DesignTokens.spacingL)
 
-                if forecast.loadingState == .empty {
-                    Text("Wake forecast will appear once times are available.")
-                        .font(AppTypography.rowBody)
-                        .foregroundStyle(WakeGlassTheme.secondaryText)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, DesignTokens.spacingL)
-                        .padding(.vertical, DesignTokens.spacingM)
-                } else {
-                    ForEach(Array(forecast.rows.enumerated()), id: \.element.id) { index, row in
-                        NextTenMorningsRow(display: row, rowMetrics: forecast.rowMetrics) {
-                            guard let entry = entries.first(where: { $0.id == row.id }) else { return }
-                            onSelect(entry)
-                        }
-                        .padding(.horizontal, DesignTokens.spacingM)
+                    if forecast.loadingState == .empty {
+                        Text("Wake forecast will appear once times are available.")
+                            .font(AppTypography.rowBody)
+                            .foregroundStyle(WakeGlassTheme.secondaryText)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, DesignTokens.spacingL)
+                            .padding(.vertical, DesignTokens.spacingM)
+                    } else {
+                        ForEach(Array(forecast.rows.enumerated()), id: \.element.id) { index, row in
+                            NextTenMorningsRow(display: row, rowMetrics: forecast.rowMetrics) {
+                                guard let entry = entries.first(where: { $0.id == row.id }) else { return }
+                                onSelect(entry)
+                            }
+                            .padding(.horizontal, DesignTokens.spacingM)
 
-                        if index < forecast.rows.count - 1 {
-                            NextTenMorningsDivider(inset: DesignTokens.spacingM)
+                            if index < forecast.rows.count - 1 {
+                                NextTenMorningsDivider(inset: DesignTokens.spacingM)
+                            }
                         }
                     }
                 }
             }
         }
+    }
+
+    private var expansionAnimation: Animation {
+        reduceMotion ? .easeOut(duration: 0.12) : .easeInOut(duration: 0.20)
     }
 }
 
@@ -1632,6 +1660,7 @@ private struct NextTenMorningsRow: View {
         }
         .buttonStyle(.plain)
         .padding(.vertical, DesignTokens.compactRowVerticalPadding)
+        .accessibilityIdentifier("nextTenMornings.row")
     }
 
     private var rowContent: some View {

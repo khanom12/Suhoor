@@ -1346,7 +1346,7 @@ struct ScheduleServiceExtractionTests {
         )
 
         #expect(fajrDisplay.selectedQuickWakeMode == .fajr)
-        #expect(fajrDisplay.quickWakeModeOptions.map(\.title) == ["Fast", "Fajr", "Quiet"])
+        #expect(fajrDisplay.quickWakeModeOptions.map(\.title) == ["Pre-Fajr", "Fajr", "Quiet"])
         #expect(fajrDisplay.quickWakeModeOptions.first(where: { $0.mode == .fajr })?.isSelected == true)
         #expect(fajrDisplay.primaryTime == fajrEntry.schedule.wakeDate)
         #expect(fajrDisplay.detailText == "Wake up 30 min before Fajr ends")
@@ -1368,7 +1368,8 @@ struct ScheduleServiceExtractionTests {
             hasDayOverride: true,
             plannedWakeState: .preFajr,
             wakeOffsetMinutesFromFajrStart: -30,
-            quickWakeModeOverride: .fast
+            quickWakeModeOverride: .fast,
+            earlyWakePurposeOverride: .tahajjud
         )
         let fastDisplay = MorningHomePresentation.heroDisplay(
             entry: fastEntry,
@@ -1388,8 +1389,8 @@ struct ScheduleServiceExtractionTests {
         #expect(fastDisplay.detailText == "Wake up 30 min before Fajr begins")
         #expect(fastDisplay.fajrWindowVisualMode == .interactiveEarlyWorshipWindow)
         #expect(fastDisplay.wakeAdjustmentRelationAnchor == .fajrStart)
-        #expect(fastDisplay.accessibilityLabel.contains("Fast mode selected"))
-        #expect(fastForecastRow.tags.map(\.title) == ["Fasting"])
+        #expect(fastDisplay.accessibilityLabel.contains("Pre-Fajr mode selected"))
+        #expect(fastForecastRow.tags.map(\.title) == ["Tahajjud"])
 
         let quietEntry = Self.makeWakeEntry(
             date: date,
@@ -1445,7 +1446,7 @@ struct ScheduleServiceExtractionTests {
             timeZone: timeZone
         )
         #expect(fajrDisplay.locationText == dateLine)
-        #expect(AlarmDayDetailPresentation.modeOptions(for: fajrDisplay).map(\.title) == ["Early", "Fajr", "Quiet"])
+        #expect(AlarmDayDetailPresentation.modeOptions(for: fajrDisplay).map(\.title) == ["Pre-Fajr", "Fajr", "Quiet"])
         #expect(AlarmDayDetailPresentation.purpose(for: fajrEntry) == nil)
         #expect(AlarmDayDetailPresentation.relationText(for: fajrDisplay) == "Wake up 30 min before Fajr ends")
         #expect(AlarmDayDetailPresentation.fajrAdhanSetting(for: fajrEntry, purpose: nil) == nil)
@@ -1457,7 +1458,7 @@ struct ScheduleServiceExtractionTests {
             fajrAdhan: nil,
             showsReset: false
         )
-        #expect(fajrContext.summary == "There are no Sunnah fasting opportunities for this day. You can still choose Early to plan a Voluntary, Qada, Vow, Kaffarah, or Other fast.")
+        #expect(fajrContext.summary == "There are no Sunnah fasting opportunities for this day. You can still choose Pre-Fajr and select Fasting to plan a Voluntary, Qada, Vow, Kaffarah, or Other fast.")
         #expect(fajrContext.sentenceChips.isEmpty)
         #expect(fajrContext.significance == nil)
         #expect(fajrContext.hasContent)
@@ -1479,7 +1480,7 @@ struct ScheduleServiceExtractionTests {
         let quietDetailDisplay = AlarmDayDetailPresentation.detailHeroDisplay(quietDisplay)
         #expect(quietDetailDisplay.primaryText == "Quiet Mode")
         #expect(quietDetailDisplay.wakeIconName == "moon.fill")
-        #expect(AlarmDayDetailPresentation.relationText(for: quietDisplay) == "No wake alarm for this date")
+        #expect(AlarmDayDetailPresentation.relationText(for: quietDisplay) == "No alarm will ring for this date")
         #expect(AlarmDayDetailPresentation.purpose(for: quietEntry) == nil)
         #expect(AlarmDayDetailPresentation.accessibilitySummary(
             dateLine: dateLine,
@@ -1487,7 +1488,7 @@ struct ScheduleServiceExtractionTests {
             purpose: nil,
             fastType: nil,
             fajrAdhan: AlarmDayDetailPresentation.fajrAdhanSetting(for: quietEntry, purpose: nil)
-        ).contains("Quiet Mode. No wake alarm for this date"))
+        ).contains("Quiet Mode. No alarm will ring for this date"))
         #expect(AlarmDayDetailPresentation.context(
             for: quietEntry,
             display: quietDisplay,
@@ -1543,7 +1544,7 @@ struct ScheduleServiceExtractionTests {
         )
         Self.expectAlarmDetailPurpose(
             AlarmDayDetailPresentation.purpose(for: ramadan),
-            title: "Fast",
+            title: "Fasting",
             isLocked: true,
             selection: .fast
         )
@@ -1571,7 +1572,7 @@ struct ScheduleServiceExtractionTests {
             fastType: AlarmDayDetailPresentation.fastType(for: ramadan, purpose: AlarmDayDetailPresentation.purpose(for: ramadan)),
             fajrAdhan: AlarmDayDetailPresentation.fajrAdhanSetting(for: ramadan, purpose: AlarmDayDetailPresentation.purpose(for: ramadan)),
             showsReset: false
-        ).summary == "You are waking early for Ramadan.")
+        ).summary == "You are waking before Fajr for Ramadan. Ramadan fast is locked for this date.")
         #expect(AlarmDayDetailPresentation.fajrAdhanSetting(
             for: ramadan,
             purpose: AlarmDayDetailPresentation.purpose(for: ramadan)
@@ -1592,7 +1593,7 @@ struct ScheduleServiceExtractionTests {
         )
         Self.expectAlarmDetailPurpose(
             AlarmDayDetailPresentation.purpose(for: tahajjud),
-            title: "Tahajjud",
+            title: "Tahajjud only",
             isLocked: false,
             selection: .tahajjud
         )
@@ -1609,7 +1610,7 @@ struct ScheduleServiceExtractionTests {
             fastType: AlarmDayDetailPresentation.fastType(for: tahajjud, purpose: AlarmDayDetailPresentation.purpose(for: tahajjud)),
             fajrAdhan: AlarmDayDetailPresentation.fajrAdhanSetting(for: tahajjud, purpose: AlarmDayDetailPresentation.purpose(for: tahajjud)),
             showsReset: false
-        ).summary == "You are waking early for Tahajjud. There are no Sunnah fasting opportunities for this day.")
+        ).summary == "You are waking before Fajr for Tahajjud only. There are no Sunnah fasting opportunities for this day.")
 
         let fastWithTahajjudContext = Self.makeWakeEntry(
             date: date,
@@ -1626,7 +1627,7 @@ struct ScheduleServiceExtractionTests {
         )
         Self.expectAlarmDetailPurpose(
             AlarmDayDetailPresentation.purpose(for: fastWithTahajjudContext),
-            title: "Fast",
+            title: "Fasting",
             isLocked: false,
             selection: .fast
         )
@@ -1642,11 +1643,12 @@ struct ScheduleServiceExtractionTests {
             ),
             plannedWakeState: .preFajr,
             wakeOffsetMinutesFromFajrStart: -30,
-            quickWakeModeOverride: .fast
+            quickWakeModeOverride: .fast,
+            earlyWakePurposeOverride: .fast
         )
         Self.expectAlarmDetailPurpose(
             AlarmDayDetailPresentation.purpose(for: whiteDays),
-            title: "Fast",
+            title: "Fasting",
             isLocked: false,
             selection: .fast
         )
@@ -1659,7 +1661,7 @@ struct ScheduleServiceExtractionTests {
             defaultOptionTitle: "Today's opportunities",
             isLocked: false,
             selectedOpportunityTitles: ["White Days fast"],
-            options: ["Today's opportunities", "Voluntary fast", "Qada fast", "Vow / Nadhr fast", "Kaffarah fast", "Other fast"]
+            options: ["Voluntary fast", "Qada fast", "Vow / Nadhr fast", "Kaffarah fast", "Other fast"]
         )
         let whiteDaysContext = AlarmDayDetailPresentation.context(
             for: whiteDays,
@@ -1675,10 +1677,10 @@ struct ScheduleServiceExtractionTests {
             fajrAdhan: AlarmDayDetailPresentation.fajrAdhanSetting(for: whiteDays, purpose: AlarmDayDetailPresentation.purpose(for: whiteDays)),
             showsReset: false
         )
-        #expect(whiteDaysContext.summary == "You are waking early to fast. This fast will use today's Sunnah opportunities by default: White Days fast.")
-        #expect(whiteDaysContext.sentencePrefix == "You are waking early to fast. This fast will use today's Sunnah opportunities by default:")
+        #expect(whiteDaysContext.summary == "You are waking before Fajr to fast. This fast will use today's Sunnah opportunities by default: White Days fast.")
+        #expect(whiteDaysContext.sentencePrefix == "You are waking before Fajr to fast. This fast will use today's Sunnah opportunities by default:")
         #expect(whiteDaysContext.sentenceChips.map(\.title) == ["White Days fast"])
-        #expect(whiteDaysContext.significance?.items == ["White Days fast"])
+        #expect(whiteDaysContext.significance == nil)
 
         let whiteDaysQada = Self.makeWakeEntry(
             date: date,
@@ -1692,6 +1694,7 @@ struct ScheduleServiceExtractionTests {
             plannedWakeState: .preFajr,
             wakeOffsetMinutesFromFajrStart: -30,
             quickWakeModeOverride: .fast,
+            earlyWakePurposeOverride: .fast,
             alarmDetailFastTypeOverride: .qada
         )
         Self.expectAlarmDetailFastType(
@@ -1704,7 +1707,7 @@ struct ScheduleServiceExtractionTests {
             isLocked: false,
             selection: .qada,
             selectedOpportunityTitles: [],
-            options: ["Today's opportunities", "Voluntary fast", "Qada fast", "Vow / Nadhr fast", "Kaffarah fast", "Other fast"]
+            options: ["Voluntary fast", "Qada fast", "Vow / Nadhr fast", "Kaffarah fast", "Other fast"]
         )
         let whiteDaysQadaContext = AlarmDayDetailPresentation.context(
             for: whiteDaysQada,
@@ -1720,7 +1723,7 @@ struct ScheduleServiceExtractionTests {
             fajrAdhan: AlarmDayDetailPresentation.fajrAdhanSetting(for: whiteDaysQada, purpose: AlarmDayDetailPresentation.purpose(for: whiteDaysQada)),
             showsReset: false
         )
-        #expect(whiteDaysQadaContext.summary == "You are waking early for Qada fast.")
+        #expect(whiteDaysQadaContext.summary == "You are waking before Fajr for a Qada fast.")
         #expect(whiteDaysQadaContext.sentenceChips.map(\.title) == ["Qada fast"])
 
         let whiteDaysVoluntaryReturn = Self.makeWakeEntry(
@@ -1735,6 +1738,7 @@ struct ScheduleServiceExtractionTests {
             plannedWakeState: .preFajr,
             wakeOffsetMinutesFromFajrStart: -30,
             quickWakeModeOverride: .fast,
+            earlyWakePurposeOverride: .fast,
             alarmDetailFastTypeOverride: .voluntary
         )
         Self.expectAlarmDetailFastType(
@@ -1747,7 +1751,7 @@ struct ScheduleServiceExtractionTests {
             isLocked: false,
             selection: nil,
             selectedOpportunityTitles: ["White Days fast"],
-            options: ["Today's opportunities", "Voluntary fast", "Qada fast", "Vow / Nadhr fast", "Kaffarah fast", "Other fast"]
+            options: ["Voluntary fast", "Qada fast", "Vow / Nadhr fast", "Kaffarah fast", "Other fast"]
         )
 
         let multipleOpportunities = Self.makeWakeEntry(
@@ -1778,7 +1782,7 @@ struct ScheduleServiceExtractionTests {
         )
         #expect(multipleContext.summary == "This day has Sunnah fasting opportunities: White Days fast, Shawwal Six fast, and Monday / Thursday fast.")
         #expect(multipleContext.sentenceChips.map(\.title) == ["White Days fast", "Shawwal Six fast", "Monday / Thursday fast"])
-        #expect(multipleContext.significance?.items == ["White Days fast", "Shawwal Six fast", "Monday / Thursday fast"])
+        #expect(multipleContext.significance == nil)
 
         let monday = Self.makeDate(year: 2026, month: 5, day: 4, timeZone: timeZone)
         let mondayOpportunity = Self.makeWakeEntry(
@@ -1850,7 +1854,7 @@ struct ScheduleServiceExtractionTests {
         )
         Self.expectAlarmDetailPurpose(
             AlarmDayDetailPresentation.purpose(for: selectedFastAndTahajjud),
-            title: "Fast",
+            title: "Fasting",
             isLocked: false,
             selection: .fast
         )
@@ -1861,6 +1865,7 @@ struct ScheduleServiceExtractionTests {
             plannedWakeState: .preFajr,
             wakeOffsetMinutesFromFajrStart: -30,
             quickWakeModeOverride: .fast,
+            earlyWakePurposeOverride: .fast,
             alarmDetailFastTypeOverride: .other
         )
         Self.expectAlarmDetailFastType(
@@ -1913,7 +1918,7 @@ struct ScheduleServiceExtractionTests {
         )
 
         #expect(fast.quickWakeSelection == .fast)
-        #expect(fast.dayContext == .fastingIntended)
+        #expect(fast.dayContext == .tahajjudIntended)
         #expect(fast.underlyingWakeMode == .earlyWorship)
         #expect(fast.boundaryRegime == .earlyWorshipWindow)
         #expect(fast.wakeBoundaryResolution.finalThirdStart != nil)

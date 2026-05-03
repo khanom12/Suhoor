@@ -61,7 +61,7 @@ enum QuickWakeMode: String, Codable, CaseIterable, Identifiable, Sendable {
     var displayTitle: String {
         switch self {
         case .fast:
-            return "Fast"
+            return "Pre-Fajr"
         case .fajr:
             return "Fajr"
         case .quiet:
@@ -75,18 +75,18 @@ enum EarlyWakePurposeOverride: String, Codable, CaseIterable, Identifiable, Send
     case tahajjud
     case fastAndTahajjud
 
-    static let allCases: [EarlyWakePurposeOverride] = [.fast, .tahajjud]
+    static let allCases: [EarlyWakePurposeOverride] = [.tahajjud, .fast]
 
     var id: String { rawValue }
 
     var displayTitle: String {
         switch self {
         case .fast:
-            return "Fast"
+            return "Fasting"
         case .tahajjud:
-            return "Tahajjud"
+            return "Tahajjud only"
         case .fastAndTahajjud:
-            return "Fast + Tahajjud"
+            return "Fasting"
         }
     }
 }

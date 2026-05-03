@@ -243,6 +243,41 @@ final class MorningHeroFajrAdjusterUITests: XCTestCase {
         })
     }
 
+    func testNextTenMorningsForecastStartsCollapsedAndExpands() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "--ui-testing-morning-hero-fajr-adjuster",
+            "--ui-testing-fixed-now=2026-04-26T12:00:00Z",
+            "-AppleLanguages",
+            "(en)",
+            "-AppleLocale",
+            "en_US"
+        ]
+        app.launch()
+
+        let header = app.descendants(matching: .any)["nextTenMornings.header"]
+        XCTAssertTrue(header.waitForExistence(timeout: 12))
+        if !header.isHittable {
+            app.swipeUp()
+            XCTAssertTrue(header.waitForExistence(timeout: 4))
+        }
+        XCTAssertEqual(header.value as? String, "Collapsed")
+
+        let firstRow = app.descendants(matching: .any)
+            .matching(identifier: "nextTenMornings.row")
+            .firstMatch
+        XCTAssertFalse(firstRow.exists)
+
+        header.tap()
+        XCTAssertTrue(waitForElementValue(in: app, identifier: "nextTenMornings.header") {
+            $0 == "Expanded"
+        })
+        XCTAssertTrue(firstRow.waitForExistence(timeout: 4))
+
+        firstRow.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["alarmDetail.dateLine"].waitForExistence(timeout: 8))
+    }
+
     private func waitForLabelChange(
         in app: XCUIApplication,
         identifier: String,
@@ -282,6 +317,29 @@ final class MorningHeroFajrAdjusterUITests: XCTestCase {
         } while Date() < deadline
 
         XCTFail("Expected \(identifier) label to match predicate", file: file, line: line)
+        return false
+    }
+
+    private func waitForElementValue(
+        in app: XCUIApplication,
+        identifier: String,
+        timeout: TimeInterval = 12,
+        file: StaticString = #filePath,
+        line: UInt = #line,
+        matches predicate: (String) -> Bool
+    ) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        repeat {
+            let element = app.descendants(matching: .any)[identifier]
+            if element.exists,
+               let value = element.value as? String,
+               predicate(value) {
+                return true
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.2))
+        } while Date() < deadline
+
+        XCTFail("Expected \(identifier) value to match predicate", file: file, line: line)
         return false
     }
 }

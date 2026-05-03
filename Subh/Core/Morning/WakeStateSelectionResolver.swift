@@ -49,10 +49,25 @@ enum WakeStateSelectionResolver {
     static func dayContextKind(for day: ActiveAlarmDay) -> MorningWakeDayContextKind {
         let context = day.resolvedDayContext
         let tags = Set(context.supportingTags)
+        let selectedMode = selectedMode(for: day)
+        let selectedPurpose = day.effectiveConfig.earlyWakePurposeOverride
+        let isRamadan = tags.contains(.ramadan) || day.isImplicitRamadan
+        let hasExplicitPreFajrFastSelection = selectedMode == .fast
+            && (selectedPurpose == .fast
+                || selectedPurpose == .fastAndTahajjud
+                || day.effectiveConfig.alarmDetailFastTypeOverride != nil)
+        let hasResolvedFastingIntent = isFastingMorning(context)
+        let defaultsToTahajjudOnly = selectedMode == .fast
+            && !hasExplicitPreFajrFastSelection
+            && !hasResolvedFastingIntent
+            && !isRamadan
         let hasTahajjud = context.primaryContext == .tahajjud
             || context.secondaryContexts.contains(.tahajjud)
             || day.effectiveConfig.tahajjudRefinement
-        let hasIntendedFast = isFastingMorning(context)
+            || selectedPurpose == .tahajjud
+            || selectedPurpose == .fastAndTahajjud
+            || defaultsToTahajjudOnly
+        let hasIntendedFast = hasResolvedFastingIntent || hasExplicitPreFajrFastSelection
         let hasFastingOpportunity = tags.contains(.mondayThursday)
             || tags.contains(.whiteDays)
             || tags.contains(.arafah)
@@ -76,9 +91,6 @@ enum WakeStateSelectionResolver {
             return .sunnahFastIntended
         }
         if hasIntendedFast {
-            return .fastingIntended
-        }
-        if selectedMode(for: day) == .fast {
             return .fastingIntended
         }
         if hasFastingOpportunity {
@@ -110,7 +122,6 @@ enum WakeStateSelectionResolver {
             override.suhoorOffsetOverrideMinutes = nil
             override.suhoorTimeOverrideMinutesFromMidnight = nil
             override.bypassLatestWakeCap = true
-            override.tahajjudRefinement = nil
         case .fajr:
             override.skipDay = false
             override.quickWakeModeOverride = .fajr
@@ -171,16 +182,23 @@ enum MorningDateIntentReducer {
         let previousMode = WakeStateSelectionResolver.selectedMode(for: day)
         let wasQuiet = previousMode == .quiet || override.quickWakeModeOverride == .quiet
         let preservedMode = override.underlyingWakeModeBeforeQuiet
+        let isRamadan = isRamadanDay(day)
 
         switch mode {
         case .fast:
             if wasQuiet, preservedMode == .fast, override.resolvedWakeRule(defaults: .default) != nil {
                 restoreFromQuiet(mode: .fast, override: &override)
-                override.earlyWakePurposeOverride = override.earlyWakePurposeOverride ?? .fast
+                override.earlyWakePurposeOverride = override.earlyWakePurposeOverride
+                    ?? preservedPreFajrPurpose(isRamadan: isRamadan, override: override)
+                override.tahajjudRefinement = override.earlyWakePurposeOverride == .tahajjud
                 applyAlarmDetailAudioPlan(override.alarmDetailAudioPlanOverride ?? .wakeAlarmAndFajrAdhan, to: &override)
             } else {
                 WakeStateSelectionResolver.apply(.fast, to: &override)
-                override.earlyWakePurposeOverride = .fast
+                override.earlyWakePurposeOverride = preservedPreFajrPurpose(isRamadan: isRamadan, override: override)
+                override.alarmDetailFastTypeOverride = override.earlyWakePurposeOverride == .fast
+                    ? override.alarmDetailFastTypeOverride
+                    : nil
+                override.tahajjudRefinement = override.earlyWakePurposeOverride == .tahajjud
             }
 
         case .fajr:
@@ -335,6 +353,23 @@ enum MorningDateIntentReducer {
         override.underlyingWakeModeBeforeQuiet = nil
         override.quietOverlay = false
         override.iftarEnabled = nil
+    }
+
+    private static func preservedPreFajrPurpose(
+        isRamadan: Bool,
+        override: DailyAlarmOverride
+    ) -> EarlyWakePurposeOverride {
+        if isRamadan {
+            return .fast
+        }
+        if override.alarmDetailFastTypeOverride != nil || override.fajrAdhanAtFajrBeginsOverride != nil {
+            return .fast
+        }
+        return .tahajjud
+    }
+
+    private static func isRamadanDay(_ day: ActiveAlarmDay) -> Bool {
+        day.isImplicitRamadan || day.resolvedDayContext.supportingTags.contains(.ramadan)
     }
 
     private static func stamp(

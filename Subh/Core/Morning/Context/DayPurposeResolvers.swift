@@ -366,8 +366,7 @@ enum DayIntentionResolver {
             )
         }
 
-        guard effectiveConfig.quickWakeModeOverride == .fast
-            || effectiveConfig.earlyWakePurposeOverride == .fast
+        guard effectiveConfig.earlyWakePurposeOverride == .fast
             || effectiveConfig.earlyWakePurposeOverride == .fastAndTahajjud
             || effectiveConfig.alarmDetailFastTypeOverride != nil
         else {

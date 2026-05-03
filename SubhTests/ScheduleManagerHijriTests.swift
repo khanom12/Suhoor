@@ -2011,7 +2011,7 @@ struct ScheduleManagerHijriTests {
         guard let fastOverride = alarmConfigStore.override(for: target.date, timeZone: timeZone),
               let fastDay = manager.activeDay(for: target.date, timeZone: timeZone),
               let fastDisplay = heroDisplay(for: target.date, manager: manager, timeZone: timeZone) else {
-            Issue.record("Expected the selected Fast mode to persist and re-resolve.")
+            Issue.record("Expected the selected Pre-Fajr mode to persist and re-resolve.")
             return
         }
 
@@ -2022,8 +2022,10 @@ struct ScheduleManagerHijriTests {
 
         #expect(fastOverride.quickWakeModeOverride == .fast)
         #expect(fastOverride.skipDay == false)
-        #expect(fastOverride.earlyWakePurposeOverride == .fast)
+        #expect(fastOverride.earlyWakePurposeOverride == .tahajjud)
         #expect(fastOverride.alarmDetailAudioPlanOverride == .wakeAlarmAndFajrAdhan)
+        #expect(fastOverride.alarmDetailFastTypeOverride == nil)
+        #expect(fastOverride.tahajjudRefinement == true)
         #expect(fastOverride.wakeStateOverride == .preFajr)
         #expect(fastOverride.wakeAnchorTypeOverride == .fajrStart)
         #expect(fastOverride.wakeDeltaOverrideMinutes == 30)
@@ -2112,7 +2114,7 @@ struct ScheduleManagerHijriTests {
         #expect(restoredFast)
         guard let restoredFastOverride = alarmConfigStore.override(for: target.date, timeZone: timeZone),
               let restoredFastDay = manager.activeDay(for: target.date, timeZone: timeZone) else {
-            Issue.record("Expected Fast mode to restore after Quiet.")
+            Issue.record("Expected Pre-Fajr mode to restore after Quiet.")
             return
         }
 

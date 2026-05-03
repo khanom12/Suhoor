@@ -292,7 +292,7 @@ enum NextTenMorningsTagResolver {
     }
 
     private static func hasFastingIntent(_ input: NextTenMorningsTagResolverInput) -> Bool {
-        if input.selectedQuickWakeMode == .fast {
+        if input.selectedQuickWakeMode == .fast, !input.tahajjudIntended {
             return true
         }
 
@@ -625,8 +625,7 @@ enum MorningHomePresentation {
                 selectedQuickWakeMode: selectedMode,
                 shawwalSixProgress: shawwalSixProgress,
                 hasDayOverride: entry.hasDayOverride,
-                tahajjudIntended: entry.activeDay.resolvedDayContext.primaryContext == .tahajjud
-                    || entry.activeDay.effectiveConfig.tahajjudRefinement
+                tahajjudIntended: isTahajjudIntended(for: entry, selectedMode: selectedMode)
             )
         )
         let trailingTime = entry.isEnabled ? entry.schedule.wakeDate : nil
@@ -1141,6 +1140,35 @@ enum MorningHomePresentation {
 
     private static func selectedQuickWakeMode(for entry: WakeRowEntry) -> QuickWakeMode {
         WakeStateSelectionResolver.selectedMode(for: entry.activeDay)
+    }
+
+    private static func isTahajjudIntended(
+        for entry: WakeRowEntry,
+        selectedMode: QuickWakeMode
+    ) -> Bool {
+        let day = entry.activeDay
+        let context = day.resolvedDayContext
+        let tags = Set(context.supportingTags)
+        let selectedPurpose = day.effectiveConfig.earlyWakePurposeOverride
+        let isRamadan = day.isImplicitRamadan || tags.contains(.ramadan)
+        let hasExplicitFastingSelection = selectedPurpose == .fast
+            || selectedPurpose == .fastAndTahajjud
+            || day.effectiveConfig.alarmDetailFastTypeOverride != nil
+        let hasResolvedFastingIntent = context.primaryContext == .fasting
+            || context.primaryContext == .suhoor
+            || context.primaryContext == .sunnahFast
+            || context.primaryContext == .qadaFast
+            || tags.contains(.voluntary)
+            || tags.contains(.qada)
+            || tags.contains(.kaffarah)
+            || tags.contains(.vow)
+
+        return context.primaryContext == .tahajjud
+            || context.secondaryContexts.contains(.tahajjud)
+            || day.effectiveConfig.tahajjudRefinement
+            || selectedPurpose == .tahajjud
+            || selectedPurpose == .fastAndTahajjud
+            || (selectedMode == .fast && !hasExplicitFastingSelection && !hasResolvedFastingIntent && !isRamadan)
     }
 
     private static func quickWakeModeOptions(
