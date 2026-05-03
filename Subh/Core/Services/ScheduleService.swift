@@ -2018,14 +2018,14 @@ final class ScheduleManager: ObservableObject {
         case .location:
             return requiresLocationAuthorization && state != .authorized
         case .alarmKit:
-            return state == .notDetermined
-        case .notifications:
             return state != .authorized
+        case .notifications:
+            return false
         }
     }
 
     func requiredOnboardingPermissions() async -> [AppPermissionKind] {
-        [.location, .alarmKit, .notifications]
+        [.location, .alarmKit]
     }
 
     func effectiveSchedulingChannel() async -> SchedulingMode {

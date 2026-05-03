@@ -30,10 +30,19 @@ struct OnboardingView: View {
 
     var body: some View {
         NavigationStack {
-            contentStack
-            .padding(.horizontal, OnboardingSpacing.sidePadding)
-            .padding(.top, OnboardingSpacing.large)
-            .padding(.bottom, OnboardingSpacing.large)
+            ZStack {
+                AppPageBackground()
+                    .ignoresSafeArea()
+
+                AppHomeContrastOverlay()
+                    .ignoresSafeArea()
+
+                contentStack
+                    .padding(.horizontal, OnboardingSpacing.sidePadding)
+                    .padding(.top, OnboardingSpacing.large)
+                    .padding(.bottom, OnboardingSpacing.large)
+            }
+            .preferredColorScheme(.dark)
             .navigationTitle("")
             .navigationBarHidden(true)
             .sheet(isPresented: $showLocationSearch) {
@@ -50,11 +59,13 @@ struct OnboardingView: View {
                         }
                     )
                 }
+                .appSettingsPresentedChrome()
             }
             .sheet(isPresented: $showCalculationMethodSheet) {
                 NavigationStack {
                     CalculationMethodSelectionView()
                 }
+                .appSettingsPresentedChrome()
             }
             .task {
                 viewModel.bind(
@@ -138,6 +149,7 @@ struct OnboardingView: View {
             AnyView(ValuePreviewStep(
                 title: viewModel.valueTitleText,
                 descriptionText: viewModel.valueBodyText,
+                supportText: viewModel.valueSupportText,
                 preview: viewModel.valueScreenPreview,
                 relationshipText: viewModel.wakeRelationshipText,
                 primaryTitle: viewModel.valuePrimaryActionTitle,
@@ -169,10 +181,10 @@ struct OnboardingView: View {
                 alarmState: viewModel.alarmKitState,
                 notificationState: viewModel.notificationState,
                 isAlarmRequestable: viewModel.alarmKitRequestable,
-                isNotificationsRequired: viewModel.isNotificationsRequired,
                 showNotificationsRow: viewModel.showNotificationsRowInPermissions,
-                showAlarmKitFallback: viewModel.shouldShowAlarmKitFallback,
-                showNextAction: viewModel.shouldShowManualAdvanceForCurrentStep,
+                requiredNoteText: viewModel.permissionsRequiredNoteText,
+                blockedContinueNoteText: viewModel.permissionsContinueBlockedNoteText,
+                showNextAction: viewModel.shouldShowPermissionsContinueAction,
                 onRequestAlarm: viewModel.requestAlarmKit,
                 onRequestNotifications: viewModel.requestNotifications,
                 onOpenSettings: viewModel.openSettings,
@@ -185,8 +197,16 @@ struct OnboardingView: View {
                 preview: viewModel.tomorrowPreview,
                 relationshipText: viewModel.wakeRelationshipText,
                 wakeLabel: viewModel.previewWakeLabelText,
+                readyState: viewModel.readyState,
+                isWorking: viewModel.isWorking,
                 primaryActionTitle: viewModel.successPrimaryActionTitle,
-                onPrimary: viewModel.markOnboardingComplete
+                onPrimary: {
+                    if viewModel.readyState == .blocked {
+                        viewModel.startFlow(animation: Motion.onboarding(reduceMotion: reduceMotion))
+                    } else {
+                        viewModel.markOnboardingComplete()
+                    }
+                }
             ))
         }
     }
@@ -195,6 +215,7 @@ struct OnboardingView: View {
 private struct ValuePreviewStep: View {
     let title: String
     let descriptionText: String
+    let supportText: String
     let preview: OnboardingTomorrowPreview
     let relationshipText: String
     let primaryTitle: String
@@ -210,13 +231,16 @@ private struct ValuePreviewStep: View {
                     .font(.body)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+                Text(supportText)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
-            OnboardingTimeCard(
+            OnboardingMorningHeroPreview(
                 preview: preview,
                 relationshipText: relationshipText,
                 wakeLabel: wakeLabel,
-                previewTag: Strings.Onboarding.previewTag,
                 animateRelationshipOnAppear: true
             )
 
@@ -303,11 +327,6 @@ private struct LocationStep: View {
                     .onboardingPrimaryButton()
             }
 
-            if locationState == .denied || locationState == .restricted {
-                Button(Strings.LocationAccess.tryAgain, action: onRequestLocation)
-                    .onboardingSecondaryButton()
-            }
-
             Button(action: onChooseCity) {
                 HStack(spacing: OnboardingSpacing.xSmall) {
                     Text(Strings.Onboarding.locationSecondaryAction)
@@ -375,13 +394,15 @@ private struct LocationStep: View {
                 }
                 return Strings.Onboarding.locationReady
             case .needsFollowUp:
-                return Strings.LocationAccess.waitingForLocation
-            case .denied, .restricted:
-                return Strings.LocationAccess.deniedExplanation
+                return Strings.Onboarding.locationWaiting
+            case .denied:
+                return Strings.Onboarding.locationDenied
+            case .restricted:
+                return Strings.Onboarding.locationRestricted
             case .notDetermined:
                 return nil
             case .unavailable:
-                return Strings.LocationAccess.autoExplanation
+                return Strings.Onboarding.locationUnavailable
             }
         }
     }
@@ -393,9 +414,9 @@ private struct PermissionsStep: View {
     let alarmState: AppPermissionState
     let notificationState: AppPermissionState
     let isAlarmRequestable: Bool
-    let isNotificationsRequired: Bool
     let showNotificationsRow: Bool
-    let showAlarmKitFallback: Bool
+    let requiredNoteText: String
+    let blockedContinueNoteText: String
     let showNextAction: Bool
     let onRequestAlarm: () -> Void
     let onRequestNotifications: () -> Void
@@ -417,6 +438,7 @@ private struct PermissionsStep: View {
             VStack(alignment: .leading, spacing: 12) {
                 permissionRow(
                     title: Strings.Onboarding.permissionsAlarmTitle,
+                    roleText: "Required",
                     status: alarmStatus,
                     actionTitle: alarmActionTitle,
                     secondaryActionTitle: nil,
@@ -430,6 +452,7 @@ private struct PermissionsStep: View {
 
                     permissionRow(
                         title: Strings.Onboarding.permissionsNotificationsTitle,
+                        roleText: "Recommended",
                         status: notificationStatus,
                         actionTitle: notificationActionTitle,
                         secondaryActionTitle: shouldShowNotificationSkip
@@ -441,14 +464,18 @@ private struct PermissionsStep: View {
                     )
                 }
             }
+            .onboardingCardStyle()
 
-            if showAlarmKitFallback {
-                InfoBanner(systemImage: "alarm", text: Strings.Onboarding.permissionsFallbackBanner)
-            }
+            InfoBanner(systemImage: "alarm", text: requiredNoteText)
 
             if showNextAction {
                 Button(Strings.Onboarding.continueAction, action: onContinue)
                     .onboardingPrimaryButton()
+            } else {
+                Text(blockedContinueNoteText)
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
@@ -459,6 +486,8 @@ private struct PermissionsStep: View {
             return Strings.Onboarding.permissionsAlarmAction
         case .denied, .restricted:
             return Strings.LocationAccess.openSettings
+        case .needsFollowUp:
+            return Strings.LocationAccess.tryAgain
         default:
             return nil
         }
@@ -468,11 +497,15 @@ private struct PermissionsStep: View {
         switch alarmState {
         case .authorized:
             return Strings.Onboarding.permissionsAlarmReady
-        case .denied, .restricted:
-            return Strings.AlarmAccess.deniedExplanation
+        case .denied:
+            return Strings.Onboarding.permissionsAlarmDenied
+        case .restricted:
+            return Strings.Onboarding.permissionsAlarmRestricted
         case .unavailable:
-            return Strings.AlarmAccess.unavailableExplanation
-        default:
+            return Strings.Onboarding.permissionsAlarmUnavailable
+        case .needsFollowUp:
+            return Strings.Onboarding.permissionsAlarmChecking
+        case .notDetermined:
             return Strings.Onboarding.permissionsAlarmHelper
         }
     }
@@ -483,6 +516,8 @@ private struct PermissionsStep: View {
             onRequestAlarm()
         case .denied, .restricted:
             onOpenSettings()
+        case .needsFollowUp:
+            onRequestAlarm()
         default:
             break
         }
@@ -494,6 +529,8 @@ private struct PermissionsStep: View {
             return Strings.Onboarding.permissionsNotificationsAction
         case .denied, .restricted:
             return Strings.LocationAccess.openSettings
+        case .needsFollowUp:
+            return Strings.LocationAccess.tryAgain
         default:
             return nil
         }
@@ -503,12 +540,16 @@ private struct PermissionsStep: View {
         switch notificationState {
         case .authorized:
             return Strings.Onboarding.permissionsNotificationsReady
-        case .denied, .restricted:
-            return Strings.NotificationAccess.deniedExplanation
-        default:
-            return isNotificationsRequired
-                ? Strings.Onboarding.permissionsNotificationsRequired
-                : Strings.Onboarding.permissionsNotificationsRecommended
+        case .denied:
+            return Strings.Onboarding.permissionsNotificationsDenied
+        case .restricted:
+            return Strings.Onboarding.permissionsNotificationsRestricted
+        case .unavailable:
+            return Strings.Onboarding.permissionsNotificationsUnavailable
+        case .needsFollowUp:
+            return Strings.Onboarding.permissionsNotificationsChecking
+        case .notDetermined:
+            return Strings.Onboarding.permissionsNotificationsRecommended
         }
     }
 
@@ -518,6 +559,8 @@ private struct PermissionsStep: View {
             onRequestNotifications()
         case .denied, .restricted:
             onOpenSettings()
+        case .needsFollowUp:
+            onRequestNotifications()
         default:
             break
         }
@@ -525,13 +568,13 @@ private struct PermissionsStep: View {
 
     private var shouldShowNotificationSkip: Bool {
         alarmState == .authorized
-            && !isNotificationsRequired
-            && notificationState != .authorized
+            && notificationState == .notDetermined
     }
 
     @ViewBuilder
     private func permissionRow(
         title: String,
+        roleText: String,
         status: String?,
         actionTitle: String?,
         secondaryActionTitle: String?,
@@ -541,8 +584,13 @@ private struct PermissionsStep: View {
     ) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text(title)
-                    .font(.headline.weight(.semibold))
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title)
+                        .font(.headline.weight(.semibold))
+                    Text(roleText)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
                 Spacer()
                 if showsCheckmark {
                     Image(systemName: "checkmark.circle.fill")
@@ -555,19 +603,47 @@ private struct PermissionsStep: View {
                     .foregroundStyle(.secondary)
             }
             if actionTitle != nil || secondaryActionTitle != nil {
-                HStack(spacing: 10) {
-                    if let actionTitle {
-                        Button(actionTitle, action: action)
-                            .onboardingPrimaryButton()
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 10) {
+                        permissionButtons(
+                            actionTitle: actionTitle,
+                            secondaryActionTitle: secondaryActionTitle,
+                            action: action,
+                            secondaryAction: secondaryAction
+                        )
                     }
-                    if let secondaryActionTitle {
-                        Button(secondaryActionTitle, action: secondaryAction)
-                            .onboardingPrimaryButton()
+                    VStack(spacing: 10) {
+                        permissionButtons(
+                            actionTitle: actionTitle,
+                            secondaryActionTitle: secondaryActionTitle,
+                            action: action,
+                            secondaryAction: secondaryAction
+                        )
                     }
                 }
             }
         }
+        .padding(OnboardingSpacing.cardPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
+        .accessibilityHint(roleText == "Required" ? "Required before Subh can prepare your first wake." : "Recommended. You can skip this for now.")
+    }
+
+    @ViewBuilder
+    private func permissionButtons(
+        actionTitle: String?,
+        secondaryActionTitle: String?,
+        action: @escaping () -> Void,
+        secondaryAction: @escaping () -> Void
+    ) -> some View {
+        if let actionTitle {
+            Button(actionTitle, action: action)
+                .onboardingPrimaryButton()
+        }
+        if let secondaryActionTitle {
+            Button(secondaryActionTitle, action: secondaryAction)
+                .onboardingSecondaryButton()
+        }
     }
 }
 
@@ -577,35 +653,46 @@ private struct SuccessStep: View {
     let preview: OnboardingTomorrowPreview
     let relationshipText: String
     let wakeLabel: String
+    let readyState: OnboardingReadyState
+    let isWorking: Bool
     let primaryActionTitle: String
     let onPrimary: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: OnboardingSpacing.medium) {
-            Label(title, systemImage: "checkmark.circle.fill")
+            Label(title, systemImage: readyState == .blocked ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
                 .font(.title2.weight(.bold))
+                .accessibilityAddTraits(.isHeader)
 
-            OnboardingTimeCard(
-                preview: preview,
-                relationshipText: relationshipText,
-                wakeLabel: wakeLabel
-            )
+            if readyState == .blocked {
+                InfoBanner(systemImage: "alarm", text: descriptionText)
+            } else {
+                OnboardingMorningHeroPreview(
+                    preview: preview,
+                    relationshipText: relationshipText,
+                    wakeLabel: wakeLabel
+                )
+            }
 
-            Text(descriptionText)
-                .font(.footnote)
-                .foregroundStyle(.secondary)
+            if readyState != .blocked {
+                Text(descriptionText)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
-            Button(primaryActionTitle, action: onPrimary)
+            Button(isWorking ? Strings.Onboarding.successLoadingText : primaryActionTitle, action: onPrimary)
                 .onboardingPrimaryButton()
+                .disabled(isWorking)
+                .accessibilityHint(readyState == .blocked ? "Returns to the setup step that needs attention." : "")
         }
     }
 }
 
-private struct OnboardingTimeCard: View {
+private struct OnboardingMorningHeroPreview: View {
     let preview: OnboardingTomorrowPreview
     let relationshipText: String
     let wakeLabel: String
-    var previewTag: String? = nil
     var animateRelationshipOnAppear: Bool = false
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -613,31 +700,74 @@ private struct OnboardingTimeCard: View {
     @State private var showRelationship: Bool = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: OnboardingSpacing.small) {
-            HStack {
-                Text(preview.dateText)
-                    .font(DesignTokens.cardTitleFont)
-                Spacer()
-                if let previewTag {
-                    Text(previewTag)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(Color.primary.opacity(0.06), in: Capsule())
+        let metrics = MorningHeroMetrics(dynamicTypeSize: dynamicTypeSize)
+        let display = heroDisplay
+
+        AppGlassSurface(variant: .hero, prominence: .high, contentPadding: OnboardingSpacing.cardPadding) {
+            VStack(alignment: .center, spacing: 0) {
+                HStack(alignment: .center, spacing: OnboardingSpacing.small) {
+                    Text(preview.previewLabelText)
+                        .appTextRole(.eyebrow)
+                        .foregroundStyle(WakeGlassTheme.tertiaryText)
+                    Spacer(minLength: OnboardingSpacing.small)
+                    badgeStack
+                }
+                .padding(.bottom, DesignTokens.spacingS)
+
+                Text(display.locationText)
+                    .font(.system(size: metrics.dateLineSize, weight: .regular))
+                    .foregroundStyle(WakeGlassTheme.secondaryText.opacity(0.92))
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Text(display.title)
+                    .font(.system(size: metrics.relativeLabelSize, weight: .regular))
+                    .foregroundStyle(WakeGlassTheme.primaryText)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, metrics.dateToRelativeGap)
+
+                MorningHeroPrimaryWakeRow(
+                    display: display,
+                    metrics: metrics,
+                    rollsActiveWakeTime: false,
+                    reduceMotion: reduceMotion
+                )
+                .padding(.top, metrics.relativeToPrimaryGap)
+
+                if display.fajrWindowVisualMode.rendersRange {
+                    FajrWindowRangeVisual(
+                        display: display,
+                        metrics: metrics,
+                        reduceMotion: reduceMotion
+                    )
+                    .allowsHitTesting(false)
+                    .padding(.top, metrics.primaryToWindowGap)
+                }
+
+                MorningHeroFadingRelationText(
+                    text: display.detailText,
+                    tone: display.relationTone,
+                    metrics: metrics,
+                    reduceMotion: reduceMotion
+                )
+                .opacity(showRelationship ? 1 : 0)
+                .padding(.top, display.fajrWindowVisualMode.rendersRange ? metrics.windowToRelationGap : metrics.primaryToRelationGap)
+
+                if let statusText = preview.statusText {
+                    Text(statusText)
+                        .font(AppTypography.cardBody)
+                        .foregroundStyle(WakeGlassTheme.secondaryText)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, DesignTokens.spacingS)
                 }
             }
-
-            cardRows
-                .animation(.easeInOut(duration: 0.28), value: showRelationship)
-
-            if let statusText = preview.statusText {
-                Text(statusText)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
+            .frame(maxWidth: metrics.maxContentWidth)
+            .frame(maxWidth: .infinity, alignment: .center)
         }
-        .onboardingCardStyle()
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilityLabel)
         .onAppear {
             guard animateRelationshipOnAppear else {
                 showRelationship = true
@@ -647,8 +777,8 @@ private struct OnboardingTimeCard: View {
             if reduceMotion {
                 showRelationship = true
             } else {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                    withAnimation(.easeInOut(duration: 0.3)) {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
+                    withAnimation(.easeInOut(duration: 0.22)) {
                         showRelationship = true
                     }
                 }
@@ -656,95 +786,119 @@ private struct OnboardingTimeCard: View {
         }
     }
 
-    private var connectorLine: some View {
-        HStack(spacing: 4) {
-            Image(systemName: "arrow.down")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-            Text(relationshipText)
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(.primary)
+    @ViewBuilder
+    private var badgeStack: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: OnboardingSpacing.xSmall) {
+                badges
+            }
+            VStack(alignment: .trailing, spacing: OnboardingSpacing.xSmall) {
+                badges
+            }
         }
-        .accessibilityLabel(relationshipText)
     }
 
     @ViewBuilder
-    private var cardRows: some View {
-        if dynamicTypeSize >= .accessibility1 {
-            VStack(alignment: .leading, spacing: OnboardingSpacing.cardRowSpacing) {
-                stackedRow(
-                    label: Strings.Onboarding.previewFajrLabel,
-                    value: preview.fajrTimeText ?? Strings.Onboarding.previewFajrPlaceholder
-                )
-                connectorLine
-                    .opacity(showRelationship ? 1 : 0)
-                    .offset(y: showRelationship ? 0 : 4)
-                stackedRow(
-                    label: wakeLabel,
-                    value: preview.wakeTimeText ?? Strings.Onboarding.previewWakePlaceholder
-                )
-                .opacity(showRelationship ? 1 : 0)
-                .offset(y: showRelationship ? 0 : 4)
-            }
-        } else {
-            Grid(horizontalSpacing: OnboardingSpacing.small, verticalSpacing: OnboardingSpacing.cardRowSpacing) {
-                GridRow {
-                    connectedRow(
-                        label: Strings.Onboarding.previewFajrLabel,
-                        value: preview.fajrTimeText ?? Strings.Onboarding.previewFajrPlaceholder
-                    )
-                    .gridCellColumns(2)
-                }
-                GridRow {
-                    Color.clear
-                    connectorLine
-                        .frame(maxWidth: .infinity, alignment: .trailing)
-                        .gridColumnAlignment(.trailing)
-                        .opacity(showRelationship ? 1 : 0)
-                        .offset(y: showRelationship ? 0 : 4)
-                }
-                GridRow {
-                    connectedRow(
-                        label: wakeLabel,
-                        value: preview.wakeTimeText ?? Strings.Onboarding.previewWakePlaceholder
-                    )
-                    .gridCellColumns(2)
-                }
-                .opacity(showRelationship ? 1 : 0)
-                .offset(y: showRelationship ? 0 : 4)
-            }
+    private var badges: some View {
+        if preview.isExample {
+            heroBadge(Strings.Onboarding.previewLabelExample)
+        }
+        if let alarmStatusText = preview.alarmStatusText {
+            heroBadge(alarmStatusText)
+        }
+        if let notificationStatusText = preview.notificationStatusText {
+            heroBadge(notificationStatusText)
         }
     }
 
-    private func stackedRow(label: String, value: String) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(label)
-                .font(.body)
-                .foregroundStyle(.secondary)
-            Text(value)
-                .font(.body.weight(.semibold).monospacedDigit())
-                .contentTransition(.numericText())
-                .animation(.easeInOut(duration: 0.25), value: value)
-        }
+    private func heroBadge(_ title: String) -> some View {
+        Text(title)
+            .font(AppTypography.badge)
+            .foregroundStyle(WakeGlassTheme.secondaryText)
+            .lineLimit(1)
+            .padding(.horizontal, DesignTokens.compactChipHorizontalPadding)
+            .padding(.vertical, 5)
+            .background(
+                Capsule()
+                    .fill(WakeGlassTheme.chipFill)
+                    .overlay {
+                        Capsule().stroke(WakeGlassTheme.chipStroke, lineWidth: 1)
+                    }
+            )
     }
 
-    private func connectedRow(label: String, value: String) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
-            Text(label)
-                .font(.body)
-                .foregroundStyle(.secondary)
-            Text(value)
-                .font(.body.weight(.semibold).monospacedDigit())
-                .contentTransition(.numericText())
-                .animation(.easeInOut(duration: 0.25), value: value)
-                .frame(maxWidth: .infinity, alignment: .trailing)
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(Color.primary.opacity(0.035))
+    private var heroDisplay: MorningHomeHeroDisplay {
+        let hasRange = preview.fajrDate != nil && preview.fajrEndDate != nil
+        let ratio = wakeWindowPositionRatio
+        let location = preview.locationText ?? (preview.isExample ? Strings.Onboarding.previewExampleLocation : Strings.Onboarding.previewLocalLocation)
+        let primaryText = preview.wakeTimeText ?? Strings.Onboarding.previewWakePlaceholder
+        let fajrWindowAccessibilityText: String? = {
+            guard let fajrTime = preview.fajrTimeText, let fajrEndTime = preview.fajrEndTimeText else { return nil }
+            return "Fajr begins \(fajrTime). Fajr ends \(fajrEndTime)."
+        }()
+
+        return MorningHomeHeroDisplay(
+            locationText: location,
+            locationIconName: nil,
+            title: preview.dateText,
+            dateLine: nil,
+            wakeState: preview.wakeDate == nil ? .unavailable : .active,
+            primaryTime: preview.wakeDate,
+            primaryText: primaryText,
+            wakeIconName: "alarm",
+            statusText: primaryText,
+            detailText: relationshipText,
+            relationTone: .normal,
+            fajrWindowLine: fajrWindowAccessibilityText ?? Strings.Onboarding.previewUnavailable,
+            fajrBeginDisplayText: preview.fajrTimeText,
+            fajrEndDisplayText: preview.fajrEndTimeText,
+            wakeWindowPositionRatio: ratio,
+            wakeWindowIndicatorState: ratio == nil ? .none : .active,
+            wakeWindowIndicatorIconName: "alarm.fill",
+            leftBoundaryMarkerStyle: hasRange ? .verticalLine : .none,
+            rightBoundaryMarkerStyle: hasRange ? .endpointCircle : .none,
+            fajrWindowVisualMode: hasRange ? .staticWithinFajrWindow : .hiddenUnavailable,
+            fajrWindowAccessibilityText: fajrWindowAccessibilityText,
+            wakeAdjustmentEnabled: false,
+            wakeAdjustmentMinTime: nil,
+            wakeAdjustmentMaxTime: nil,
+            wakeAdjustmentFajrEndTime: preview.fajrEndDate,
+            wakeAdjustmentStepMinutes: 5,
+            wakeAdjustmentRelationAnchor: .fajrEnd,
+            wakeAdjustmentAccessibilityValue: nil,
+            selectedQuickWakeMode: nil,
+            quickWakeModeOptions: [],
+            chipTitles: [],
+            accessibilityLabel: accessibilityLabel
         )
+    }
+
+    private var wakeWindowPositionRatio: Double? {
+        guard
+            let begin = preview.fajrDate,
+            let end = preview.fajrEndDate,
+            let wake = preview.wakeDate,
+            end > begin
+        else {
+            return nil
+        }
+
+        return min(1, max(0, wake.timeIntervalSince(begin) / end.timeIntervalSince(begin)))
+    }
+
+    private var accessibilityLabel: String {
+        [
+            preview.isExample ? Strings.Onboarding.previewLabelExample : nil,
+            "\(preview.dateText) morning",
+            preview.wakeTimeText.map { "\(wakeLabel) at \($0)" },
+            relationshipText,
+            preview.locationText,
+            preview.alarmStatusText,
+            preview.notificationStatusText,
+            preview.statusText
+        ]
+            .compactMap { $0 }
+            .joined(separator: ". ")
     }
 }
 
@@ -754,11 +908,15 @@ private struct OnboardingCardStyle: ViewModifier {
             .padding(OnboardingSpacing.cardPadding)
             .background(
                 RoundedRectangle(cornerRadius: OnboardingSpacing.cardCornerRadius, style: .continuous)
-                    .fill(Color(.secondarySystemGroupedBackground))
+                    .fill(.ultraThinMaterial)
+                    .overlay {
+                        RoundedRectangle(cornerRadius: OnboardingSpacing.cardCornerRadius, style: .continuous)
+                            .fill(Color.black.opacity(0.18))
+                    }
             )
             .overlay(
                 RoundedRectangle(cornerRadius: OnboardingSpacing.cardCornerRadius, style: .continuous)
-                    .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+                    .stroke(Color.white.opacity(0.08), lineWidth: 1)
             )
     }
 }
@@ -772,7 +930,7 @@ private extension View {
         self
             .font(.headline.weight(.semibold))
             .frame(maxWidth: .infinity, minHeight: OnboardingSpacing.buttonHeight)
-            .buttonStyle(.borderedProminent)
+            .appControlStyle(.primary, tint: DawnColor.accent)
             .buttonBorderShape(.roundedRectangle(radius: OnboardingSpacing.buttonCornerRadius))
             .controlSize(.large)
             .frame(minHeight: OnboardingSpacing.tapTargetMin)
@@ -780,7 +938,7 @@ private extension View {
 
     func onboardingSecondaryButton() -> some View {
         self
-            .buttonStyle(.bordered)
+            .appControlStyle(.secondary)
             .buttonBorderShape(.roundedRectangle(radius: OnboardingSpacing.buttonCornerRadius))
             .controlSize(.regular)
             .frame(minHeight: OnboardingSpacing.tapTargetMin)
@@ -847,20 +1005,26 @@ private struct OnboardingHeaderView: View {
 @available(iOS 17.0, *)
 #Preview("Fajr Value") {
     ValuePreviewStep(
-        title: "Wake for and around Fajr",
-        descriptionText: "Subh resolves your next morning from local Fajr times and keeps the main wake anchored to the supported Fajr end.",
+        title: Strings.Onboarding.valueTitle,
+        descriptionText: Strings.Onboarding.valueBody,
+        supportText: Strings.Onboarding.valueSupport,
         preview: OnboardingTomorrowPreview(
+            previewLabelText: Strings.Onboarding.previewLabelExample,
             dateText: "Today",
+            locationText: Strings.Onboarding.previewExampleLocation,
+            isExample: true,
             targetDate: Date(),
             fajrDate: Date(),
+            fajrEndDate: Date().addingTimeInterval(57 * 60),
             wakeDate: Date().addingTimeInterval(-30 * 60),
-            fajrTimeText: "5:27 AM",
+            fajrTimeText: "4:30 AM",
+            fajrEndTimeText: "5:27 AM",
             wakeTimeText: "4:57 AM",
             statusText: nil
         ),
-        relationshipText: "30 min before supported Fajr end",
-        primaryTitle: "Set my morning plan",
-        wakeLabel: "Next wake",
+        relationshipText: Strings.Onboarding.previewRelationshipText,
+        primaryTitle: Strings.Onboarding.valuePrimaryAction,
+        wakeLabel: Strings.Onboarding.previewWakeLabel,
         onPrimary: {}
     )
     .padding(.horizontal, OnboardingSpacing.sidePadding)

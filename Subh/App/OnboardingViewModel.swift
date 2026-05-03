@@ -100,7 +100,7 @@ final class OnboardingViewModel: ObservableObject {
             hasRequestedSchedule = false
             return
         }
-        guard isLocationReady, isSchedulingReady else { return }
+        guard isLocationReady else { return }
         guard !hasRequestedSchedule else { return }
         hasRequestedSchedule = true
         scheduleManager.requestRefresh(reason: .settingsChanged)
@@ -122,6 +122,9 @@ final class OnboardingViewModel: ObservableObject {
     }
 
     func advance(animation: Animation?) {
+        if step == .permissions, !alarmKitReady {
+            return
+        }
         guard let next = nextStep(after: step) else { return }
         guard let resolved = resolvedStep(startingAt: next) else { return }
         goTo(resolved, animation: animation)
@@ -143,12 +146,12 @@ final class OnboardingViewModel: ObservableObject {
     }
 
     func startFlow(animation: Animation?) {
-        let next: OnboardingStep = isLocationReady ? .permissions : .location
+        let next = firstUnresolvedSetupStep ?? .success
         goTo(resolvedStep(startingAt: next) ?? .success, animation: animation)
     }
 
     func handleExplore(animation: Animation?) {
-        if isConfigured && isLocationReady && isSchedulingReady {
+        if isConfigured && canCompleteOnboarding {
             markOnboardingComplete()
         } else {
             startFlow(animation: animation)
@@ -237,7 +240,19 @@ final class OnboardingViewModel: ObservableObject {
     private func completeOnboarding() async {
         isWorking = true
         if let scheduleManager {
+            await scheduleManager.refreshPermissionSummary()
+            permissionStates = scheduleManager.permissionSnapshot.presentations.mapValues(\.state)
+            alarmKitRequestable = scheduleManager.canRequestAlarmKitAuthorization
+            syncSettings()
             await scheduleManager.refreshSchedules(force: true)
+            updateScheduleReadiness()
+        }
+        guard canCompleteOnboarding else {
+            isWorking = false
+            if let step = firstUnresolvedSetupStep ?? stepForBlockedReason(blockedReason) {
+                goTo(step, animation: currentAnimation)
+            }
+            return
         }
         settingsStore?.update { draft in
             draft.isConfigured = true
@@ -267,33 +282,43 @@ final class OnboardingViewModel: ObservableObject {
         isReviewingBack && shouldSkip(step)
     }
 
-    var valueTitleText: String { "Wake for and around Fajr" }
+    var valueTitleText: String { Strings.Onboarding.valueTitle }
     var valueBodyText: String {
-        "Subh resolves your next morning from local Fajr times and keeps the main wake anchored to the supported Fajr end."
+        Strings.Onboarding.valueBody
     }
-    var previewWakeLabelText: String { "Next wake" }
-    var wakeRelationshipText: String { "30 min before supported Fajr end" }
-    var locationTitleText: String { "Trust your local prayer times" }
+    var valueSupportText: String { Strings.Onboarding.valueSupport }
+    var previewWakeLabelText: String { Strings.Onboarding.previewWakeLabel }
+    var wakeRelationshipText: String { Strings.Onboarding.previewRelationshipText }
+    var locationTitleText: String { Strings.Onboarding.locationTitle }
     var locationBodyText: String {
-        "Your morning plan follows local Fajr times. Use your location or choose a city, and change the calculation method if needed."
+        Strings.Onboarding.locationBody
     }
     var locationTrustBullets: [String] {
-        [
-            "Used to calculate accurate local prayer times",
-            "Change your city or method anytime"
-        ]
+        Strings.Onboarding.locationTrustBullets
     }
-    var showsCalculationMethodSummary: Bool { true }
-    var permissionsTitleText: String { "Keep your wake reliable" }
+    var showsCalculationMethodSummary: Bool { false }
+    var permissionsTitleText: String { Strings.Onboarding.permissionsTitle }
     var permissionsBodyText: String {
-        "Alarm access helps your main wake ring reliably around Fajr. Notifications support reminders and fallback delivery where needed."
+        Strings.Onboarding.permissionsBody
     }
+    var permissionsRequiredNoteText: String { Strings.Onboarding.permissionsRequiredNote }
+    var permissionsContinueBlockedNoteText: String { Strings.Onboarding.permissionsContinueBlockedNote }
     var showNotificationsRowInPermissions: Bool { true }
-    var successTitleText: String { "Your morning plan is ready" }
-    var successBodyText: String {
-        "Your next wake is set from the shared Subh resolver, 30 minutes before the supported Fajr end."
+    var successTitleText: String {
+        readyState == .blocked
+            ? Strings.Onboarding.successBlockedTitle
+            : Strings.Onboarding.successReadyTitle
     }
-    var successPrimaryActionTitle: String { "Go to Home" }
+    var successBodyText: String {
+        readyState == .blocked
+            ? Strings.Onboarding.successBlockedBody
+            : Strings.Onboarding.successReadyBody
+    }
+    var successPrimaryActionTitle: String {
+        readyState == .blocked
+            ? Strings.Onboarding.successBlockedAction
+            : Strings.Onboarding.successReadyAction
+    }
     var calculationMethodName: String {
         settingsStore?.settings.calculationMethod.displayName
             ?? CalculationMethod.defaultForTimeZone(.current).displayName
@@ -308,27 +333,42 @@ final class OnboardingViewModel: ObservableObject {
                 ? Strings.Onboarding.previewUnavailable
                 : Strings.Onboarding.previewNeedsLocation
             return OnboardingTomorrowPreview(
+                previewLabelText: Strings.Onboarding.previewLabelActual,
                 dateText: dateText,
+                locationText: previewLocationText,
+                isExample: false,
                 targetDate: nil,
                 fajrDate: nil,
+                fajrEndDate: nil,
                 wakeDate: nil,
                 fajrTimeText: nil,
+                fajrEndTimeText: nil,
                 wakeTimeText: nil,
-                statusText: statusText
+                statusText: statusText,
+                alarmStatusText: alarmReadinessBadgeText,
+                notificationStatusText: notificationReadinessBadgeText
             )
         }
 
         let wakeDate = schedule.wakeDate
         let fajrTime = TimeFormatters.timeFormatter.string(from: schedule.fajrDate)
+        let fajrEndTime = schedule.fajrEndDate.map { TimeFormatters.timeFormatter.string(from: $0) }
         let wakeTime = TimeFormatters.timeFormatter.string(from: wakeDate)
         return OnboardingTomorrowPreview(
+            previewLabelText: Strings.Onboarding.previewLabelActual,
             dateText: dateText,
+            locationText: previewLocationText ?? schedule.locationDescription,
+            isExample: false,
             targetDate: targetDay,
             fajrDate: schedule.fajrDate,
+            fajrEndDate: schedule.fajrEndDate,
             wakeDate: wakeDate,
             fajrTimeText: fajrTime,
+            fajrEndTimeText: fajrEndTime,
             wakeTimeText: wakeTime,
-            statusText: nil
+            statusText: nil,
+            alarmStatusText: alarmReadinessBadgeText,
+            notificationStatusText: notificationReadinessBadgeText
         )
     }
 
@@ -338,25 +378,37 @@ final class OnboardingViewModel: ObservableObject {
         if isLocationReady, let schedule = scheduleManager?.schedule(for: targetDay) {
             let wakeDate = schedule.wakeDate
             let fajrTime = TimeFormatters.timeFormatter.string(from: schedule.fajrDate)
+            let fajrEndTime = schedule.fajrEndDate.map { TimeFormatters.timeFormatter.string(from: $0) }
             let wakeTime = TimeFormatters.timeFormatter.string(from: wakeDate)
             return OnboardingTomorrowPreview(
+                previewLabelText: Strings.Onboarding.previewLabelActual,
                 dateText: label,
+                locationText: previewLocationText ?? schedule.locationDescription,
+                isExample: false,
                 targetDate: targetDay,
                 fajrDate: schedule.fajrDate,
+                fajrEndDate: schedule.fajrEndDate,
                 wakeDate: wakeDate,
                 fajrTimeText: fajrTime,
+                fajrEndTimeText: fajrEndTime,
                 wakeTimeText: wakeTime,
                 statusText: nil
             )
         }
 
+        let example = examplePreviewDates(on: targetDay)
         return OnboardingTomorrowPreview(
+            previewLabelText: Strings.Onboarding.previewLabelExample,
             dateText: label,
+            locationText: Strings.Onboarding.previewExampleLocation,
+            isExample: true,
             targetDate: targetDay,
-            fajrDate: nil,
-            wakeDate: nil,
-            fajrTimeText: "5:27 AM",
-            wakeTimeText: "4:57 AM",
+            fajrDate: example.fajrBegin,
+            fajrEndDate: example.fajrEnd,
+            wakeDate: example.wake,
+            fajrTimeText: TimeFormatters.timeFormatter.string(from: example.fajrBegin),
+            fajrEndTimeText: TimeFormatters.timeFormatter.string(from: example.fajrEnd),
+            wakeTimeText: TimeFormatters.timeFormatter.string(from: example.wake),
             statusText: nil
         )
     }
@@ -370,7 +422,7 @@ final class OnboardingViewModel: ObservableObject {
     }
 
     var valuePrimaryActionTitle: String {
-        "Set my morning plan"
+        Strings.Onboarding.valuePrimaryAction
     }
 
     var flowSteps: [OnboardingStep] {
@@ -387,7 +439,7 @@ final class OnboardingViewModel: ObservableObject {
         if !isLocationReady {
             steps.append(.location)
         }
-        if !isSchedulingReady {
+        if !alarmKitReady {
             steps.append(.permissions)
         }
         return steps
@@ -412,6 +464,15 @@ final class OnboardingViewModel: ObservableObject {
     var alarmKitState: AppPermissionState { permissionStates[.alarmKit] ?? .notDetermined }
     var notificationState: AppPermissionState { permissionStates[.notifications] ?? .notDetermined }
 
+    var readiness: OnboardingReadiness {
+        OnboardingReadiness(
+            locationReady: isLocationReady,
+            prayerTimeReady: prayerTimeReady,
+            alarmKitState: alarmKitState,
+            notificationState: notificationState
+        )
+    }
+
     var isLocationReady: Bool {
         switch locationMode {
         case .auto:
@@ -421,35 +482,30 @@ final class OnboardingViewModel: ObservableObject {
         }
     }
 
-    var isNotificationsReady: Bool {
-        notificationState == .authorized
-    }
+    var prayerTimeReady: Bool { isScheduleReady }
+    var alarmKitReady: Bool { readiness.alarmKitReady }
+    var notificationsReady: Bool { readiness.notificationsReady }
+    var notificationsRecommended: Bool { readiness.notificationsRecommended }
+    var canCompleteOnboarding: Bool { readiness.canCompleteOnboarding }
+    var blockedReason: OnboardingBlockedReason? { readiness.blockedReason }
+    var readyState: OnboardingReadyState { readiness.readyState }
+
+    var isNotificationsReady: Bool { notificationsReady }
 
     var isAlarmAccessReady: Bool {
-        alarmKitState == .authorized || alarmKitState == .unavailable
+        alarmKitReady
     }
 
     var isSchedulingReady: Bool {
-        switch alarmKitState {
-        case .authorized:
-            return true
-        case .unavailable:
-            return isNotificationsReady
-        default:
-            return false
-        }
-    }
-
-    var isNotificationsRequired: Bool {
-        alarmKitState == .unavailable
+        alarmKitReady
     }
 
     var isConfigured: Bool {
         settingsStore?.settings.isConfigured ?? false
     }
 
-    var shouldShowAlarmKitFallback: Bool {
-        alarmKitState == .unavailable
+    var shouldShowPermissionsContinueAction: Bool {
+        alarmKitReady
     }
 
     private func skipIfNeeded() {
@@ -481,7 +537,7 @@ final class OnboardingViewModel: ObservableObject {
         case .location:
             return isLocationReady
         case .permissions:
-            return isSchedulingReady
+            return alarmKitReady && notificationState != .notDetermined
         case .success:
             return false
         }
@@ -489,11 +545,7 @@ final class OnboardingViewModel: ObservableObject {
 
     private func updateInitialStep() {
         if useShortFlow {
-            if missingShortFlowSteps.isEmpty {
-                step = .success
-            } else {
-                step = flowSteps.first ?? .success
-            }
+            step = flowSteps.first ?? .success
         } else {
             step = .valuePreview
         }
@@ -501,8 +553,62 @@ final class OnboardingViewModel: ObservableObject {
         logStepViewed(step: step)
     }
 
+    private var firstUnresolvedSetupStep: OnboardingStep? {
+        if !isLocationReady {
+            return .location
+        }
+        if !alarmKitReady {
+            return .permissions
+        }
+        if notificationState == .notDetermined && !useShortFlow {
+            return .permissions
+        }
+        return nil
+    }
+
+    private func stepForBlockedReason(_ reason: OnboardingBlockedReason?) -> OnboardingStep? {
+        switch reason {
+        case .missingLocation, .missingPrayerTime:
+            return .location
+        case .missingAlarmKit:
+            return .permissions
+        case nil:
+            return nil
+        }
+    }
+
     private var currentAnimation: Animation? {
         UIAccessibility.isReduceMotionEnabled ? nil : .easeInOut(duration: 0.28)
+    }
+
+    private var previewLocationText: String? {
+        if let locationName, !locationName.isEmpty {
+            return locationName
+        }
+        if isLocationReady {
+            return Strings.Onboarding.previewLocalLocation
+        }
+        return nil
+    }
+
+    private var alarmReadinessBadgeText: String? {
+        alarmKitReady ? Strings.Onboarding.successAlarmReadyBadge : nil
+    }
+
+    private var notificationReadinessBadgeText: String? {
+        notificationState == .authorized
+            ? Strings.Onboarding.successNotificationOnBadge
+            : Strings.Onboarding.successNotificationOffBadge
+    }
+
+    private func examplePreviewDates(on targetDay: Date) -> (fajrBegin: Date, fajrEnd: Date, wake: Date) {
+        var calendar = Calendar.current
+        calendar.timeZone = .current
+        let fajrBegin = calendar.date(bySettingHour: 4, minute: 30, second: 0, of: targetDay) ?? targetDay
+        let fajrEnd = calendar.date(bySettingHour: 5, minute: 27, second: 0, of: targetDay)
+            ?? fajrBegin.addingTimeInterval(57 * 60)
+        let wake = fajrEnd.addingTimeInterval(-30 * 60)
+        return (fajrBegin, fajrEnd, wake)
     }
 
     private func logPermissionTransitions(

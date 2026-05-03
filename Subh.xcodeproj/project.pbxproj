@@ -18,6 +18,7 @@
 		A1B000001234567890000012 /* AlarmConfigMigrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B000001234567890000111 /* AlarmConfigMigrationTests.swift */; };
 		A1B000001234567890000013 /* ScheduleServiceExtractionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B000001234567890000112 /* ScheduleServiceExtractionTests.swift */; };
 		A1B000001234567890000014 /* MorningPlanStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B000001234567890000113 /* MorningPlanStoreTests.swift */; };
+		A9C7F978580B444686F2ED48 /* OnboardingActivationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA782D026A424A038C4A9141 /* OnboardingActivationTests.swift */; };
 		B2C000001234567890000103 /* MorningHeroFajrAdjusterUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2C000001234567890000101 /* MorningHeroFajrAdjusterUITests.swift */; };
 /* End PBXBuildFile section */
 
@@ -53,6 +54,7 @@
 		A1B000001234567890000111 /* AlarmConfigMigrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlarmConfigMigrationTests.swift; sourceTree = "<group>"; };
 		A1B000001234567890000112 /* ScheduleServiceExtractionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScheduleServiceExtractionTests.swift; sourceTree = "<group>"; };
 		A1B000001234567890000113 /* MorningPlanStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MorningPlanStoreTests.swift; sourceTree = "<group>"; };
+		FA782D026A424A038C4A9141 /* OnboardingActivationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingActivationTests.swift; sourceTree = "<group>"; };
 		B2C000001234567890000101 /* MorningHeroFajrAdjusterUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MorningHeroFajrAdjusterUITests.swift; sourceTree = "<group>"; };
 		B2C000001234567890000102 /* SubhUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SubhUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -125,6 +127,7 @@
 				A1B000001234567890000111 /* AlarmConfigMigrationTests.swift */,
 				A1B000001234567890000112 /* ScheduleServiceExtractionTests.swift */,
 				A1B000001234567890000113 /* MorningPlanStoreTests.swift */,
+				FA782D026A424A038C4A9141 /* OnboardingActivationTests.swift */,
 			);
 			path = SubhTests;
 			sourceTree = "<group>";
@@ -293,6 +296,7 @@
 				A1B000001234567890000012 /* AlarmConfigMigrationTests.swift in Sources */,
 				A1B000001234567890000013 /* ScheduleServiceExtractionTests.swift in Sources */,
 				A1B000001234567890000014 /* MorningPlanStoreTests.swift in Sources */,
+				A9C7F978580B444686F2ED48 /* OnboardingActivationTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

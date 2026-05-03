@@ -17,11 +17,11 @@
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>NSAlarmKitUsageDescription</key>
-	<string>Subh uses alarms to wake you before Fajr.</string>
+	<string>Subh schedules alarms to wake you around Fajr.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Subh uses your location to calculate accurate Fajr times.</string>
+	<string>Subh uses your location to calculate local Fajr times.</string>
 	<key>NSUserNotificationUsageDescription</key>
-	<string>Subh sends reminders before Fajr and fallback alerts.</string>
+	<string>Subh can send reminders and schedule updates for your mornings.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
