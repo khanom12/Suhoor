@@ -139,10 +139,6 @@ enum MorningWakeResolutionService {
             return .defaultFajrMorning
         }
         switch dayContext {
-        case .tahajjudIntended:
-            return .intendedTahajjud
-        case .fastingAndTahajjudIntended:
-            return .intendedFastingAndTahajjud
         case .fastingIntended,
              .ramadanFasting,
              .qadaFastIntended,
@@ -222,7 +218,7 @@ enum MorningWakeResolutionService {
             return .manualDragOverride
         }
         if day.effectiveConfig.quickWakeModeOverride == .fajr
-            || day.effectiveConfig.quickWakeModeOverride == .fast {
+            || day.effectiveConfig.quickWakeModeOverride == .suhoor {
             return .quickSelectorDefault
         }
         if day.effectiveConfig.wakeRuleWasOverridden {
@@ -235,8 +231,8 @@ enum MorningWakeResolutionService {
         }
         if rule.state == .preFajr,
            rule.anchorType == .fajrStart,
-           rule.deltaMinutes == WakeStateSelectionResolver.defaultFastDeltaMinutes {
-            return .globalDefaultFastOffset
+           rule.deltaMinutes == WakeStateSelectionResolver.defaultSuhoorDeltaMinutes {
+            return .globalDefaultSuhoorOffset
         }
         if day.selectedPlanIsGenerated {
             return .planGenerated
@@ -518,7 +514,7 @@ enum MorningWakeResolutionService {
             return "Fajr begins at \(formatter.string(from: begin)) and Fajr ends at \(formatter.string(from: end))."
         case .finalThirdOfNight:
             guard let finalThird = boundary.finalThirdStart, let begin = boundary.fajrBegins else {
-                return "Early-worship times are not available yet."
+                return "Suhoor boundary times are not available yet."
             }
             return "Final third begins at \(formatter.string(from: finalThird)) and Fajr begins at \(formatter.string(from: begin))."
         case .unavailable:
@@ -552,8 +548,7 @@ private extension ActiveAlarmDay {
         switch decisionLog.selectedPlanID {
         case let id where id.contains("ramadan")
             || id.contains("qada")
-            || id.contains("sunnah")
-            || id.contains("tahajjud"):
+            || id.contains("sunnah"):
             return true
         default:
             return false

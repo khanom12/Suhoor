@@ -73,10 +73,6 @@ enum ProductSurfacePresentation {
             titles.append("Fasting")
         }
 
-        if resolved.primaryContext == .tahajjud || day.effectiveConfig.tahajjudRefinement {
-            titles.append("Tahajjud")
-        }
-
         if day.decisionLog.latestWakeCapApplied {
             titles.append("Cap applied")
         }
@@ -111,7 +107,7 @@ enum ProductSurfacePresentation {
         case .standard:
             return ordinaryDaySummaryText
         case .tahajjud:
-            return "Tahajjud planned"
+            return "Suhoor planned"
         case .suhoor, .fasting:
             return "Fasting tomorrow"
         case .sunnahFast:

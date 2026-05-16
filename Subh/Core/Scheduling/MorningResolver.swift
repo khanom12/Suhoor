@@ -752,7 +752,7 @@ enum DefaultWakeRuleValidator {
                     return DefaultWakeRuleValidationResult(
                         isValid: false,
                         firstInvalidDateKey: key,
-                        message: "Pre-Fajr defaults must resolve before Fajr starts.",
+                        message: "Suhoor defaults must resolve before Fajr starts.",
                         capPulledIntoPreFajrCount: capPulledIntoPreFajrCount
                     )
                 }
@@ -781,7 +781,7 @@ enum DefaultWakeRuleValidator {
                 return DefaultWakeRuleValidationResult(
                     isValid: false,
                     firstInvalidDateKey: key,
-                    message: "Defaults may only use Pre-Fajr or In-Fajr wake states.",
+                    message: "Defaults may only use Suhoor or In-Fajr wake states.",
                     capPulledIntoPreFajrCount: capPulledIntoPreFajrCount
                 )
             }

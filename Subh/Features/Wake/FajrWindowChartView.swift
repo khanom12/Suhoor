@@ -448,8 +448,6 @@ struct FajrWindowChartView: View {
             dashedOverlayLine(for: \.saferWakeMinutes, color: Color.green.opacity(0.82), in: frame)
         case .compareFasting:
             dashedOverlayLine(for: \.fastingWakeMinutes, color: Color.pink.opacity(0.78), in: frame)
-        case .compareTahajjud:
-            dashedOverlayLine(for: \.tahajjudWakeMinutes, color: Color.blue.opacity(0.80), in: frame)
         }
     }
 

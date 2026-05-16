@@ -1777,8 +1777,6 @@ private struct NextTenMorningsTagChip: View {
             return FastPrimaryIntent.ramadanObligatory.style.color
         case .fastingIntent:
             return FastPrimaryIntent.voluntary.style.color
-        case .tahajjudIntent:
-            return Color.purple
         case .qada:
             return FastPrimaryIntent.qadaMakeup.style.color
         case .kaffarah:

@@ -546,8 +546,9 @@ struct ScheduleManagerHijriTests {
         #expect(added == true)
         guard let activeDay = manager.activeWindowSnapshot.visibleDays.first(where: {
             $0.provenances.contains(where: { $0.sourceOrigin == .recurringIslamic(.whiteDays) })
+                && $0.tagResult.computedPrimaryIntent != .forbidden
         }) else {
-            Issue.record("Expected a visible recurring white-days entry.")
+            Issue.record("Expected a visible recurring white-days entry outside forbidden fasting days.")
             return
         }
 
@@ -1925,12 +1926,14 @@ struct ScheduleManagerHijriTests {
 
         let earlyWake = target.decisionLog.prayerWindow.fajrStart.addingTimeInterval(-30 * 60)
         alarmConfigStore.updateOverride(for: target.date, timeZone: timeZone) { override in
+            override.quickWakeModeOverride = .suhoor
+            override.earlyWakePurposeOverride = .fast
             override.wakeStateOverride = .fixedWake
             override.fixedWakeTimeOverrideMinutesFromMidnight = DateHelpers.minutesFromMidnight(
                 for: earlyWake,
                 timeZone: timeZone
             )
-            override.tahajjudRefinement = true
+            override.tahajjudRefinement = false
             override.bypassLatestWakeCap = true
         }
         await manager.refreshSchedules(force: true)
@@ -2003,7 +2006,7 @@ struct ScheduleManagerHijriTests {
         }
 
         let defaultWakeRule = alarmConfigStore.defaults.defaultWakeRule
-        let selectedFast = await manager.selectHeroWakeMode(for: target.date, mode: .fast, timeZone: timeZone)
+        let selectedFast = await manager.selectHeroWakeMode(for: target.date, mode: .suhoor, timeZone: timeZone)
 
         #expect(selectedFast)
         #expect(alarmConfigStore.defaults.defaultWakeRule == defaultWakeRule)
@@ -2011,7 +2014,7 @@ struct ScheduleManagerHijriTests {
         guard let fastOverride = alarmConfigStore.override(for: target.date, timeZone: timeZone),
               let fastDay = manager.activeDay(for: target.date, timeZone: timeZone),
               let fastDisplay = heroDisplay(for: target.date, manager: manager, timeZone: timeZone) else {
-            Issue.record("Expected the selected Pre-Fajr mode to persist and re-resolve.")
+            Issue.record("Expected the selected Suhoor mode to persist and re-resolve.")
             return
         }
 
@@ -2020,17 +2023,17 @@ struct ScheduleManagerHijriTests {
             $0.dateKey == fastDay.dateKey
         }
 
-        #expect(fastOverride.quickWakeModeOverride == .fast)
+        #expect(fastOverride.quickWakeModeOverride == .suhoor)
         #expect(fastOverride.skipDay == false)
-        #expect(fastOverride.earlyWakePurposeOverride == .tahajjud)
+        #expect(fastOverride.earlyWakePurposeOverride == .fast)
         #expect(fastOverride.alarmDetailAudioPlanOverride == .wakeAlarmAndFajrAdhan)
         #expect(fastOverride.alarmDetailFastTypeOverride == nil)
-        #expect(fastOverride.tahajjudRefinement == true)
+        #expect(fastOverride.tahajjudRefinement == false)
         #expect(fastOverride.wakeStateOverride == .preFajr)
         #expect(fastOverride.wakeAnchorTypeOverride == .fajrStart)
         #expect(fastOverride.wakeDeltaOverrideMinutes == 30)
-        #expect(fastDay.effectiveConfig.quickWakeModeOverride == .fast)
-        #expect(fastDisplay.selectedQuickWakeMode == .fast)
+        #expect(fastDay.effectiveConfig.quickWakeModeOverride == .suhoor)
+        #expect(fastDisplay.selectedQuickWakeMode == .suhoor)
         #expect(fastDisplay.fajrWindowVisualMode == .interactiveEarlyWorshipWindow)
         #expect(fastDisplay.detailText == "Wake up 30 min before Fajr begins")
         #expect(abs(fastDay.schedule.wakeDate.timeIntervalSince(expectedFastWake)) < 60)
@@ -2043,9 +2046,9 @@ struct ScheduleManagerHijriTests {
         )
 
         #expect(selectedPurpose)
-        #expect(alarmConfigStore.override(for: target.date, timeZone: timeZone)?.earlyWakePurposeOverride == .tahajjud)
+        #expect(alarmConfigStore.override(for: target.date, timeZone: timeZone)?.earlyWakePurposeOverride == .fast)
         #expect(alarmConfigStore.override(for: target.date, timeZone: timeZone)?.alarmDetailFastTypeOverride == nil)
-        #expect(manager.activeDay(for: target.date, timeZone: timeZone)?.effectiveConfig.earlyWakePurposeOverride == .tahajjud)
+        #expect(manager.activeDay(for: target.date, timeZone: timeZone)?.effectiveConfig.earlyWakePurposeOverride == .fast)
 
         let selectedFastPurpose = await manager.selectAlarmDetailEarlyPurpose(
             for: target.date,
@@ -2090,7 +2093,7 @@ struct ScheduleManagerHijriTests {
         }
 
         #expect(quietOverride.quickWakeModeOverride == .quiet)
-        #expect(quietOverride.underlyingWakeModeBeforeQuiet == .fast)
+        #expect(quietOverride.underlyingWakeModeBeforeQuiet == .suhoor)
         #expect(quietOverride.earlyWakePurposeOverride == .fast)
         #expect(quietOverride.alarmDetailFastTypeOverride == .qada)
         #expect(quietOverride.alarmDetailAudioPlanOverride == .wakeAlarm)
@@ -2110,22 +2113,22 @@ struct ScheduleManagerHijriTests {
             #expect(quietMorningcastEntry.config.quickWakeModeOverride == .quiet || quietMorningcastEntry.config.skipDay)
         }
 
-        let restoredFast = await manager.selectHeroWakeMode(for: target.date, mode: .fast, timeZone: timeZone)
+        let restoredFast = await manager.selectHeroWakeMode(for: target.date, mode: .suhoor, timeZone: timeZone)
         #expect(restoredFast)
         guard let restoredFastOverride = alarmConfigStore.override(for: target.date, timeZone: timeZone),
               let restoredFastDay = manager.activeDay(for: target.date, timeZone: timeZone) else {
-            Issue.record("Expected Pre-Fajr mode to restore after Quiet.")
+            Issue.record("Expected Suhoor mode to restore after Quiet.")
             return
         }
 
-        #expect(restoredFastOverride.quickWakeModeOverride == .fast)
+        #expect(restoredFastOverride.quickWakeModeOverride == .suhoor)
         #expect(restoredFastOverride.underlyingWakeModeBeforeQuiet == nil)
         #expect(restoredFastOverride.earlyWakePurposeOverride == .fast)
         #expect(restoredFastOverride.alarmDetailFastTypeOverride == .qada)
         #expect(restoredFastOverride.alarmDetailAudioPlanOverride == .wakeAlarm)
         #expect(restoredFastOverride.fajrAdhanAtFajrBeginsOverride == false)
         #expect(restoredFastOverride.skipDay == false)
-        #expect(restoredFastDay.effectiveConfig.quickWakeModeOverride == .fast)
+        #expect(restoredFastDay.effectiveConfig.quickWakeModeOverride == .suhoor)
         #expect(restoredFastDay.scheduledEvents.contains { $0.type == .wakeAlarm })
         #expect(restoredFastDay.scheduledEvents.contains { $0.type == .fajrBoundaryNotice && $0.deliveryKinds.isEmpty })
 

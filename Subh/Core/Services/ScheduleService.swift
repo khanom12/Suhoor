@@ -407,7 +407,7 @@ final class ScheduleManager: ObservableObject {
         overlay: FajrWindowOverlay,
         timeZone: TimeZone = .current
     ) -> FajrWindowOverlaySeries? {
-        guard overlay == .compareFasting || overlay == .compareTahajjud else {
+        guard overlay == .compareFasting else {
             return nil
         }
 
@@ -765,18 +765,6 @@ final class ScheduleManager: ObservableObject {
             overlays.append(fasting)
         }
 
-        if let cachedTahajjud = fajrWindowOverlaySeriesCache[
-            FajrWindowOverlayCacheKey(
-                datasetKey: fajrWindowDatasetKey(period: period, timeZone: timeZone),
-                overlay: .compareTahajjud
-            )
-        ], cachedTahajjud.isAvailable {
-            overlays.append(cachedTahajjud)
-        } else if requestedOverlay == .compareTahajjud,
-                  let tahajjud = fajrWindowOverlaySeries(period: period, overlay: .compareTahajjud, timeZone: timeZone) {
-            overlays.append(tahajjud)
-        }
-
         return overlays
     }
 
@@ -882,8 +870,6 @@ final class ScheduleManager: ObservableObject {
                 overrideSelection: FastIntentSelection(primaryIntent: .voluntary, secondaryTags: []),
                 timeZone: timeZone
             )
-        case .compareTahajjud:
-            return nil
         }
     }
 
@@ -1574,7 +1560,7 @@ final class ScheduleManager: ObservableObject {
                 override: &override,
                 now: timeProvider.now()
             )
-            if mode == .fast, isRamadan {
+            if mode == .suhoor, isRamadan {
                 override.alarmDetailFastTypeOverride = nil
                 MorningDateIntentReducer.applyAlarmDetailAudioPlan(
                     .wakeAlarmAndFajrAdhan,
@@ -1715,7 +1701,7 @@ final class ScheduleManager: ObservableObject {
         let normalizedDate = DateHelpers.startOfDay(date, in: timeZone)
         guard let day = activeDay(for: normalizedDate, timeZone: timeZone),
               !Self.isRamadanAlarmDetailDay(day),
-              WakeStateSelectionResolver.selectedMode(for: day) == .fast else {
+              WakeStateSelectionResolver.selectedMode(for: day) == .suhoor else {
             return false
         }
 

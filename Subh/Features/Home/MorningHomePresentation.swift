@@ -140,7 +140,6 @@ enum NextTenMorningsTagSemantic: Equatable {
     case quietMode
     case ramadan
     case fastingIntent
-    case tahajjudIntent
     case qada
     case kaffarah
     case vow
@@ -250,7 +249,6 @@ struct NextTenMorningsTagResolverInput: Equatable {
     let selectedQuickWakeMode: QuickWakeMode?
     let shawwalSixProgress: ShawwalSixProgressSummary?
     let hasDayOverride: Bool
-    let tahajjudIntended: Bool
 }
 
 struct NextTenMorningsTagResolution: Equatable {
@@ -270,8 +268,6 @@ enum NextTenMorningsTagResolver {
             tags = [tag(.ramadan, priority: 10)]
         } else if hasFastingIntent(input) {
             tags = fastingTags(input)
-        } else if input.tahajjudIntended {
-            tags = tahajjudTags(input)
         } else {
             let opportunityTags = opportunityTags(input)
             tags = opportunityTags.isEmpty
@@ -292,7 +288,7 @@ enum NextTenMorningsTagResolver {
     }
 
     private static func hasFastingIntent(_ input: NextTenMorningsTagResolverInput) -> Bool {
-        if input.selectedQuickWakeMode == .fast, !input.tahajjudIntended {
+        if input.selectedQuickWakeMode == .suhoor {
             return true
         }
 
@@ -339,14 +335,6 @@ enum NextTenMorningsTagResolver {
             tags.append(tag(.observanceIntended(secondaryTag), priority: intendedPriority(for: secondaryTag)))
         }
 
-        return tags
-    }
-
-    private static func tahajjudTags(_ input: NextTenMorningsTagResolverInput) -> [NextTenMorningsTagDisplay] {
-        var tags = [tag(.tahajjudIntent, priority: 60)]
-        for secondaryTag in sortedVisibleOpportunityTags(input.compatibleOpportunityTags, shawwalSixProgress: input.shawwalSixProgress) {
-            tags.append(tag(.observanceOpportunity(secondaryTag), priority: opportunityPriority(for: secondaryTag)))
-        }
         return tags
     }
 
@@ -465,8 +453,6 @@ enum NextTenMorningsTagResolver {
             return "ramadan"
         case .fastingIntent:
             return "fasting"
-        case .tahajjudIntent:
-            return "tahajjud"
         case .qada:
             return "qada"
         case .kaffarah:
@@ -490,8 +476,6 @@ enum NextTenMorningsTagResolver {
             return "Ramadan"
         case .fastingIntent:
             return "Fasting"
-        case .tahajjudIntent:
-            return "Tahajjud"
         case .qada:
             return "Qada"
         case .kaffarah:
@@ -505,7 +489,7 @@ enum NextTenMorningsTagResolver {
 
     private static func prominence(for semantic: NextTenMorningsTagSemantic) -> NextTenMorningsTagProminence {
         switch semantic {
-        case .quietMode, .ramadan, .fastingIntent, .tahajjudIntent, .qada, .kaffarah, .vow:
+        case .quietMode, .ramadan, .fastingIntent, .qada, .kaffarah, .vow:
             return .strong
         case .observanceOpportunity, .observanceIntended:
             return .opportunity
@@ -524,8 +508,6 @@ enum NextTenMorningsTagResolver {
             return "Ramadan morning"
         case .fastingIntent:
             return "Fasting intended"
-        case .tahajjudIntent:
-            return "Tahajjud intended"
         case .qada:
             return "Qada"
         case .kaffarah:
@@ -624,8 +606,7 @@ enum MorningHomePresentation {
                 quietModeState: resolvedQuietModeState,
                 selectedQuickWakeMode: selectedMode,
                 shawwalSixProgress: shawwalSixProgress,
-                hasDayOverride: entry.hasDayOverride,
-                tahajjudIntended: isTahajjudIntended(for: entry, selectedMode: selectedMode)
+                hasDayOverride: entry.hasDayOverride
             )
         )
         let trailingTime = entry.isEnabled ? entry.schedule.wakeDate : nil
@@ -982,13 +963,6 @@ enum MorningHomePresentation {
             }
             return "Fasting intended for \(details.joined(separator: ", "))"
         }
-        if tags.first?.semantic == .tahajjudIntent {
-            let details = tags.dropFirst().map(\.accessibilityText)
-            if details.isEmpty {
-                return "Tahajjud intended"
-            }
-            return "Tahajjud intended; \(details.joined(separator: ", "))"
-        }
         return tags.map(\.accessibilityText).joined(separator: ", ")
     }
 
@@ -1073,7 +1047,7 @@ enum MorningHomePresentation {
             return "Qada planned"
         }
         if context.primaryContext == .tahajjud || entry.activeDay.effectiveConfig.tahajjudRefinement {
-            return "Tahajjud planned"
+            return "Suhoor planned"
         }
         if context.primaryContext == .fasting
             || context.primaryContext == .suhoor
@@ -1142,35 +1116,6 @@ enum MorningHomePresentation {
         WakeStateSelectionResolver.selectedMode(for: entry.activeDay)
     }
 
-    private static func isTahajjudIntended(
-        for entry: WakeRowEntry,
-        selectedMode: QuickWakeMode
-    ) -> Bool {
-        let day = entry.activeDay
-        let context = day.resolvedDayContext
-        let tags = Set(context.supportingTags)
-        let selectedPurpose = day.effectiveConfig.earlyWakePurposeOverride
-        let isRamadan = day.isImplicitRamadan || tags.contains(.ramadan)
-        let hasExplicitFastingSelection = selectedPurpose == .fast
-            || selectedPurpose == .fastAndTahajjud
-            || day.effectiveConfig.alarmDetailFastTypeOverride != nil
-        let hasResolvedFastingIntent = context.primaryContext == .fasting
-            || context.primaryContext == .suhoor
-            || context.primaryContext == .sunnahFast
-            || context.primaryContext == .qadaFast
-            || tags.contains(.voluntary)
-            || tags.contains(.qada)
-            || tags.contains(.kaffarah)
-            || tags.contains(.vow)
-
-        return context.primaryContext == .tahajjud
-            || context.secondaryContexts.contains(.tahajjud)
-            || day.effectiveConfig.tahajjudRefinement
-            || selectedPurpose == .tahajjud
-            || selectedPurpose == .fastAndTahajjud
-            || (selectedMode == .fast && !hasExplicitFastingSelection && !hasResolvedFastingIntent && !isRamadan)
-    }
-
     private static func quickWakeModeOptions(
         selected: QuickWakeMode,
         relativeDayLabel: String
@@ -1189,8 +1134,8 @@ enum MorningHomePresentation {
     private static func quickWakeModeAccessibilityHint(mode: QuickWakeMode, relativeDayLabel: String) -> String {
         let day = quickWakeModeRelativeDayReference(relativeDayLabel)
         switch mode {
-        case .fast:
-            return "Wakes 30 min before Fajr begins for \(day)."
+        case .suhoor:
+            return "Wakes 30 min before Fajr begins for suhoor on \(day)."
         case .fajr:
             return "Wakes 30 min before Fajr ends for \(day)."
         case .quiet:
@@ -1211,7 +1156,6 @@ enum MorningHomePresentation {
         let redundantTitles: Set<String> = [
             "Fasting",
             "Qada",
-            "Tahajjud",
             "Changed",
             "Skipped",
             "Fixed wake",

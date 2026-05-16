@@ -320,16 +320,9 @@ struct AlarmDayDetailView: View {
                     }
                 }
 
-                if let purpose = context.purpose {
-                    contextDividerIfNeeded(after: context.significance != nil)
-                    contextSection(title: "Pre-Fajr intention") {
-                        purposeChip(purpose, metrics: metrics)
-                    }
-                }
-
                 if let fastType = context.fastType {
                     contextDividerIfNeeded(after: context.significance != nil || context.purpose != nil)
-                    contextSection(title: "Fasting intention") {
+                    contextSection(title: "Suhoor intention") {
                         VStack(alignment: .leading, spacing: 10) {
                             fastTypeChip(fastType, metrics: metrics)
                             if !fastType.selectedOpportunityChips.isEmpty {
@@ -545,7 +538,7 @@ struct AlarmDayDetailView: View {
         showsMenuIndicator: Bool
     ) -> some View {
         HStack(spacing: 6) {
-            Text("Pre-Fajr:")
+            Text("Suhoor:")
                 .foregroundStyle(WakeGlassTheme.tertiaryText)
             Text(purpose.title)
                 .foregroundStyle(WakeGlassTheme.primaryText.opacity(0.92))
@@ -575,7 +568,7 @@ struct AlarmDayDetailView: View {
                 }
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(purpose.isLocked ? "Pre-Fajr intention: \(purpose.title), locked" : "Pre-Fajr intention: \(purpose.title)")
+        .accessibilityLabel(purpose.isLocked ? "Suhoor intention: \(purpose.title), locked" : "Suhoor intention: \(purpose.title)")
     }
 
     private func detailChipLabel(
@@ -966,36 +959,14 @@ enum AlarmDayDetailPresentation {
     }
 
     static func purpose(for entry: WakeRowEntry) -> AlarmDetailPurposePresentation? {
-        let selectedMode = WakeStateSelectionResolver.selectedMode(for: entry.activeDay)
-        guard selectedMode == .fast else { return nil }
-
-        let context = entry.activeDay.resolvedDayContext
-        let tags = Set(context.supportingTags)
-        let hasTahajjud = context.primaryContext == .tahajjud
-            || context.secondaryContexts.contains(.tahajjud)
-            || entry.activeDay.effectiveConfig.tahajjudRefinement
-
-        if tags.contains(.ramadan) || entry.activeDay.isImplicitRamadan {
-            return AlarmDetailPurposePresentation(title: "Fasting", isLocked: true, selection: .fast)
-        }
-        if let override = entry.activeDay.effectiveConfig.earlyWakePurposeOverride {
-            let selection: EarlyWakePurposeOverride = override == .tahajjud ? .tahajjud : .fast
-            return AlarmDetailPurposePresentation(title: selection.displayTitle, isLocked: false, selection: selection)
-        }
-        if entry.activeDay.effectiveConfig.alarmDetailFastTypeOverride != nil || isFastingContext(context) {
-            return AlarmDetailPurposePresentation(title: "Fasting", isLocked: false, selection: .fast)
-        }
-        if hasTahajjud && !isFastingContext(context) {
-            return AlarmDetailPurposePresentation(title: "Tahajjud only", isLocked: false, selection: .tahajjud)
-        }
-        return AlarmDetailPurposePresentation(title: "Tahajjud only", isLocked: false, selection: .tahajjud)
+        nil
     }
 
     static func fastType(
         for entry: WakeRowEntry,
         purpose: AlarmDetailPurposePresentation?
     ) -> AlarmDetailFastPurposePresentation? {
-        guard purpose?.selection == .fast else { return nil }
+        guard WakeStateSelectionResolver.selectedMode(for: entry.activeDay) == .suhoor else { return nil }
 
         if isRamadan(entry) {
             return AlarmDetailFastPurposePresentation(
@@ -1053,7 +1024,7 @@ enum AlarmDayDetailPresentation {
         }
 
         if isRamadan {
-            return selectedMode == .fast ? AlarmDetailFajrAdhanPresentation(
+            return selectedMode == .suhoor ? AlarmDetailFajrAdhanPresentation(
                 isEnabled: true,
                 isLocked: true,
                 subtitle: "Locked on for Ramadan.",
@@ -1061,14 +1032,14 @@ enum AlarmDayDetailPresentation {
             ) : nil
         }
 
-        guard selectedMode == .fast, purpose?.selection == .fast else { return nil }
+        guard selectedMode == .suhoor else { return nil }
         let isEnabled = entry.activeDay.effectiveConfig.alarmDetailAudioPlanOverride != .wakeAlarm
         return AlarmDetailFajrAdhanPresentation(
             isEnabled: isEnabled,
             isLocked: false,
             subtitle: isEnabled
-                ? "Keep the Fajr adhan after the pre-Fajr wake."
-                : "Only the pre-Fajr wake alarm will ring.",
+                ? "Keep the Fajr adhan after the Suhoor wake."
+                : "Only the Suhoor wake alarm will ring.",
             lockedNote: nil
         )
     }
@@ -1083,8 +1054,8 @@ enum AlarmDayDetailPresentation {
     ) -> AlarmDetailContextPresentation {
         let significance: AlarmDetailDaySignificancePresentation? = nil
         let selectedMode = WakeStateSelectionResolver.selectedMode(for: entry.activeDay)
-        let showPurpose = selectedMode == .fast ? purpose : nil
-        let showFastType = selectedMode == .fast && purpose?.selection == .fast ? fastType : nil
+        let showPurpose: AlarmDetailPurposePresentation? = nil
+        let showFastType = selectedMode == .suhoor ? fastType : nil
         let sentence = contextSentence(
             for: entry,
             display: display,
@@ -1119,11 +1090,8 @@ enum AlarmDayDetailPresentation {
             parts.append(display.primaryText)
         }
         parts.append(relationText(for: display))
-        if let purpose {
-            parts.append("Pre-Fajr intention: \(purpose.title)")
-        }
         if let fastType {
-            parts.append("Fasting intention: \(fastType.title)")
+            parts.append("Suhoor intention: \(fastType.title)")
         }
         if let fajrAdhan {
             parts.append("Fajr adhan at Fajr begins: \(fajrAdhan.isEnabled ? "On" : "Off")")
@@ -1133,8 +1101,8 @@ enum AlarmDayDetailPresentation {
 
     private static func detailTitle(for mode: QuickWakeMode) -> String {
         switch mode {
-        case .fast:
-            return "Pre-Fajr"
+        case .suhoor:
+            return "Suhoor"
         case .fajr:
             return "Fajr"
         case .quiet:
@@ -1144,8 +1112,8 @@ enum AlarmDayDetailPresentation {
 
     private static func detailAccessibilityHint(for mode: QuickWakeMode) -> String {
         switch mode {
-        case .fast:
-            return "Wakes 30 minutes before Fajr begins for this date."
+        case .suhoor:
+            return "Wakes 30 minutes before Fajr begins for suhoor on this date."
         case .fajr:
             return "Wakes 30 minutes before Fajr ends for this date."
         case .quiet:
@@ -1206,7 +1174,7 @@ enum AlarmDayDetailPresentation {
         }
 
         if isRamadan(entry) {
-            if selectedMode == .fast {
+            if selectedMode == .suhoor {
                 return sentence("You are waking before Fajr for Ramadan. Ramadan fast is locked for this date.")
             }
             return sentence("This is a Ramadan date.")
@@ -1216,15 +1184,9 @@ enum AlarmDayDetailPresentation {
         case .fajr:
             return opportunitySentence(
                 prefix: "This day has Sunnah fasting opportunities:",
-                noOpportunityText: "There are no Sunnah fasting opportunities for this day. You can still choose Pre-Fajr and select Fasting to plan a Voluntary, Qada, Vow, Kaffarah, or Other fast."
+                noOpportunityText: "There are no Sunnah fasting opportunities for this day. You can still choose Suhoor to plan a Voluntary, Qada, Vow, Kaffarah, or Other fast."
             )
-        case .fast:
-            if purpose?.selection == .tahajjud {
-                return opportunitySentence(
-                    prefix: "You are waking before Fajr for Tahajjud only. This day also has Sunnah fasting opportunities:",
-                    noOpportunityText: "You are waking before Fajr for Tahajjud only. There are no Sunnah fasting opportunities for this day."
-                )
-            }
+        case .suhoor:
             if let fastType,
                let override = fastType.selection,
                override != .voluntary {
@@ -1240,11 +1202,11 @@ enum AlarmDayDetailPresentation {
                 )
             }
             if opportunities.isEmpty {
-                return sentence("You are waking before Fajr to fast. This will be saved as a Voluntary fast unless you choose another fast type.")
+                return sentence("You are waking before Fajr for suhoor. This will be saved as a Voluntary fast unless you choose another Suhoor intention.")
             }
             return (
-                "You are waking before Fajr to fast. This fast will use today's Sunnah opportunities by default: \(opportunityList).",
-                "You are waking before Fajr to fast. This fast will use today's Sunnah opportunities by default:",
+                "You are waking before Fajr for suhoor. This fast will use today's Sunnah opportunities by default: \(opportunityList).",
+                "You are waking before Fajr for suhoor. This fast will use today's Sunnah opportunities by default:",
                 opportunities,
                 "."
             )

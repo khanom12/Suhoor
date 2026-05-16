@@ -56,7 +56,10 @@ enum FajrWindowOverlay: String, CaseIterable, Identifiable, Hashable, Sendable {
     case myWake
     case compareSafe
     case compareFasting
-    case compareTahajjud
+
+    static var allCases: [FajrWindowOverlay] {
+        [.myWake, .compareSafe, .compareFasting]
+    }
 
     var id: String { rawValue }
 
@@ -67,9 +70,7 @@ enum FajrWindowOverlay: String, CaseIterable, Identifiable, Hashable, Sendable {
         case .compareSafe:
             return "Safer option"
         case .compareFasting:
-            return "Fasting wake"
-        case .compareTahajjud:
-            return "Compare Tahajjud"
+            return "Suhoor wake"
         }
     }
 
@@ -81,8 +82,6 @@ enum FajrWindowOverlay: String, CaseIterable, Identifiable, Hashable, Sendable {
             return "Compares your wake with a safer option that keeps the same lead before the supported Fajr end."
         case .compareFasting:
             return "Compares your wake with the fasting wake when that plan differs."
-        case .compareTahajjud:
-            return "Compares your wake with the Tahajjud wake when that plan differs."
         }
     }
 }
@@ -253,7 +252,6 @@ struct FajrWindowDatasetRow: Identifiable, Equatable, Sendable {
     let isOverride: Bool
     let isSpecialDay: Bool
     let isFastingContext: Bool
-    let isTahajjudContext: Bool
     let contextTags: [String]
     let relationText: String
 
@@ -273,19 +271,16 @@ struct FajrWindowPoint: Identifiable, Equatable, Sendable {
     let primaryWake: Date
     let saferWake: Date?
     let fastingWake: Date?
-    let tahajjudWake: Date?
     let fajrStartMinutes: Int
     let fajrEndOrBoundaryMinutes: Int
     let primaryWakeMinutes: Int
     let saferWakeMinutes: Int?
     let fastingWakeMinutes: Int?
-    let tahajjudWakeMinutes: Int?
     let bufferBeforeBoundaryMinutes: Int
     let isSkipped: Bool
     let isOverride: Bool
     let isSpecialDay: Bool
     let isFastingContext: Bool
-    let isTahajjudContext: Bool
     let contextTags: [String]
     let relationText: String
 
@@ -299,8 +294,6 @@ struct FajrWindowPoint: Identifiable, Equatable, Sendable {
             return saferWakeMinutes
         case .compareFasting:
             return fastingWakeMinutes
-        case .compareTahajjud:
-            return tahajjudWakeMinutes
         }
     }
 }

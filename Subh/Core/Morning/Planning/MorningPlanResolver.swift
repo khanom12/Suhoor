@@ -120,7 +120,7 @@ enum MorningPlanResolver {
         let wakeRule = MorningWakeRule(
             state: .preFajr,
             anchorType: .fajrStart,
-            deltaMinutes: WakeStateSelectionResolver.defaultFastDeltaMinutes,
+            deltaMinutes: WakeStateSelectionResolver.defaultSuhoorDeltaMinutes,
             latestWakeCapMinutesFromMidnight: defaultPlan.wakeRule.latestWakeCapMinutesFromMidnight,
             bypassLatestWakeCap: true
         )
@@ -132,7 +132,7 @@ enum MorningPlanResolver {
             wakeAnchorType: .fajrStart,
             wakeDelta: WakeDelta(
                 relation: .before,
-                minutes: WakeStateSelectionResolver.defaultFastDeltaMinutes
+                minutes: WakeStateSelectionResolver.defaultSuhoorDeltaMinutes
             ),
             fixedWakeTimeCompatibilityMinutesFromMidnight: nil,
             reminderEnabled: defaultPlan.reminderEnabled,

@@ -58,7 +58,9 @@ enum UITestFixtureConfigurator {
             override.wakeStateOverride = .preFajr
             override.wakeAnchorTypeOverride = .fajrStart
             override.wakeDeltaOverrideMinutes = 30
-            override.tahajjudRefinement = true
+            override.quickWakeModeOverride = .suhoor
+            override.earlyWakePurposeOverride = .fast
+            override.tahajjudRefinement = false
             override.bypassLatestWakeCap = true
         }
     }

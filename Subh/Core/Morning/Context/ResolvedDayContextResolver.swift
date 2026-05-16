@@ -104,7 +104,7 @@ enum ResolvedDayContextResolver {
         case .sunnahFast:
             return "A Sunnah observance is shaping today's wake."
         case .tahajjud:
-            return "Tahajjud context is shaping today's wake."
+            return "Suhoor context is shaping today's wake."
         case .suhoor:
             return "Fasting context is shaping today's wake."
         case .jamaah:

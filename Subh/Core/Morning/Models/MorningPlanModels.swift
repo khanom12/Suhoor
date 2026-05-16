@@ -52,7 +52,7 @@ enum DefaultWakeState: String, Codable, CaseIterable, Identifiable, Sendable {
 }
 
 enum QuickWakeMode: String, Codable, CaseIterable, Identifiable, Sendable {
-    case fast
+    case suhoor
     case fajr
     case quiet
 
@@ -60,13 +60,36 @@ enum QuickWakeMode: String, Codable, CaseIterable, Identifiable, Sendable {
 
     var displayTitle: String {
         switch self {
-        case .fast:
-            return "Pre-Fajr"
+        case .suhoor:
+            return "Suhoor"
         case .fajr:
             return "Fajr"
         case .quiet:
             return "Quiet"
         }
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        let value = try container.decode(String.self)
+        switch value {
+        case "suhoor", "fast", "preFajr", "pre-fajr", "early", "Early", "Fast", "Pre-Fajr":
+            self = .suhoor
+        case "fajr", "Fajr":
+            self = .fajr
+        case "quiet", "Quiet", "off", "Off", "noAlarm", "No alarm":
+            self = .quiet
+        default:
+            throw DecodingError.dataCorruptedError(
+                in: container,
+                debugDescription: "Unknown quick wake mode: \(value)"
+            )
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(rawValue)
     }
 }
 
@@ -75,19 +98,38 @@ enum EarlyWakePurposeOverride: String, Codable, CaseIterable, Identifiable, Send
     case tahajjud
     case fastAndTahajjud
 
-    static let allCases: [EarlyWakePurposeOverride] = [.tahajjud, .fast]
+    static let allCases: [EarlyWakePurposeOverride] = [.fast]
 
     var id: String { rawValue }
 
     var displayTitle: String {
         switch self {
         case .fast:
-            return "Fasting"
+            return "Suhoor"
         case .tahajjud:
-            return "Tahajjud only"
+            return "Suhoor"
         case .fastAndTahajjud:
-            return "Fasting"
+            return "Suhoor"
         }
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        let value = try container.decode(String.self)
+        switch value {
+        case "fast", "tahajjud", "fastAndTahajjud", "otherEarlyWorship", "other", "Fasting", "Tahajjud only":
+            self = .fast
+        default:
+            throw DecodingError.dataCorruptedError(
+                in: container,
+                debugDescription: "Unknown early wake purpose: \(value)"
+            )
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(rawValue)
     }
 }
 

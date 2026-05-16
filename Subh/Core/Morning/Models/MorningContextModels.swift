@@ -17,7 +17,7 @@ enum MorningContextType: String, Codable, CaseIterable, Identifiable, Sendable {
         case .standard:
             return "Standard"
         case .tahajjud:
-            return "Tahajjud"
+            return "Suhoor"
         case .suhoor:
             return "Suhoor"
         case .fasting:

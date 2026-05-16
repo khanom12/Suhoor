@@ -206,7 +206,7 @@ enum ObservanceOpportunityResolver {
         case .tashreeq:
             return "Days of Tashreeq"
         case .tahajjudEligible:
-            return "Tahajjud"
+            return "Suhoor"
         }
     }
 
@@ -223,7 +223,7 @@ enum ObservanceOpportunityResolver {
         case .voluntaryGeneral:
             return "User-sourced fasting opportunity."
         case .tahajjudEligible:
-            return "Optional night-wake purpose."
+            return "Legacy night-wake purpose resolves to Suhoor for MVP."
         case .ordinary:
             return nil
         }
@@ -320,13 +320,18 @@ enum DayIntentionResolver {
         }
 
         if overrides.tahajjudDateKeys.contains(dateKey) {
+            let selection = FastIntentSelection(primaryIntent: .voluntary, secondaryTags: [])
             return ResolvedDayIntention(
-                kind: .tahajjud,
+                kind: .fast,
                 source: .userSelected,
-                selectedOpportunityIDs: [],
-                fastIntent: nil,
+                selectedOpportunityIDs: selectedOpportunityIDs(
+                    for: selection,
+                    opportunities: opportunities,
+                    tagResult: tagResult
+                ),
+                fastIntent: selection,
                 suppressesPrompts: false,
-                explanation: "Tahajjud is selected without adding fast completion pressure."
+                explanation: "Legacy Tahajjud selection resolves to Suhoor for MVP."
             )
         }
 
@@ -355,19 +360,10 @@ enum DayIntentionResolver {
         tagResult: TagComputationResult,
         effectiveConfig: EffectiveDailyConfig
     ) -> ResolvedDayIntention? {
-        if effectiveConfig.earlyWakePurposeOverride == .tahajjud || effectiveConfig.tahajjudRefinement {
-            return ResolvedDayIntention(
-                kind: .tahajjud,
-                source: .userDateOverride,
-                selectedOpportunityIDs: [],
-                fastIntent: nil,
-                suppressesPrompts: false,
-                explanation: "Tahajjud is selected for this morning without adding fast completion pressure."
-            )
-        }
-
         guard effectiveConfig.earlyWakePurposeOverride == .fast
             || effectiveConfig.earlyWakePurposeOverride == .fastAndTahajjud
+            || effectiveConfig.earlyWakePurposeOverride == .tahajjud
+            || effectiveConfig.tahajjudRefinement
             || effectiveConfig.alarmDetailFastTypeOverride != nil
         else {
             return nil
@@ -484,7 +480,7 @@ enum DayRequiredActionResolver {
         case .defaultFajr:
             return [.fajrCheckIn]
         case .tahajjud:
-            return [.fajrCheckIn, .tahajjudCheckIn]
+            return [.fajrCheckIn, .fastStatus, .fastCompletion]
         case .fast:
             var actions: [DayRequiredAction] = [.fajrCheckIn, .fastStatus, .fastCompletion]
             if intention.fastIntent?.primaryIntent == .qadaMakeup {
@@ -752,7 +748,7 @@ enum DayPurposeResolver {
         case .fast:
             return intention.fastIntent?.primaryIntent.shortTitle ?? "Fast planned."
         case .tahajjud:
-            return "Tahajjud wake planned."
+            return "Suhoor planned."
         case .quiet:
             return "Quiet day."
         }

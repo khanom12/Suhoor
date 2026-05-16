@@ -26,6 +26,11 @@ This checklist covers behavior that simulator tests cannot prove with enough con
 ## Morning Modes
 
 - Fajr: verify active wake is scheduled through the selected channel.
-- Fast / early worship: verify pre-Fajr wake remains active when later Fajr-begins adhan cue is disabled.
-- Quiet: verify delivery is suppressed or cancelled while underlying Fajr/Fast/Tahajjud context remains restorable.
+- Suhoor: verify before-Fajr wake remains active when the later Fajr-begins adhan cue is disabled.
+- Quiet: verify delivery is suppressed or cancelled while underlying Fajr/Suhoor context remains restorable.
 - Fajr adhan wake audio: verify adhan sound selection does not show the alarm as off.
+
+## User-Observed Reliability Regressions
+
+- Wrong-time firing: schedule a Suhoor or Fajr wake, leave the device idle, and verify the alarm fires only at the expected local wake time, not at unrelated daytime times.
+- Missed wake: schedule the next morning wake, leave the app terminated overnight, and verify the expected alarm fires or the app records/reports a delivery failure without rewriting the morning as Quiet.

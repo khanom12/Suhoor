@@ -328,7 +328,7 @@ struct AlarmBehaviorSettingsView: View {
                 supportingText: "Choose the sound used before Fajr, at Fajr start, during Fajr, after Fajr, and for fixed wakes."
             ) {
                 soundPickerRow(
-                    title: "Pre-Fajr wake sound",
+                    title: "Suhoor wake sound",
                     binding: soundBinding(\.preFajrWakeSoundSelectionGlobal)
                 )
                 AppGroupDivider()

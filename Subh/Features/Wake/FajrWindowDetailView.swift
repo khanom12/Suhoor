@@ -194,8 +194,6 @@ struct FajrWindowDetailView: View {
                 return snapshot.availableOverlays.contains(overlay)
             case .compareFasting:
                 return shouldOfferFastingWake
-            case .compareTahajjud:
-                return snapshot.availableOverlays.contains(overlay)
             }
         }
     }

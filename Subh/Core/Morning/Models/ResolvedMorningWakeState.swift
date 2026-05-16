@@ -16,8 +16,6 @@ enum MorningWakeDayContextKind: String, Codable, CaseIterable, Identifiable, Sen
     case qadaFastIntended
     case sunnahFastIntended
     case customFastIntended
-    case tahajjudIntended
-    case fastingAndTahajjudIntended
     case observanceOnly
     case adjusted
     case unknown
@@ -47,8 +45,6 @@ enum WakeBoundaryKind: String, Codable, CaseIterable, Identifiable, Sendable {
 enum WakeBoundaryReason: String, Codable, CaseIterable, Identifiable, Sendable {
     case defaultFajrMorning
     case intendedFasting
-    case intendedTahajjud
-    case intendedFastingAndTahajjud
     case fallbackMissingNightData
     case quietPreserved
     case unavailable
@@ -73,7 +69,7 @@ struct WakeBoundaryResolution: Codable, Equatable, Sendable {
 
 enum WakeTimeOrigin: String, Codable, CaseIterable, Identifiable, Sendable {
     case globalDefaultFajrOffset
-    case globalDefaultFastOffset
+    case globalDefaultSuhoorOffset
     case quickSelectorDefault
     case manualDragOverride
     case dateSpecificOverride
@@ -84,6 +80,23 @@ enum WakeTimeOrigin: String, Codable, CaseIterable, Identifiable, Sendable {
     case unavailable
 
     var id: String { rawValue }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        let rawValue = try container.decode(String.self)
+        switch rawValue {
+        case "globalDefaultFastOffset":
+            self = .globalDefaultSuhoorOffset
+        default:
+            guard let value = WakeTimeOrigin(rawValue: rawValue) else {
+                throw DecodingError.dataCorruptedError(
+                    in: container,
+                    debugDescription: "Unknown WakeTimeOrigin raw value: \(rawValue)"
+                )
+            }
+            self = value
+        }
+    }
 }
 
 enum WakeTimeRelationBoundary: String, Codable, CaseIterable, Identifiable, Sendable {

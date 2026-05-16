@@ -63,7 +63,7 @@ enum Strings {
 
         static let valueTitle = "Wake for Fajr, automatically."
         static let valueBody = "Subh calculates your local Fajr time and prepares your next wake by default. Your main wake is set 30 minutes before Fajr ends."
-        static let valueSupport = "Fasting and Tahajjud mornings can be adjusted later when you need them."
+        static let valueSupport = "Suhoor and fasting mornings can be adjusted later when you need them."
         static let valuePrimaryAction = "Set up Subh"
 
         static let locationTitle = "Find your Fajr time"
@@ -107,7 +107,7 @@ enum Strings {
         static let permissionsNotificationsChecking = "Checking notifications…"
 
         static let successReadyTitle = "Your first wake is ready"
-        static let successReadyBody = "Subh has prepared your next Fajr wake using your location and default timing. You can adjust fasting and Tahajjud mornings later."
+        static let successReadyBody = "Subh has prepared your next Fajr wake using your location and default timing. You can adjust Suhoor and fasting mornings later."
         static let successReadyAction = "View my morning"
         static let successLoadingText = "Preparing your wake…"
         static let successAlarmReadyBadge = "Alarm ready"

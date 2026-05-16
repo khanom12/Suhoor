@@ -74,7 +74,7 @@ final class FajrWindowDetailStore: ObservableObject {
         selectedDateKey = nil
         cancelOverlayLoad()
 
-        if requestedOverlay == .compareFasting || requestedOverlay == .compareTahajjud {
+        if requestedOverlay == .compareFasting {
             requestedOverlay = .myWake
         }
 
@@ -91,7 +91,7 @@ final class FajrWindowDetailStore: ObservableObject {
         cancelOverlayLoad(resetRequestedOverlay: false)
         requestedOverlay = overlay
 
-        guard overlay == .compareFasting || overlay == .compareTahajjud else {
+        guard overlay == .compareFasting else {
             refreshSnapshot(using: scheduleManager, timeZone: timeZone)
             return
         }

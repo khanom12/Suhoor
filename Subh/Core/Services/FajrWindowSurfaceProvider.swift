@@ -17,7 +17,7 @@ struct FajrWindowSurfaceProvider {
             overrideDateKeys: overrideDateKeys,
             timeZone: timeZone
         )
-        let overlays = [FajrWindowOverlay.compareFasting, .compareTahajjud].compactMap { overlay in
+        let overlays = [FajrWindowOverlay.compareFasting].compactMap { overlay in
             buildOverlaySeries(
                 period: period,
                 overlay: overlay,
@@ -74,7 +74,7 @@ struct FajrWindowSurfaceProvider {
         comparisonDay: (ActiveAlarmDay, FajrWindowOverlay) -> ActiveAlarmDay?,
         timeZone: TimeZone = .current
     ) -> FajrWindowOverlaySeries? {
-        guard overlay == .compareFasting || overlay == .compareTahajjud else {
+        guard overlay == .compareFasting else {
             return nil
         }
 
@@ -253,7 +253,6 @@ struct FajrWindowSurfaceProvider {
             isOverride: row.isOverride,
             isSpecialDay: row.isSpecialDay,
             isFastingContext: row.isFastingContext,
-            isTahajjudContext: row.isTahajjudContext,
             contextTags: row.contextTags,
             relationText: row.relationText
         )
@@ -305,9 +304,6 @@ struct FajrWindowSurfaceProvider {
             || day.resolvedDayContext.supportingTags.contains(.qada)
             || day.resolvedDayContext.supportingTags.contains(.voluntary)
 
-        let isTahajjudContext = day.resolvedDayContext.primaryContext == .tahajjud
-            || day.resolvedDayContext.secondaryContexts.contains(.tahajjud)
-
         return FajrWindowDatasetRow(
             dayOrdinal: ordinal,
             date: day.date,
@@ -330,7 +326,6 @@ struct FajrWindowSurfaceProvider {
             isOverride: overrideDateKeys.contains(day.dateKey),
             isSpecialDay: day.resolvedDayContext.primaryContext != .standard || !secondaryTitles.isEmpty,
             isFastingContext: isFastingContext,
-            isTahajjudContext: isTahajjudContext,
             contextTags: tags,
             relationText: ProductSurfacePresentation.wakeRelationText(
                 delta: day.decisionLog.resolvedDelta,
@@ -345,7 +340,6 @@ struct FajrWindowSurfaceProvider {
     ) -> [FajrWindowPoint] {
         rows.map { row in
             let fastingValue = overlayLookup[.compareFasting]?.valuesByDateKey[row.dateKey]
-            let tahajjudValue = overlayLookup[.compareTahajjud]?.valuesByDateKey[row.dateKey]
 
             return FajrWindowPoint(
                 dayOrdinal: row.dayOrdinal,
@@ -360,19 +354,16 @@ struct FajrWindowSurfaceProvider {
                 primaryWake: row.primaryWake,
                 saferWake: row.saferWake,
                 fastingWake: fastingValue?.wake,
-                tahajjudWake: tahajjudValue?.wake,
                 fajrStartMinutes: row.fajrStartMinutes,
                 fajrEndOrBoundaryMinutes: row.fajrEndOrBoundaryMinutes,
                 primaryWakeMinutes: row.primaryWakeMinutes,
                 saferWakeMinutes: row.saferWakeMinutes,
                 fastingWakeMinutes: fastingValue?.wakeMinutes,
-                tahajjudWakeMinutes: tahajjudValue?.wakeMinutes,
                 bufferBeforeBoundaryMinutes: row.bufferBeforeBoundaryMinutes,
                 isSkipped: row.isSkipped,
                 isOverride: row.isOverride,
                 isSpecialDay: row.isSpecialDay,
                 isFastingContext: row.isFastingContext,
-                isTahajjudContext: row.isTahajjudContext,
                 contextTags: row.contextTags,
                 relationText: row.relationText
             )
@@ -424,9 +415,6 @@ struct FajrWindowSurfaceProvider {
         var overlays: [FajrWindowOverlay] = [.myWake, .compareSafe]
         if overlayLookup[.compareFasting]?.isAvailable == true {
             overlays.append(.compareFasting)
-        }
-        if overlayLookup[.compareTahajjud]?.isAvailable == true {
-            overlays.append(.compareTahajjud)
         }
         return overlays
     }
@@ -515,19 +503,8 @@ struct FajrWindowSurfaceProvider {
             secondaryItems.append(
                 FajrWindowValueItem(
                     id: "fasting-wake",
-                    label: "Fasting wake",
+                    label: "Suhoor wake",
                     value: TimeFormatters.timeFormatter.string(from: fastingWake),
-                    emphasis: .secondary
-                )
-            )
-        }
-
-        if let tahajjudWake = point.tahajjudWake {
-            secondaryItems.append(
-                FajrWindowValueItem(
-                    id: "tahajjud-wake",
-                    label: "Tahajjud wake",
-                    value: TimeFormatters.timeFormatter.string(from: tahajjudWake),
                     emphasis: .secondary
                 )
             )
@@ -576,11 +553,8 @@ struct FajrWindowSurfaceProvider {
             label = "Safer option"
             value = point.saferWake
         case .compareFasting:
-            label = "Fasting wake"
+            label = "Suhoor wake"
             value = point.fastingWake
-        case .compareTahajjud:
-            label = "Tahajjud comparison"
-            value = point.tahajjudWake
         }
 
         guard let value else { return nil }
@@ -1110,8 +1084,7 @@ struct FajrWindowSurfaceProvider {
                 point.fajrEndOrBoundaryMinutes,
                 point.primaryWakeMinutes,
                 point.saferWakeMinutes,
-                point.fastingWakeMinutes,
-                point.tahajjudWakeMinutes
+                point.fastingWakeMinutes
             ].compactMap { $0 }
         }
 
@@ -1131,8 +1104,7 @@ struct FajrWindowSurfaceProvider {
                 point.fajrEndOrBoundaryMinutes,
                 point.primaryWakeMinutes,
                 point.saferWakeMinutes,
-                point.fastingWakeMinutes,
-                point.tahajjudWakeMinutes
+                point.fastingWakeMinutes
             ].compactMap { $0 }
         }
 
