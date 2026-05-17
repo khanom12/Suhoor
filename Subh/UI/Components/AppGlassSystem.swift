@@ -260,22 +260,72 @@ struct AppPageBackground: View {
 }
 
 struct AppHomeContrastOverlay: View {
+    var role: AppHomeContrastOverlayRole = .legacy
+
     var body: some View {
+        let configuration = role.configuration
+
         ZStack {
-            Color.black.opacity(0.25)
+            Color.black.opacity(configuration.baseOpacity)
 
             LinearGradient(
-                stops: [
-                    .init(color: Color.black.opacity(0.68), location: 0.00),
-                    .init(color: Color.black.opacity(0.42), location: 0.26),
-                    .init(color: Color.black.opacity(0.18), location: 0.58),
-                    .init(color: Color.black.opacity(0.06), location: 1.00)
-                ],
+                stops: configuration.gradientStops,
                 startPoint: .top,
                 endPoint: .bottom
             )
         }
     }
+}
+
+struct AppHomeAtmosphereBaseOverlay: View {
+    var body: some View {
+        AppHomeContrastOverlay(role: .backgroundAtmosphere)
+    }
+}
+
+struct AppHomeForegroundContrastOverlay: View {
+    var body: some View {
+        AppHomeContrastOverlay(role: .foregroundReadability)
+    }
+}
+
+enum AppHomeContrastOverlayRole {
+    case legacy
+    case backgroundAtmosphere
+    case foregroundReadability
+
+    fileprivate var configuration: AppHomeContrastOverlayConfiguration {
+        switch self {
+        case .legacy:
+            AppHomeContrastOverlayConfiguration(
+                baseOpacity: 0.25,
+                gradientOpacities: [0.68, 0.42, 0.18, 0.06]
+            )
+        case .backgroundAtmosphere:
+            AppHomeContrastOverlayConfiguration(
+                baseOpacity: 0.06,
+                gradientOpacities: [0.16, 0.10, 0.04, 0.015]
+            )
+        case .foregroundReadability:
+            AppHomeContrastOverlayConfiguration(
+                baseOpacity: 0.12,
+                gradientOpacities: [0.38, 0.24, 0.12, 0.05]
+            )
+        }
+    }
+}
+
+private struct AppHomeContrastOverlayConfiguration {
+    let baseOpacity: Double
+    let gradientOpacities: [Double]
+
+    var gradientStops: [Gradient.Stop] {
+        zip(gradientOpacities, Self.locations).map { opacity, location in
+            .init(color: Color.black.opacity(opacity), location: location)
+        }
+    }
+
+    private static let locations: [CGFloat] = [0.00, 0.26, 0.58, 1.00]
 }
 
 struct AppSectionHeader<Trailing: View>: View {

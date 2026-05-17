@@ -66,7 +66,7 @@ struct AppAtmosphericCloudLayer: View {
     }
 
     private static func heroCloudHeight(for size: CGSize) -> CGFloat {
-        min(max(size.height * 0.40, 320), 430)
+        min(max(size.height * 0.42, 320), 500)
     }
 
     private static let animationFrameInterval = 1.0 / 30.0
@@ -76,46 +76,46 @@ struct AppAtmosphericCloudLayer: View {
         HeroCloudLayer(
             assetName: "SubhDawnHeroCloudMist",
             duration: 290,
-            opacity: 0.16,
+            opacity: 0.25,
             widthMultiplier: 1.45,
             phaseOffset: 0.08,
-            yOffset: -18,
-            blurRadius: 5
+            yOffsetRatio: -0.06,
+            blurRadius: 4
         ),
         HeroCloudLayer(
             assetName: "SubhDawnHeroCloudFar",
             duration: 235,
-            opacity: 0.24,
+            opacity: 0.43,
             widthMultiplier: 1.52,
             phaseOffset: 0.31,
-            yOffset: -12,
-            blurRadius: 2
+            yOffsetRatio: -0.05,
+            blurRadius: 1.5
         ),
         HeroCloudLayer(
             assetName: "SubhDawnHeroCloudMid",
             duration: 168,
-            opacity: 0.26,
+            opacity: 0.54,
             widthMultiplier: 1.58,
             phaseOffset: 0.57,
-            yOffset: -4,
-            blurRadius: 1
+            yOffsetRatio: -0.02,
+            blurRadius: 0.75
         ),
         HeroCloudLayer(
             assetName: "SubhDawnHeroCloudLow",
             duration: 116,
-            opacity: 0.22,
+            opacity: 0.48,
             widthMultiplier: 1.66,
             phaseOffset: 0.19,
-            yOffset: 3,
-            blurRadius: 0
+            yOffsetRatio: 0.03,
+            blurRadius: 0.25
         ),
         HeroCloudLayer(
             assetName: "SubhDawnHeroCloudNear",
             duration: 78,
-            opacity: 0.18,
+            opacity: 0.40,
             widthMultiplier: 1.74,
             phaseOffset: 0.73,
-            yOffset: 8,
+            yOffsetRatio: 0.06,
             blurRadius: 0
         )
     ]
@@ -142,7 +142,7 @@ private struct RepeatingHeroCloudLayer: View {
             }
         }
         .frame(width: tileWidth * 3, height: containerHeight, alignment: .leading)
-        .offset(x: xOffset - tileWidth, y: layer.yOffset)
+        .offset(x: xOffset - tileWidth, y: containerHeight * layer.yOffsetRatio)
         .opacity(layer.opacity)
         .blur(radius: layer.blurRadius)
         .compositingGroup()
@@ -163,7 +163,7 @@ private struct HeroCloudLayer: Identifiable {
     let opacity: Double
     let widthMultiplier: CGFloat
     let phaseOffset: TimeInterval
-    let yOffset: CGFloat
+    let yOffsetRatio: CGFloat
     let blurRadius: CGFloat
 
     var id: String { assetName }

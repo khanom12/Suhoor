@@ -46,10 +46,13 @@ struct SubhHomeView: View {
                 AppPageBackground()
                     .ignoresSafeArea()
 
+                AppHomeAtmosphereBaseOverlay()
+                    .ignoresSafeArea()
+
                 AppAtmosphericCloudLayer()
                     .ignoresSafeArea()
 
-                AppHomeContrastOverlay()
+                AppHomeForegroundContrastOverlay()
                     .ignoresSafeArea()
 
                 ScrollView {
