@@ -46,6 +46,9 @@ struct SubhHomeView: View {
                 AppPageBackground()
                     .ignoresSafeArea()
 
+                AppAtmosphericCloudLayer()
+                    .ignoresSafeArea()
+
                 AppHomeContrastOverlay()
                     .ignoresSafeArea()
 
