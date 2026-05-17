@@ -471,6 +471,170 @@ struct TagComputationEngineTests {
         #expect(purpose.analyticsCredits.contains { $0.creditType == .completed } == false)
     }
 
+    @Test
+    func sharedTagsKeepOpportunityOnlyAsFajr() {
+        let timeZone = TimeZone(secondsFromGMT: 0) ?? .current
+        let date = makeAdjustedHijriDate(year: 1447, month: .dhulHijjah, day: 9, timeZone: timeZone)
+        let purpose = resolvePurpose(for: date, timeZone: timeZone)
+
+        let tags = ProductSurfacePresentation.sharedDayTags(
+            dateKey: purpose.dateKey,
+            resolvedDayPurpose: purpose,
+            selectedMode: .fajr,
+            surface: .nextSevenDaysCompactRow
+        )
+        let context = ProductSurfacePresentation.primaryMorningContext(
+            dateKey: purpose.dateKey,
+            resolvedDayPurpose: purpose,
+            selectedMode: .fajr,
+            sharedTags: ProductSurfacePresentation.sharedDayTags(
+                dateKey: purpose.dateKey,
+                resolvedDayPurpose: purpose,
+                selectedMode: .fajr,
+                surface: .primaryMorningContextCompact
+            ),
+            density: .compact
+        )
+
+        #expect(tags.visibleTags.map(\.label).contains("Fajr"))
+        #expect(tags.visibleTags.map(\.label).contains("Suhoor") == false)
+        #expect(tags.visibleTags.map(\.label).contains("Arafah"))
+        #expect(context.primaryKind == .opportunityOnly)
+        #expect(context.title == "Arafah recognized")
+        #expect(context.body?.contains("not planned Suhoor") == true)
+    }
+
+    @Test
+    func sharedTagsShowSuhoorWhenOpportunityIsSelected() {
+        let timeZone = TimeZone(secondsFromGMT: 0) ?? .current
+        let date = makeAdjustedHijriDate(year: 1447, month: .dhulHijjah, day: 9, timeZone: timeZone)
+        let purpose = resolvePurpose(
+            for: date,
+            selection: FastIntentSelection(primaryIntent: .voluntary, secondaryTags: []),
+            timeZone: timeZone
+        )
+
+        let tags = ProductSurfacePresentation.sharedDayTags(
+            dateKey: purpose.dateKey,
+            resolvedDayPurpose: purpose,
+            selectedMode: .suhoor,
+            surface: .nextSevenDaysCompactRow
+        )
+        let context = ProductSurfacePresentation.primaryMorningContext(
+            dateKey: purpose.dateKey,
+            resolvedDayPurpose: purpose,
+            selectedMode: .suhoor,
+            sharedTags: ProductSurfacePresentation.sharedDayTags(
+                dateKey: purpose.dateKey,
+                resolvedDayPurpose: purpose,
+                selectedMode: .suhoor,
+                surface: .primaryMorningContextCompact
+            ),
+            density: .compact
+        )
+
+        #expect(tags.visibleTags.map(\.label).contains("Suhoor"))
+        #expect(tags.visibleTags.map(\.label).contains("Arafah"))
+        #expect(context.primaryKind == .selectedSunnahOpportunity)
+        #expect(context.title == "Arafah fast planned")
+    }
+
+    @Test
+    func primaryContextKeepsQadaPrimaryOnWhiteDayOpportunity() {
+        let timeZone = TimeZone(secondsFromGMT: 0) ?? .current
+        let date = makeAdjustedHijriDate(year: 1447, month: .muharram, day: 13, timeZone: timeZone)
+        let purpose = resolvePurpose(
+            for: date,
+            selection: FastIntentSelection(primaryIntent: .qadaMakeup, secondaryTags: []),
+            timeZone: timeZone
+        )
+        let shared = ProductSurfacePresentation.sharedDayTags(
+            dateKey: purpose.dateKey,
+            resolvedDayPurpose: purpose,
+            selectedMode: .suhoor,
+            surface: .alarmDetailContext
+        )
+
+        let context = ProductSurfacePresentation.primaryMorningContext(
+            dateKey: purpose.dateKey,
+            resolvedDayPurpose: purpose,
+            selectedMode: .suhoor,
+            sharedTags: shared,
+            density: .expanded
+        )
+
+        #expect(shared.visibleTags.map(\.label).contains("Qada"))
+        #expect(shared.visibleTags.map(\.label).contains("White Days"))
+        #expect(context.primaryKind == .selectedQadaOrObligatoryMakeup)
+        #expect(context.title == "Qada fast planned")
+        #expect(context.body?.contains("White Days opportunity") == true)
+        #expect(hasCredit(purpose, kind: .whiteDays, type: .completed) == false)
+    }
+
+    @Test
+    func ramadanAndForbiddenContextSuppressAlternatives() {
+        let timeZone = TimeZone(secondsFromGMT: 0) ?? .current
+        let ramadanDate = makeAdjustedHijriDate(year: 1447, month: .ramadan, day: 10, timeZone: timeZone)
+        let ramadanPurpose = resolvePurpose(for: ramadanDate, timeZone: timeZone)
+        let forbiddenDate = makeAdjustedHijriDate(year: 1447, month: .shawwal, day: 1, timeZone: timeZone)
+        let forbiddenPurpose = resolvePurpose(for: forbiddenDate, timeZone: timeZone)
+
+        let ramadanTags = ProductSurfacePresentation.sharedDayTags(
+            dateKey: ramadanPurpose.dateKey,
+            resolvedDayPurpose: ramadanPurpose,
+            selectedMode: .suhoor,
+            surface: .nextSevenDaysCompactRow
+        )
+        let forbiddenContext = ProductSurfacePresentation.primaryMorningContext(
+            dateKey: forbiddenPurpose.dateKey,
+            resolvedDayPurpose: forbiddenPurpose,
+            selectedMode: .fajr,
+            sharedTags: ProductSurfacePresentation.sharedDayTags(
+                dateKey: forbiddenPurpose.dateKey,
+                resolvedDayPurpose: forbiddenPurpose,
+                selectedMode: .fajr,
+                surface: .alarmDetailContext
+            ),
+            density: .expanded
+        )
+
+        #expect(ramadanTags.visibleTags.map(\.label) == ["Ramadan"])
+        #expect(forbiddenContext.primaryKind == .forbiddenFastingDay)
+        #expect(forbiddenContext.title == "Eid morning")
+        #expect(forbiddenContext.body?.contains("Fasting is not offered") == true)
+    }
+
+    @Test
+    func quietContextPreservesUnderlyingOpportunityMeaning() {
+        let timeZone = TimeZone(secondsFromGMT: 0) ?? .current
+        let date = makeAdjustedHijriDate(year: 1447, month: .dhulHijjah, day: 9, timeZone: timeZone)
+        let purpose = resolvePurpose(for: date, timeZone: timeZone)
+        let shared = ProductSurfacePresentation.sharedDayTags(
+            dateKey: purpose.dateKey,
+            resolvedDayPurpose: purpose,
+            selectedMode: .quiet,
+            surface: .nextSevenDaysCompactRow
+        )
+        let context = ProductSurfacePresentation.primaryMorningContext(
+            dateKey: purpose.dateKey,
+            resolvedDayPurpose: purpose,
+            selectedMode: .quiet,
+            sharedTags: ProductSurfacePresentation.sharedDayTags(
+                dateKey: purpose.dateKey,
+                resolvedDayPurpose: purpose,
+                selectedMode: .quiet,
+                surface: .alarmDetailContext
+            ),
+            density: .expanded
+        )
+
+        #expect(shared.visibleTags.map(\.label) == ["Quiet"])
+        #expect(shared.hiddenTags.map(\.label).contains("Arafah"))
+        #expect(context.primaryKind == .quietMeaningfulDay)
+        #expect(context.title == "Arafah recognized")
+        #expect(context.body?.contains("opportunity is still recognized") == true)
+    }
+
     private func makeHijriDate(year: Int, month: Int, day: Int, timeZone: TimeZone) -> Date {
         var calendar = Calendar(identifier: .islamicCivil)
         calendar.timeZone = timeZone

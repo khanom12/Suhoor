@@ -267,6 +267,7 @@ final class ActiveDayResolver {
                 primaryDisplay: day.primaryDisplay,
                 sourceSummaryText: day.sourceSummaryText,
                 resolvedDayContext: day.resolvedDayContext,
+                resolvedDayPurpose: day.resolvedDayPurpose,
                 scheduledEvents: day.scheduledEvents,
                 decisionLog: day.decisionLog,
                 dailyCompletion: day.dailyCompletion

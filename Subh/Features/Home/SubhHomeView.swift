@@ -70,6 +70,12 @@ struct SubhHomeView: View {
                             }
                         }
 
+                        if let entry = snapshot.tomorrow {
+                            PrimaryMorningContextCard(entry: entry) {
+                                destination = .day(entry.schedule)
+                            }
+                        }
+
                         NextTenMorningsCard(entries: snapshot.morningcast) { entry in
                             destination = .day(entry.schedule)
                         }
@@ -216,6 +222,120 @@ struct SubhHomeView: View {
             settingsPath.append(route)
         }
         isShowingSettings = true
+    }
+}
+
+private struct PrimaryMorningContextCard: View {
+    let entry: WakeRowEntry
+    let onOpen: () -> Void
+
+    private var presentation: PrimaryMorningContextPresentation {
+        ProductSurfacePresentation.primaryMorningContext(
+            for: entry.activeDay,
+            density: .compact
+        )
+    }
+
+    var body: some View {
+        if presentation.displayModeAvailability == .visible {
+            Button(action: onOpen) {
+                AppGlassSurface(
+                    variant: WakeGlassTheme.homeSurfaceVariant,
+                    contentPadding: 14
+                ) {
+                    VStack(alignment: .leading, spacing: 9) {
+                        Text(presentation.title)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(WakeGlassTheme.primaryText.opacity(0.94))
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        if let body = presentation.body, !body.isEmpty {
+                            Text(body)
+                                .font(.footnote)
+                                .foregroundStyle(WakeGlassTheme.secondaryText)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+
+                        if !presentation.compactChips.isEmpty {
+                            SharedDayTagChipFlow(tags: presentation.compactChips)
+                                .padding(.top, 2)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+            .buttonStyle(.plain)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(presentation.accessibilityLabel)
+            .accessibilityValue(presentation.accessibilityValue ?? "")
+            .accessibilityHint("Double-tap for details.")
+            .accessibilityIdentifier("primaryMorningContext.compact")
+        }
+    }
+}
+
+private struct SharedDayTagChipFlow: View {
+    let tags: [SharedDayTagPresentation]
+
+    var body: some View {
+        FlowLayout(spacing: 6) {
+            ForEach(tags) { tag in
+                SharedDayTagChip(tag: tag)
+            }
+        }
+    }
+}
+
+private struct SharedDayTagChip: View {
+    let tag: SharedDayTagPresentation
+
+    var body: some View {
+        let tint = color(for: tag)
+        Text(tag.label)
+            .font(AppTypography.badge)
+            .foregroundStyle(tint.opacity(0.96))
+            .lineLimit(1)
+            .minimumScaleFactor(0.82)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background {
+                Capsule(style: .continuous)
+                    .fill(tint.opacity(tag.prominence == .subdued ? 0.08 : 0.14))
+                    .overlay {
+                        Capsule(style: .continuous)
+                            .stroke(tint.opacity(tag.prominence == .subdued ? 0.18 : 0.30), lineWidth: 0.8)
+                    }
+            }
+            .accessibilityHidden(true)
+    }
+
+    private func color(for tag: SharedDayTagPresentation) -> Color {
+        switch tag.semanticKind {
+        case .wakeMode(let mode):
+            switch mode {
+            case .suhoor:
+                return FastPrimaryIntent.voluntary.style.color
+            case .fajr:
+                return WakeGlassTheme.secondaryText
+            case .quiet:
+                return WakeGlassTheme.tertiaryText
+            }
+        case .opportunity(let kind):
+            return FastSecondaryVirtueTag(kind)?.style.color ?? WakeGlassTheme.secondaryText
+        case .fastingPurpose(let intent):
+            return intent.style.color
+        case .calendarContext(let kind):
+            switch kind {
+            case .ramadan:
+                return FastPrimaryIntent.ramadanObligatory.style.color
+            case .eidAlFitr, .eidAlAdha, .tashreeq:
+                return DawnColor.danger
+            default:
+                return WakeGlassTheme.secondaryText
+            }
+        case .statusModifier(let status):
+            return status == .quiet ? WakeGlassTheme.tertiaryText : WakeGlassTheme.secondaryText
+        }
     }
 }
 
@@ -1833,6 +1953,7 @@ private struct NextTenMorningsDivider: View {
             .padding(.leading, inset)
     }
 }
+
 
 private struct SubhHomeTimeLockup: View {
     let date: Date

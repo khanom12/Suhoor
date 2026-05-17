@@ -58,6 +58,7 @@ enum LegacyResolvedDayAdapter {
             primaryDisplay: effectiveConfig.primaryDisplay(schedule: schedule),
             sourceSummaryText: sourceSummaryText,
             resolvedDayContext: snapshot.resolvedDayContext,
+            resolvedDayPurpose: snapshot.resolvedDayPurpose,
             scheduledEvents: snapshot.materializedEvents,
             decisionLog: snapshot.decisionLog,
             dailyCompletion: snapshot.dailyCompletion

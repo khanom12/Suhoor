@@ -1052,17 +1052,41 @@ enum AlarmDayDetailPresentation {
         fajrAdhan: AlarmDetailFajrAdhanPresentation?,
         showsReset: Bool
     ) -> AlarmDetailContextPresentation {
-        let significance: AlarmDetailDaySignificancePresentation? = nil
         let selectedMode = WakeStateSelectionResolver.selectedMode(for: entry.activeDay)
         let showPurpose: AlarmDetailPurposePresentation? = nil
         let showFastType = selectedMode == .suhoor ? fastType : nil
-        let sentence = contextSentence(
-            for: entry,
-            display: display,
-            selectedMode: selectedMode,
-            purpose: purpose,
-            fastType: fastType
+
+        guard entry.activeDay.resolvedDayPurpose != nil else {
+            let sentence = contextSentence(
+                for: entry,
+                display: display,
+                selectedMode: selectedMode,
+                purpose: purpose,
+                fastType: fastType
+            )
+            return AlarmDetailContextPresentation(
+                summary: sentence.summary,
+                sentencePrefix: sentence.prefix,
+                sentenceChips: sentence.chips,
+                sentenceSuffix: sentence.suffix,
+                significance: nil,
+                purpose: showPurpose,
+                fastType: showFastType,
+                fajrAdhan: fajrAdhan,
+                showsReset: showsReset
+            )
+        }
+
+        let primaryContext = ProductSurfacePresentation.primaryMorningContext(
+            for: entry.activeDay,
+            density: .expanded
         )
+        let contextChips = alarmDetailChips(from: primaryContext.expandedChips)
+        let significance = contextChips.isEmpty ? nil : AlarmDetailDaySignificancePresentation(
+            title: "Day context",
+            chips: contextChips
+        )
+        let sentence = primaryContextSentence(primaryContext)
         return AlarmDetailContextPresentation(
             summary: sentence.summary,
             sentencePrefix: sentence.prefix,
@@ -1223,6 +1247,18 @@ enum AlarmDayDetailPresentation {
         }
     }
 
+    private static func primaryContextSentence(
+        _ presentation: PrimaryMorningContextPresentation
+    ) -> (summary: String, prefix: String, chips: [AlarmDetailChipPresentation], suffix: String) {
+        let body = presentation.body.map { " \($0)" } ?? ""
+        return (
+            presentation.accessibilityLabel,
+            presentation.title,
+            [],
+            body
+        )
+    }
+
     private static func defaultFastPurposeTitle(for entry: WakeRowEntry) -> String {
         let opportunities = fastingOpportunityChips(for: entry)
         if !opportunities.isEmpty {
@@ -1267,33 +1303,89 @@ enum AlarmDayDetailPresentation {
     }
 
     static func fastingOpportunityChips(for entry: WakeRowEntry) -> [AlarmDetailChipPresentation] {
+        guard entry.activeDay.resolvedDayPurpose != nil else {
+            return legacyFastingOpportunityChips(for: entry)
+        }
+
+        let snapshot = ProductSurfacePresentation.sharedDayTags(
+            for: entry.activeDay,
+            surface: .alarmDetailContext
+        )
+        return (snapshot.visibleTags + snapshot.hiddenTags).compactMap { tag in
+            guard case .opportunity(let kind) = tag.semanticKind,
+                  let secondary = FastSecondaryVirtueTag(kind) else { return nil }
+            return AlarmDetailChipPresentation(
+                title: alarmDetailOpportunityTitle(for: secondary, date: entry.activeDay.date),
+                style: .opportunity(secondary)
+            )
+        }
+    }
+
+    private static func legacyFastingOpportunityChips(for entry: WakeRowEntry) -> [AlarmDetailChipPresentation] {
         let tags = Set(entry.activeDay.resolvedDayContext.supportingTags)
-        let computedSecondaryTags = entry.activeDay.tagResult.computedSecondaryTags
-        var chips: [AlarmDetailChipPresentation] = []
+        let legacyOrder: [(DayTag, FastSecondaryVirtueTag)] = [
+            (.arafah, .arafah),
+            (.ashura, .ashura),
+            (.dhulHijjahFirstNine, .dhulHijjahFirstNine),
+            (.whiteDays, .whiteDays),
+            (.shawwalSix, .shawwalSix),
+            (.mondayThursday, .mondayThursday)
+        ]
+        return legacyOrder.compactMap { dayTag, secondary in
+            guard tags.contains(dayTag) else { return nil }
+            return AlarmDetailChipPresentation(
+                title: alarmDetailOpportunityTitle(for: secondary, date: entry.activeDay.date),
+                style: .opportunity(secondary)
+            )
+        }
+    }
 
-        func has(_ dayTag: DayTag, _ secondaryTag: FastSecondaryVirtueTag) -> Bool {
-            tags.contains(dayTag) || computedSecondaryTags.contains(secondaryTag)
+    private static func alarmDetailOpportunityTitle(for tag: FastSecondaryVirtueTag, date: Date) -> String {
+        switch tag {
+        case .arafah:
+            return "Arafah fast"
+        case .ashura:
+            return "Ashura fast"
+        case .dhulHijjahFirstNine:
+            return "Dhul Hijjah fast"
+        case .whiteDays:
+            return "White Days fast"
+        case .shawwalSix:
+            return "Shawwal Six fast"
+        case .mondayThursday:
+            return weekdayFastTitle(for: date)
         }
+    }
 
-        if has(.arafah, .arafah) {
-            chips.append(AlarmDetailChipPresentation(title: "Arafah fast", style: .opportunity(.arafah)))
+    private static func alarmDetailChips(
+        from tags: [SharedDayTagPresentation]
+    ) -> [AlarmDetailChipPresentation] {
+        tags.compactMap(alarmDetailChip(from:))
+    }
+
+    private static func alarmDetailChip(
+        from tag: SharedDayTagPresentation
+    ) -> AlarmDetailChipPresentation? {
+        switch tag.semanticKind {
+        case .fastingPurpose(let intent):
+            return AlarmDetailChipPresentation(title: tag.label, style: .primary(intent))
+        case .opportunity(let kind):
+            guard let secondary = FastSecondaryVirtueTag(kind) else {
+                return AlarmDetailChipPresentation(title: tag.label, style: .neutral)
+            }
+            return AlarmDetailChipPresentation(title: tag.label, style: .opportunity(secondary))
+        case .calendarContext(let kind):
+            switch kind {
+            case .ramadan:
+                return AlarmDetailChipPresentation(title: tag.label, style: .primary(.ramadanObligatory))
+            case .eidAlFitr, .eidAlAdha, .tashreeq:
+                return AlarmDetailChipPresentation(title: tag.label, style: .primary(.forbidden))
+            default:
+                return AlarmDetailChipPresentation(title: tag.label, style: .neutral)
+            }
+        case .statusModifier, .wakeMode:
+            return AlarmDetailChipPresentation(title: tag.label, style: .neutral)
         }
-        if has(.ashura, .ashura) {
-            chips.append(AlarmDetailChipPresentation(title: "Ashura fast", style: .opportunity(.ashura)))
-        }
-        if has(.dhulHijjahFirstNine, .dhulHijjahFirstNine) {
-            chips.append(AlarmDetailChipPresentation(title: "Dhul Hijjah fast", style: .opportunity(.dhulHijjahFirstNine)))
-        }
-        if has(.whiteDays, .whiteDays) {
-            chips.append(AlarmDetailChipPresentation(title: "White Days fast", style: .opportunity(.whiteDays)))
-        }
-        if has(.shawwalSix, .shawwalSix) {
-            chips.append(AlarmDetailChipPresentation(title: "Shawwal Six fast", style: .opportunity(.shawwalSix)))
-        }
-        if has(.mondayThursday, .mondayThursday) {
-            chips.append(AlarmDetailChipPresentation(title: weekdayFastTitle(for: entry.activeDay.date), style: .opportunity(.mondayThursday)))
-        }
-        return chips
     }
 
     private static func weekdayFastTitle(for date: Date) -> String {

@@ -2976,6 +2976,7 @@ struct ActiveAlarmDay: Codable, Equatable, Identifiable, Sendable {
     let primaryDisplay: PrimaryDisplay?
     let sourceSummaryText: String
     let resolvedDayContext: ResolvedDayContext
+    let resolvedDayPurpose: ResolvedDayPurpose?
     let scheduledEvents: [ScheduledEvent]
     let decisionLog: RuleDecisionLog
     let dailyCompletion: DailyCompletionSnapshot
@@ -2994,6 +2995,7 @@ struct ActiveAlarmDay: Codable, Equatable, Identifiable, Sendable {
         primaryDisplay: PrimaryDisplay?,
         sourceSummaryText: String,
         resolvedDayContext: ResolvedDayContext = .standard,
+        resolvedDayPurpose: ResolvedDayPurpose? = nil,
         scheduledEvents: [ScheduledEvent] = [],
         decisionLog: RuleDecisionLog? = nil,
         dailyCompletion: DailyCompletionSnapshot? = nil
@@ -3009,6 +3011,7 @@ struct ActiveAlarmDay: Codable, Equatable, Identifiable, Sendable {
         self.primaryDisplay = primaryDisplay
         self.sourceSummaryText = sourceSummaryText
         self.resolvedDayContext = resolvedDayContext
+        self.resolvedDayPurpose = resolvedDayPurpose
         self.scheduledEvents = scheduledEvents
         self.decisionLog = decisionLog ?? RuleDecisionLog.compatibilityFallback(
             dateKey: dateKey,
@@ -3031,6 +3034,7 @@ struct ActiveAlarmDay: Codable, Equatable, Identifiable, Sendable {
         case primaryDisplay
         case sourceSummaryText
         case resolvedDayContext
+        case resolvedDayPurpose
         case scheduledEvents
         case decisionLog
         case dailyCompletion
@@ -3049,6 +3053,7 @@ struct ActiveAlarmDay: Codable, Equatable, Identifiable, Sendable {
         let primaryDisplay = try container.decodeIfPresent(PrimaryDisplay.self, forKey: .primaryDisplay)
         let sourceSummaryText = try container.decode(String.self, forKey: .sourceSummaryText)
         let resolvedDayContext = try container.decodeIfPresent(ResolvedDayContext.self, forKey: .resolvedDayContext) ?? .standard
+        let resolvedDayPurpose = try container.decodeIfPresent(ResolvedDayPurpose.self, forKey: .resolvedDayPurpose)
         let scheduledEvents = try container.decodeIfPresent([ScheduledEvent].self, forKey: .scheduledEvents) ?? []
         let decisionLog = try container.decodeIfPresent(RuleDecisionLog.self, forKey: .decisionLog)
         let dailyCompletion = try container.decodeIfPresent(DailyCompletionSnapshot.self, forKey: .dailyCompletion)
@@ -3066,6 +3071,7 @@ struct ActiveAlarmDay: Codable, Equatable, Identifiable, Sendable {
             primaryDisplay: primaryDisplay,
             sourceSummaryText: sourceSummaryText,
             resolvedDayContext: resolvedDayContext,
+            resolvedDayPurpose: resolvedDayPurpose,
             scheduledEvents: scheduledEvents,
             decisionLog: decisionLog,
             dailyCompletion: dailyCompletion

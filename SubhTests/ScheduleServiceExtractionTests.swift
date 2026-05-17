@@ -1396,7 +1396,7 @@ struct ScheduleServiceExtractionTests {
         #expect(fastDisplay.fajrWindowVisualMode == .interactiveEarlyWorshipWindow)
         #expect(fastDisplay.wakeAdjustmentRelationAnchor == .fajrStart)
         #expect(fastDisplay.accessibilityLabel.contains("Suhoor mode selected"))
-        #expect(fastForecastRow.tags.map(\.title) == ["Fasting"])
+        #expect(fastForecastRow.tags.map(\.title) == ["Suhoor"])
 
         let quietEntry = Self.makeWakeEntry(
             date: date,
@@ -1427,7 +1427,7 @@ struct ScheduleServiceExtractionTests {
         #expect(quietDisplay.fajrWindowVisualMode == .staticWithinFajrWindow)
         #expect(quietDisplay.wakeAdjustmentEnabled == false)
         #expect(quietDisplay.wakeAdjustmentAccessibilityValue == nil)
-        #expect(quietForecastRow.tags.map(\.title) == ["Quiet mode"])
+        #expect(quietForecastRow.tags.map(\.title) == ["Quiet"])
     }
 
     @Test
@@ -2437,15 +2437,15 @@ struct ScheduleServiceExtractionTests {
     func nextTenMorningsTagDoctrineMatchesForecastSpec() {
         #expect(Self.nextTenTagTitles() == ["Fajr"])
         #expect(Self.nextTenTagTitles(primary: .ramadanObligatory, opportunities: [.ashura]) == ["Ramadan"])
-        #expect(Self.nextTenTagTitles(quietModeState: .active, primary: .voluntary, secondary: [.ashura]) == ["Quiet mode"])
-        #expect(Self.nextTenTagTitles(primary: .voluntary, secondary: [.ashura]) == ["Fasting", "Ashura"])
+        #expect(Self.nextTenTagTitles(quietModeState: .active, primary: .voluntary, secondary: [.ashura]) == ["Quiet"])
+        #expect(Self.nextTenTagTitles(primary: .voluntary, secondary: [.ashura]) == ["Suhoor", "Ashura"])
         #expect(Self.nextTenTagTitles(opportunities: [.ashura]) == ["Fajr", "Ashura"])
-        #expect(Self.nextTenTagTitles(primary: .qadaMakeup, secondary: [.whiteDays]) == ["Fasting", "Qada"])
-        #expect(Self.nextTenTagTitles(opportunities: [.ashura], selectedQuickWakeMode: .suhoor) == ["Fasting"])
+        #expect(Self.nextTenTagTitles(primary: .qadaMakeup, secondary: [.whiteDays]) == ["Suhoor", "Qada"])
+        #expect(Self.nextTenTagTitles(opportunities: [.ashura], selectedQuickWakeMode: .suhoor) == ["Suhoor"])
         #expect(Self.nextTenTagTitles(opportunities: [.mondayThursday]) == ["Fajr"])
-        #expect(Self.nextTenTagTitles(primary: .voluntary, secondary: [.mondayThursday]) == ["Fasting", "Mon/Thu"])
+        #expect(Self.nextTenTagTitles(primary: .voluntary, secondary: [.mondayThursday]) == ["Suhoor", "Mon/Thu"])
         #expect(Self.nextTenTagTitles(opportunities: [.whiteDays]) == ["Fajr", "White Days"])
-        #expect(Self.nextTenTagTitles(primary: .voluntary, secondary: [.whiteDays]) == ["Fasting", "White Days"])
+        #expect(Self.nextTenTagTitles(primary: .voluntary, secondary: [.whiteDays]) == ["Suhoor", "White Days"])
         #expect(Self.nextTenTagTitles(opportunities: [.shawwalSix]) == ["Fajr", "Shawwal 6"])
         #expect(Self.nextTenTagTitles(opportunities: [.shawwalSix], shawwalComplete: true) == ["Fajr"])
     }
@@ -2480,9 +2480,9 @@ struct ScheduleServiceExtractionTests {
             opportunities: []
         )
 
-        #expect(resolution.visibleTags.map(\.title) == ["Fasting", "Arafah", "Dhul Hijjah"])
+        #expect(resolution.visibleTags.map(\.title) == ["Suhoor", "Arafah", "Dhul Hijjah"])
         #expect(resolution.visibleTags.count == 3)
-        #expect(resolution.accessibilityTags.map(\.title) == ["Fasting", "Arafah", "Dhul Hijjah", "White Days"])
+        #expect(resolution.accessibilityTags.map(\.title) == ["Suhoor", "Arafah", "Dhul Hijjah", "White Days"])
 
         let opportunityResolution = Self.nextTenTagResolution(
             opportunities: [.arafah, .dhulHijjahFirstNine, .whiteDays, .shawwalSix]

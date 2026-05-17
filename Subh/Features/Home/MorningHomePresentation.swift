@@ -242,6 +242,7 @@ struct ShawwalSixProgressSummary: Equatable {
 struct NextTenMorningsTagResolverInput: Equatable {
     let date: Date
     let dateKey: String
+    var resolvedDayPurpose: ResolvedDayPurpose? = nil
     let resolvedContext: ResolvedDayContext
     let tagResult: TagComputationResult
     let compatibleOpportunityTags: [FastSecondaryVirtueTag]
@@ -260,26 +261,133 @@ enum NextTenMorningsTagResolver {
     static let maximumVisibleTags = 3
 
     static func resolve(_ input: NextTenMorningsTagResolverInput) -> NextTenMorningsTagResolution {
-        let tags: [NextTenMorningsTagDisplay]
-
-        if input.quietModeState == .active {
-            tags = [tag(.quietMode, priority: 0)]
-        } else if isRamadan(input) {
-            tags = [tag(.ramadan, priority: 10)]
-        } else if hasFastingIntent(input) {
-            tags = fastingTags(input)
-        } else {
-            let opportunityTags = opportunityTags(input)
-            tags = opportunityTags.isEmpty
-                ? [tag(.fajrFallback, priority: 100)]
-                : [tag(.fajrFallback, priority: 65)] + opportunityTags
-        }
-
-        let ordered = orderedUnique(tags)
+        let selectedMode = resolvedSelectedMode(for: input)
+        let shared = ProductSurfacePresentation.sharedDayTags(
+            dateKey: input.dateKey,
+            resolvedDayPurpose: input.resolvedDayPurpose,
+            selectedMode: selectedMode,
+            resolvedContext: input.resolvedContext,
+            tagResult: input.tagResult,
+            compatibleOpportunityTags: input.compatibleOpportunityTags,
+            surface: .nextSevenDaysCompactRow,
+            shawwalSixComplete: input.shawwalSixProgress?.isComplete == true
+        )
+        let ordered = shared.visibleTags.map(nextTenTagDisplay(from:))
+        let accessible = (shared.visibleTags + shared.hiddenTags).map(nextTenTagDisplay(from:))
         return NextTenMorningsTagResolution(
             visibleTags: Array(ordered.prefix(maximumVisibleTags)),
-            accessibilityTags: ordered
+            accessibilityTags: orderedUnique(accessible)
         )
+    }
+
+    private static func resolvedSelectedMode(for input: NextTenMorningsTagResolverInput) -> QuickWakeMode {
+        if input.quietModeState == .active {
+            return .quiet
+        }
+        if let selectedQuickWakeMode = input.selectedQuickWakeMode {
+            return selectedQuickWakeMode
+        }
+        if hasFastingIntent(input) || isRamadan(input) {
+            return .suhoor
+        }
+        return .fajr
+    }
+
+    private static func nextTenTagDisplay(
+        from tag: SharedDayTagPresentation
+    ) -> NextTenMorningsTagDisplay {
+        let semantic = nextTenSemantic(from: tag)
+        return NextTenMorningsTagDisplay(
+            id: tag.id,
+            title: tag.label,
+            semantic: semantic,
+            prominence: nextTenProminence(from: tag.prominence, family: tag.family),
+            priority: nextTenPriority(for: tag),
+            accessibilityText: accessibilityText(for: semantic)
+        )
+    }
+
+    private static func nextTenSemantic(
+        from tag: SharedDayTagPresentation
+    ) -> NextTenMorningsTagSemantic {
+        switch tag.semanticKind {
+        case .wakeMode(let mode):
+            switch mode {
+            case .suhoor:
+                return .fastingIntent
+            case .fajr:
+                return .fajrFallback
+            case .quiet:
+                return .quietMode
+            }
+        case .calendarContext(let kind):
+            if kind == .ramadan {
+                return .ramadan
+            }
+            return .fajrFallback
+        case .fastingPurpose(let intent):
+            switch intent {
+            case .qadaMakeup:
+                return .qada
+            case .kaffarahExpiation:
+                return .kaffarah
+            case .vowNadhr:
+                return .vow
+            case .ramadanObligatory:
+                return .ramadan
+            case .voluntary, .other, .forbidden:
+                return .fastingIntent
+            }
+        case .opportunity(let kind):
+            if let secondaryTag = FastSecondaryVirtueTag(kind) {
+                return tag.isUserSelected ? .observanceIntended(secondaryTag) : .observanceOpportunity(secondaryTag)
+            }
+            return .fajrFallback
+        case .statusModifier(let status):
+            return status == .quiet ? .quietMode : .fajrFallback
+        }
+    }
+
+    private static func nextTenProminence(
+        from prominence: SharedDayTagProminence,
+        family: SharedDayTagFamily
+    ) -> NextTenMorningsTagProminence {
+        switch prominence {
+        case .primary, .quiet:
+            return .strong
+        case .secondary:
+            return family == .opportunity ? .opportunity : .fallback
+        case .subdued:
+            return .fallback
+        }
+    }
+
+    private static func nextTenPriority(for tag: SharedDayTagPresentation) -> Int {
+        switch tag.semanticKind {
+        case .wakeMode(.quiet):
+            return 0
+        case .calendarContext(.ramadan):
+            return 10
+        case .calendarContext:
+            return 15
+        case .wakeMode(.suhoor):
+            return 20
+        case .fastingPurpose(.qadaMakeup):
+            return 30
+        case .fastingPurpose(.kaffarahExpiation):
+            return 31
+        case .fastingPurpose(.vowNadhr):
+            return 32
+        case .opportunity(let kind):
+            guard let secondaryTag = FastSecondaryVirtueTag(kind) else { return 55 }
+            return 40 + secondaryPriority(for: secondaryTag)
+        case .fastingPurpose:
+            return 55
+        case .wakeMode(.fajr):
+            return 0
+        case .statusModifier:
+            return 90
+        }
     }
 
     private static func isRamadan(_ input: NextTenMorningsTagResolverInput) -> Bool {
@@ -448,11 +556,11 @@ enum NextTenMorningsTagResolver {
         case .fajrFallback:
             return "fajr"
         case .quietMode:
-            return "quiet-mode"
+            return "quiet"
         case .ramadan:
             return "ramadan"
         case .fastingIntent:
-            return "fasting"
+            return "suhoor"
         case .qada:
             return "qada"
         case .kaffarah:
@@ -471,11 +579,11 @@ enum NextTenMorningsTagResolver {
         case .fajrFallback:
             return "Fajr"
         case .quietMode:
-            return "Quiet mode"
+            return "Quiet"
         case .ramadan:
             return "Ramadan"
         case .fastingIntent:
-            return "Fasting"
+            return "Suhoor"
         case .qada:
             return "Qada"
         case .kaffarah:
@@ -507,7 +615,7 @@ enum NextTenMorningsTagResolver {
         case .ramadan:
             return "Ramadan morning"
         case .fastingIntent:
-            return "Fasting intended"
+            return "Suhoor selected"
         case .qada:
             return "Qada"
         case .kaffarah:
@@ -600,6 +708,7 @@ enum MorningHomePresentation {
             NextTenMorningsTagResolverInput(
                 date: entry.schedule.date,
                 dateKey: entry.id,
+                resolvedDayPurpose: entry.activeDay.resolvedDayPurpose,
                 resolvedContext: entry.activeDay.resolvedDayContext,
                 tagResult: entry.activeDay.tagResult,
                 compatibleOpportunityTags: compatibleOpportunityTags,
@@ -959,9 +1068,9 @@ enum MorningHomePresentation {
         if tags.first?.semantic == .fastingIntent {
             let details = tags.dropFirst().map(\.accessibilityText)
             if details.isEmpty {
-                return "Fasting intended"
+                return "Suhoor selected"
             }
-            return "Fasting intended for \(details.joined(separator: ", "))"
+            return "Suhoor selected; \(details.joined(separator: ", "))"
         }
         return tags.map(\.accessibilityText).joined(separator: ", ")
     }
@@ -1128,8 +1237,8 @@ enum MorningHomePresentation {
                 accessibilityLabel: "\(mode.displayTitle)\(mode == selected ? ", selected" : "")",
                 accessibilityHint: quickWakeModeAccessibilityHint(mode: mode, relativeDayLabel: relativeDayLabel)
             )
-        }
     }
+}
 
     private static func quickWakeModeAccessibilityHint(mode: QuickWakeMode, relativeDayLabel: String) -> String {
         let day = quickWakeModeRelativeDayReference(relativeDayLabel)
