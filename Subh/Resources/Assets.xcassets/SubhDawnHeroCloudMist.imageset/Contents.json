@@ -1,18 +1,18 @@
 {
   "images": [
     {
+      "filename": "SubhDawnHeroCloudMist.png",
       "idiom": "universal",
-      "filename": "SubhDawnMistVeil.png",
       "scale": "1x"
     },
     {
+      "filename": "SubhDawnHeroCloudMist@2x.png",
       "idiom": "universal",
-      "filename": "SubhDawnMistVeil@2x.png",
       "scale": "2x"
     },
     {
+      "filename": "SubhDawnHeroCloudMist@3x.png",
       "idiom": "universal",
-      "filename": "SubhDawnMistVeil@3x.png",
       "scale": "3x"
     }
   ],

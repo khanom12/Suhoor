@@ -5,20 +5,28 @@ struct AppAtmosphericCloudLayer: View {
 
     var body: some View {
         GeometryReader { geometry in
-            if reduceMotion {
-                cloudStack(
-                    in: geometry.size,
-                    seconds: 0,
-                    isMotionReduced: true
-                )
-            } else {
-                TimelineView(.animation(minimumInterval: Self.animationFrameInterval)) { timeline in
+            let heroCloudHeight = Self.heroCloudHeight(for: geometry.size)
+
+            VStack(spacing: 0) {
+                if reduceMotion {
                     cloudStack(
-                        in: geometry.size,
-                        seconds: timeline.date.timeIntervalSince(Self.referenceDate),
-                        isMotionReduced: false
+                        containerWidth: geometry.size.width,
+                        containerHeight: heroCloudHeight,
+                        seconds: 0,
+                        isMotionReduced: true
                     )
+                } else {
+                    TimelineView(.animation(minimumInterval: Self.animationFrameInterval)) { timeline in
+                        cloudStack(
+                            containerWidth: geometry.size.width,
+                            containerHeight: heroCloudHeight,
+                            seconds: timeline.date.timeIntervalSince(Self.referenceDate),
+                            isMotionReduced: false
+                        )
+                    }
                 }
+
+                Spacer(minLength: 0)
             }
         }
         .allowsHitTesting(false)
@@ -26,129 +34,136 @@ struct AppAtmosphericCloudLayer: View {
     }
 
     private func cloudStack(
-        in size: CGSize,
+        containerWidth: CGFloat,
+        containerHeight: CGFloat,
         seconds: TimeInterval,
         isMotionReduced: Bool
     ) -> some View {
         ZStack(alignment: .topLeading) {
-            ForEach(Self.bands) { band in
-                RepeatingCloudBand(
-                    band: band,
-                    containerSize: size,
+            ForEach(Self.layers) { layer in
+                RepeatingHeroCloudLayer(
+                    layer: layer,
+                    containerWidth: containerWidth,
+                    containerHeight: containerHeight,
                     seconds: seconds,
                     isMotionReduced: isMotionReduced
                 )
             }
         }
-        .frame(width: size.width, height: size.height)
+        .frame(width: containerWidth, height: containerHeight, alignment: .top)
         .clipped()
+        .mask(alignment: .top) {
+            LinearGradient(
+                stops: [
+                    .init(color: .white.opacity(0.95), location: 0.00),
+                    .init(color: .white, location: 0.62),
+                    .init(color: .white.opacity(0.00), location: 1.00)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        }
+    }
+
+    private static func heroCloudHeight(for size: CGSize) -> CGFloat {
+        min(max(size.height * 0.40, 320), 430)
     }
 
     private static let animationFrameInterval = 1.0 / 30.0
     private static let referenceDate = Date(timeIntervalSinceReferenceDate: 0)
 
-    private static let bands: [AtmosphericCloudBand] = [
-        AtmosphericCloudBand(
-            assetName: "SubhDawnMistVeil",
-            canvasHeight: 250,
-            verticalOffsetRatio: 0.10,
-            opacity: 0.18,
-            loopDuration: 260,
-            direction: -1,
-            phaseOffset: 0.12,
-            tileWidthMultiplier: 1.70,
-            blurRadius: 2.5
+    private static let layers: [HeroCloudLayer] = [
+        HeroCloudLayer(
+            assetName: "SubhDawnHeroCloudMist",
+            duration: 290,
+            opacity: 0.16,
+            widthMultiplier: 1.45,
+            phaseOffset: 0.08,
+            yOffset: -18,
+            blurRadius: 5
         ),
-        AtmosphericCloudBand(
-            assetName: "SubhDawnCloudWispFar",
-            canvasHeight: 170,
-            verticalOffsetRatio: 0.04,
-            opacity: 0.32,
-            loopDuration: 220,
-            direction: -1,
-            phaseOffset: 0.34,
-            tileWidthMultiplier: 1.65,
+        HeroCloudLayer(
+            assetName: "SubhDawnHeroCloudFar",
+            duration: 235,
+            opacity: 0.24,
+            widthMultiplier: 1.52,
+            phaseOffset: 0.31,
+            yOffset: -12,
             blurRadius: 2
         ),
-        AtmosphericCloudBand(
-            assetName: "SubhDawnCloudWispMid",
-            canvasHeight: 190,
-            verticalOffsetRatio: 0.16,
-            opacity: 0.36,
-            loopDuration: 155,
-            direction: -1,
-            phaseOffset: 0.58,
-            tileWidthMultiplier: 1.70,
-            blurRadius: 1.25
-        ),
-        AtmosphericCloudBand(
-            assetName: "SubhDawnCloudWispLow",
-            canvasHeight: 220,
-            verticalOffsetRatio: 0.34,
+        HeroCloudLayer(
+            assetName: "SubhDawnHeroCloudMid",
+            duration: 168,
             opacity: 0.26,
-            loopDuration: 110,
-            direction: -1,
-            phaseOffset: 0.21,
-            tileWidthMultiplier: 1.80,
+            widthMultiplier: 1.58,
+            phaseOffset: 0.57,
+            yOffset: -4,
             blurRadius: 1
         ),
-        AtmosphericCloudBand(
-            assetName: "SubhDawnCloudWispNear",
-            canvasHeight: 235,
-            verticalOffsetRatio: 0.42,
-            opacity: 0.20,
-            loopDuration: 76,
-            direction: -1,
+        HeroCloudLayer(
+            assetName: "SubhDawnHeroCloudLow",
+            duration: 116,
+            opacity: 0.22,
+            widthMultiplier: 1.66,
+            phaseOffset: 0.19,
+            yOffset: 3,
+            blurRadius: 0
+        ),
+        HeroCloudLayer(
+            assetName: "SubhDawnHeroCloudNear",
+            duration: 78,
+            opacity: 0.18,
+            widthMultiplier: 1.74,
             phaseOffset: 0.73,
-            tileWidthMultiplier: 1.95,
-            blurRadius: 0.75
+            yOffset: 8,
+            blurRadius: 0
         )
     ]
 }
 
-private struct RepeatingCloudBand: View {
-    let band: AtmosphericCloudBand
-    let containerSize: CGSize
+private struct RepeatingHeroCloudLayer: View {
+    let layer: HeroCloudLayer
+    let containerWidth: CGFloat
+    let containerHeight: CGFloat
     let seconds: TimeInterval
     let isMotionReduced: Bool
 
     var body: some View {
-        let tileWidth = max(containerSize.width * band.tileWidthMultiplier, 1)
-        let animatedProgress = CGFloat(seconds.truncatingRemainder(dividingBy: band.loopDuration) / band.loopDuration)
-        let progress = isMotionReduced ? band.phaseOffset : (animatedProgress + band.phaseOffset).truncatingRemainder(dividingBy: 1)
-        let phase = progress * tileWidth * band.direction
+        let tileWidth = max(containerWidth * layer.widthMultiplier, containerWidth + 1)
+        let animatedProgress = seconds.truncatingRemainder(dividingBy: layer.duration) / layer.duration
+        let progress = isMotionReduced
+            ? layer.phaseOffset
+            : (animatedProgress + layer.phaseOffset).truncatingRemainder(dividingBy: 1)
+        let xOffset = -tileWidth * CGFloat(progress)
 
         HStack(spacing: 0) {
-            cloudImage(tileWidth: tileWidth)
-            cloudImage(tileWidth: tileWidth)
-            cloudImage(tileWidth: tileWidth)
+            ForEach(0..<3, id: \.self) { _ in
+                cloudImage(tileWidth: tileWidth)
+            }
         }
-        .frame(width: tileWidth * 3, height: band.canvasHeight, alignment: .leading)
-        .offset(x: -tileWidth + phase)
-        .offset(y: containerSize.height * band.verticalOffsetRatio)
-        .opacity(band.opacity)
-        .blur(radius: band.blurRadius)
-        .blendMode(.screen)
+        .frame(width: tileWidth * 3, height: containerHeight, alignment: .leading)
+        .offset(x: xOffset - tileWidth, y: layer.yOffset)
+        .opacity(layer.opacity)
+        .blur(radius: layer.blurRadius)
+        .compositingGroup()
     }
 
     private func cloudImage(tileWidth: CGFloat) -> some View {
-        Image(band.assetName)
+        Image(layer.assetName)
             .resizable()
             .scaledToFill()
-            .frame(width: tileWidth, height: band.canvasHeight)
+            .frame(width: tileWidth, height: containerHeight, alignment: .top)
             .clipped()
     }
 }
 
-private struct AtmosphericCloudBand: Identifiable {
+private struct HeroCloudLayer: Identifiable {
     let assetName: String
-    let canvasHeight: CGFloat
-    let verticalOffsetRatio: CGFloat
+    let duration: TimeInterval
     let opacity: Double
-    let loopDuration: TimeInterval
-    let direction: CGFloat
-    let phaseOffset: CGFloat
-    let tileWidthMultiplier: CGFloat
+    let widthMultiplier: CGFloat
+    let phaseOffset: TimeInterval
+    let yOffset: CGFloat
     let blurRadius: CGFloat
 
     var id: String { assetName }

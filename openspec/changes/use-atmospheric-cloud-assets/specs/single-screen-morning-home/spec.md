@@ -1,24 +1,25 @@
 ## ADDED Requirements
 
-### Requirement: Asset-backed atmospheric home background
-The Subh home surface SHALL render the atmospheric background using the provided Subh dawn cloud image assets above the static wake background and below the home contrast overlay.
+### Requirement: Top-hero asset-backed atmospheric home background
+The Subh home surface SHALL render the atmospheric background using the provided AI-generated top-hero cloud image assets above the static wake background and below the home contrast overlay.
 
-#### Scenario: Home renders asset-backed cloud layer
+#### Scenario: Home renders top-hero cloud layer
 - **GIVEN** the Subh home is visible after onboarding
 - **WHEN** the background stack renders
 - **THEN** the system SHALL place `AppAtmosphericCloudLayer` above `AppPageBackground`
 - **AND** the system SHALL place `AppAtmosphericCloudLayer` below `AppHomeContrastOverlay`
-- **AND** the layer SHALL render the provided `SubhDawnMistVeil`, `SubhDawnCloudWispFar`, `SubhDawnCloudWispMid`, `SubhDawnCloudWispLow`, and `SubhDawnCloudWispNear` assets
+- **AND** the layer SHALL render the provided `SubhDawnHeroCloudMist`, `SubhDawnHeroCloudFar`, `SubhDawnHeroCloudMid`, `SubhDawnHeroCloudLow`, and `SubhDawnHeroCloudNear` assets
+- **AND** visible cloud content SHALL be confined to the upper hero area
 - **AND** the foreground home content SHALL remain readable
 
 #### Scenario: Clouds animate with depth-based parallax when motion is allowed
 - **GIVEN** Reduce Motion is disabled
 - **WHEN** the Subh home remains visible
 - **THEN** the atmospheric cloud bands SHALL move horizontally in slow seamless loops
-- **AND** `SubhDawnCloudWispNear` SHALL move faster than `SubhDawnCloudWispLow`
-- **AND** `SubhDawnCloudWispLow` SHALL move faster than `SubhDawnCloudWispMid`
-- **AND** `SubhDawnCloudWispMid` SHALL move faster than `SubhDawnCloudWispFar`
-- **AND** `SubhDawnCloudWispFar` SHALL move faster than `SubhDawnMistVeil`
+- **AND** `SubhDawnHeroCloudNear` SHALL move faster than `SubhDawnHeroCloudLow`
+- **AND** `SubhDawnHeroCloudLow` SHALL move faster than `SubhDawnHeroCloudMid`
+- **AND** `SubhDawnHeroCloudMid` SHALL move faster than `SubhDawnHeroCloudFar`
+- **AND** `SubhDawnHeroCloudFar` SHALL move faster than `SubhDawnHeroCloudMist`
 - **AND** the layers SHALL generally drift in the same horizontal direction
 
 #### Scenario: Clouds are static when motion is reduced
