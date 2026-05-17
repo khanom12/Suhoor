@@ -259,8 +259,7 @@ struct FajrWindowSurfaceProvider {
     }
 
     private func compactAnchorPoint(from points: [FajrWindowPoint]) -> FajrWindowPoint? {
-        guard !points.isEmpty else { return nil }
-        return points[min(points.count / 2, points.count - 1)]
+        points.first
     }
 
     private func buildDatasetRow(

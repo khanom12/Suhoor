@@ -15,7 +15,7 @@ Subh is not MVP-ready until each gate has either passing evidence or a tracked e
 | Build | Clean simulator build from repo root | `xcodebuild -project Subh.xcodeproj -scheme Subh -destination 'platform=iOS Simulator,name=iPhone 16' build` |
 | Tests | Configured unit test plan passes | `xcodebuild -project Subh.xcodeproj -scheme Subh -testPlan Subh -destination 'platform=iOS Simulator,name=iPhone 16' test` |
 | Onboarding | User can configure location, calculation method, permissions, and reach Home | Simulator/manual UI pass |
-| Home | Home answers tomorrow morning first and shows Fajrcast/Morningcast support | UI/manual and snapshot tests |
+| Home | Home answers tomorrow morning first and shows Next 7 Days / Weekly Fajrcast support | UI/manual and snapshot tests |
 | Resolver | Wake plan, explanation, context flags, trust notes, and reliability state resolve deterministically | Unit tests with fixed dates/time zones |
 | Alarm | Wake support schedules reliably or honestly degrades | Simulator fallback plus physical-device AlarmKit pass |
 | Refresh | Launch, foreground, settings, location, and time-sensitive changes refresh schedules | Integration tests |
@@ -96,8 +96,9 @@ This is the first path to make boringly reliable before expanding advanced obser
 
 - Home hero suppresses ordinary/default labels and diagnostic provider text.
 - Fasting, Qada, Tahajjud, changed, skipped, and fixed wake states produce short meaningful hero copy.
-- Weekly Fajrcast selects tomorrow by default.
-- Morningcast excludes today and tomorrow and respects the maximum count.
+- Weekly Fajrcast selects the first Next 7 Days date by default.
+- Next 7 Days starts with today's wake when still upcoming, otherwise tomorrow, and respects the seven-row maximum.
+- Next 7 Days row keys match Weekly Fajrcast visible keys.
 - Degraded reliability copy is short, visible, and actionable.
 
 ## Integration Tests
@@ -114,7 +115,7 @@ This is the first path to make boringly reliable before expanding advanced obser
 
 - Tapping the tomorrow hero opens tomorrow detail when resolved.
 - Weekly Fajrcast opens the Fajr-window detail for the selected date.
-- Morningcast rows open the relevant day detail.
+- Next 7 Days rows open the relevant day detail.
 - Settings remains reachable.
 - Large Dynamic Type keeps hero text readable and bottom controls clear of content.
 

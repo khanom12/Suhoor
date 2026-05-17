@@ -216,7 +216,7 @@ struct NextTenMorningsRowMetrics: Equatable {
 }
 
 struct NextTenMorningsSnapshot: Equatable {
-    static let title = "NEXT 10 MORNINGS"
+    static let title = "NEXT 7 DAYS"
 
     let title: String
     let rows: [NextTenMorningsRowDisplay]

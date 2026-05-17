@@ -1606,10 +1606,10 @@ private struct NextTenMorningsCard: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Next 10 Mornings")
+                .accessibilityLabel("Next 7 Days")
                 .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
                 .accessibilityHint(isExpanded ? "Double-tap to collapse." : "Double-tap to expand.")
-                .accessibilityIdentifier("nextTenMornings.header")
+                .accessibilityIdentifier("nextSevenDays.header")
 
                 if isExpanded {
                     NextTenMorningsDivider(inset: DesignTokens.spacingL)
@@ -1660,7 +1660,7 @@ private struct NextTenMorningsRow: View {
         }
         .buttonStyle(.plain)
         .padding(.vertical, DesignTokens.compactRowVerticalPadding)
-        .accessibilityIdentifier("nextTenMornings.row")
+        .accessibilityIdentifier("nextSevenDays.row")
     }
 
     private var rowContent: some View {

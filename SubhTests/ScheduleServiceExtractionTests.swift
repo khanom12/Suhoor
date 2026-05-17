@@ -979,6 +979,10 @@ struct ScheduleServiceExtractionTests {
         let tomorrowKey = DateHelpers.dayIdentifier(for: tomorrow, timeZone: timeZone)
         #expect(snapshot.tomorrow?.schedule.date == tomorrow)
         #expect(snapshot.weeklyFajrcast.selectedDay.dateKey == tomorrowKey)
+        #expect(snapshot.morningcast.count == MorningHomeSnapshot.maximumMorningcastCount)
+        #expect(snapshot.morningcast.first?.id == tomorrowKey)
+        #expect(snapshot.weeklyFajrcast.points.first?.dateKey == tomorrowKey)
+        #expect(snapshot.weeklyFajrcast.points.map(\.dateKey) == snapshot.morningcast.map(\.id))
     }
 
     @Test
@@ -2302,7 +2306,7 @@ struct ScheduleServiceExtractionTests {
     }
 
     @Test
-    func morningcastEntriesStartWithTomorrow() {
+    func morningcastEntriesIncludeTodayWhenWakeIsUpcoming() {
         let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
         let today = Self.makeDate(year: 2026, month: 4, day: 26, timeZone: timeZone)
         var calendar = Calendar(identifier: .gregorian)
@@ -2320,16 +2324,63 @@ struct ScheduleServiceExtractionTests {
             timeZone: timeZone
         )
 
+        #expect(visible.map(\.schedule.date) == entries.map(\.schedule.date))
+    }
+
+    @Test
+    func morningcastEntriesStartWithTomorrowAfterTodaysWakePasses() {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let today = Self.makeDate(year: 2026, month: 4, day: 26, hour: 12, timeZone: timeZone)
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let todayStart = calendar.startOfDay(for: today)
+        let entries = (0..<4).map { offset in
+            Self.makeWakeEntry(
+                date: calendar.date(byAdding: .day, value: offset, to: todayStart) ?? todayStart,
+                timeZone: timeZone
+            )
+        }
+
+        let visible = MorningHomeSnapshot.morningcastEntries(
+            from: entries,
+            currentDate: today,
+            timeZone: timeZone
+        )
+
         #expect(visible.map(\.schedule.date) == Array(entries.dropFirst(1)).map(\.schedule.date))
     }
 
     @Test
     func nextTenMorningsForecastNamingIsStable() {
-        #expect(MorningHomeSnapshot.forecastTitle == "NEXT 10 MORNINGS")
+        #expect(MorningHomeSnapshot.forecastTitle == "NEXT 7 DAYS")
 
         let snapshot = MorningHomePresentation.nextTenMorningsSnapshot(from: [])
-        #expect(snapshot.title == "NEXT 10 MORNINGS")
+        #expect(snapshot.title == "NEXT 7 DAYS")
         #expect(snapshot.loadingState == .empty)
+    }
+
+    @Test
+    func nextTenMorningsForecastUsesSevenRowsWhenReady() {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let startDate = Self.makeDate(year: 2026, month: 5, day: 1, timeZone: timeZone)
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let entries = (0..<8).map { offset in
+            Self.makeWakeEntry(
+                date: calendar.date(byAdding: .day, value: offset, to: startDate) ?? startDate,
+                timeZone: timeZone
+            )
+        }
+
+        let snapshot = MorningHomePresentation.nextTenMorningsSnapshot(
+            from: entries,
+            currentDate: startDate,
+            timeZone: timeZone
+        )
+
+        #expect(snapshot.rows.count == 7)
+        #expect(snapshot.rows.map(\.id) == Array(entries.prefix(7)).map(\.id))
+        #expect(snapshot.loadingState == .ready)
     }
 
     @Test
@@ -3081,13 +3132,12 @@ struct ScheduleServiceExtractionTests {
     }
 
     @Test
-    func compactFajrcastUsesCenteredVisibleWindow() {
+    func compactFajrcastUsesForwardVisibleWindow() {
         let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
         let today = Self.makeDate(year: 2026, month: 4, day: 26, hour: 22, minute: 34, timeZone: timeZone)
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = timeZone
-        let selected = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: today)) ?? today
-        let windowStart = calendar.date(byAdding: .day, value: -3, to: selected) ?? selected
+        let windowStart = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: today)) ?? today
         let activeDays = (0..<7).map { offset in
             Self.makeWakeEntry(
                 date: calendar.date(byAdding: .day, value: offset, to: windowStart) ?? windowStart,
@@ -3103,36 +3153,39 @@ struct ScheduleServiceExtractionTests {
         )
         let snapshot = provider.compactSnapshot(
             dataset: dataset,
-            selectedDateKey: activeDays[3].dateKey,
+            selectedDateKey: activeDays[0].dateKey,
             now: today,
             timeZone: timeZone
         )
 
-        let anchorKey = activeDays[3].dateKey
+        let anchorKey = activeDays[0].dateKey
         let visibleDateKeys = activeDays.map { $0.dateKey }
         let snapshotDateKeys = snapshot.points.map { $0.dateKey }
 
+        #expect(snapshot.anchorDateKey == anchorKey)
         #expect(snapshot.points.first?.dateKey == activeDays.first?.dateKey)
         #expect(snapshot.selectedDay.dateKey == anchorKey)
-        #expect(snapshot.chart.points.firstIndex(where: { $0.dateKey == snapshot.selectedDay.dateKey }) == 3)
+        #expect(snapshot.chart.points.firstIndex(where: { $0.dateKey == snapshot.selectedDay.dateKey }) == 0)
         #expect(snapshotDateKeys == visibleDateKeys)
         #expect(snapshot.chart.points.count == 7)
         #expect(snapshot.chart.compactYTicks.count == 4)
-        #expect(snapshot.chart.points.map { Self.weekdayInitial(for: $0.date, timeZone: timeZone) } == ["F", "S", "S", "M", "T", "W", "T"])
+        #expect(snapshot.chart.points.map { Self.weekdayInitial(for: $0.date, timeZone: timeZone) } == ["M", "T", "W", "T", "F", "S", "S"])
 
         let focusedSnapshot = provider.compactSnapshot(
             dataset: dataset,
-            selectedDateKey: activeDays[0].dateKey,
+            anchorDateKey: anchorKey,
+            selectedDateKey: activeDays[3].dateKey,
             now: today,
             timeZone: timeZone
         )
         let focusedDateKeys = focusedSnapshot.points.map { $0.dateKey }
 
-        #expect(focusedSnapshot.selectedDay.dateKey == activeDays[0].dateKey)
-        #expect(focusedSnapshot.chart.points.firstIndex(where: { $0.dateKey == anchorKey }) == 3)
-        #expect(focusedSnapshot.chart.points.firstIndex(where: { $0.dateKey == focusedSnapshot.selectedDay.dateKey }) == 0)
+        #expect(focusedSnapshot.anchorDateKey == anchorKey)
+        #expect(focusedSnapshot.selectedDay.dateKey == activeDays[3].dateKey)
+        #expect(focusedSnapshot.chart.points.firstIndex(where: { $0.dateKey == anchorKey }) == 0)
+        #expect(focusedSnapshot.chart.points.firstIndex(where: { $0.dateKey == focusedSnapshot.selectedDay.dateKey }) == 3)
         #expect(focusedDateKeys == visibleDateKeys)
-        #expect(focusedSnapshot.selectedDay.relativeLabel == "FRIDAY")
+        #expect(focusedSnapshot.selectedDay.relativeLabel == "THURSDAY")
         #expect(focusedSnapshot.summary.primaryText == "Fajr begins around the same time this week.")
         #expect(focusedSnapshot.summary.secondaryText == nil)
 
@@ -3146,7 +3199,7 @@ struct ScheduleServiceExtractionTests {
         let snapBackDateKeys = snapBackSnapshot.points.map { $0.dateKey }
 
         #expect(snapBackSnapshot.selectedDay.dateKey == anchorKey)
-        #expect(snapBackSnapshot.chart.points.firstIndex(where: { $0.dateKey == snapBackSnapshot.selectedDay.dateKey }) == 3)
+        #expect(snapBackSnapshot.chart.points.firstIndex(where: { $0.dateKey == snapBackSnapshot.selectedDay.dateKey }) == 0)
         #expect(snapBackDateKeys == visibleDateKeys)
         #expect(snapBackSnapshot.summary.primaryText == focusedSnapshot.summary.primaryText)
         #expect(snapBackSnapshot.summary.secondaryText == focusedSnapshot.summary.secondaryText)

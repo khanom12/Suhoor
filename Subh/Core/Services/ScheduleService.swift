@@ -358,7 +358,7 @@ final class ScheduleManager: ObservableObject {
             )
             let resolvedAnchorDateKey = DateHelpers.dayIdentifier(for: anchorDate, timeZone: timeZone)
             let activeDays = activeDaysForWeeklyFajrcast(
-                centeredOn: anchorDate,
+                startingFrom: anchorDate,
                 timeZone: timeZone
             )
             let visibleDateKeys = Set(activeDays.map(\.dateKey))
@@ -500,10 +500,12 @@ final class ScheduleManager: ObservableObject {
             )
             .prefix(MorningHomeSnapshot.maximumMorningcastCount)
         )
+        let forecastStartDateKey = morningcast.first?.id ?? tomorrowDay?.dateKey
 
         return MorningHomeSnapshot(
             tomorrow: tomorrowEntry,
             weeklyFajrcast: fajrWindowCompactSnapshot(
+                anchorDateKey: forecastStartDateKey,
                 timeZone: timeZone
             ),
             morningcast: morningcast,
@@ -820,18 +822,17 @@ final class ScheduleManager: ObservableObject {
     }
 
     private func activeDaysForWeeklyFajrcast(
-        centeredOn selectedDate: Date,
+        startingFrom selectedDate: Date,
         timeZone: TimeZone
     ) -> [ActiveAlarmDay] {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = timeZone
 
         let selectedStart = DateHelpers.startOfDay(selectedDate, in: timeZone)
-        let windowStart = calendar.date(byAdding: .day, value: -3, to: selectedStart) ?? selectedStart
 
         guard let coordinate = currentCoordinate() else {
             let windowDates = DateHelpers.dates(
-                startingFrom: windowStart,
+                startingFrom: selectedStart,
                 count: 7,
                 calendar: calendar
             )
@@ -842,7 +843,7 @@ final class ScheduleManager: ObservableObject {
         }
 
         let resolvedEntries = activeDayResolver.resolvedEntriesForActiveWindow(
-            from: windowStart,
+            from: selectedStart,
             limit: 7,
             timeZone: timeZone
         )

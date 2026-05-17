@@ -379,6 +379,6 @@ struct MorningHomeSnapshotTests {
             .weeklyFajrcast,
             .morningcast
         ])
-        #expect(MorningHomeSnapshot.maximumMorningcastCount == 10)
+        #expect(MorningHomeSnapshot.maximumMorningcastCount == 7)
     }
 }
