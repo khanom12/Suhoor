@@ -126,7 +126,7 @@ final class ScheduleManager: ObservableObject {
                     coordinate: coordinate,
                     timeZone: timeZone,
                     visibleHorizonDays: entries.count,
-                    scheduledHorizonDays: entries.count
+                    scheduledHorizonDays: 0
                 )
             }
         )

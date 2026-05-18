@@ -2,6 +2,7 @@ import SwiftUI
 
 struct AlarmDayDetailView: View {
     let schedule: DaySchedule
+    let sourceContext: MonthPlanningDayDetailSourceContext?
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -18,6 +19,14 @@ struct AlarmDayDetailView: View {
     @Namespace private var quickSelectorHighlight
 
     private let timeZone: TimeZone = .current
+
+    init(
+        schedule: DaySchedule,
+        sourceContext: MonthPlanningDayDetailSourceContext? = nil
+    ) {
+        self.schedule = schedule
+        self.sourceContext = sourceContext
+    }
 
     var body: some View {
         ZStack {
@@ -58,8 +67,8 @@ struct AlarmDayDetailView: View {
         let metrics = MorningHeroMetrics(dynamicTypeSize: dynamicTypeSize)
         let display = AlarmDayDetailPresentation.detailHeroDisplay(displayedHeroDisplay)
         let purpose = wakeEntry.flatMap { AlarmDayDetailPresentation.purpose(for: $0) }
-        let fastType = wakeEntry.flatMap { AlarmDayDetailPresentation.fastType(for: $0, purpose: purpose) }
-        let fajrAdhan = wakeEntry.flatMap { AlarmDayDetailPresentation.fajrAdhanSetting(for: $0, purpose: purpose) }
+        let fastType = wakeEntry.flatMap { fastTypePresentation(for: $0, purpose: purpose) }
+        let fajrAdhan = wakeEntry.flatMap { fajrAdhanPresentation(for: $0, purpose: purpose) }
         let context = wakeEntry.map {
             AlarmDayDetailPresentation.context(
                 for: $0,
@@ -100,8 +109,8 @@ struct AlarmDayDetailView: View {
         let metrics = MorningHeroMetrics(dynamicTypeSize: dynamicTypeSize)
         let display = AlarmDayDetailPresentation.detailHeroDisplay(displayedHeroDisplay)
         let purpose = wakeEntry.flatMap { AlarmDayDetailPresentation.purpose(for: $0) }
-        let fastType = wakeEntry.flatMap { AlarmDayDetailPresentation.fastType(for: $0, purpose: purpose) }
-        let fajrAdhan = wakeEntry.flatMap { AlarmDayDetailPresentation.fajrAdhanSetting(for: $0, purpose: purpose) }
+        let fastType = wakeEntry.flatMap { fastTypePresentation(for: $0, purpose: purpose) }
+        let fajrAdhan = wakeEntry.flatMap { fajrAdhanPresentation(for: $0, purpose: purpose) }
 
         return detailHero(
             display: display,
@@ -162,7 +171,7 @@ struct AlarmDayDetailView: View {
 
             if !display.quickWakeModeOptions.isEmpty {
                 MorningHeroQuickWakeModeSelector(
-                    options: AlarmDayDetailPresentation.modeOptions(for: display),
+                    options: modeOptions(for: display),
                     metrics: metrics,
                     highlightNamespace: quickSelectorHighlight,
                     reduceMotion: reduceMotion,
@@ -244,6 +253,28 @@ struct AlarmDayDetailView: View {
         reduceMotion
             ? .easeOut(duration: 0.12)
             : .easeInOut(duration: 0.22)
+    }
+
+    private func modeOptions(for display: MorningHomeHeroDisplay) -> [MorningHeroQuickWakeModeOption] {
+        let options = AlarmDayDetailPresentation.modeOptions(for: display)
+        guard sourceContext?.allowsSuhoorControls == false else { return options }
+        return options.filter { $0.mode != .suhoor }
+    }
+
+    private func fastTypePresentation(
+        for entry: WakeRowEntry,
+        purpose: AlarmDetailPurposePresentation?
+    ) -> AlarmDetailFastPurposePresentation? {
+        guard sourceContext?.allowsSuhoorControls != false else { return nil }
+        return AlarmDayDetailPresentation.fastType(for: entry, purpose: purpose)
+    }
+
+    private func fajrAdhanPresentation(
+        for entry: WakeRowEntry,
+        purpose: AlarmDetailPurposePresentation?
+    ) -> AlarmDetailFajrAdhanPresentation? {
+        guard sourceContext?.allowsSuhoorControls != false else { return nil }
+        return AlarmDayDetailPresentation.fajrAdhanSetting(for: entry, purpose: purpose)
     }
 
     private func heroTopAlignmentSlot(metrics: MorningHeroMetrics) -> some View {

@@ -4,6 +4,7 @@ import SwiftUI
 private enum SubhHomeDestination: Identifiable, Hashable {
     case day(DaySchedule)
     case fajrcast(selectedDateKey: String?)
+    case monthPicker(MonthPlanningCalendarMode)
 
     var id: String {
         switch self {
@@ -11,6 +12,8 @@ private enum SubhHomeDestination: Identifiable, Hashable {
             return "day-\(schedule.id)"
         case .fajrcast(let selectedDateKey):
             return "fajrcast-\(selectedDateKey ?? "default")"
+        case .monthPicker(let mode):
+            return "month-picker-\(mode.rawValue)"
         }
     }
 
@@ -31,10 +34,12 @@ private enum SettingsRoute: Hashable {
 struct SubhHomeView: View {
     @EnvironmentObject private var scheduleManager: ScheduleManager
     @EnvironmentObject private var appNavigator: AppNavigator
+    @ObservedObject private var entitlementStore = SubhEntitlementStore.shared
 
     @State private var destination: SubhHomeDestination?
     @State private var settingsPath = NavigationPath()
     @State private var isShowingSettings = false
+    @State private var lockedMonthPreviewMode: MonthPlanningCalendarMode?
     @State private var weeklyFajrcastFocusedDateKey: String?
     @State private var heroWakeAdjustment: FajrWindowLiveWakeAdjustment?
 
@@ -82,6 +87,16 @@ struct SubhHomeView: View {
                             }
                         }
 
+                        PlanAheadTiles(
+                            entitlement: entitlementStore.snapshot,
+                            onSelect: { mode in
+                                destination = .monthPicker(mode)
+                            },
+                            onLockedSelect: { mode in
+                                lockedMonthPreviewMode = mode
+                            }
+                        )
+
                         NextTenMorningsCard(entries: snapshot.morningcast) { entry in
                             destination = .day(entry.schedule)
                         }
@@ -114,6 +129,8 @@ struct SubhHomeView: View {
                         initialPeriod: .sevenDays,
                         initialSelectedDateKey: selectedDateKey
                     )
+                case .monthPicker(let mode):
+                    MonthPlanningPickerView(mode: mode)
                 }
             }
         }
@@ -130,6 +147,12 @@ struct SubhHomeView: View {
                     }
             }
             .appSettingsPresentedChrome()
+        }
+        .sheet(item: $lockedMonthPreviewMode) { mode in
+            MonthPlanningFeaturePreviewSheet(
+                mode: mode,
+                entitlement: entitlementStore.snapshot
+            )
         }
         .onReceive(appNavigator.$latestRequest.compactMap { $0 }) { request in
             handle(request.intent)
