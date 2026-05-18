@@ -41,7 +41,7 @@ struct AppAtmosphericCloudLayer: View {
     ) -> some View {
         ZStack(alignment: .topLeading) {
             ForEach(Self.layers) { layer in
-                RepeatingHeroCloudLayer(
+                SeamlessHeroCloudLayer(
                     layer: layer,
                     containerWidth: containerWidth,
                     containerHeight: containerHeight,
@@ -63,6 +63,13 @@ struct AppAtmosphericCloudLayer: View {
                 endPoint: .bottom
             )
         }
+        .mask {
+            HorizontalFeatherMask(
+                leadingOpaqueLocation: 0.04,
+                trailingOpaqueLocation: 0.96,
+                edgeOpacity: 0.72
+            )
+        }
     }
 
     private static func heroCloudHeight(for size: CGSize) -> CGFloat {
@@ -77,51 +84,51 @@ struct AppAtmosphericCloudLayer: View {
             assetName: "SubhDawnHeroCloudMist",
             duration: 290,
             opacity: 0.25,
-            widthMultiplier: 1.45,
             phaseOffset: 0.08,
             yOffsetRatio: -0.06,
-            blurRadius: 4
+            blurRadius: 4,
+            horizontalFeatherFraction: 0.16
         ),
         HeroCloudLayer(
             assetName: "SubhDawnHeroCloudFar",
             duration: 235,
             opacity: 0.43,
-            widthMultiplier: 1.52,
             phaseOffset: 0.31,
             yOffsetRatio: -0.05,
-            blurRadius: 1.5
+            blurRadius: 1.5,
+            horizontalFeatherFraction: 0.16
         ),
         HeroCloudLayer(
             assetName: "SubhDawnHeroCloudMid",
             duration: 168,
             opacity: 0.54,
-            widthMultiplier: 1.58,
             phaseOffset: 0.57,
             yOffsetRatio: -0.02,
-            blurRadius: 0.75
+            blurRadius: 0.75,
+            horizontalFeatherFraction: 0.18
         ),
         HeroCloudLayer(
             assetName: "SubhDawnHeroCloudLow",
             duration: 116,
             opacity: 0.48,
-            widthMultiplier: 1.66,
             phaseOffset: 0.19,
             yOffsetRatio: 0.03,
-            blurRadius: 0.25
+            blurRadius: 0.25,
+            horizontalFeatherFraction: 0.20
         ),
         HeroCloudLayer(
             assetName: "SubhDawnHeroCloudNear",
             duration: 78,
             opacity: 0.40,
-            widthMultiplier: 1.74,
             phaseOffset: 0.73,
             yOffsetRatio: 0.06,
-            blurRadius: 0
+            blurRadius: 0,
+            horizontalFeatherFraction: 0.22
         )
     ]
 }
 
-private struct RepeatingHeroCloudLayer: View {
+private struct SeamlessHeroCloudLayer: View {
     let layer: HeroCloudLayer
     let containerWidth: CGFloat
     let containerHeight: CGFloat
@@ -129,31 +136,94 @@ private struct RepeatingHeroCloudLayer: View {
     let isMotionReduced: Bool
 
     var body: some View {
-        let tileWidth = max(containerWidth * layer.widthMultiplier, containerWidth + 1)
+        let tileWidth = containerHeight * Self.assetAspectRatio
+        let featherWidth = tileWidth * layer.horizontalFeatherFraction
+        let tileStride = max(tileWidth - featherWidth, 1)
+        let leadingOverscan = tileWidth + tileStride
+        let trailingOverscan = tileWidth + tileStride
+        let copyCount = Self.copyCount(
+            containerWidth: containerWidth,
+            leadingOverscan: leadingOverscan,
+            trailingOverscan: trailingOverscan,
+            tileStride: tileStride
+        )
         let animatedProgress = seconds.truncatingRemainder(dividingBy: layer.duration) / layer.duration
         let progress = isMotionReduced
             ? layer.phaseOffset
             : (animatedProgress + layer.phaseOffset).truncatingRemainder(dividingBy: 1)
-        let xOffset = -tileWidth * CGFloat(progress)
+        let xOffset = tileStride * CGFloat(progress)
+        let trackStart = -leadingOverscan - xOffset
 
-        HStack(spacing: 0) {
-            ForEach(0..<3, id: \.self) { _ in
-                cloudImage(tileWidth: tileWidth)
+        ZStack(alignment: .topLeading) {
+            ForEach(0..<copyCount, id: \.self) { index in
+                FeatheredCloudTile(
+                    assetName: layer.assetName,
+                    tileWidth: tileWidth,
+                    tileHeight: containerHeight,
+                    featherFraction: layer.horizontalFeatherFraction
+                )
+                .offset(x: trackStart + (CGFloat(index) * tileStride))
             }
         }
-        .frame(width: tileWidth * 3, height: containerHeight, alignment: .leading)
-        .offset(x: xOffset - tileWidth, y: containerHeight * layer.yOffsetRatio)
+        .frame(width: containerWidth, height: containerHeight, alignment: .topLeading)
+        .clipped()
+        .offset(y: containerHeight * layer.yOffsetRatio)
         .opacity(layer.opacity)
         .blur(radius: layer.blurRadius)
         .compositingGroup()
     }
 
-    private func cloudImage(tileWidth: CGFloat) -> some View {
-        Image(layer.assetName)
+    private static let assetAspectRatio: CGFloat = 2
+
+    private static func copyCount(
+        containerWidth: CGFloat,
+        leadingOverscan: CGFloat,
+        trailingOverscan: CGFloat,
+        tileStride: CGFloat
+    ) -> Int {
+        let coverageWidth = containerWidth + leadingOverscan + trailingOverscan + tileStride
+        return max(4, Int(ceil(coverageWidth / tileStride)) + 1)
+    }
+}
+
+private struct FeatheredCloudTile: View {
+    let assetName: String
+    let tileWidth: CGFloat
+    let tileHeight: CGFloat
+    let featherFraction: CGFloat
+
+    var body: some View {
+        Image(assetName)
             .resizable()
-            .scaledToFill()
-            .frame(width: tileWidth, height: containerHeight, alignment: .top)
-            .clipped()
+            .aspectRatio(Self.assetAspectRatio, contentMode: .fit)
+            .frame(width: tileWidth, height: tileHeight, alignment: .center)
+            .mask {
+                HorizontalFeatherMask(
+                    leadingOpaqueLocation: featherFraction,
+                    trailingOpaqueLocation: 1 - featherFraction
+                )
+            }
+    }
+
+    private static let assetAspectRatio: CGFloat = 2
+}
+
+private struct HorizontalFeatherMask: View {
+    let leadingOpaqueLocation: CGFloat
+    let trailingOpaqueLocation: CGFloat
+    var edgeOpacity: Double = 0
+
+    var body: some View {
+        LinearGradient(
+            stops: [
+                .init(color: .white.opacity(edgeOpacity), location: 0.00),
+                .init(color: .white, location: leadingOpaqueLocation),
+                .init(color: .white, location: trailingOpaqueLocation),
+                .init(color: .white.opacity(edgeOpacity), location: 1.00)
+            ],
+            startPoint: .leading,
+            endPoint: .trailing
+        )
     }
 }
 
@@ -161,10 +231,10 @@ private struct HeroCloudLayer: Identifiable {
     let assetName: String
     let duration: TimeInterval
     let opacity: Double
-    let widthMultiplier: CGFloat
     let phaseOffset: TimeInterval
     let yOffsetRatio: CGFloat
     let blurRadius: CGFloat
+    let horizontalFeatherFraction: CGFloat
 
     var id: String { assetName }
 }
