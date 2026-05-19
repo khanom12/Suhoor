@@ -82,7 +82,7 @@ struct AppAtmosphericCloudLayer: View {
     private static let layers: [HeroCloudLayer] = [
         HeroCloudLayer(
             assetName: "SubhDawnHeroCloudMist",
-            duration: 290,
+            duration: 116,
             opacity: 0.25,
             phaseOffset: 0.08,
             yOffsetRatio: -0.06,
@@ -91,7 +91,7 @@ struct AppAtmosphericCloudLayer: View {
         ),
         HeroCloudLayer(
             assetName: "SubhDawnHeroCloudFar",
-            duration: 235,
+            duration: 94,
             opacity: 0.43,
             phaseOffset: 0.31,
             yOffsetRatio: -0.05,
@@ -100,7 +100,7 @@ struct AppAtmosphericCloudLayer: View {
         ),
         HeroCloudLayer(
             assetName: "SubhDawnHeroCloudMid",
-            duration: 168,
+            duration: 67.2,
             opacity: 0.54,
             phaseOffset: 0.57,
             yOffsetRatio: -0.02,
@@ -109,7 +109,7 @@ struct AppAtmosphericCloudLayer: View {
         ),
         HeroCloudLayer(
             assetName: "SubhDawnHeroCloudLow",
-            duration: 116,
+            duration: 46.4,
             opacity: 0.48,
             phaseOffset: 0.19,
             yOffsetRatio: 0.03,
@@ -118,7 +118,7 @@ struct AppAtmosphericCloudLayer: View {
         ),
         HeroCloudLayer(
             assetName: "SubhDawnHeroCloudNear",
-            duration: 78,
+            duration: 31.2,
             opacity: 0.40,
             phaseOffset: 0.73,
             yOffsetRatio: 0.06,
