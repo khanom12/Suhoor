@@ -1396,7 +1396,7 @@ struct ScheduleServiceExtractionTests {
         #expect(fastDisplay.fajrWindowVisualMode == .interactiveEarlyWorshipWindow)
         #expect(fastDisplay.wakeAdjustmentRelationAnchor == .fajrStart)
         #expect(fastDisplay.accessibilityLabel.contains("Suhoor mode selected"))
-        #expect(fastForecastRow.tags.map(\.title) == ["Suhoor"])
+        #expect(fastForecastRow.tags.isEmpty)
 
         let quietEntry = Self.makeWakeEntry(
             date: date,
@@ -1427,7 +1427,9 @@ struct ScheduleServiceExtractionTests {
         #expect(quietDisplay.fajrWindowVisualMode == .staticWithinFajrWindow)
         #expect(quietDisplay.wakeAdjustmentEnabled == false)
         #expect(quietDisplay.wakeAdjustmentAccessibilityValue == nil)
-        #expect(quietForecastRow.tags.map(\.title) == ["Quiet"])
+        #expect(quietForecastRow.tags.isEmpty)
+        #expect(quietForecastRow.trailingTime == nil)
+        #expect(quietForecastRow.trailingStatusText == "Quiet")
     }
 
     @Test
@@ -2352,10 +2354,11 @@ struct ScheduleServiceExtractionTests {
 
     @Test
     func nextTenMorningsForecastNamingIsStable() {
-        #expect(MorningHomeSnapshot.forecastTitle == "NEXT 7 DAYS")
+        #expect(MorningHomeSnapshot.forecastTitle == "NEXT 7 MORNINGS")
 
         let snapshot = MorningHomePresentation.nextTenMorningsSnapshot(from: [])
-        #expect(snapshot.title == "NEXT 7 DAYS")
+        #expect(snapshot.title == "NEXT 7 MORNINGS")
+        #expect(snapshot.subtitle == "View and plan your next seven mornings")
         #expect(snapshot.loadingState == .empty)
     }
 
@@ -2399,7 +2402,7 @@ struct ScheduleServiceExtractionTests {
         )
 
         #expect(row.dateLabel == "Tomorrow")
-        #expect(row.tags.map(\.title) == ["Fajr"])
+        #expect(row.tags.isEmpty)
         #expect(row.trailingTime == entry.schedule.wakeDate)
         #expect(row.trailingStatusText == nil)
         #expect(row.accessibilityLabel.contains("Fajr morning"))
@@ -2435,19 +2438,19 @@ struct ScheduleServiceExtractionTests {
 
     @Test
     func nextTenMorningsTagDoctrineMatchesForecastSpec() {
-        #expect(Self.nextTenTagTitles() == ["Fajr"])
+        #expect(Self.nextTenTagTitles() == [])
         #expect(Self.nextTenTagTitles(primary: .ramadanObligatory, opportunities: [.ashura]) == ["Ramadan"])
-        #expect(Self.nextTenTagTitles(quietModeState: .active, primary: .voluntary, secondary: [.ashura]) == ["Quiet"])
-        #expect(Self.nextTenTagTitles(primary: .voluntary, secondary: [.ashura]) == ["Suhoor", "Ashura"])
-        #expect(Self.nextTenTagTitles(opportunities: [.ashura]) == ["Fajr", "Ashura"])
-        #expect(Self.nextTenTagTitles(primary: .qadaMakeup, secondary: [.whiteDays]) == ["Suhoor", "Qada"])
-        #expect(Self.nextTenTagTitles(opportunities: [.ashura], selectedQuickWakeMode: .suhoor) == ["Suhoor"])
-        #expect(Self.nextTenTagTitles(opportunities: [.mondayThursday]) == ["Fajr"])
-        #expect(Self.nextTenTagTitles(primary: .voluntary, secondary: [.mondayThursday]) == ["Suhoor", "Mon/Thu"])
-        #expect(Self.nextTenTagTitles(opportunities: [.whiteDays]) == ["Fajr", "White Days"])
-        #expect(Self.nextTenTagTitles(primary: .voluntary, secondary: [.whiteDays]) == ["Suhoor", "White Days"])
-        #expect(Self.nextTenTagTitles(opportunities: [.shawwalSix]) == ["Fajr", "Shawwal 6"])
-        #expect(Self.nextTenTagTitles(opportunities: [.shawwalSix], shawwalComplete: true) == ["Fajr"])
+        #expect(Self.nextTenTagTitles(quietModeState: .active, primary: .voluntary, secondary: [.ashura]) == ["Ashura"])
+        #expect(Self.nextTenTagTitles(primary: .voluntary, secondary: [.ashura]) == ["Ashura"])
+        #expect(Self.nextTenTagTitles(opportunities: [.ashura]) == ["Ashura"])
+        #expect(Self.nextTenTagTitles(primary: .qadaMakeup, secondary: [.whiteDays]) == ["White Days"])
+        #expect(Self.nextTenTagTitles(opportunities: [.ashura], selectedQuickWakeMode: .suhoor) == ["Ashura"])
+        #expect(Self.nextTenTagTitles(opportunities: [.mondayThursday]) == [])
+        #expect(Self.nextTenTagTitles(primary: .voluntary, secondary: [.mondayThursday]) == [])
+        #expect(Self.nextTenTagTitles(opportunities: [.whiteDays]) == ["White Days"])
+        #expect(Self.nextTenTagTitles(primary: .voluntary, secondary: [.whiteDays]) == ["White Days"])
+        #expect(Self.nextTenTagTitles(opportunities: [.shawwalSix]) == ["Shawwal 6"])
+        #expect(Self.nextTenTagTitles(opportunities: [.shawwalSix], shawwalComplete: true) == [])
     }
 
     @Test
@@ -2468,8 +2471,9 @@ struct ScheduleServiceExtractionTests {
             )
         )
 
-        #expect(resolution.visibleTags.map(\.title) == ["Fajr", "White Days"])
-        #expect(resolution.accessibilityTags.map(\.title) == ["Fajr", "White Days"])
+        #expect(resolution.visibleTags.map(\.title) == ["White Days"])
+        #expect(resolution.accessibilityTags.map(\.title).contains("Fajr"))
+        #expect(resolution.accessibilityTags.map(\.title).contains("White Days"))
     }
 
     @Test
@@ -2480,16 +2484,23 @@ struct ScheduleServiceExtractionTests {
             opportunities: []
         )
 
-        #expect(resolution.visibleTags.map(\.title) == ["Suhoor", "Arafah", "Dhul Hijjah"])
+        #expect(resolution.visibleTags.map(\.title) == ["Arafah", "Dhul Hijjah", "White Days"])
         #expect(resolution.visibleTags.count == 3)
-        #expect(resolution.accessibilityTags.map(\.title) == ["Suhoor", "Arafah", "Dhul Hijjah", "White Days"])
+        #expect(resolution.accessibilityTags.map(\.title).contains("Suhoor"))
+        #expect(resolution.accessibilityTags.map(\.title).contains("Arafah"))
+        #expect(resolution.accessibilityTags.map(\.title).contains("Dhul Hijjah"))
+        #expect(resolution.accessibilityTags.map(\.title).contains("White Days"))
 
         let opportunityResolution = Self.nextTenTagResolution(
             opportunities: [.arafah, .dhulHijjahFirstNine, .whiteDays, .shawwalSix]
         )
-        #expect(opportunityResolution.visibleTags.map(\.title) == ["Fajr", "Arafah", "Dhul Hijjah"])
+        #expect(opportunityResolution.visibleTags.map(\.title) == ["Arafah", "Dhul Hijjah", "White Days"])
         #expect(opportunityResolution.visibleTags.count == 3)
-        #expect(opportunityResolution.accessibilityTags.map(\.title) == ["Fajr", "Arafah", "Dhul Hijjah", "White Days", "Shawwal 6"])
+        #expect(opportunityResolution.accessibilityTags.map(\.title).contains("Fajr"))
+        #expect(opportunityResolution.accessibilityTags.map(\.title).contains("Arafah"))
+        #expect(opportunityResolution.accessibilityTags.map(\.title).contains("Dhul Hijjah"))
+        #expect(opportunityResolution.accessibilityTags.map(\.title).contains("White Days"))
+        #expect(opportunityResolution.accessibilityTags.map(\.title).contains("Shawwal 6"))
     }
 
     @Test

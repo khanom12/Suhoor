@@ -105,8 +105,11 @@ struct MonthPlanningMorningRow: Identifiable {
     let entry: WakeRowEntry
     let primaryDateLabel: String
     let secondaryDateLabel: String
-    let statusLine: String
-    let modeTitle: String
+    let contextTags: [NextTenMorningsTagDisplay]
+    let allAccessibilityTags: [NextTenMorningsTagDisplay]
+    let trailingTime: Date?
+    let trailingStatusText: String?
+    let isInactive: Bool
     let showsOverride: Bool
     let showsCompleteLock: Bool
     let accessibilityLabel: String
@@ -149,6 +152,7 @@ enum MonthPlanningPresentation {
     static func gregorianPickerMonths(
         now: Date,
         timeZone: TimeZone,
+        hijriRangeTextProvider: ((MonthPlanningDateRange) -> String?)? = nil,
         activeDayProvider: (Date) -> ActiveAlarmDay?
     ) -> [MonthPlanningPickerMonth] {
         gregorianMonthIdentities(now: now, count: horizonMonthCount, timeZone: timeZone).compactMap { identity in
@@ -166,9 +170,11 @@ enum MonthPlanningPresentation {
             return MonthPlanningPickerMonth(
                 identity: identity,
                 title: title,
-                subtitle: nil,
+                subtitle: hijriRangeTextProvider?(range),
                 countText: availability.label ?? countText,
-                accessibilityLabel: "\(title), \(availability.label ?? countText)",
+                accessibilityLabel: [title, hijriRangeTextProvider?(range), availability.label ?? countText]
+                    .compactMap { $0 }
+                    .joined(separator: ", "),
                 isCurrentMonth: isCurrent,
                 dateRange: range,
                 availability: availability
@@ -378,26 +384,56 @@ enum MonthPlanningPresentation {
         let hijriText = hijri.map { "\($0.month.displayName) \($0.day)" } ?? "Hijri date unavailable"
         let selectedMode = WakeStateSelectionResolver.selectedMode(for: day)
         let resolvedWake = MorningWakeResolutionService.resolve(for: day, timeZone: timeZone)
-        let statusLine = rowStatusLine(
-            resolvedWake: resolvedWake,
-            modeTitle: selectedMode.displayTitle,
-            timeZone: timeZone
+        let quietModeState: NextTenMorningsQuietModeState = selectedMode == .quiet || resolvedWake.alarmActivation == .quietSuppressed
+            ? .active
+            : .inactive
+        let compatibleOpportunityTags = FastIntentEngine.displaySecondaryTags(
+            FastIntentEngine.dateDerivedObservanceTags(
+                for: day.date,
+                timeZone: timeZone,
+                includeShawwalPotential: true
+            )
         )
+        let tagResolution = NextTenMorningsTagResolver.resolve(
+            NextTenMorningsTagResolverInput(
+                date: day.date,
+                dateKey: day.dateKey,
+                resolvedDayPurpose: day.resolvedDayPurpose,
+                resolvedContext: day.resolvedDayContext,
+                tagResult: day.tagResult,
+                compatibleOpportunityTags: compatibleOpportunityTags,
+                quietModeState: quietModeState,
+                selectedQuickWakeMode: selectedMode,
+                shawwalSixProgress: nil,
+                hasDayOverride: entry.hasDayOverride
+            )
+        )
+        let trailing = rowTrailingDisplay(resolvedWake: resolvedWake)
         let primary = mode == .gregorian ? gregorian : hijriText
         let secondary = mode == .gregorian ? hijriText : gregorian
         let showsCompleteLock = selectedMode == .suhoor && !entitlement.allows(.suhoorPlanning)
         let lockText = showsCompleteLock ? ", Complete required for Suhoor controls" : ""
+        let accessibilityStatus: String
+        if let trailingTime = trailing.time {
+            accessibilityStatus = "Wake at \(timeFormatter(timeZone: timeZone).string(from: trailingTime))"
+        } else {
+            accessibilityStatus = trailing.status ?? "Wake status unavailable"
+        }
+        let tagText = accessibilityTagSummary(tagResolution.accessibilityTags)
 
         return MonthPlanningMorningRow(
             id: day.dateKey,
             entry: entry,
             primaryDateLabel: primary,
             secondaryDateLabel: secondary,
-            statusLine: statusLine,
-            modeTitle: selectedMode.displayTitle,
+            contextTags: tagResolution.visibleTags,
+            allAccessibilityTags: tagResolution.accessibilityTags,
+            trailingTime: trailing.time,
+            trailingStatusText: trailing.status,
+            isInactive: trailing.time == nil,
             showsOverride: entry.hasDayOverride,
             showsCompleteLock: showsCompleteLock,
-            accessibilityLabel: "\(primary), \(secondary), \(statusLine)\(entry.hasDayOverride ? ", changed for this date" : "")\(lockText)"
+            accessibilityLabel: "\(primary), \(secondary), \(tagText), \(accessibilityStatus)\(entry.hasDayOverride ? ", changed for this date" : "")\(lockText)"
         )
     }
 
@@ -436,24 +472,27 @@ enum MonthPlanningPresentation {
         return isCurrent ? "\(count) \(suffix) left" : "\(count) \(suffix)"
     }
 
-    private static func rowStatusLine(
-        resolvedWake: ResolvedMorningWakeState,
-        modeTitle: String,
-        timeZone: TimeZone
-    ) -> String {
+    private static func rowTrailingDisplay(
+        resolvedWake: ResolvedMorningWakeState
+    ) -> (time: Date?, status: String?) {
         switch resolvedWake.alarmActivation {
         case .active:
             guard let wakeTime = resolvedWake.wakeTimeResolution.wakeTime else {
-                return "Wake time unavailable · \(modeTitle)"
+                return (nil, "Unavailable")
             }
-            return "Wake \(timeFormatter(timeZone: timeZone).string(from: wakeTime)) · \(modeTitle)"
+            return (wakeTime, nil)
         case .quietSuppressed:
-            return "Quiet · No alarm"
+            return (nil, "Quiet")
         case .offWithAnchor, .noAnchor:
-            return "No alarm · \(modeTitle)"
+            return (nil, "No alarm")
         case .unavailable:
-            return "Unavailable · \(modeTitle)"
+            return (nil, "Unavailable")
         }
+    }
+
+    private static func accessibilityTagSummary(_ tags: [NextTenMorningsTagDisplay]) -> String {
+        guard !tags.isEmpty else { return "Fajr morning" }
+        return tags.map(\.accessibilityText).joined(separator: ", ")
     }
 
     private static func rowsVisibleRangeText(_ rows: [MonthPlanningMorningRow], timeZone: TimeZone) -> String? {

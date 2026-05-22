@@ -87,18 +87,26 @@ struct SubhHomeView: View {
                             }
                         }
 
-                        PlanAheadTiles(
-                            entitlement: entitlementStore.effectiveSnapshot,
-                            onSelect: { mode in
-                                destination = .monthPicker(mode)
-                            },
-                            onLockedSelect: { mode in
-                                lockedMonthPreviewMode = mode
-                            }
-                        )
+                        VStack(alignment: .leading, spacing: DesignTokens.spacingS) {
+                            Text("Plan ahead")
+                                .font(.headline.weight(.semibold))
+                                .foregroundStyle(WakeGlassTheme.primaryText.opacity(0.96))
+                                .padding(.horizontal, 2)
+                                .accessibilityAddTraits(.isHeader)
 
-                        NextTenMorningsCard(entries: snapshot.morningcast) { entry in
-                            destination = .day(entry.schedule)
+                            NextTenMorningsCard(entries: snapshot.morningcast) { entry in
+                                destination = .day(entry.schedule)
+                            }
+
+                            PlanAheadTiles(
+                                entitlement: entitlementStore.effectiveSnapshot,
+                                onSelect: { mode in
+                                    destination = .monthPicker(mode)
+                                },
+                                onLockedSelect: { mode in
+                                    lockedMonthPreviewMode = mode
+                                }
+                            )
                         }
 
                         WeeklyFajrcastCard(
@@ -1738,11 +1746,18 @@ private struct NextTenMorningsCard: View {
                         isExpanded.toggle()
                     }
                 } label: {
-                    HStack(spacing: DesignTokens.spacingS) {
-                        Text(forecast.title)
-                            .appTextRole(.eyebrow)
-                            .foregroundStyle(WakeGlassTheme.tertiaryText)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                    HStack(alignment: .center, spacing: DesignTokens.spacingS) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(forecast.title)
+                                .appTextRole(.eyebrow)
+                                .foregroundStyle(WakeGlassTheme.secondaryText)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+
+                            Text(forecast.subtitle)
+                                .font(.footnote)
+                                .foregroundStyle(WakeGlassTheme.secondaryText.opacity(0.86))
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
 
                         Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
                             .font(.system(size: 12, weight: .semibold))
@@ -1755,10 +1770,10 @@ private struct NextTenMorningsCard: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Next 7 Days")
+                .accessibilityLabel("Next 7 Mornings")
+                .accessibilityHint(isExpanded ? "Double-tap to collapse." : "Double-tap to expand and view your next seven mornings.")
                 .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
-                .accessibilityHint(isExpanded ? "Double-tap to collapse." : "Double-tap to expand.")
-                .accessibilityIdentifier("nextSevenDays.header")
+                .accessibilityIdentifier("nextTenMornings.header")
 
                 if isExpanded {
                     NextTenMorningsDivider(inset: DesignTokens.spacingL)
@@ -1803,13 +1818,14 @@ private struct NextTenMorningsRow: View {
         Button(action: onSelect) {
             rowContent
             .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(minHeight: 50, alignment: .center)
             .contentShape(Rectangle())
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(display.accessibilityLabel)
         }
         .buttonStyle(.plain)
         .padding(.vertical, DesignTokens.compactRowVerticalPadding)
-        .accessibilityIdentifier("nextSevenDays.row")
+        .accessibilityIdentifier("nextTenMornings.row")
     }
 
     private var rowContent: some View {
@@ -1870,7 +1886,7 @@ private enum NextTenMorningsTagMetrics {
     static let strokeWidth: CGFloat = 0.8
 }
 
-private struct NextTenMorningsTagCluster: View {
+struct NextTenMorningsTagCluster: View {
     let tags: [NextTenMorningsTagDisplay]
     let isDisabled: Bool
 
@@ -1924,6 +1940,8 @@ private struct NextTenMorningsTagChip: View {
             return Color.gray
         case .ramadan:
             return FastPrimaryIntent.ramadanObligatory.style.color
+        case .eid, .fastingUnavailable:
+            return DawnColor.danger
         case .fastingIntent:
             return FastPrimaryIntent.voluntary.style.color
         case .qada:
@@ -2025,7 +2043,7 @@ private struct SubhHomeTimeLockup: View {
     }()
 }
 
-private struct NextTenMorningsTimeLockup: View {
+struct NextTenMorningsTimeLockup: View {
     let date: Date
     let isDisabled: Bool
 

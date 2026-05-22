@@ -277,6 +277,7 @@ struct MonthPlanningPresentationTests {
         let months = MonthPlanningPresentation.gregorianPickerMonths(
             now: now,
             timeZone: timeZone,
+            hijriRangeTextProvider: { _ in "Dhul Qidah 14 - Dhul Hijjah 15" },
             activeDayProvider: { date in
                 byDateKey[DateHelpers.dayIdentifier(for: date, timeZone: timeZone)]
             }
@@ -285,6 +286,7 @@ struct MonthPlanningPresentationTests {
         let current = try #require(months.first)
         let next = try #require(months.dropFirst().first)
         #expect(current.title == "May 2026")
+        #expect(current.subtitle == "Dhul Qidah 14 - Dhul Hijjah 15")
         #expect(current.countText == "2 mornings left")
         #expect(current.availability.isAvailable)
         #expect(next.title == "June 2026")
@@ -345,7 +347,11 @@ struct MonthPlanningPresentationTests {
         let gregorianRow = try #require(gregorianSnapshot.rows.first)
         #expect(gregorianRow.primaryDateLabel == "Thu, May 21")
         #expect(gregorianRow.secondaryDateLabel == "Dhul Hijjah 4")
-        #expect(gregorianRow.statusLine == "Wake 4:18 AM · Fajr")
+        #expect(gregorianRow.contextTags.map(\.title) == ["Dhul Hijjah"])
+        #expect(gregorianRow.trailingTime == future.schedule.wakeDate)
+        #expect(gregorianRow.trailingStatusText == nil)
+        #expect(gregorianRow.accessibilityLabel.contains("Fajr morning"))
+        #expect(gregorianRow.accessibilityLabel.contains("Dhul Hijjah fasting opportunity"))
 
         let hijriSnapshot = MonthPlanningPresentation.detailSnapshot(
             identity: .hijri(year: 1447, month: .dhulHijjah),

@@ -139,6 +139,8 @@ enum NextTenMorningsTagSemantic: Equatable {
     case fajrFallback
     case quietMode
     case ramadan
+    case eid
+    case fastingUnavailable
     case fastingIntent
     case qada
     case kaffarah
@@ -216,9 +218,11 @@ struct NextTenMorningsRowMetrics: Equatable {
 }
 
 struct NextTenMorningsSnapshot: Equatable {
-    static let title = "NEXT 7 DAYS"
+    static let title = MorningHomeSnapshot.forecastTitle
+    static let subtitle = "View and plan your next seven mornings"
 
     let title: String
+    let subtitle: String
     let rows: [NextTenMorningsRowDisplay]
     let rowMetrics: NextTenMorningsRowMetrics
     let loadingState: NextTenMorningsLoadingState
@@ -272,10 +276,11 @@ enum NextTenMorningsTagResolver {
             surface: .nextSevenDaysCompactRow,
             shawwalSixComplete: input.shawwalSixProgress?.isComplete == true
         )
-        let ordered = shared.visibleTags.map(nextTenTagDisplay(from:))
-        let accessible = (shared.visibleTags + shared.hiddenTags).map(nextTenTagDisplay(from:))
+        let sourceTags = shared.visibleTags + shared.hiddenTags
+        let ordered = orderedUnique(sourceTags.compactMap(nextTenVisibleTagDisplay(from:)))
+        let accessible = sourceTags.map(nextTenTagDisplay(from:))
         return NextTenMorningsTagResolution(
-            visibleTags: Array(ordered.prefix(maximumVisibleTags)),
+            visibleTags: Array(dominantVisibleTags(from: ordered).prefix(maximumVisibleTags)),
             accessibilityTags: orderedUnique(accessible)
         )
     }
@@ -307,6 +312,40 @@ enum NextTenMorningsTagResolver {
         )
     }
 
+    private static func nextTenVisibleTagDisplay(
+        from tag: SharedDayTagPresentation
+    ) -> NextTenMorningsTagDisplay? {
+        let display = nextTenTagDisplay(from: tag)
+        switch display.semantic {
+        case .ramadan, .eid, .fastingUnavailable, .observanceOpportunity, .observanceIntended:
+            break
+        case .fajrFallback, .quietMode, .fastingIntent, .qada, .kaffarah, .vow:
+            return nil
+        }
+
+        switch display.semantic {
+        case .observanceOpportunity(.mondayThursday), .observanceIntended(.mondayThursday):
+            return nil
+        default:
+            return display
+        }
+    }
+
+    private static func dominantVisibleTags(
+        from tags: [NextTenMorningsTagDisplay]
+    ) -> [NextTenMorningsTagDisplay] {
+        if tags.contains(where: { $0.semantic == .fastingUnavailable }) {
+            return tags.filter { $0.semantic == .fastingUnavailable }
+        }
+        if tags.contains(where: { $0.semantic == .eid }) {
+            return tags.filter { $0.semantic == .eid }
+        }
+        if tags.contains(where: { $0.semantic == .ramadan }) {
+            return tags.filter { $0.semantic == .ramadan }
+        }
+        return tags
+    }
+
     private static func nextTenSemantic(
         from tag: SharedDayTagPresentation
     ) -> NextTenMorningsTagSemantic {
@@ -321,10 +360,16 @@ enum NextTenMorningsTagResolver {
                 return .quietMode
             }
         case .calendarContext(let kind):
-            if kind == .ramadan {
+            switch kind {
+            case .ramadan:
                 return .ramadan
+            case .eidAlFitr, .eidAlAdha:
+                return .eid
+            case .tashreeq:
+                return .fastingUnavailable
+            default:
+                return .fajrFallback
             }
-            return .fajrFallback
         case .fastingPurpose(let intent):
             switch intent {
             case .qadaMakeup:
@@ -366,6 +411,10 @@ enum NextTenMorningsTagResolver {
         switch tag.semanticKind {
         case .wakeMode(.quiet):
             return 0
+        case .calendarContext(.tashreeq):
+            return 0
+        case .calendarContext(.eidAlFitr), .calendarContext(.eidAlAdha):
+            return 5
         case .calendarContext(.ramadan):
             return 10
         case .calendarContext:
@@ -559,6 +608,10 @@ enum NextTenMorningsTagResolver {
             return "quiet"
         case .ramadan:
             return "ramadan"
+        case .eid:
+            return "eid"
+        case .fastingUnavailable:
+            return "fasting-unavailable"
         case .fastingIntent:
             return "suhoor"
         case .qada:
@@ -582,6 +635,10 @@ enum NextTenMorningsTagResolver {
             return "Quiet"
         case .ramadan:
             return "Ramadan"
+        case .eid:
+            return "Eid"
+        case .fastingUnavailable:
+            return "Fasting unavailable"
         case .fastingIntent:
             return "Suhoor"
         case .qada:
@@ -597,7 +654,7 @@ enum NextTenMorningsTagResolver {
 
     private static func prominence(for semantic: NextTenMorningsTagSemantic) -> NextTenMorningsTagProminence {
         switch semantic {
-        case .quietMode, .ramadan, .fastingIntent, .qada, .kaffarah, .vow:
+        case .quietMode, .ramadan, .eid, .fastingUnavailable, .fastingIntent, .qada, .kaffarah, .vow:
             return .strong
         case .observanceOpportunity, .observanceIntended:
             return .opportunity
@@ -614,6 +671,10 @@ enum NextTenMorningsTagResolver {
             return "Quiet mode"
         case .ramadan:
             return "Ramadan morning"
+        case .eid:
+            return "Eid morning"
+        case .fastingUnavailable:
+            return "Fasting unavailable"
         case .fastingIntent:
             return "Suhoor selected"
         case .qada:
@@ -652,6 +713,7 @@ enum MorningHomePresentation {
 
         return NextTenMorningsSnapshot(
             title: NextTenMorningsSnapshot.title,
+            subtitle: NextTenMorningsSnapshot.subtitle,
             rows: rows,
             rowMetrics: nextTenMorningsRowMetrics(for: rows, timeZone: timeZone),
             loadingState: rows.isEmpty ? .empty : .ready,
@@ -718,8 +780,9 @@ enum MorningHomePresentation {
                 hasDayOverride: entry.hasDayOverride
             )
         )
-        let trailingTime = entry.isEnabled ? entry.schedule.wakeDate : nil
-        let trailingStatusText = entry.isEnabled ? nil : WakePagePresentation.noWakeTrailingText
+        let isQuiet = resolvedQuietModeState == .active
+        let trailingTime = isQuiet ? nil : (entry.isEnabled ? entry.schedule.wakeDate : nil)
+        let trailingStatusText = isQuiet ? "Quiet" : (entry.isEnabled ? nil : "No alarm")
         let accessibilityLabel = nextTenMorningsAccessibilityLabel(
             entry: entry,
             date: entry.schedule.date,
@@ -1036,7 +1099,7 @@ enum MorningHomePresentation {
         if let trailingTime {
             parts.append("Wake at \(timeFormatter(timeZone: timeZone).string(from: trailingTime))")
         } else if let trailingStatusText {
-            parts.append(trailingStatusText)
+            parts.append(trailingStatusText == "Quiet" ? "Quiet mode" : trailingStatusText)
         }
 
         if entry.hasDayOverride {

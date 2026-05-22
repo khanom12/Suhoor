@@ -8,12 +8,7 @@ struct PlanAheadTiles: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Plan ahead")
-                .appTextRole(.eyebrow)
-                .foregroundStyle(WakeGlassTheme.tertiaryText)
-                .padding(.horizontal, 2)
-
+        Group {
             if dynamicTypeSize.isAccessibilitySize {
                 VStack(spacing: DesignTokens.spacingS) {
                     tile(.gregorian)
@@ -96,6 +91,7 @@ struct MonthPlanningPickerView: View {
     let mode: MonthPlanningCalendarMode
 
     @EnvironmentObject private var scheduleManager: ScheduleManager
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ObservedObject private var entitlementStore = SubhEntitlementStore.shared
     @State private var months: [MonthPlanningPickerMonth] = []
     @State private var isLoading = true
@@ -119,17 +115,19 @@ struct MonthPlanningPickerView: View {
                     } else if isLoading {
                         MonthPlanningLoadingCard()
                     } else {
-                        ForEach(months) { month in
-                            if month.availability.isAvailable {
-                                NavigationLink {
-                                    MonthPlanningDetailView(identity: month.identity)
-                                } label: {
+                        LazyVGrid(columns: monthGridColumns, alignment: .center, spacing: DesignTokens.spacingS) {
+                            ForEach(months) { month in
+                                if month.availability.isAvailable {
+                                    NavigationLink {
+                                        MonthPlanningDetailView(identity: month.identity)
+                                    } label: {
+                                        MonthPlanningPickerMonthCard(month: month)
+                                    }
+                                    .buttonStyle(.plain)
+                                } else {
                                     MonthPlanningPickerMonthCard(month: month)
+                                        .opacity(0.72)
                                 }
-                                .buttonStyle(.plain)
-                            } else {
-                                MonthPlanningPickerMonthCard(month: month)
-                                    .opacity(0.72)
                             }
                         }
                     }
@@ -150,6 +148,16 @@ struct MonthPlanningPickerView: View {
 
     private var reloadKey: String {
         "\(mode.rawValue)-\(scheduleManager.currentRevision)-\(entitlementStore.effectiveSnapshot.tier.rawValue)"
+    }
+
+    private var monthGridColumns: [GridItem] {
+        if dynamicTypeSize.isAccessibilitySize {
+            return [GridItem(.flexible(), spacing: DesignTokens.spacingS)]
+        }
+        return [
+            GridItem(.flexible(), spacing: DesignTokens.spacingS),
+            GridItem(.flexible(), spacing: DesignTokens.spacingS)
+        ]
     }
 
     private var header: some View {
@@ -180,7 +188,8 @@ struct MonthPlanningPickerView: View {
         case .gregorian:
             months = MonthPlanningPresentation.gregorianPickerMonths(
                 now: now,
-                timeZone: timeZone
+                timeZone: timeZone,
+                hijriRangeTextProvider: hijriRangeText(for:)
             ) { date in
                 scheduleManager.activeDay(for: date, timeZone: timeZone)
             }
@@ -214,6 +223,21 @@ struct MonthPlanningPickerView: View {
             },
             timeZone: timeZone
         )
+    }
+
+    private func hijriRangeText(for range: MonthPlanningDateRange) -> String? {
+        guard
+            let start = AdjustedHijriCalendar.shared.adjustedComponents(for: range.start, timeZone: timeZone),
+            let end = AdjustedHijriCalendar.shared.adjustedComponents(for: range.end, timeZone: timeZone)
+        else {
+            return nil
+        }
+
+        if start.hijriYear == end.hijriYear, start.month == end.month {
+            return "\(start.month.displayName) \(start.day)-\(end.day)"
+        }
+
+        return "\(start.month.displayName) \(start.day) - \(end.month.displayName) \(end.day)"
     }
 }
 
@@ -449,12 +473,30 @@ struct MonthPlanningFeaturePreviewSheet: View {
 private struct MonthPlanningPickerMonthCard: View {
     let month: MonthPlanningPickerMonth
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     var body: some View {
         AppGlassSurface(
             variant: WakeGlassTheme.homeSurfaceVariant,
             contentPadding: 14
         ) {
-            HStack(alignment: .center, spacing: DesignTokens.spacingM) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: month.identity.mode == .gregorian ? "calendar" : "moon.stars")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(WakeGlassTheme.primaryText.opacity(month.availability.isAvailable ? 0.90 : 0.58))
+                        .accessibilityHidden(true)
+
+                    Spacer(minLength: 6)
+
+                    Image(systemName: month.availability.isAvailable ? "chevron.right" : "minus.circle")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(WakeGlassTheme.tertiaryText)
+                        .accessibilityHidden(true)
+                }
+
+                Spacer(minLength: 4)
+
                 VStack(alignment: .leading, spacing: 5) {
                     Text(month.title)
                         .font(.headline.weight(.semibold))
@@ -467,24 +509,17 @@ private struct MonthPlanningPickerMonthCard: View {
                             .foregroundStyle(WakeGlassTheme.secondaryText)
                             .fixedSize(horizontal: false, vertical: true)
                     }
-                }
 
-                Spacer(minLength: DesignTokens.spacingS)
-
-                VStack(alignment: .trailing, spacing: 5) {
                     Text(month.countText)
                         .font(.footnote.weight(.semibold))
                         .foregroundStyle(month.availability.isAvailable ? WakeGlassTheme.secondaryText : WakeGlassTheme.tertiaryText)
-                        .multilineTextAlignment(.trailing)
+                        .multilineTextAlignment(.leading)
                         .fixedSize(horizontal: false, vertical: true)
-
-                    Image(systemName: month.availability.isAvailable ? "chevron.right" : "minus.circle")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(WakeGlassTheme.tertiaryText)
-                        .accessibilityHidden(true)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+            .aspectRatio(dynamicTypeSize.isAccessibilitySize ? nil : 1.02, contentMode: .fit)
+            .frame(minHeight: dynamicTypeSize.isAccessibilitySize ? 128 : 142, alignment: .topLeading)
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(month.accessibilityLabel)
@@ -558,45 +593,61 @@ private struct MonthlyFajrcastPlaceholderCard: View {
 private struct MonthPlanningMorningRowView: View {
     let row: MonthPlanningMorningRow
 
+    @ScaledMetric(relativeTo: .body) private var rowMinHeight: CGFloat = 64
+
     var body: some View {
-        HStack(alignment: .center, spacing: DesignTokens.spacingM) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(row.primaryDateLabel)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(WakeGlassTheme.primaryText.opacity(0.94))
-                    .fixedSize(horizontal: false, vertical: true)
-
-                Text(row.secondaryDateLabel)
-                    .font(.footnote)
-                    .foregroundStyle(WakeGlassTheme.secondaryText)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                Text(row.statusLine)
-                    .font(.footnote.weight(.medium))
-                    .foregroundStyle(WakeGlassTheme.secondaryText)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+        HStack(alignment: .center, spacing: 0) {
+            dateLane
+                .frame(width: 118, alignment: .leading)
 
             Spacer(minLength: DesignTokens.spacingS)
 
-            VStack(alignment: .trailing, spacing: 6) {
-                MonthPlanningModeChip(title: row.modeTitle)
+            NextTenMorningsTagCluster(tags: row.contextTags, isDisabled: row.isInactive)
+                .frame(minWidth: 52, maxWidth: .infinity, alignment: .center)
 
-                if row.showsOverride {
-                    MonthPlanningStatusChip(title: "Changed")
-                }
+            Spacer(minLength: DesignTokens.spacingS)
 
-                if row.showsCompleteLock {
-                    MonthPlanningStatusChip(title: "Complete")
-                }
-            }
+            trailingLockup
+                .frame(width: 92, alignment: .trailing)
         }
         .padding(.horizontal, DesignTokens.spacingM)
         .padding(.vertical, DesignTokens.compactRowVerticalPadding)
+        .frame(minHeight: rowMinHeight, alignment: .center)
         .contentShape(Rectangle())
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(row.accessibilityLabel)
         .accessibilityHint("Double-tap for details.")
+    }
+
+    private var dateLane: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(row.primaryDateLabel)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(WakeGlassTheme.primaryText.opacity(row.isInactive ? 0.68 : 0.94))
+                .lineLimit(1)
+                .minimumScaleFactor(0.78)
+
+            Text(row.secondaryDateLabel)
+                .font(.footnote)
+                .foregroundStyle(WakeGlassTheme.secondaryText.opacity(row.isInactive ? 0.78 : 1.0))
+                .lineLimit(1)
+                .minimumScaleFactor(0.78)
+        }
+    }
+
+    @ViewBuilder
+    private var trailingLockup: some View {
+        if let trailingTime = row.trailingTime {
+            NextTenMorningsTimeLockup(date: trailingTime, isDisabled: row.isInactive)
+                .fixedSize(horizontal: true, vertical: false)
+        } else if let trailingStatusText = row.trailingStatusText {
+            Text(trailingStatusText)
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(WakeGlassTheme.secondaryText)
+                .lineLimit(1)
+                .minimumScaleFactor(0.82)
+                .multilineTextAlignment(.trailing)
+        }
     }
 }
 
