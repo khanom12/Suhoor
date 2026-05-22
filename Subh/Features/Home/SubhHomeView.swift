@@ -88,7 +88,7 @@ struct SubhHomeView: View {
                         }
 
                         PlanAheadTiles(
-                            entitlement: entitlementStore.snapshot,
+                            entitlement: entitlementStore.effectiveSnapshot,
                             onSelect: { mode in
                                 destination = .monthPicker(mode)
                             },
@@ -151,7 +151,7 @@ struct SubhHomeView: View {
         .sheet(item: $lockedMonthPreviewMode) { mode in
             MonthPlanningFeaturePreviewSheet(
                 mode: mode,
-                entitlement: entitlementStore.snapshot
+                entitlement: entitlementStore.effectiveSnapshot
             )
         }
         .onReceive(appNavigator.$latestRequest.compactMap { $0 }) { request in

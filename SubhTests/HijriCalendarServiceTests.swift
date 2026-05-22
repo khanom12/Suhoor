@@ -385,6 +385,40 @@ struct MonthPlanningPresentationTests {
         #expect(store.snapshot == .free)
     }
 
+    #if DEBUG
+    @Test
+    @MainActor
+    func entitlementStoreUsesTemporaryDevelopmentOverrideInDebug() {
+        let suiteName = "MonthPlanningPresentationTests.DevelopmentOverride"
+        let suite = UserDefaults(suiteName: suiteName)!
+        suite.removePersistentDomain(forName: suiteName)
+
+        let store = SubhEntitlementStore(defaults: suite, environment: [:])
+
+        #expect(store.snapshot == .free)
+        #expect(store.effectiveSnapshot.allows(.monthPlanning))
+        #expect(store.effectiveSnapshot.allows(.suhoorPlanning))
+        #expect(store.effectiveSnapshot.isTemporary)
+    }
+
+    @Test
+    @MainActor
+    func developmentEntitlementOverrideCanBeDisabledForGateTesting() {
+        let suiteName = "MonthPlanningPresentationTests.DevelopmentOverrideDisabled"
+        let suite = UserDefaults(suiteName: suiteName)!
+        suite.removePersistentDomain(forName: suiteName)
+
+        let store = SubhEntitlementStore(
+            defaults: suite,
+            environment: ["SUBH_DISABLE_DEVELOPMENT_ENTITLEMENT_OVERRIDE": "1"]
+        )
+
+        #expect(store.snapshot == .free)
+        #expect(store.effectiveSnapshot == .free)
+        #expect(store.effectiveSnapshot.allows(.monthPlanning) == false)
+    }
+    #endif
+
     private static let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
 
     private static func makeDate(

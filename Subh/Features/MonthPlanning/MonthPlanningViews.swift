@@ -114,8 +114,8 @@ struct MonthPlanningPickerView: View {
                 LazyVStack(alignment: .leading, spacing: DesignTokens.spacingM) {
                     header
 
-                    if !entitlementStore.snapshot.allows(.monthPlanning) {
-                        MonthPlanningLockedCard(mode: mode, entitlement: entitlementStore.snapshot)
+                    if !entitlementStore.effectiveSnapshot.allows(.monthPlanning) {
+                        MonthPlanningLockedCard(mode: mode, entitlement: entitlementStore.effectiveSnapshot)
                     } else if isLoading {
                         MonthPlanningLoadingCard()
                     } else {
@@ -149,7 +149,7 @@ struct MonthPlanningPickerView: View {
     }
 
     private var reloadKey: String {
-        "\(mode.rawValue)-\(scheduleManager.currentRevision)-\(entitlementStore.snapshot.tier.rawValue)"
+        "\(mode.rawValue)-\(scheduleManager.currentRevision)-\(entitlementStore.effectiveSnapshot.tier.rawValue)"
     }
 
     private var header: some View {
@@ -168,7 +168,7 @@ struct MonthPlanningPickerView: View {
 
     @MainActor
     private func loadMonths() async {
-        guard entitlementStore.snapshot.allows(.monthPlanning) else {
+        guard entitlementStore.effectiveSnapshot.allows(.monthPlanning) else {
             isLoading = false
             months = []
             return
@@ -237,8 +237,8 @@ struct MonthPlanningDetailView: View {
 
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: DesignTokens.spacingM) {
-                    if !entitlementStore.snapshot.allows(.monthPlanning) {
-                        MonthPlanningLockedCard(mode: identity.mode, entitlement: entitlementStore.snapshot)
+                    if !entitlementStore.effectiveSnapshot.allows(.monthPlanning) {
+                        MonthPlanningLockedCard(mode: identity.mode, entitlement: entitlementStore.effectiveSnapshot)
                     } else if isLoading {
                         MonthPlanningLoadingCard()
                     } else if let snapshot {
@@ -267,7 +267,7 @@ struct MonthPlanningDetailView: View {
                                                 sourceContext: MonthPlanningDayDetailSourceContext(
                                                     mode: snapshot.mode,
                                                     monthIdentity: snapshot.identity,
-                                                    entitlement: entitlementStore.snapshot
+                                                    entitlement: entitlementStore.effectiveSnapshot
                                                 )
                                             )
                                         } label: {
@@ -302,7 +302,7 @@ struct MonthPlanningDetailView: View {
     }
 
     private var reloadKey: String {
-        "\(identity.id)-\(scheduleManager.currentRevision)-\(entitlementStore.snapshot.tier.rawValue)"
+        "\(identity.id)-\(scheduleManager.currentRevision)-\(entitlementStore.effectiveSnapshot.tier.rawValue)"
     }
 
     private var fallbackTitle: String {
@@ -316,7 +316,7 @@ struct MonthPlanningDetailView: View {
 
     @MainActor
     private func loadSnapshot() async {
-        guard entitlementStore.snapshot.allows(.monthPlanning) else {
+        guard entitlementStore.effectiveSnapshot.allows(.monthPlanning) else {
             isLoading = false
             snapshot = nil
             return
@@ -337,7 +337,7 @@ struct MonthPlanningDetailView: View {
                 activeDays: activeDays,
                 now: now,
                 timeZone: timeZone,
-                entitlement: entitlementStore.snapshot,
+                entitlement: entitlementStore.effectiveSnapshot,
                 hijriComponentsProvider: hijriComponents(for:timeZone:)
             )
         case .hijri(let year, let month):
@@ -351,7 +351,7 @@ struct MonthPlanningDetailView: View {
                 activeDays: activeDays,
                 now: now,
                 timeZone: timeZone,
-                entitlement: entitlementStore.snapshot,
+                entitlement: entitlementStore.effectiveSnapshot,
                 hijriComponentsProvider: hijriComponents(for:timeZone:),
                 hijriAdjustmentText: hijriAdjustmentText(for: yearMonth)
             )

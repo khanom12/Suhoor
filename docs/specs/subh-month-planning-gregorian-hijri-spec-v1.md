@@ -614,6 +614,14 @@ The active MVP quick-mode language remains aligned to:
 Suhoor | Fajr | Quiet
 ```
 
+### 13.5 Development entitlement enforcement
+
+During active development, Debug/development builds may expose the full Month Planning flow through a centralized development entitlement override so Calendar Months, Hijri Months, Month Picker, Month Detail, and Day Detail integration can be tested end to end.
+
+The override must remain centralized in the entitlement provider or equivalent service. Month Planning views should read the effective entitlement state rather than adding local debug-only tier checks.
+
+Release/production builds must continue to route through the real entitlement path and must not be permanently forced to Complete. Final Free, Plus, and Complete enforcement remains a pricing/entitlement implementation responsibility.
+
 ---
 
 ## 14. Loading, empty, and error states

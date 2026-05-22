@@ -43,6 +43,9 @@ struct SubhEntitlementSnapshot: Equatable {
     static let plus = SubhEntitlementSnapshot(tier: .plus)
     static let complete = SubhEntitlementSnapshot(tier: .complete)
     static let completeTrial = SubhEntitlementSnapshot(tier: .completeTrial, isTemporary: true)
+    #if DEBUG
+    static let developmentComplete = SubhEntitlementSnapshot(tier: .completeTrial, isTemporary: true)
+    #endif
 
     init(tier: SubhEntitlementTier, isTemporary: Bool? = nil) {
         self.tier = tier
@@ -86,8 +89,22 @@ final class SubhEntitlementStore: ObservableObject {
     static let shared = SubhEntitlementStore()
 
     private static let defaultsKey = "Subh.EntitlementTier"
+    #if DEBUG
+    private static let developmentOverrideDefaultsKey = "Subh.DevelopmentEntitlementTier"
+    private static let developmentOverrideDisabledDefaultsKey = "Subh.DevelopmentEntitlementOverrideDisabled"
+
+    private let developmentOverrideSnapshot: SubhEntitlementSnapshot?
+    #endif
 
     @Published private(set) var snapshot: SubhEntitlementSnapshot
+
+    var effectiveSnapshot: SubhEntitlementSnapshot {
+        #if DEBUG
+        return developmentOverrideSnapshot ?? snapshot
+        #else
+        return snapshot
+        #endif
+    }
 
     init(
         defaults: UserDefaults = .standard,
@@ -96,10 +113,52 @@ final class SubhEntitlementStore: ObservableObject {
         let rawTier = environment["SUBH_ENTITLEMENT_TIER"]
             ?? defaults.string(forKey: Self.defaultsKey)
         let tier = rawTier.flatMap(SubhEntitlementTier.init(rawValue:)) ?? .free
+        #if DEBUG
+        self.developmentOverrideSnapshot = Self.developmentOverrideSnapshot(
+            defaults: defaults,
+            environment: environment
+        )
+        #endif
         self.snapshot = SubhEntitlementSnapshot(tier: tier)
     }
 
     func updateForTesting(_ snapshot: SubhEntitlementSnapshot) {
         self.snapshot = snapshot
     }
+
+    #if DEBUG
+    private static func developmentOverrideSnapshot(
+        defaults: UserDefaults,
+        environment: [String: String]
+    ) -> SubhEntitlementSnapshot? {
+        if isDevelopmentOverrideDisabled(defaults: defaults, environment: environment) {
+            return nil
+        }
+
+        let rawTier = environment["SUBH_DEVELOPMENT_ENTITLEMENT_TIER"]
+            ?? defaults.string(forKey: developmentOverrideDefaultsKey)
+        let tier = rawTier.flatMap(SubhEntitlementTier.init(rawValue:)) ?? SubhEntitlementSnapshot.developmentComplete.tier
+        return SubhEntitlementSnapshot(tier: tier, isTemporary: true)
+    }
+
+    private static func isDevelopmentOverrideDisabled(
+        defaults: UserDefaults,
+        environment: [String: String]
+    ) -> Bool {
+        if defaults.bool(forKey: developmentOverrideDisabledDefaultsKey) {
+            return true
+        }
+
+        guard let rawValue = environment["SUBH_DISABLE_DEVELOPMENT_ENTITLEMENT_OVERRIDE"] else {
+            return false
+        }
+
+        switch rawValue.lowercased() {
+        case "1", "true", "yes", "enabled":
+            return true
+        default:
+            return false
+        }
+    }
+    #endif
 }
