@@ -108,6 +108,7 @@ Display horizon, edit horizon, and active scheduled horizon remain distinct.
 | `subh-early-worship-boundary-spec-v2.md` | 2 | Suhoor before-Fajr boundary model; legacy early-worship terminology is internal/deferred. |
 | `subh-alarm-delivery-schedule-reliability-spec-v3.md` | 3 | Platform delivery, identifiers, stale cancellation, reconciliation, delivery ledger, diagnostics. |
 | `subh-wake-sessions-wake-checks-morning-logs-spec-v1.md` | 1 | Wake Session execution, primary alarm + wake checks, awake confirmation, immediate MorningLogs. |
+| `subh-wake-session-testing-and-simulation-harness-spec-v1.md` | 1 | Debug/internal Wake Session testing harness, compressed scenarios, fake scheduling, real-device AlarmKit test tooling, release guardrails. |
 | `subh-quiet-mode-quiet-morning-contract-spec-v1.md` | 1 | Quiet Mode overlay, Quiet Morning semantics, active-session confirmation, restoration, quiet cancellation. |
 | `subh-sound-alarm-settings-spec-v1.md` | 1 | Alarm sound roles, ramped audio asset policy, sound-setting boundaries. |
 | `subh-morning-hero-item-spec-v15.md` | 15 | Home hero layout, visible state hierarchy, Hero Action Slot, selector presentation, hero CTAs. |
@@ -156,6 +157,7 @@ When specs overlap, use this hierarchy:
 | User intention anchors | Planning Horizon spec | Delivery, Hero local state |
 | One resolved morning graph | Morning Resolution Contract | Separate UI-local engines |
 | Wake Session execution | Wake Sessions spec | Pricing, Hero, Delivery alone |
+| Wake Session testing/simulation harness | Wake Session Testing Harness spec | Production wake rules, Pricing, separate test engines |
 | Wake-check platform scheduling | Alarm Delivery spec + Wake Sessions spec | Hero, Pricing |
 | Quiet suppression/restoration | Quiet Mode spec | Permission warnings, delivery failure states |
 | Sound role/asset policy | Sound and Alarm Settings spec | Wake mode activation |
@@ -172,7 +174,7 @@ When specs overlap, use this hierarchy:
 2. Read `subh-planning-horizon-day-resolution-intention-anchoring-spec-v3.md` and `subh-day-purpose-opportunity-resolution-spec-v1.md` for date meaning, future edits, and intention ownership.
 3. Read `subh-fajr-time-calculation-determination-selection-spec-v1.md` and `subh-early-worship-boundary-spec-v2.md` for prayer-window and Suhoor before-Fajr assumptions.
 4. Read `subh-quick-wake-mode-intent-mutation-contract-v2.md` before implementing Home or detail wake-mode edits.
-5. Read `subh-wake-sessions-wake-checks-morning-logs-spec-v1.md`, `subh-quiet-mode-quiet-morning-contract-spec-v1.md`, and `subh-sound-alarm-settings-spec-v1.md` before making wake-execution, Quiet, or sound claims.
+5. Read `subh-wake-sessions-wake-checks-morning-logs-spec-v1.md`, `subh-wake-session-testing-and-simulation-harness-spec-v1.md`, `subh-quiet-mode-quiet-morning-contract-spec-v1.md`, and `subh-sound-alarm-settings-spec-v1.md` before making wake-execution, testing-harness, Quiet, or sound claims.
 6. Read `subh-alarm-delivery-schedule-reliability-spec-v3.md` before changing scheduling, permission, fallback, or diagnostics behavior.
 7. Read surface specs after the contracts they consume: Hero, Detail, Next 7 Mornings, Weekly Fajrcast, Month Planning, Primary Context, and Shared Tags.
 8. Read `subh-pricing-entitlement-spec-v3.md` and `subh-mvp-interaction-tier-exposure-matrix-v2.md` before implementing paywalls, trials, feature gates, downgrade behavior, or paid-layer surfaces.

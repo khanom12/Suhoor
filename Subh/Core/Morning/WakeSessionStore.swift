@@ -57,6 +57,8 @@ struct WakeSessionDraft: Equatable, Sendable {
     let primaryScheduledEventID: String?
     let wakeCheckIDs: [String]
     let wakeCheckScheduledEventIDs: [String]
+    var isTest: Bool = false
+    var scenarioID: String? = nil
 }
 
 struct WakeSession: Codable, Equatable, Identifiable, Sendable {
@@ -83,6 +85,8 @@ struct WakeSession: Codable, Equatable, Identifiable, Sendable {
     var operationalLogIDs: [UUID]
     var createdAt: Date
     var updatedAt: Date
+    var isTest: Bool
+    var scenarioID: String?
 
     var id: String { wakeSessionID }
 
@@ -118,6 +122,8 @@ struct WakeSession: Codable, Equatable, Identifiable, Sendable {
         self.operationalLogIDs = []
         self.createdAt = now
         self.updatedAt = now
+        self.isTest = draft.isTest
+        self.scenarioID = draft.scenarioID
     }
 
     mutating func apply(draft: WakeSessionDraft, now: Date) {
@@ -130,6 +136,8 @@ struct WakeSession: Codable, Equatable, Identifiable, Sendable {
         primaryScheduledEventID = draft.primaryScheduledEventID
         wakeCheckIDs = draft.wakeCheckIDs
         wakeCheckScheduledEventIDs = draft.wakeCheckScheduledEventIDs
+        isTest = draft.isTest
+        scenarioID = draft.scenarioID
         if !status.isTerminal {
             status = .scheduled
         } else if status == .quietMorning {
@@ -138,6 +146,63 @@ struct WakeSession: Codable, Equatable, Identifiable, Sendable {
             quietReason = nil
         }
         updatedAt = now
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case wakeSessionID
+        case dateKey
+        case morningDate
+        case mode
+        case confirmedWakeMode
+        case finalThirdStart
+        case fajrBegins
+        case fajrEnds
+        case plannedWakeTime
+        case primaryAlarmID
+        case primaryScheduledEventID
+        case wakeCheckIDs
+        case wakeCheckScheduledEventIDs
+        case status
+        case confirmedAt
+        case expiredAt
+        case cancelledAt
+        case quietReason
+        case firedScheduledEventIDs
+        case stoppedScheduledEventIDs
+        case operationalLogIDs
+        case createdAt
+        case updatedAt
+        case isTest
+        case scenarioID
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        wakeSessionID = try container.decode(String.self, forKey: .wakeSessionID)
+        dateKey = try container.decode(String.self, forKey: .dateKey)
+        morningDate = try container.decode(Date.self, forKey: .morningDate)
+        mode = try container.decode(WakeSessionMode.self, forKey: .mode)
+        confirmedWakeMode = try container.decodeIfPresent(WakeSessionMode.self, forKey: .confirmedWakeMode)
+        finalThirdStart = try container.decodeIfPresent(Date.self, forKey: .finalThirdStart)
+        fajrBegins = try container.decode(Date.self, forKey: .fajrBegins)
+        fajrEnds = try container.decodeIfPresent(Date.self, forKey: .fajrEnds)
+        plannedWakeTime = try container.decode(Date.self, forKey: .plannedWakeTime)
+        primaryAlarmID = try container.decodeIfPresent(String.self, forKey: .primaryAlarmID)
+        primaryScheduledEventID = try container.decodeIfPresent(String.self, forKey: .primaryScheduledEventID)
+        wakeCheckIDs = try container.decode([String].self, forKey: .wakeCheckIDs)
+        wakeCheckScheduledEventIDs = try container.decode([String].self, forKey: .wakeCheckScheduledEventIDs)
+        status = try container.decode(WakeSessionStatus.self, forKey: .status)
+        confirmedAt = try container.decodeIfPresent(Date.self, forKey: .confirmedAt)
+        expiredAt = try container.decodeIfPresent(Date.self, forKey: .expiredAt)
+        cancelledAt = try container.decodeIfPresent(Date.self, forKey: .cancelledAt)
+        quietReason = try container.decodeIfPresent(String.self, forKey: .quietReason)
+        firedScheduledEventIDs = try container.decodeIfPresent([String].self, forKey: .firedScheduledEventIDs) ?? []
+        stoppedScheduledEventIDs = try container.decodeIfPresent([String].self, forKey: .stoppedScheduledEventIDs) ?? []
+        operationalLogIDs = try container.decodeIfPresent([UUID].self, forKey: .operationalLogIDs) ?? []
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+        updatedAt = try container.decode(Date.self, forKey: .updatedAt)
+        isTest = try container.decodeIfPresent(Bool.self, forKey: .isTest) ?? false
+        scenarioID = try container.decodeIfPresent(String.self, forKey: .scenarioID)
     }
 }
 
@@ -167,6 +232,8 @@ struct MorningLogRecord: Codable, Equatable, Identifiable, Sendable {
     let timestamp: Date
     let scheduledEventID: String?
     let metadata: [String: String]
+    let isTest: Bool
+    let scenarioID: String?
 
     init(
         id: UUID = UUID(),
@@ -175,7 +242,9 @@ struct MorningLogRecord: Codable, Equatable, Identifiable, Sendable {
         type: MorningLogRecordType,
         timestamp: Date,
         scheduledEventID: String? = nil,
-        metadata: [String: String] = [:]
+        metadata: [String: String] = [:],
+        isTest: Bool = false,
+        scenarioID: String? = nil
     ) {
         self.id = id
         self.dateKey = dateKey
@@ -184,6 +253,33 @@ struct MorningLogRecord: Codable, Equatable, Identifiable, Sendable {
         self.timestamp = timestamp
         self.scheduledEventID = scheduledEventID
         self.metadata = metadata
+        self.isTest = isTest
+        self.scenarioID = scenarioID
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case dateKey
+        case wakeSessionID
+        case type
+        case timestamp
+        case scheduledEventID
+        case metadata
+        case isTest
+        case scenarioID
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        dateKey = try container.decode(String.self, forKey: .dateKey)
+        wakeSessionID = try container.decodeIfPresent(String.self, forKey: .wakeSessionID)
+        type = try container.decode(MorningLogRecordType.self, forKey: .type)
+        timestamp = try container.decode(Date.self, forKey: .timestamp)
+        scheduledEventID = try container.decodeIfPresent(String.self, forKey: .scheduledEventID)
+        metadata = try container.decodeIfPresent([String: String].self, forKey: .metadata) ?? [:]
+        isTest = try container.decodeIfPresent(Bool.self, forKey: .isTest) ?? false
+        scenarioID = try container.decodeIfPresent(String.self, forKey: .scenarioID)
     }
 }
 
@@ -229,8 +325,10 @@ struct MorningLogEntry: Codable, Equatable, Sendable {
     var quietMorning: Bool
     var records: [MorningLogRecord]
     var updatedAt: Date
+    var isTest: Bool
+    var scenarioID: String?
 
-    init(dateKey: String, updatedAt: Date) {
+    init(dateKey: String, updatedAt: Date, isTest: Bool = false, scenarioID: String? = nil) {
         self.dateKey = dateKey
         self.suhoorWakeOutcome = .unconfirmed
         self.fajrWakeOutcome = .unconfirmed
@@ -241,10 +339,43 @@ struct MorningLogEntry: Codable, Equatable, Sendable {
         self.quietMorning = false
         self.records = []
         self.updatedAt = updatedAt
+        self.isTest = isTest
+        self.scenarioID = scenarioID
     }
 
     var hasFajrPrayerConfirmed: Bool {
         fajrPrayerOutcome == .fajrPrayerConfirmed
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case dateKey
+        case suhoorWakeOutcome
+        case fajrWakeOutcome
+        case fajrPrayerOutcome
+        case fastingIntentOutcome
+        case fastingDayPlanned
+        case fastCompletionOutcome
+        case quietMorning
+        case records
+        case updatedAt
+        case isTest
+        case scenarioID
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        dateKey = try container.decode(String.self, forKey: .dateKey)
+        suhoorWakeOutcome = try container.decodeIfPresent(MorningWakeOutcome.self, forKey: .suhoorWakeOutcome) ?? .unconfirmed
+        fajrWakeOutcome = try container.decodeIfPresent(MorningWakeOutcome.self, forKey: .fajrWakeOutcome) ?? .unconfirmed
+        fajrPrayerOutcome = try container.decodeIfPresent(FajrPrayerOutcome.self, forKey: .fajrPrayerOutcome) ?? .unconfirmed
+        fastingIntentOutcome = try container.decodeIfPresent(FastingIntentOutcome.self, forKey: .fastingIntentOutcome) ?? .unconfirmed
+        fastingDayPlanned = try container.decodeIfPresent(Bool.self, forKey: .fastingDayPlanned) ?? false
+        fastCompletionOutcome = try container.decodeIfPresent(FastCompletionOutcome.self, forKey: .fastCompletionOutcome) ?? .unconfirmed
+        quietMorning = try container.decodeIfPresent(Bool.self, forKey: .quietMorning) ?? false
+        records = try container.decodeIfPresent([MorningLogRecord].self, forKey: .records) ?? []
+        updatedAt = try container.decode(Date.self, forKey: .updatedAt)
+        isTest = try container.decodeIfPresent(Bool.self, forKey: .isTest) ?? records.contains { $0.isTest }
+        scenarioID = try container.decodeIfPresent(String.self, forKey: .scenarioID) ?? records.first(where: { $0.scenarioID != nil })?.scenarioID
     }
 }
 
@@ -307,7 +438,9 @@ final class WakeSessionStore: ObservableObject {
                 dateKey: draft.dateKey,
                 wakeSessionID: draft.wakeSessionID,
                 type: .wakeSessionCreated,
-                timestamp: now
+                timestamp: now,
+                isTest: draft.isTest,
+                scenarioID: draft.scenarioID
             )
             logIDs.append(record.id)
         }
@@ -318,7 +451,9 @@ final class WakeSessionStore: ObservableObject {
                 wakeSessionID: draft.wakeSessionID,
                 type: .primaryAlarmScheduled,
                 timestamp: now,
-                scheduledEventID: primaryID
+                scheduledEventID: primaryID,
+                isTest: draft.isTest,
+                scenarioID: draft.scenarioID
             )
             logIDs.append(record.id)
         }
@@ -330,7 +465,9 @@ final class WakeSessionStore: ObservableObject {
                 wakeSessionID: draft.wakeSessionID,
                 type: .wakeCheckScheduled,
                 timestamp: now,
-                scheduledEventID: wakeCheckID
+                scheduledEventID: wakeCheckID,
+                isTest: draft.isTest,
+                scenarioID: draft.scenarioID
             )
             logIDs.append(record.id)
         }
@@ -356,7 +493,9 @@ final class WakeSessionStore: ObservableObject {
             wakeSessionID: wakeSessionID,
             type: .primaryAlarmFired,
             timestamp: now,
-            scheduledEventID: scheduledEventID
+            scheduledEventID: scheduledEventID,
+            isTest: session.isTest,
+            scenarioID: session.scenarioID
         )
         appendUnique(&session.operationalLogIDs, value: record.id)
         session.updatedAt = now
@@ -381,7 +520,9 @@ final class WakeSessionStore: ObservableObject {
             wakeSessionID: wakeSessionID,
             type: .wakeCheckFired,
             timestamp: now,
-            scheduledEventID: scheduledEventID
+            scheduledEventID: scheduledEventID,
+            isTest: session.isTest,
+            scenarioID: session.scenarioID
         )
         appendUnique(&session.operationalLogIDs, value: record.id)
         session.updatedAt = now
@@ -407,7 +548,9 @@ final class WakeSessionStore: ObservableObject {
             wakeSessionID: wakeSessionID,
             type: .alarmStopped,
             timestamp: now,
-            scheduledEventID: scheduledEventID
+            scheduledEventID: scheduledEventID,
+            isTest: session.isTest,
+            scenarioID: session.scenarioID
         )
         appendUnique(&session.operationalLogIDs, value: record.id)
         session.updatedAt = now
@@ -449,7 +592,9 @@ final class WakeSessionStore: ObservableObject {
             dateKey: session.dateKey,
             wakeSessionID: wakeSessionID,
             type: confirmationType,
-            timestamp: now
+            timestamp: now,
+            isTest: session.isTest,
+            scenarioID: session.scenarioID
         )
         appendUnique(&session.operationalLogIDs, value: confirmationRecord.id)
 
@@ -458,7 +603,9 @@ final class WakeSessionStore: ObservableObject {
                 dateKey: session.dateKey,
                 wakeSessionID: wakeSessionID,
                 type: .fastingIntentConfirmed,
-                timestamp: now
+                timestamp: now,
+                isTest: session.isTest,
+                scenarioID: session.scenarioID
             )
             appendUnique(&session.operationalLogIDs, value: fastingRecord.id)
         }
@@ -469,7 +616,9 @@ final class WakeSessionStore: ObservableObject {
                 wakeSessionID: wakeSessionID,
                 type: .wakeChecksCancelled,
                 timestamp: now,
-                metadata: ["eventIDs": cancelledScheduledEventIDs.joined(separator: ",")]
+                metadata: ["eventIDs": cancelledScheduledEventIDs.joined(separator: ",")],
+                isTest: session.isTest,
+                scenarioID: session.scenarioID
             )
             appendUnique(&session.operationalLogIDs, value: cancelRecord.id)
         }
@@ -491,7 +640,9 @@ final class WakeSessionStore: ObservableObject {
             dateKey: dateKey,
             wakeSessionID: wakeSessionID,
             type: .fajrPrayerConfirmed,
-            timestamp: now
+            timestamp: now,
+            isTest: wakeSessionID.flatMap { sessionsByID[$0]?.isTest } ?? false,
+            scenarioID: wakeSessionID.flatMap { sessionsByID[$0]?.scenarioID }
         )
         if let wakeSessionID, var session = sessionsByID[wakeSessionID] {
             appendUnique(&session.operationalLogIDs, value: record.id)
@@ -522,7 +673,9 @@ final class WakeSessionStore: ObservableObject {
             wakeSessionID: wakeSessionID,
             type: .quietMorning,
             timestamp: now,
-            metadata: reason.map { ["reason": $0] } ?? [:]
+            metadata: reason.map { ["reason": $0] } ?? [:],
+            isTest: session.isTest,
+            scenarioID: session.scenarioID
         )
         appendUnique(&session.operationalLogIDs, value: quietRecord.id)
 
@@ -532,7 +685,9 @@ final class WakeSessionStore: ObservableObject {
                 wakeSessionID: wakeSessionID,
                 type: .wakeChecksCancelled,
                 timestamp: now,
-                metadata: ["eventIDs": cancelledScheduledEventIDs.joined(separator: ",")]
+                metadata: ["eventIDs": cancelledScheduledEventIDs.joined(separator: ",")],
+                isTest: session.isTest,
+                scenarioID: session.scenarioID
             )
             appendUnique(&session.operationalLogIDs, value: cancelRecord.id)
         }
@@ -562,7 +717,9 @@ final class WakeSessionStore: ObservableObject {
             dateKey: session.dateKey,
             wakeSessionID: wakeSessionID,
             type: .wakeSessionExpiredUnconfirmed,
-            timestamp: now
+            timestamp: now,
+            isTest: session.isTest,
+            scenarioID: session.scenarioID
         )
         appendUnique(&session.operationalLogIDs, value: record.id)
         session.updatedAt = now
@@ -577,6 +734,29 @@ final class WakeSessionStore: ObservableObject {
         currentRevision = 0
         defaults.removeObject(forKey: storageKey)
         defaults.removeObject(forKey: revisionKey)
+    }
+
+    func clearTestWakeSessions() {
+        let original = sessionsByID
+        sessionsByID = sessionsByID.filter { !$0.value.isTest }
+        guard sessionsByID != original else { return }
+        bumpRevision()
+    }
+
+    func clearTestMorningLogs() {
+        let original = morningLogsByDateKey
+        morningLogsByDateKey = morningLogsByDateKey.filter { !$0.value.isTest }
+        guard morningLogsByDateKey != original else { return }
+        bumpRevision()
+    }
+
+    func clearAllTestRecords() {
+        let originalSessions = sessionsByID
+        let originalLogs = morningLogsByDateKey
+        sessionsByID = sessionsByID.filter { !$0.value.isTest }
+        morningLogsByDateKey = morningLogsByDateKey.filter { !$0.value.isTest }
+        guard sessionsByID != originalSessions || morningLogsByDateKey != originalLogs else { return }
+        bumpRevision()
     }
 
 #if DEBUG
@@ -602,7 +782,9 @@ final class WakeSessionStore: ObservableObject {
         type: MorningLogRecordType,
         timestamp: Date,
         scheduledEventID: String? = nil,
-        metadata: [String: String] = [:]
+        metadata: [String: String] = [:],
+        isTest: Bool = false,
+        scenarioID: String? = nil
     ) -> MorningLogRecord {
         let record = MorningLogRecord(
             dateKey: dateKey,
@@ -610,9 +792,13 @@ final class WakeSessionStore: ObservableObject {
             type: type,
             timestamp: timestamp,
             scheduledEventID: scheduledEventID,
-            metadata: metadata
+            metadata: metadata,
+            isTest: isTest,
+            scenarioID: scenarioID
         )
         updateMorningLog(dateKey: dateKey, now: timestamp) { log in
+            log.isTest = log.isTest || isTest
+            log.scenarioID = log.scenarioID ?? scenarioID
             log.records.append(record)
         }
         return record
@@ -668,8 +854,26 @@ final class WakeSessionStore: ObservableObject {
 }
 
 enum WakeSessionPlanner {
-    static let wakeCheckIntervalMinutes = 5
-    static let maximumWakeCheckCount = 5
+    struct WakeCheckConfiguration: Equatable, Sendable {
+        let intervalMinutes: Int
+        let maximumCount: Int
+        let cutoffBufferMinutes: Int
+
+        static let production = WakeCheckConfiguration(
+            intervalMinutes: 5,
+            maximumCount: 5,
+            cutoffBufferMinutes: 5
+        )
+
+        static let compressedTest = WakeCheckConfiguration(
+            intervalMinutes: 1,
+            maximumCount: 3,
+            cutoffBufferMinutes: 1
+        )
+    }
+
+    static let wakeCheckIntervalMinutes = WakeCheckConfiguration.production.intervalMinutes
+    static let maximumWakeCheckCount = WakeCheckConfiguration.production.maximumCount
 
     static func wakeSessionID(for dateKey: String) -> String {
         WakeSessionStore.sessionID(for: dateKey)
@@ -686,15 +890,20 @@ enum WakeSessionPlanner {
         primaryWakeTime: Date,
         prayerWindow: DailyPrayerWindow,
         soundRole: MorningSoundRole?,
-        now: Date = .distantPast
+        now: Date = .distantPast,
+        configuration: WakeCheckConfiguration = .production
     ) -> [ScheduledEvent] {
-        guard let cutoff = wakeCheckCutoff(mode: mode, prayerWindow: prayerWindow) else {
+        guard let cutoff = wakeCheckCutoff(
+            mode: mode,
+            prayerWindow: prayerWindow,
+            cutoffBufferMinutes: configuration.cutoffBufferMinutes
+        ) else {
             return []
         }
 
-        return (1...maximumWakeCheckCount).compactMap { index in
+        return (1...configuration.maximumCount).compactMap { index in
             let wakeCheckTime = primaryWakeTime.addingTimeInterval(
-                TimeInterval(index * wakeCheckIntervalMinutes * 60)
+                TimeInterval(index * configuration.intervalMinutes * 60)
             )
             guard wakeCheckTime <= cutoff, wakeCheckTime > now else {
                 return nil
@@ -704,7 +913,7 @@ enum WakeSessionPlanner {
                 type: .wakeFollowUp,
                 dateKey: dateKey,
                 fireDate: wakeCheckTime,
-                relativeTo: .wakeAlarm(offsetMinutes: index * wakeCheckIntervalMinutes),
+                relativeTo: .wakeAlarm(offsetMinutes: index * configuration.intervalMinutes),
                 isUserVisible: true,
                 affectsCompletion: false,
                 deliveryKinds: [.wake],
@@ -777,13 +986,14 @@ enum WakeSessionPlanner {
 
     static func wakeCheckCutoff(
         mode: WakeSessionMode,
-        prayerWindow: DailyPrayerWindow
+        prayerWindow: DailyPrayerWindow,
+        cutoffBufferMinutes: Int = WakeCheckConfiguration.production.cutoffBufferMinutes
     ) -> Date? {
         switch mode {
         case .suhoor:
-            return prayerWindow.fajrStart.addingTimeInterval(-TimeInterval(wakeCheckIntervalMinutes * 60))
+            return prayerWindow.fajrStart.addingTimeInterval(-TimeInterval(cutoffBufferMinutes * 60))
         case .fajr:
-            return prayerWindow.fajrEnd?.addingTimeInterval(-TimeInterval(wakeCheckIntervalMinutes * 60))
+            return prayerWindow.fajrEnd?.addingTimeInterval(-TimeInterval(cutoffBufferMinutes * 60))
         }
     }
 }

@@ -152,6 +152,20 @@ final class ScheduleManager: ObservableObject {
         await self?.ensureScheduleWindow(reason: request.reason)
     }
 
+#if DEBUG || INTERNAL_TESTING
+    lazy var wakeSessionTestingHarness = WakeSessionTestingHarness(
+        wakeSessionStore: wakeSessionStore,
+        realAlarmKitScheduler: { [weak self] events, mode, now in
+            await self?.scheduleWakeSessionLabRealAlarmKit(events: events, mode: mode, now: now) ?? false
+        },
+        refreshSurfaces: { [weak self] in
+            self?.refreshCurrentMorningHomeSnapshot()
+        },
+        realTimeProvider: SystemTimeProvider(),
+        initialNow: timeProvider.now()
+    )
+#endif
+
     init(
         settingsStore: SuhoorSettingsStore,
         locationService: LocationService,
@@ -314,6 +328,62 @@ final class ScheduleManager: ObservableObject {
     var currentDate: Date {
         timeProvider.now()
     }
+
+#if DEBUG || INTERNAL_TESTING
+    private func scheduleWakeSessionLabRealAlarmKit(
+        events: [ScheduledEvent],
+        mode: WakeSessionMode,
+        now: Date,
+        timeZone: TimeZone = .current
+    ) async -> Bool {
+        guard let primary = events.first(where: { $0.wakeSessionRole == .primaryWake }),
+              let baseDay = activeWindowSnapshot.visibleDays.first else {
+            return false
+        }
+        _ = mode
+
+        let date = DateHelpers.startOfDay(now, in: timeZone)
+        let schedule = DaySchedule(
+            date: date,
+            fajrDate: now.addingTimeInterval(60),
+            fajrEndDate: now.addingTimeInterval(8 * 60),
+            maghribDate: date.addingTimeInterval(18 * 60 * 60),
+            wakeDate: primary.fireDate,
+            reminderDate: nil,
+            boundaryDate: nil,
+            iftarDate: nil,
+            fajrSoundChoice: settingsStore.settings.inFajrWakeSoundSelectionGlobal,
+            iftarSoundChoice: nil,
+            locationDescription: "Wake Session Lab",
+            offsetMinutes: 0,
+            calculationMethodName: "Compressed test window",
+            timeZone: timeZone
+        )
+        let testDay = ActiveAlarmDay(
+            date: date,
+            dateKey: primary.dateKey,
+            schedule: schedule,
+            effectiveConfig: baseDay.effectiveConfig,
+            provenances: baseDay.provenances,
+            isImplicitRamadan: false,
+            isExplicitOneOff: true,
+            tagResult: baseDay.tagResult,
+            primaryDisplay: baseDay.primaryDisplay,
+            sourceSummaryText: "Wake Session Lab",
+            resolvedDayContext: baseDay.resolvedDayContext,
+            resolvedDayPurpose: baseDay.resolvedDayPurpose,
+            scheduledEvents: events,
+            decisionLog: baseDay.decisionLog,
+            dailyCompletion: .empty(dateKey: primary.dateKey)
+        )
+
+        return await alarmScheduler.scheduleDay(
+            day: testDay,
+            settings: settingsStore.settings,
+            mode: .alarmKit
+        )
+    }
+#endif
 
     var currentPrayerLocationDisplayText: String {
         prayerLocationDisplayText()

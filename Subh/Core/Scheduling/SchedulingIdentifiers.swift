@@ -77,4 +77,20 @@ struct SchedulingIdentifiers {
             return DateHelpers.stableUUID(from: identifier(for: event, deliveryKind: deliveryKind, channel: channel))
         }
     }
+
+    static func testWakeSessionID(scenarioID: String) -> String {
+        "test.wakeSession.\(scenarioID)"
+    }
+
+    static func testWakePrimaryEventID(scenarioID: String) -> String {
+        "\(testWakeSessionID(scenarioID: scenarioID)).primary"
+    }
+
+    static func testWakeCheckEventID(scenarioID: String, index: Int) -> String {
+        "\(testWakeSessionID(scenarioID: scenarioID)).check.\(index)"
+    }
+
+    static func isTestIdentifier(_ identifier: String) -> Bool {
+        identifier.hasPrefix("test.")
+    }
 }

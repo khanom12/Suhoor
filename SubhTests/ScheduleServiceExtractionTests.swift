@@ -746,6 +746,222 @@ struct ScheduleServiceExtractionTests {
 
     @Test
     @MainActor
+    func wakeSessionLabCompressedFajrScenarioUsesTestTimingOnly() async throws {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let now = Self.makeDate(year: 2026, month: 5, day: 26, hour: 14, timeZone: timeZone)
+        let store = WakeSessionStore(loadPersistedData: false)
+        let harness = WakeSessionTestingHarness(wakeSessionStore: store, initialNow: now, timeZone: timeZone)
+
+        await harness.start(WakeSessionTestScenario.fajrCompressed)
+
+        let plan = try #require(harness.activePlan)
+        let session = try #require(store.session(id: plan.wakeSessionID))
+        #expect(plan.fajrBegins == now.addingTimeInterval(60))
+        #expect(plan.primaryWakeTime == now.addingTimeInterval(2 * 60))
+        #expect(plan.fajrEnds == now.addingTimeInterval(8 * 60))
+        let wakeCheckFireDates = plan.wakeCheckEvents.map { $0.fireDate }
+        #expect(wakeCheckFireDates == [
+            now.addingTimeInterval(3 * 60),
+            now.addingTimeInterval(4 * 60),
+            now.addingTimeInterval(5 * 60)
+        ])
+        #expect(WakeSessionPlanner.wakeCheckIntervalMinutes == 5)
+        #expect(WakeSessionPlanner.maximumWakeCheckCount == 5)
+        #expect(session.isTest)
+        #expect(store.morningLog(for: plan.dateKey)?.isTest == true)
+    }
+
+    @Test
+    @MainActor
+    func wakeSessionLabCompressedSuhoorScenarioConfirmsFastingIntentOnly() async throws {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let now = Self.makeDate(year: 2026, month: 5, day: 26, hour: 14, timeZone: timeZone)
+        let store = WakeSessionStore(loadPersistedData: false)
+        let harness = WakeSessionTestingHarness(wakeSessionStore: store, initialNow: now, timeZone: timeZone)
+
+        await harness.start(WakeSessionTestScenario.suhoorCompressed)
+        harness.confirmAwakeForSuhoor()
+
+        let plan = try #require(harness.activePlan)
+        let log = try #require(store.morningLog(for: plan.dateKey))
+        #expect(plan.finalThirdStart == now)
+        #expect(plan.primaryWakeTime == now.addingTimeInterval(2 * 60))
+        #expect(plan.fajrBegins == now.addingTimeInterval(8 * 60))
+        #expect(plan.wakeCheckEvents.count == 3)
+        #expect(log.suhoorWakeOutcome == MorningWakeOutcome.confirmedAwakeForSuhoor)
+        #expect(log.fastingIntentOutcome == FastingIntentOutcome.fastingIntentConfirmed)
+        #expect(log.fajrPrayerOutcome == FajrPrayerOutcome.unconfirmed)
+        #expect(log.fastCompletionOutcome == FastCompletionOutcome.unconfirmed)
+        #expect(harness.pendingTestAlarms.isEmpty)
+    }
+
+    @Test
+    @MainActor
+    func wakeSessionLabAlarmStopDoesNotConfirmAwakeAndLeavesChecksPending() async throws {
+        let store = WakeSessionStore(loadPersistedData: false)
+        let harness = WakeSessionTestingHarness(wakeSessionStore: store)
+
+        await harness.start(WakeSessionTestScenario.alarmStopVsAwake)
+
+        let plan = try #require(harness.activePlan)
+        let session = try #require(store.session(id: plan.wakeSessionID))
+        #expect(session.status == WakeSessionStatus.unconfirmed)
+        #expect(session.confirmedAt == nil)
+        #expect(harness.pendingTestAlarms.contains { $0.role == WakeSessionTestAlarmRole.wakeCheck })
+        #expect(store.morningLog(for: plan.dateKey)?.records.contains { $0.type == .alarmStopped } == true)
+    }
+
+    @Test
+    @MainActor
+    func wakeSessionLabAwakeAndPrayerConfirmationsRemainSeparate() async throws {
+        let store = WakeSessionStore(loadPersistedData: false)
+        let harness = WakeSessionTestingHarness(wakeSessionStore: store)
+
+        await harness.start(WakeSessionTestScenario.fajrCompressed)
+        harness.confirmAwakeForFajr()
+
+        let plan = try #require(harness.activePlan)
+        var log = try #require(store.morningLog(for: plan.dateKey))
+        #expect(log.fajrWakeOutcome == MorningWakeOutcome.confirmedAwakeForFajr)
+        #expect(log.fajrPrayerOutcome == FajrPrayerOutcome.unconfirmed)
+        #expect(harness.pendingTestAlarms.isEmpty)
+
+        harness.confirmFajrPrayer()
+
+        log = try #require(store.morningLog(for: plan.dateKey))
+        #expect(log.fajrPrayerOutcome == FajrPrayerOutcome.fajrPrayerConfirmed)
+    }
+
+    @Test
+    @MainActor
+    func wakeSessionLabQuietCancelsChecksWithoutMissedPrayer() async throws {
+        let store = WakeSessionStore(loadPersistedData: false)
+        let harness = WakeSessionTestingHarness(wakeSessionStore: store)
+
+        await harness.start(WakeSessionTestScenario.quietDuringWakeChecks)
+        #expect(harness.pendingTestAlarms.contains { $0.role == WakeSessionTestAlarmRole.wakeCheck })
+
+        harness.confirmQuietMorning()
+
+        let plan = try #require(harness.activePlan)
+        let session = try #require(store.session(id: plan.wakeSessionID))
+        let log = try #require(store.morningLog(for: plan.dateKey))
+        #expect(session.status == WakeSessionStatus.quietMorning)
+        #expect(log.quietMorning)
+        #expect(log.fajrPrayerOutcome == FajrPrayerOutcome.unconfirmed)
+        #expect(log.records.contains { $0.type == .fajrPrayerConfirmed } == false)
+        #expect(harness.pendingTestAlarms.isEmpty)
+    }
+
+    @Test
+    @MainActor
+    func wakeSessionLabRescheduleCancelsStaleIdsAndAvoidsDuplicates() async throws {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let now = Self.makeDate(year: 2026, month: 5, day: 26, hour: 14, timeZone: timeZone)
+        let store = WakeSessionStore(loadPersistedData: false)
+        let harness = WakeSessionTestingHarness(wakeSessionStore: store, initialNow: now, timeZone: timeZone)
+
+        await harness.start(WakeSessionTestScenario.sliderReschedule)
+        let originalPending = harness.pendingTestAlarms.map { $0.scheduledEventID }
+        harness.rescheduleActiveWake()
+
+        let plan = try #require(harness.activePlan)
+        let session = try #require(store.session(id: plan.wakeSessionID))
+        let pending = harness.pendingTestAlarms.map { $0.scheduledEventID }
+        #expect(session.plannedWakeTime == now.addingTimeInterval(3 * 60))
+        let allOriginalPendingCancelled = originalPending.allSatisfy { stale in
+            harness.alarmRecords.contains {
+                $0.scheduledEventID == stale && $0.status == WakeSessionTestAlarmStatus.cancelled
+            }
+        }
+        #expect(allOriginalPendingCancelled)
+        #expect(Set(pending).count == pending.count)
+        #expect(pending.contains(session.primaryScheduledEventID ?? ""))
+    }
+
+    @Test
+    @MainActor
+    func wakeSessionLabPermissionFailureIsNotQuietOrMissedPrayer() async throws {
+        let store = WakeSessionStore(loadPersistedData: false)
+        let harness = WakeSessionTestingHarness(wakeSessionStore: store)
+
+        await harness.start(WakeSessionTestScenario.permissionFailure)
+
+        let plan = try #require(harness.activePlan)
+        let session = try #require(store.session(id: plan.wakeSessionID))
+        let log = try #require(store.morningLog(for: plan.dateKey))
+        #expect(harness.permissionState == WakeSessionTestPermissionState.alarmKitDenied)
+        #expect(harness.alarmRecords.allSatisfy { $0.status == WakeSessionTestAlarmStatus.failed && $0.isTest })
+        #expect(session.mode == WakeSessionMode.fajr)
+        #expect(session.status == WakeSessionStatus.scheduled)
+        #expect(log.quietMorning == false)
+        #expect(log.fajrPrayerOutcome == FajrPrayerOutcome.unconfirmed)
+    }
+
+    @Test
+    @MainActor
+    func wakeSessionLabSuhoorUnconfirmedHandsOffToFajrPath() async throws {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let now = Self.makeDate(year: 2026, month: 5, day: 26, hour: 14, timeZone: timeZone)
+        let store = WakeSessionStore(loadPersistedData: false)
+        let harness = WakeSessionTestingHarness(wakeSessionStore: store, initialNow: now, timeZone: timeZone)
+
+        await harness.start(WakeSessionTestScenario.suhoorUnconfirmedToFajr)
+        harness.jumpToFajrBegins()
+        harness.confirmAwakeForFajr()
+
+        let plan = try #require(harness.activePlan)
+        let log = try #require(store.morningLog(for: plan.dateKey))
+        #expect(log.suhoorWakeOutcome == MorningWakeOutcome.unconfirmed)
+        #expect(log.fajrWakeOutcome == MorningWakeOutcome.confirmedAwakeForFajr)
+        #expect(log.fajrPrayerOutcome == FajrPrayerOutcome.unconfirmed)
+    }
+
+    @Test
+    @MainActor
+    func wakeSessionLabRealAlarmKitCompressedPathIsExplicitAndSafeForAutomation() async throws {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let now = Self.makeDate(year: 2026, month: 5, day: 26, hour: 14, timeZone: timeZone)
+        let store = WakeSessionStore(loadPersistedData: false)
+        var scheduledEvents: [ScheduledEvent] = []
+        let harness = WakeSessionTestingHarness(
+            wakeSessionStore: store,
+            realAlarmKitScheduler: { events, _, _ in
+                scheduledEvents = events
+                return true
+            },
+            realTimeProvider: FixedTimeProvider(fixedNow: now),
+            initialNow: now,
+            timeZone: timeZone
+        )
+
+        let preview = harness.makeRealAlarmKitPreviewEvents(now: now)
+        let previewFireDates = preview.map { $0.fireDate }
+        #expect(previewFireDates == [
+            now.addingTimeInterval(2 * 60),
+            now.addingTimeInterval(3 * 60),
+            now.addingTimeInterval(4 * 60),
+            now.addingTimeInterval(5 * 60)
+        ])
+
+        await harness.start(WakeSessionTestScenario.realAlarmKitCompressed)
+
+        #expect(harness.schedulerMode == WakeSessionTestSchedulerMode.realAlarmKit)
+        #expect(scheduledEvents == preview)
+        #expect(harness.alarmRecords.allSatisfy { $0.channel == WakeSessionTestAlarmChannel.realAlarmKit && $0.isTest })
+    }
+
+    @Test
+    func wakeSessionLabBuildGateFollowsCompilationMode() {
+        #if DEBUG || INTERNAL_TESTING
+        #expect(WakeSessionLabBuildGate.isAvailableInCurrentBuild)
+        #else
+        #expect(WakeSessionLabBuildGate.isAvailableInCurrentBuild == false)
+        #endif
+    }
+
+    @Test
+    @MainActor
     func scheduleDayCancelsStaleIdentifiersWhenNoPriorPlanIsKnown() async {
         let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
         let activeDay = Self.makeSchedulerActiveDay(

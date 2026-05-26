@@ -35,6 +35,27 @@ struct SettingsRootView: View {
                 }
             }
 
+#if DEBUG || INTERNAL_TESTING
+            if WakeSessionLabBuildGate.isAvailableInCurrentBuild {
+                SettingsGroup(title: "Developer") {
+                    NavigationLink {
+                        WakeSessionLabView(harness: scheduleManager.wakeSessionTestingHarness)
+                    } label: {
+                        SettingsRow {
+                            SettingsSummaryRow(
+                                title: "Wake Session Lab",
+                                subtitle: "Compressed internal tests for Wake Sessions, Wake Checks, Quiet, logs, and AlarmKit.",
+                                systemImage: "testtube.2",
+                                badgeText: "Debug",
+                                badgeTone: .warning,
+                                showsDisclosureIndicator: true
+                            )
+                        }
+                    }
+                }
+            }
+#endif
+
             ForEach(SettingsDestinationGroup.allCases) { group in
                 SettingsGroup(title: group.title) {
                     ForEach(Array(group.destinations.enumerated()), id: \.element.id) { index, destination in

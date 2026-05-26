@@ -23,3 +23,30 @@ struct FixedTimeProvider: TimeProviding {
         fixedNow
     }
 }
+
+final class MutableTimeProvider: TimeProviding, @unchecked Sendable {
+    private let lock = NSLock()
+    nonisolated(unsafe) private var storedNow: Date
+
+    init(now: Date = Date()) {
+        self.storedNow = now
+    }
+
+    nonisolated func now() -> Date {
+        lock.lock()
+        defer { lock.unlock() }
+        return storedNow
+    }
+
+    func setNow(_ now: Date) {
+        lock.lock()
+        storedNow = now
+        lock.unlock()
+    }
+
+    func advance(by interval: TimeInterval) {
+        lock.lock()
+        storedNow = storedNow.addingTimeInterval(interval)
+        lock.unlock()
+    }
+}
