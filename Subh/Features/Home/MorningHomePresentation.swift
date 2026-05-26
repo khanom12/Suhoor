@@ -65,6 +65,36 @@ enum MorningHeroRelationTone: String, Equatable {
     case urgentRed
 }
 
+enum MorningHeroActionSlotAction: Equatable {
+    case none
+    case confirmAwake(WakeSessionMode)
+    case confirmFajrPrayer
+}
+
+enum MorningHeroActionSlotStyle: String, Equatable {
+    case empty
+    case compact
+    case primary
+    case confirmation
+    case quiet
+}
+
+struct MorningHeroActionSlotDisplay: Equatable {
+    let style: MorningHeroActionSlotStyle
+    let primaryTitle: String?
+    let secondaryText: String?
+    let action: MorningHeroActionSlotAction
+    let accessibilityLabel: String
+
+    static let empty = MorningHeroActionSlotDisplay(
+        style: .empty,
+        primaryTitle: nil,
+        secondaryText: nil,
+        action: .none,
+        accessibilityLabel: ""
+    )
+}
+
 struct MorningHomeHeroDisplay: Equatable {
     let locationText: String
     let locationIconName: String?
@@ -96,6 +126,7 @@ struct MorningHomeHeroDisplay: Equatable {
     let wakeAdjustmentAccessibilityValue: String?
     let selectedQuickWakeMode: QuickWakeMode?
     let quickWakeModeOptions: [MorningHeroQuickWakeModeOption]
+    let actionSlot: MorningHeroActionSlotDisplay
     let chipTitles: [String]
     let accessibilityLabel: String
 }
@@ -809,6 +840,8 @@ enum MorningHomePresentation {
 
     static func heroDisplay(
         entry: WakeRowEntry?,
+        wakeSession: WakeSession? = nil,
+        morningLog: MorningLogEntry? = nil,
         permissionSummary: String,
         locationDisplayText: String? = nil,
         locationIconName: String? = nil,
@@ -853,6 +886,7 @@ enum MorningHomePresentation {
                 wakeAdjustmentAccessibilityValue: nil,
                 selectedQuickWakeMode: nil,
                 quickWakeModeOptions: [],
+                actionSlot: .empty,
                 chipTitles: [],
                 accessibilityLabel: "\(fallbackLocation). Tomorrow. Wake time unavailable. \(detail). Fajr times are not available yet."
             )
@@ -892,6 +926,14 @@ enum MorningHomePresentation {
             for: entry,
             wakeState: wakeState,
             resolvedWakeState: resolvedWakeState,
+            timeZone: timeZone
+        )
+        let actionSlot = heroActionSlot(
+            for: entry,
+            wakeSession: wakeSession,
+            morningLog: morningLog,
+            selectedQuickWakeMode: selectedQuickWakeMode,
+            currentDate: currentDate,
             timeZone: timeZone
         )
         let accessibilityLabel = heroAccessibilityLabel(
@@ -939,8 +981,143 @@ enum MorningHomePresentation {
             wakeAdjustmentAccessibilityValue: fajrWindow.adjustmentAccessibilityValue,
             selectedQuickWakeMode: selectedQuickWakeMode,
             quickWakeModeOptions: quickWakeModeOptions(selected: selectedQuickWakeMode, relativeDayLabel: title),
+            actionSlot: actionSlot,
             chipTitles: chipTitles,
             accessibilityLabel: accessibilityLabel
+        )
+    }
+
+    private static func heroActionSlot(
+        for entry: WakeRowEntry,
+        wakeSession: WakeSession?,
+        morningLog: MorningLogEntry?,
+        selectedQuickWakeMode: QuickWakeMode?,
+        currentDate: Date,
+        timeZone: TimeZone
+    ) -> MorningHeroActionSlotDisplay {
+        if selectedQuickWakeMode == .quiet || wakeSession?.status == .quietMorning {
+            return MorningHeroActionSlotDisplay(
+                style: .quiet,
+                primaryTitle: nil,
+                secondaryText: "Quiet morning",
+                action: .none,
+                accessibilityLabel: "Quiet morning. Wake checks are stopped for this morning."
+            )
+        }
+
+        guard let wakeSession else {
+            return .empty
+        }
+
+        let prayerWindow = entry.activeDay.decisionLog.prayerWindow
+        let prayerConfirmed = morningLog?.fajrPrayerOutcome == .fajrPrayerConfirmed
+        let fajrWakeConfirmed = morningLog?.fajrWakeOutcome == .confirmedAwakeForFajr
+            || (wakeSession.status == .confirmedAwake && wakeSession.confirmedWakeMode == .fajr)
+        let suhoorWakeConfirmed = morningLog?.suhoorWakeOutcome == .confirmedAwakeForSuhoor
+            || (wakeSession.status == .confirmedAwake && wakeSession.confirmedWakeMode == .suhoor)
+        let primaryHasFired = currentDate >= wakeSession.plannedWakeTime
+            || wakeSession.status == .primaryAlarmFired
+            || wakeSession.status == .unconfirmed
+            || wakeSession.status == .wakeChecksPending
+
+        if prayerConfirmed {
+            return MorningHeroActionSlotDisplay(
+                style: .confirmation,
+                primaryTitle: "Fajr prayer recorded",
+                secondaryText: nil,
+                action: .none,
+                accessibilityLabel: "Fajr prayer recorded for this morning."
+            )
+        }
+
+        if wakeSession.mode == .suhoor, currentDate >= prayerWindow.fajrStart {
+            if suhoorWakeConfirmed {
+                return fajrPrayerActionSlot()
+            }
+            if fajrWakeConfirmed {
+                return fajrPrayerActionSlot()
+            }
+            return awaitingConfirmationSlot(mode: .fajr)
+        }
+
+        if wakeSession.mode == .fajr, fajrWakeConfirmed {
+            if currentDate >= prayerWindow.fajrStart {
+                return fajrPrayerActionSlot()
+            }
+            return confirmedAwakeSlot(session: wakeSession, timeZone: timeZone)
+        }
+
+        if wakeSession.mode == .suhoor, suhoorWakeConfirmed {
+            return confirmedAwakeSlot(session: wakeSession, timeZone: timeZone)
+        }
+
+        if primaryHasFired {
+            return awaitingConfirmationSlot(mode: wakeSession.mode)
+        }
+
+        if isActiveBeforePrimary(wakeSession: wakeSession, currentDate: currentDate) {
+            return MorningHeroActionSlotDisplay(
+                style: .compact,
+                primaryTitle: "I’m awake",
+                secondaryText: "Already awake?",
+                action: .confirmAwake(wakeSession.mode),
+                accessibilityLabel: "Already awake. Confirm awake for \(wakeSession.mode.confirmationTitle)."
+            )
+        }
+
+        return .empty
+    }
+
+    private static func isActiveBeforePrimary(
+        wakeSession: WakeSession,
+        currentDate: Date
+    ) -> Bool {
+        let activeStart: Date
+        switch wakeSession.mode {
+        case .suhoor:
+            activeStart = wakeSession.finalThirdStart ?? wakeSession.plannedWakeTime.addingTimeInterval(-30 * 60)
+        case .fajr:
+            activeStart = wakeSession.fajrBegins
+        }
+        return currentDate >= activeStart && currentDate < wakeSession.plannedWakeTime
+    }
+
+    private static func awaitingConfirmationSlot(mode: WakeSessionMode) -> MorningHeroActionSlotDisplay {
+        MorningHeroActionSlotDisplay(
+            style: .primary,
+            primaryTitle: "I’m awake for \(mode.confirmationTitle)",
+            secondaryText: "Wake checks continue until you confirm.",
+            action: .confirmAwake(mode),
+            accessibilityLabel: "Confirm awake for \(mode.confirmationTitle). Wake checks continue until you confirm."
+        )
+    }
+
+    private static func confirmedAwakeSlot(
+        session: WakeSession,
+        timeZone: TimeZone
+    ) -> MorningHeroActionSlotDisplay {
+        let confirmedText: String
+        if let confirmedAt = session.confirmedAt {
+            confirmedText = "Awake confirmed at \(timeFormatter(timeZone: timeZone).string(from: confirmedAt))"
+        } else {
+            confirmedText = "Awake confirmed"
+        }
+        return MorningHeroActionSlotDisplay(
+            style: .confirmation,
+            primaryTitle: confirmedText,
+            secondaryText: "Wake checks stopped for this morning",
+            action: .none,
+            accessibilityLabel: "\(confirmedText). Wake checks stopped for this morning."
+        )
+    }
+
+    private static func fajrPrayerActionSlot() -> MorningHeroActionSlotDisplay {
+        MorningHeroActionSlotDisplay(
+            style: .primary,
+            primaryTitle: "I prayed Fajr",
+            secondaryText: nil,
+            action: .confirmFajrPrayer,
+            accessibilityLabel: "Confirm Fajr prayer for this morning."
         )
     }
 
@@ -1012,6 +1189,7 @@ enum MorningHomePresentation {
             wakeAdjustmentAccessibilityValue: accessibilityValue,
             selectedQuickWakeMode: display.selectedQuickWakeMode,
             quickWakeModeOptions: display.quickWakeModeOptions,
+            actionSlot: display.actionSlot,
             chipTitles: display.chipTitles,
             accessibilityLabel: adjustedAccessibilityLabel(
                 base: display.accessibilityLabel,

@@ -42,6 +42,7 @@ final class ScheduleManager: ObservableObject {
     private let fajrLogStore: FajrLogStore
     private let qadaBacklogStore: QadaBacklogStore
     private let qadaBatchStore: QadaBatchStore
+    private let wakeSessionStore: WakeSessionStore
     private let usesLegacyContexts: Bool
     private let cacheStore: ScheduleCacheStore
     private let timeProvider: any TimeProviding
@@ -160,6 +161,7 @@ final class ScheduleManager: ObservableObject {
         fajrLogStore: FajrLogStore? = nil,
         qadaBacklogStore: QadaBacklogStore? = nil,
         qadaBatchStore: QadaBatchStore? = nil,
+        wakeSessionStore: WakeSessionStore? = nil,
         usesLegacyContexts: Bool = true,
         hijriAdjustmentStore: HijriMonthAdjustmentStore = HijriMonthAdjustmentStore(),
         hijriAdjustmentChangeStore: HijriAdjustmentChangeStore = HijriAdjustmentChangeStore(),
@@ -172,6 +174,8 @@ final class ScheduleManager: ObservableObject {
         let resolvedFajrLogStore = fajrLogStore ?? FajrLogStore(loadPersistedData: usesLegacyContexts)
         let resolvedQadaBacklogStore = qadaBacklogStore ?? QadaBacklogStore(loadPersistedData: usesLegacyContexts)
         let resolvedQadaBatchStore = qadaBatchStore ?? QadaBatchStore(loadPersistedData: usesLegacyContexts)
+        let resolvedWakeSessionStore = wakeSessionStore
+            ?? WakeSessionStore(defaults: alarmConfigStore.storageDefaults, loadPersistedData: usesLegacyContexts)
 
         self.settingsStore = settingsStore
         self.alarmConfigStore = alarmConfigStore
@@ -189,6 +193,7 @@ final class ScheduleManager: ObservableObject {
         self.fajrLogStore = resolvedFajrLogStore
         self.qadaBacklogStore = resolvedQadaBacklogStore
         self.qadaBatchStore = resolvedQadaBatchStore
+        self.wakeSessionStore = resolvedWakeSessionStore
         self.usesLegacyContexts = usesLegacyContexts
         self.hijriAdjustmentStore = hijriAdjustmentStore
         self.hijriAdjustmentChangeStore = hijriAdjustmentChangeStore
@@ -287,6 +292,7 @@ final class ScheduleManager: ObservableObject {
             .store(in: &cancellables)
 
         updateBootstrapState()
+        syncWakeSessions(for: activeWindowSnapshot, now: timeProvider.now())
         refreshCurrentMorningHomeSnapshot()
         monthTagResultLookup.handler = { [weak self] date, dateKey, fallback, timeZone in
             guard let self else { return fallback }
@@ -480,7 +486,7 @@ final class ScheduleManager: ObservableObject {
         let tomorrow = DateHelpers.startOfTomorrow(in: timeZone, now: now)
         let tomorrowKey = DateHelpers.dayIdentifier(for: tomorrow, timeZone: timeZone)
         let targetMorning: ActiveAlarmDay?
-        if let todayDay, now <= todayDay.schedule.wakeDate {
+        if let todayDay, Self.shouldKeepCurrentMorningInHero(todayDay, now: now) {
             targetMorning = todayDay
         } else {
             targetMorning = activeWindowSnapshot.byDateKey[tomorrowKey]
@@ -490,6 +496,8 @@ final class ScheduleManager: ObservableObject {
         let tomorrowEntry = tomorrowDay.map {
             WakeRowActionResolver.makeEntry(activeDay: $0, overrideDateKeys: overrideDateKeys)
         }
+        let heroWakeSession = tomorrowDay.flatMap { wakeSessionStore.session(for: $0.dateKey) }
+        let heroMorningLog = tomorrowDay.flatMap { wakeSessionStore.morningLog(for: $0.dateKey) }
         let allMorningEntries = activeWindowSnapshot.visibleDays
             .map { WakeRowActionResolver.makeEntry(activeDay: $0, overrideDateKeys: overrideDateKeys) }
         let morningcast = Array(
@@ -504,6 +512,8 @@ final class ScheduleManager: ObservableObject {
 
         return MorningHomeSnapshot(
             tomorrow: tomorrowEntry,
+            heroWakeSession: heroWakeSession,
+            heroMorningLog: heroMorningLog,
             weeklyFajrcast: fajrWindowCompactSnapshot(
                 anchorDateKey: forecastStartDateKey,
                 timeZone: timeZone
@@ -512,6 +522,24 @@ final class ScheduleManager: ObservableObject {
             permissionState: permissionSnapshot,
             contextFlags: MorningHomeContextFlag.flags(for: tomorrowDay?.resolvedDayContext ?? .standard)
         )
+    }
+
+    private static func shouldKeepCurrentMorningInHero(_ day: ActiveAlarmDay, now: Date) -> Bool {
+        guard let fajrEnd = day.decisionLog.prayerWindow.fajrEnd else {
+            return now <= day.schedule.wakeDate
+        }
+        return now <= fajrEnd
+    }
+
+    private func syncWakeSessions(for snapshot: ActiveAlarmWindowSnapshot, now: Date) {
+        for day in snapshot.scheduledDays {
+            syncWakeSession(for: day, now: now)
+        }
+    }
+
+    private func syncWakeSession(for day: ActiveAlarmDay, now: Date) {
+        guard let draft = WakeSessionPlanner.wakeSessionDraft(for: day) else { return }
+        _ = wakeSessionStore.upsertScheduledSession(from: draft, now: now)
     }
 
     var currentHijriAdjustmentYear: Int {
@@ -1137,13 +1165,15 @@ final class ScheduleManager: ObservableObject {
                 timeZone: .current
             )
             if adjustedVisibleDays != activeWindowSnapshot.visibleDays {
-                activeWindowSnapshot = ActiveAlarmWindowSnapshot(
+                let adjustedSnapshot = ActiveAlarmWindowSnapshot(
                     generatedAt: activeWindowSnapshot.generatedAt,
                     visibleDays: adjustedVisibleDays,
                     scheduledDays: Array(adjustedVisibleDays.prefix(activeWindowSnapshot.scheduledHorizonDays)),
                     visibleHorizonDays: activeWindowSnapshot.visibleHorizonDays,
                     scheduledHorizonDays: activeWindowSnapshot.scheduledHorizonDays
                 )
+                syncWakeSessions(for: adjustedSnapshot, now: timeProvider.now())
+                activeWindowSnapshot = adjustedSnapshot
                 schedules = activeWindowSnapshot.visibleDays.map(\.schedule)
                 activeTagSelectionRevision = fastTagStore.currentRevision
                 cacheStore.save(
@@ -1253,6 +1283,8 @@ final class ScheduleManager: ObservableObject {
         schedulingMode = reconciliation.schedulingMode
         statusText = reconciliation.statusText
         lastUpdated = now
+        syncWakeSessions(for: activeWindowSnapshot, now: now)
+        refreshCurrentMorningHomeSnapshot()
 
         await runAlarmPipelineDiagnostics(
             snapshot: activeWindowSnapshot,
@@ -1364,6 +1396,7 @@ final class ScheduleManager: ObservableObject {
         debugValidateActiveWindow(adjustedSnapshot, resolvedEntries: resolvedEntries)
 
         let refreshCompletedAt = timeProvider.now()
+        syncWakeSessions(for: adjustedSnapshot, now: refreshCompletedAt)
         activeWindowSnapshot = adjustedSnapshot
         schedules = adjustedSnapshot.visibleDays.map(\.schedule)
         lastUpdated = refreshCompletedAt
@@ -1459,7 +1492,9 @@ final class ScheduleManager: ObservableObject {
             return
         }
 
-        activeWindowSnapshot = activeWindowSnapshot.replacing(updatedDay, generatedAt: timeProvider.now())
+        let rescheduledAt = timeProvider.now()
+        syncWakeSession(for: updatedDay, now: rescheduledAt)
+        activeWindowSnapshot = activeWindowSnapshot.replacing(updatedDay, generatedAt: rescheduledAt)
         schedules = activeWindowSnapshot.visibleDays.map(\.schedule)
 
         let settings = settingsStore.settings
@@ -1573,6 +1608,124 @@ final class ScheduleManager: ObservableObject {
 
         await rescheduleDay(normalizedDate, preferCached: false)
         return true
+    }
+
+    func requiresQuietConfirmationForWakeSession(on date: Date, timeZone: TimeZone = .current) -> Bool {
+        let normalizedDate = DateHelpers.startOfDay(date, in: timeZone)
+        guard let day = activeDay(for: normalizedDate, timeZone: timeZone) else { return false }
+        guard let session = wakeSessionStore.session(for: day.dateKey), !session.status.isTerminal else { return false }
+        return WakeSessionPlanner.cancellableWakeSessionEvents(
+            for: day,
+            wakeSessionID: session.wakeSessionID,
+            now: timeProvider.now()
+        ).isEmpty == false
+    }
+
+    @discardableResult
+    func confirmAwakeForFajr(on date: Date, timeZone: TimeZone = .current) async -> Bool {
+        await confirmAwake(on: date, mode: .fajr, timeZone: timeZone)
+    }
+
+    @discardableResult
+    func confirmAwakeForSuhoor(on date: Date, timeZone: TimeZone = .current) async -> Bool {
+        await confirmAwake(on: date, mode: .suhoor, timeZone: timeZone)
+    }
+
+    @discardableResult
+    func confirmFajrPrayer(on date: Date, timeZone: TimeZone = .current) async -> Bool {
+        let normalizedDate = DateHelpers.startOfDay(date, in: timeZone)
+        guard let day = activeDay(for: normalizedDate, timeZone: timeZone) else {
+            return false
+        }
+        let session = ensureWakeSession(for: day)
+        let now = timeProvider.now()
+        _ = wakeSessionStore.confirmFajrPrayer(
+            dateKey: day.dateKey,
+            wakeSessionID: session?.wakeSessionID,
+            now: now
+        )
+        fajrLogStore.setStatus(
+            .completed,
+            for: day.dateKey,
+            now: now,
+            source: "currentMorningCheckIn"
+        )
+        refreshCurrentMorningHomeSnapshot(timeZone: timeZone)
+        return true
+    }
+
+    @discardableResult
+    func confirmQuietForActiveWakeSession(on date: Date, timeZone: TimeZone = .current) async -> Bool {
+        let normalizedDate = DateHelpers.startOfDay(date, in: timeZone)
+        guard let day = activeDay(for: normalizedDate, timeZone: timeZone) else {
+            return false
+        }
+        let session = ensureWakeSession(for: day)
+        let cancelled = await alarmScheduler.cancelWakeSessionEvents(
+            day: day,
+            wakeSessionID: session?.wakeSessionID,
+            now: timeProvider.now()
+        )
+        if let session {
+            _ = wakeSessionStore.markQuietMorning(
+                wakeSessionID: session.wakeSessionID,
+                reason: "userSelectedQuiet",
+                cancelledScheduledEventIDs: cancelled.map(\.id),
+                now: timeProvider.now()
+            )
+        }
+        _ = await selectHeroWakeMode(for: normalizedDate, mode: .quiet, timeZone: timeZone)
+        refreshCurrentMorningHomeSnapshot(timeZone: timeZone)
+        return true
+    }
+
+    @discardableResult
+    private func confirmAwake(on date: Date, mode: WakeSessionMode, timeZone: TimeZone) async -> Bool {
+        let normalizedDate = DateHelpers.startOfDay(date, in: timeZone)
+        guard let day = activeDay(for: normalizedDate, timeZone: timeZone),
+              let session = ensureWakeSession(for: day) else {
+            return false
+        }
+        let cancelled = await alarmScheduler.cancelWakeSessionEvents(
+            day: day,
+            wakeSessionID: session.wakeSessionID,
+            now: timeProvider.now()
+        )
+        let now = timeProvider.now()
+        _ = wakeSessionStore.confirmAwake(
+            wakeSessionID: session.wakeSessionID,
+            mode: mode,
+            cancelledScheduledEventIDs: cancelled.map(\.id),
+            now: now
+        )
+        if mode == .suhoor {
+            let primaryIntent = day.tagResult.computedPrimaryIntent == .other
+                ? FastPrimaryIntent.voluntary
+                : day.tagResult.computedPrimaryIntent
+            fastLogStore.setStatus(
+                .inProgress,
+                for: day.dateKey,
+                intentSnapshot: FastIntentSnapshot(
+                    primaryIntent: primaryIntent,
+                    secondaryTags: day.tagResult.computedSecondaryTags
+                ),
+                now: now,
+                qadaEffect: nil,
+                source: "currentMorningSuhoorIntent"
+            )
+        }
+        refreshCurrentMorningHomeSnapshot(timeZone: timeZone)
+        return true
+    }
+
+    private func ensureWakeSession(for day: ActiveAlarmDay) -> WakeSession? {
+        if let session = wakeSessionStore.session(for: day.dateKey) {
+            return session
+        }
+        guard let draft = WakeSessionPlanner.wakeSessionDraft(for: day) else {
+            return nil
+        }
+        return wakeSessionStore.upsertScheduledSession(from: draft, now: timeProvider.now())
     }
 
     @discardableResult
@@ -2927,7 +3080,7 @@ struct NextWakeEventSummary: Equatable, Sendable {
         case .wakeReminder:
             return "Reminder before the main wake."
         case .wakeFollowUp:
-            return "Follow-up after the main wake."
+            return "Wake check after the main wake."
         case .fajrBoundaryNotice:
             return event.fajrStartBehavior == .takeoverIfUnresolvedOtherwiseCue
                 ? "Fajr-start checkpoint with takeover if the wake is still active."

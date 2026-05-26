@@ -172,6 +172,7 @@ final class MorningHeroFajrAdjusterUITests: XCTestCase {
         let quietAfterFast = app.descendants(matching: .any)["morningHero.quickWakeMode.quiet"]
         XCTAssertTrue(quietAfterFast.waitForExistence(timeout: 4))
         quietAfterFast.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        confirmQuietCancellationIfNeeded(in: app)
 
         XCTAssertTrue(waitForElementLabel(in: app, identifier: "morningHero.primaryWakeTime") {
             $0 == "Quiet mode"
@@ -220,6 +221,7 @@ final class MorningHeroFajrAdjusterUITests: XCTestCase {
         let quietAfterSuhoorAgain = app.descendants(matching: .any)["morningHero.quickWakeMode.quiet"]
         XCTAssertTrue(quietAfterSuhoorAgain.waitForExistence(timeout: 4))
         quietAfterSuhoorAgain.tap()
+        confirmQuietCancellationIfNeeded(in: app)
         XCTAssertTrue(waitForElementLabel(in: app, identifier: "morningHero.primaryWakeTime") {
             $0 == "Quiet mode"
         })
@@ -318,6 +320,13 @@ final class MorningHeroFajrAdjusterUITests: XCTestCase {
 
         XCTFail("Expected \(identifier) label to match predicate", file: file, line: line)
         return false
+    }
+
+    private func confirmQuietCancellationIfNeeded(in app: XCUIApplication) {
+        let stopButton = app.buttons["Stop for this morning"]
+        if stopButton.waitForExistence(timeout: 2) {
+            stopButton.tap()
+        }
     }
 
     private func waitForElementValue(

@@ -570,9 +570,10 @@ struct ScheduleManagerHijriTests {
             draft.locationMode = .fixed
             draft.fixedLocation = FixedLocation(latitude: 43.6532, longitude: -79.3832)
         }
+        let now = Self.makeDate(year: 2026, month: 7, day: 1, timeZone: timeZone)
 
         guard let targetDate = Self.firstGregorianDate(
-            onOrAfter: DateHelpers.startOfToday(in: timeZone),
+            onOrAfter: now,
             timeZone: timeZone,
             matcher: { weekday in weekday == 2 || weekday == 5 }
         ) else {
@@ -589,7 +590,8 @@ struct ScheduleManagerHijriTests {
             alarmConfigStore: alarmConfigStore,
             fastTagStore: FastTagStore(defaults: defaults),
             hijriAdjustmentStore: HijriMonthAdjustmentStore(defaults: defaults),
-            cacheStore: ScheduleCacheStore(defaults: defaults)
+            cacheStore: ScheduleCacheStore(defaults: defaults),
+            timeProvider: FixedTimeProvider(fixedNow: now)
         )
 
         await manager.refreshSchedules(force: true)
@@ -614,7 +616,8 @@ struct ScheduleManagerHijriTests {
             alarmConfigStore: AlarmConfigStore(defaultsStore: defaults),
             fastTagStore: fastTagStore,
             hijriAdjustmentStore: HijriMonthAdjustmentStore(defaults: defaults),
-            cacheStore: ScheduleCacheStore(defaults: defaults)
+            cacheStore: ScheduleCacheStore(defaults: defaults),
+            timeProvider: FixedTimeProvider(fixedNow: now)
         )
 
         await refreshedManager.ensureScheduleWindow(reason: .appLaunch)
@@ -642,9 +645,10 @@ struct ScheduleManagerHijriTests {
             draft.locationMode = .fixed
             draft.fixedLocation = FixedLocation(latitude: 43.6532, longitude: -79.3832)
         }
+        let now = Self.makeDate(year: 2026, month: 7, day: 1, timeZone: timeZone)
 
         guard let targetDate = Self.firstGregorianDate(
-            onOrAfter: DateHelpers.startOfToday(in: timeZone),
+            onOrAfter: now,
             timeZone: timeZone,
             matcher: { weekday in weekday == 2 || weekday == 5 }
         ) else {
@@ -662,7 +666,8 @@ struct ScheduleManagerHijriTests {
             alarmConfigStore: alarmConfigStore,
             fastTagStore: fastTagStore,
             hijriAdjustmentStore: HijriMonthAdjustmentStore(defaults: defaults),
-            cacheStore: ScheduleCacheStore(defaults: defaults)
+            cacheStore: ScheduleCacheStore(defaults: defaults),
+            timeProvider: FixedTimeProvider(fixedNow: now)
         )
 
         await manager.refreshSchedules(force: true)

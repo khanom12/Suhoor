@@ -36,7 +36,7 @@ struct SchedulingIdentifierSet: Equatable, Sendable {
             alarmIdentifiers.append(SchedulingIdentifiers.legacyAlarmIDV1(for: schedule, kind: kind))
         }
 
-        for event in eventStubs(for: schedule) + events {
+        for event in eventStubs(for: schedule) + wakeCheckEventStubs(for: schedule) + events {
             for deliveryKind in event.deliveryKinds {
                 notificationIdentifiers.append(SchedulingIdentifiers.identifier(for: event, deliveryKind: deliveryKind))
                 alarmIdentifiers.append(SchedulingIdentifiers.alarmID(for: event, deliveryKind: deliveryKind))
@@ -126,6 +126,23 @@ struct SchedulingIdentifierSet: Equatable, Sendable {
                 deliveryKinds: [.iftarNotification, .iftarAlarm, .iftarAdhan]
             )
         ]
+    }
+
+    private static func wakeCheckEventStubs(for schedule: DaySchedule) -> [ScheduledEvent] {
+        (1...WakeSessionPlanner.maximumWakeCheckCount).map { index in
+            ScheduledEvent(
+                id: WakeSessionPlanner.wakeCheckEventID(dateKey: schedule.id, index: index),
+                type: .wakeFollowUp,
+                dateKey: schedule.id,
+                fireDate: schedule.wakeDate,
+                relativeTo: .wakeAlarm(offsetMinutes: index * WakeSessionPlanner.wakeCheckIntervalMinutes),
+                isUserVisible: true,
+                affectsCompletion: false,
+                deliveryKinds: [.wake],
+                wakeSessionID: WakeSessionPlanner.wakeSessionID(for: schedule.id),
+                wakeSessionRole: .wakeCheck
+            )
+        }
     }
 
     private static func stubSchedule(for day: Date, timeZone: TimeZone) -> DaySchedule {

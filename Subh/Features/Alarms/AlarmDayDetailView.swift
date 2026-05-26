@@ -948,6 +948,7 @@ enum AlarmDayDetailPresentation {
             wakeAdjustmentAccessibilityValue: display.wakeAdjustmentAccessibilityValue,
             selectedQuickWakeMode: display.selectedQuickWakeMode,
             quickWakeModeOptions: display.quickWakeModeOptions,
+            actionSlot: display.actionSlot,
             chipTitles: display.chipTitles,
             accessibilityLabel: display.accessibilityLabel
         )

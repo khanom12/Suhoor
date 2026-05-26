@@ -42,6 +42,7 @@ struct SubhHomeView: View {
     @State private var lockedMonthPreviewMode: MonthPlanningCalendarMode?
     @State private var weeklyFajrcastFocusedDateKey: String?
     @State private var heroWakeAdjustment: FajrWindowLiveWakeAdjustment?
+    @State private var pendingQuietConfirmationDate: Date?
 
     var body: some View {
         let weeklyFajrcast = weeklyFajrcastSnapshot
@@ -64,6 +65,8 @@ struct SubhHomeView: View {
                     LazyVStack(alignment: .leading, spacing: DesignTokens.spacingL) {
                         TomorrowMorningHero(
                             entry: snapshot.tomorrow,
+                            wakeSession: snapshot.heroWakeSession,
+                            morningLog: snapshot.heroMorningLog,
                             permissionSummary: snapshot.permissionState.summaryText,
                             locationDisplayText: scheduleManager.currentPrayerLocationDisplayText,
                             locationIconName: scheduleManager.currentPrayerLocationIconName,
@@ -72,7 +75,25 @@ struct SubhHomeView: View {
                                 await scheduleManager.commitHeroWakeAdjustment(for: date, wakeTime: wakeTime)
                             },
                             onSelectWakeMode: { date, mode in
-                                await scheduleManager.selectHeroWakeMode(for: date, mode: mode)
+                                if mode == .quiet,
+                                   scheduleManager.requiresQuietConfirmationForWakeSession(on: date) {
+                                    await MainActor.run {
+                                        pendingQuietConfirmationDate = date
+                                    }
+                                    return false
+                                }
+                                return await scheduleManager.selectHeroWakeMode(for: date, mode: mode)
+                            },
+                            onConfirmAwake: { date, mode in
+                                switch mode {
+                                case .fajr:
+                                    return await scheduleManager.confirmAwakeForFajr(on: date)
+                                case .suhoor:
+                                    return await scheduleManager.confirmAwakeForSuhoor(on: date)
+                                }
+                            },
+                            onConfirmFajrPrayer: { date in
+                                await scheduleManager.confirmFajrPrayer(on: date)
                             },
                             onPreviewWakeAdjustment: previewHeroWakeAdjustment
                         ) {
@@ -161,6 +182,31 @@ struct SubhHomeView: View {
                 mode: mode,
                 entitlement: entitlementStore.effectiveSnapshot
             )
+        }
+        .confirmationDialog(
+            "Stop wake checks for this morning?",
+            isPresented: Binding(
+                get: { pendingQuietConfirmationDate != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        pendingQuietConfirmationDate = nil
+                    }
+                }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Keep wake checks", role: .cancel) {
+                pendingQuietConfirmationDate = nil
+            }
+            Button("Stop for this morning", role: .destructive) {
+                guard let date = pendingQuietConfirmationDate else { return }
+                pendingQuietConfirmationDate = nil
+                Task {
+                    await scheduleManager.confirmQuietForActiveWakeSession(on: date)
+                }
+            }
+        } message: {
+            Text("Subh will cancel remaining alarms and mark this morning as quiet.")
         }
         .onReceive(appNavigator.$latestRequest.compactMap { $0 }) { request in
             handle(request.intent)
@@ -381,23 +427,30 @@ private struct TomorrowMorningHero: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     let entry: WakeRowEntry?
+    let wakeSession: WakeSession?
+    let morningLog: MorningLogEntry?
     let permissionSummary: String
     let locationDisplayText: String
     let locationIconName: String?
     let currentDate: Date
     let onCommitWakeAdjustment: (Date, Date) async -> Bool
     let onSelectWakeMode: (Date, QuickWakeMode) async -> Bool
+    let onConfirmAwake: (Date, WakeSessionMode) async -> Bool
+    let onConfirmFajrPrayer: (Date) async -> Bool
     let onPreviewWakeAdjustment: (Date, Date?) -> Void
     let onOpen: () -> Void
 
     @State private var tentativeWakeTime: Date?
     @State private var isCommittingWakeAdjustment = false
     @State private var isSelectingWakeMode = false
+    @State private var isCommittingActionSlot = false
     @Namespace private var quickSelectorHighlight
 
     var body: some View {
         let baseDisplay = MorningHomePresentation.heroDisplay(
             entry: entry,
+            wakeSession: wakeSession,
+            morningLog: morningLog,
             permissionSummary: permissionSummary,
             locationDisplayText: locationDisplayText,
             locationIconName: locationIconName,
@@ -455,6 +508,15 @@ private struct TomorrowMorningHero: View {
             )
                 .padding(.top, display.fajrWindowVisualMode.rendersRange ? metrics.windowToRelationGap : metrics.primaryToRelationGap)
 
+            MorningHeroActionSlotView(
+                display: display.actionSlot,
+                metrics: metrics,
+                isDisabled: isCommittingActionSlot || isSelectingWakeMode || isCommittingWakeAdjustment
+            ) {
+                commitActionSlot(display.actionSlot.action)
+            }
+            .padding(.top, metrics.relationToActionSlotGap)
+
             if !display.quickWakeModeOptions.isEmpty {
                 MorningHeroQuickWakeModeSelector(
                     options: display.quickWakeModeOptions,
@@ -485,6 +547,7 @@ private struct TomorrowMorningHero: View {
             tentativeWakeTime = nil
             isCommittingWakeAdjustment = false
             isSelectingWakeMode = false
+            isCommittingActionSlot = false
         }
         .onChange(of: entry?.schedule.wakeDate) { _, _ in
             if !isCommittingWakeAdjustment {
@@ -578,6 +641,30 @@ private struct TomorrowMorningHero: View {
         }
     }
 
+    private func commitActionSlot(_ action: MorningHeroActionSlotAction) {
+        guard let date = entry?.schedule.date else { return }
+        switch action {
+        case .none:
+            return
+        case .confirmAwake(let mode):
+            isCommittingActionSlot = true
+            Task {
+                _ = await onConfirmAwake(date, mode)
+                await MainActor.run {
+                    isCommittingActionSlot = false
+                }
+            }
+        case .confirmFajrPrayer:
+            isCommittingActionSlot = true
+            Task {
+                _ = await onConfirmFajrPrayer(date)
+                await MainActor.run {
+                    isCommittingActionSlot = false
+                }
+            }
+        }
+    }
+
     private func adjustWakeAccessibility(
         display: MorningHomeHeroDisplay,
         direction: AccessibilityAdjustmentDirection
@@ -609,6 +696,120 @@ private struct TomorrowMorningHero: View {
             onPreviewWakeAdjustment(date, clamped)
         }
         commitWakeAdjustment(clamped)
+    }
+}
+
+private struct MorningHeroActionSlotView: View {
+    let display: MorningHeroActionSlotDisplay
+    let metrics: MorningHeroMetrics
+    let isDisabled: Bool
+    let onAction: () -> Void
+
+    var body: some View {
+        Group {
+            switch display.style {
+            case .empty:
+                Color.clear
+            case .compact:
+                compactContent
+            case .primary:
+                primaryContent
+            case .confirmation, .quiet:
+                confirmationContent
+            }
+        }
+        .frame(maxWidth: metrics.maxContentWidth, minHeight: metrics.actionSlotHeight, alignment: .center)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(display.accessibilityLabel)
+        .accessibilityIdentifier(MorningHeroUIIdentifier.actionSlot)
+    }
+
+    private var primaryContent: some View {
+        VStack(spacing: 6) {
+            if let primaryTitle = display.primaryTitle {
+                Button(action: onAction) {
+                    Text(primaryTitle)
+                        .font(.system(size: metrics.quickSelectorLabelSize, weight: .semibold))
+                        .foregroundStyle(WakeGlassTheme.primaryText)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.78)
+                        .frame(maxWidth: min(metrics.maxContentWidth, 250), minHeight: 42)
+                        .padding(.horizontal, 16)
+                        .background {
+                            Capsule(style: .continuous)
+                                .fill(WakeGlassTheme.primaryText.opacity(0.14))
+                                .overlay {
+                                    Capsule(style: .continuous)
+                                        .stroke(WakeGlassTheme.primaryText.opacity(0.30), lineWidth: 0.9)
+                                }
+                        }
+                }
+                .buttonStyle(.plain)
+                .disabled(isDisabled || display.action == .none)
+            }
+
+            if let secondaryText = display.secondaryText {
+                Text(secondaryText)
+                    .font(.caption)
+                    .foregroundStyle(WakeGlassTheme.secondaryText.opacity(0.90))
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private var compactContent: some View {
+        HStack(alignment: .center, spacing: 8) {
+            if let secondaryText = display.secondaryText {
+                Text(secondaryText)
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(WakeGlassTheme.secondaryText.opacity(0.92))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.82)
+            }
+
+            if let primaryTitle = display.primaryTitle {
+                Button(action: onAction) {
+                    Text(primaryTitle)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(WakeGlassTheme.primaryText)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.82)
+                        .padding(.horizontal, 11)
+                        .padding(.vertical, 7)
+                        .background {
+                            Capsule(style: .continuous)
+                                .fill(WakeGlassTheme.primaryText.opacity(0.12))
+                                .overlay {
+                                    Capsule(style: .continuous)
+                                        .stroke(WakeGlassTheme.primaryText.opacity(0.26), lineWidth: 0.8)
+                                }
+                        }
+                }
+                .buttonStyle(.plain)
+                .disabled(isDisabled || display.action == .none)
+            }
+        }
+    }
+
+    private var confirmationContent: some View {
+        VStack(spacing: 4) {
+            if let primaryTitle = display.primaryTitle {
+                Text(primaryTitle)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(WakeGlassTheme.primaryText.opacity(0.94))
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if let secondaryText = display.secondaryText {
+                Text(secondaryText)
+                    .font(.caption)
+                    .foregroundStyle(WakeGlassTheme.secondaryText.opacity(0.88))
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
     }
 }
 
@@ -703,6 +904,8 @@ struct MorningHeroMetrics {
     var primaryToRelationGap: CGFloat { 8 * min(scale, 1.2) }
     var primaryToWindowGap: CGFloat { 8 * min(scale, 1.2) }
     var windowToRelationGap: CGFloat { 12 * min(scale, 1.2) }
+    var relationToActionSlotGap: CGFloat { max(8, 9 * min(scale, 1.2)) }
+    var actionSlotHeight: CGFloat { max(58, 58 * min(scale, 1.28)) }
     var relationToSelectorGap: CGFloat { max(12, 14 * min(scale, 1.2)) }
     var primaryRowSpacing: CGFloat { max(7, 8 * scale) }
     var iconVerticalOffset: CGFloat { -1 * scale }

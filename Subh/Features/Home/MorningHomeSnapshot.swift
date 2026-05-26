@@ -21,6 +21,8 @@ struct MorningHomeSnapshot {
     ]
 
     let tomorrow: WakeRowEntry?
+    let heroWakeSession: WakeSession?
+    let heroMorningLog: MorningLogEntry?
     let weeklyFajrcast: FajrWindowCompactSnapshot
     let morningcast: [WakeRowEntry]
     let permissionState: PermissionSnapshot
@@ -28,6 +30,8 @@ struct MorningHomeSnapshot {
 
     static let empty = MorningHomeSnapshot(
         tomorrow: nil,
+        heroWakeSession: nil,
+        heroMorningLog: nil,
         weeklyFajrcast: .empty,
         morningcast: [],
         permissionState: .empty,

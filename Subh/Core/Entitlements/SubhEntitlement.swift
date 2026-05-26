@@ -33,6 +33,10 @@ enum SubhFeatureGate: Hashable {
     case monthPlanning
     case suhoorPlanning
     case monthlyFajrcast
+    case wakeSessions
+    case wakeChecks
+    case currentMorningCheckIn
+    case quietMorning
 }
 
 struct SubhEntitlementSnapshot: Equatable {
@@ -71,6 +75,8 @@ struct SubhEntitlementSnapshot: Equatable {
             return allowsCompleteFeatures || tier == .ramadanPreview
         case .monthlyFajrcast:
             return allowsCompleteFeatures
+        case .wakeSessions, .wakeChecks, .currentMorningCheckIn, .quietMorning:
+            return true
         }
     }
 

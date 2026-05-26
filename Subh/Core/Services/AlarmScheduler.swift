@@ -99,6 +99,33 @@ final class AlarmScheduler {
         )
     }
 
+    @discardableResult
+    func cancelWakeSessionEvents(
+        day: ActiveAlarmDay,
+        wakeSessionID: String?,
+        now: Date = Date()
+    ) async -> [ScheduledEvent] {
+        let events = WakeSessionPlanner.cancellableWakeSessionEvents(
+            for: day,
+            wakeSessionID: wakeSessionID,
+            now: now
+        )
+        guard !events.isEmpty else { return [] }
+
+        let identifiers = events.reduce(SchedulingIdentifierSet()) { partial, event in
+            event.deliveryKinds.reduce(partial) { result, deliveryKind in
+                result.union(SchedulingIdentifierSet.forEvent(event, deliveryKind: deliveryKind))
+            }
+        }
+        await routineScheduler.cancelIdentifiers(identifiers)
+
+        let cancelledEventIDs = Set(events.map(\.id))
+        lastPlannedEvents = lastPlannedEvents.filter { _, plan in
+            !cancelledEventIDs.contains(plan.event.id)
+        }
+        return events
+    }
+
     private func reconcile(
         to nextPlans: [String: PlannedScheduledEvent],
         settings: AppSettings?,

@@ -868,6 +868,7 @@ private struct OnboardingMorningHeroPreview: View {
             wakeAdjustmentAccessibilityValue: nil,
             selectedQuickWakeMode: nil,
             quickWakeModeOptions: [],
+            actionSlot: .empty,
             chipTitles: [],
             accessibilityLabel: accessibilityLabel
         )

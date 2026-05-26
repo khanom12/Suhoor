@@ -121,6 +121,7 @@ enum MorningSoundRole: String, Codable, CaseIterable, Identifiable, Sendable {
 
 enum WakeSessionEventRole: String, Codable, CaseIterable, Identifiable, Sendable {
     case primaryWake
+    case wakeCheck
     case checkpoint
     case companion
 
@@ -151,7 +152,7 @@ enum ScheduledEventType: String, Codable, CaseIterable, Identifiable, Sendable {
         case .wakeAlarm:
             return "Wake Alarm"
         case .wakeFollowUp:
-            return "Wake Follow-Up"
+            return "Wake Check"
         case .fajrBoundaryNotice:
             return "Fajr Notice"
         case .iftarReminder:

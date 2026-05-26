@@ -540,6 +540,211 @@ struct ScheduleServiceExtractionTests {
     }
 
     @Test
+    func fajrWakeChecksUseDefaultIntervalAndCutoff() throws {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let prayerWindow = Self.makePrayerWindow(timeZone: timeZone)
+        let fajrEnd = try #require(prayerWindow.fajrEnd)
+        let primaryWake = fajrEnd.addingTimeInterval(-30 * 60)
+
+        let events = WakeSessionPlanner.wakeCheckEvents(
+            dateKey: "2026-05-01",
+            wakeSessionID: WakeSessionPlanner.wakeSessionID(for: "2026-05-01"),
+            mode: .fajr,
+            primaryWakeTime: primaryWake,
+            prayerWindow: prayerWindow,
+            soundRole: .inFajrWake
+        )
+
+        #expect(events.count == 5)
+        #expect(events.map(\.fireDate) == (1...5).map { primaryWake.addingTimeInterval(TimeInterval($0 * 5 * 60)) })
+        #expect(events.last?.fireDate == fajrEnd.addingTimeInterval(-5 * 60))
+        #expect(events.allSatisfy { $0.wakeSessionRole == .wakeCheck })
+        #expect(events.allSatisfy { $0.deliveryKinds == [.wake] })
+    }
+
+    @Test
+    func suhoorWakeChecksUseFajrBeginCutoff() {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let prayerWindow = Self.makePrayerWindow(timeZone: timeZone)
+        let primaryWake = prayerWindow.fajrStart.addingTimeInterval(-30 * 60)
+
+        let events = WakeSessionPlanner.wakeCheckEvents(
+            dateKey: "2026-05-01",
+            wakeSessionID: WakeSessionPlanner.wakeSessionID(for: "2026-05-01"),
+            mode: .suhoor,
+            primaryWakeTime: primaryWake,
+            prayerWindow: prayerWindow,
+            soundRole: .preFajrWake
+        )
+
+        #expect(events.count == 5)
+        #expect(events.map(\.fireDate) == (1...5).map { primaryWake.addingTimeInterval(TimeInterval($0 * 5 * 60)) })
+        #expect(events.last?.fireDate == prayerWindow.fajrStart.addingTimeInterval(-5 * 60))
+    }
+
+    @Test
+    func wakeCheckPlannerSchedulesFewerChecksNearCutoff() throws {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let prayerWindow = Self.makePrayerWindow(timeZone: timeZone)
+        let fajrEnd = try #require(prayerWindow.fajrEnd)
+        let nearCutoffWake = fajrEnd.addingTimeInterval(-10 * 60)
+        let tooLateWake = fajrEnd.addingTimeInterval(-4 * 60)
+
+        let oneCheck = WakeSessionPlanner.wakeCheckEvents(
+            dateKey: "2026-05-01",
+            wakeSessionID: WakeSessionPlanner.wakeSessionID(for: "2026-05-01"),
+            mode: .fajr,
+            primaryWakeTime: nearCutoffWake,
+            prayerWindow: prayerWindow,
+            soundRole: .inFajrWake
+        )
+        let noChecks = WakeSessionPlanner.wakeCheckEvents(
+            dateKey: "2026-05-01",
+            wakeSessionID: WakeSessionPlanner.wakeSessionID(for: "2026-05-01"),
+            mode: .fajr,
+            primaryWakeTime: tooLateWake,
+            prayerWindow: prayerWindow,
+            soundRole: .inFajrWake
+        )
+
+        #expect(oneCheck.map(\.fireDate) == [fajrEnd.addingTimeInterval(-5 * 60)])
+        #expect(noChecks.isEmpty)
+    }
+
+    @Test
+    @MainActor
+    func confirmingAwakeCancelsPendingWakeChecks() async {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let activeDay = Self.makeSchedulerActiveDayWithWakeChecks(
+            date: DateHelpers.startOfDay(Date().addingTimeInterval(2 * 24 * 60 * 60), in: timeZone),
+            timeZone: timeZone
+        )
+        let routineScheduler = RecordingRoutineScheduler()
+        let scheduler = AlarmScheduler(routineScheduler: routineScheduler)
+
+        _ = await scheduler.scheduleDay(day: activeDay, settings: .default, canUseAlarmKit: false)
+        let cancelled = await scheduler.cancelWakeSessionEvents(
+            day: activeDay,
+            wakeSessionID: WakeSessionPlanner.wakeSessionID(for: activeDay.dateKey),
+            now: Date()
+        )
+
+        #expect(cancelled.map(\.id).contains("\(activeDay.dateKey).wakeAlarm"))
+        #expect(cancelled.map(\.id).contains(WakeSessionPlanner.wakeCheckEventID(dateKey: activeDay.dateKey, index: 1)))
+        #expect(routineScheduler.cancelledIdentifierSets.last?.notificationIdentifiers.contains(
+            "\(WakeSessionPlanner.wakeCheckEventID(dateKey: activeDay.dateKey, index: 1)).wake"
+        ) == true)
+    }
+
+    @Test
+    @MainActor
+    func alarmStopDoesNotConfirmWakeSession() {
+        let store = WakeSessionStore(loadPersistedData: false)
+        let draft = Self.makeWakeSessionDraft(mode: .fajr)
+        store.upsertScheduledSession(from: draft, now: draft.plannedWakeTime.addingTimeInterval(-60))
+
+        let session = store.recordAlarmStopped(
+            wakeSessionID: draft.wakeSessionID,
+            scheduledEventID: draft.primaryScheduledEventID,
+            now: draft.plannedWakeTime
+        )
+
+        #expect(session?.status == .unconfirmed)
+        #expect(session?.confirmedAt == nil)
+        #expect(store.morningLog(for: draft.dateKey)?.fajrWakeOutcome == .unconfirmed)
+        #expect(store.morningLog(for: draft.dateKey)?.records.contains { $0.type == .alarmStopped } == true)
+    }
+
+    @Test
+    @MainActor
+    func quietMorningLogsQuietWithoutMissedPrayer() {
+        let store = WakeSessionStore(loadPersistedData: false)
+        let draft = Self.makeWakeSessionDraft(mode: .fajr)
+        store.upsertScheduledSession(from: draft)
+
+        _ = store.markQuietMorning(
+            wakeSessionID: draft.wakeSessionID,
+            reason: "test",
+            cancelledScheduledEventIDs: draft.wakeCheckScheduledEventIDs
+        )
+
+        let log = store.morningLog(for: draft.dateKey)
+        #expect(store.session(for: draft.dateKey)?.status == .quietMorning)
+        #expect(log?.quietMorning == true)
+        #expect(log?.fajrPrayerOutcome == .unconfirmed)
+        #expect(log?.records.contains { $0.type == .quietMorning } == true)
+        #expect(log?.records.contains { $0.type == .fajrPrayerConfirmed } == false)
+
+        _ = store.upsertScheduledSession(from: draft)
+        #expect(store.session(for: draft.dateKey)?.status == .scheduled)
+        #expect(store.session(for: draft.dateKey)?.quietReason == nil)
+    }
+
+    @Test
+    @MainActor
+    func suhoorConfirmationSetsFastingIntentOnly() {
+        let store = WakeSessionStore(loadPersistedData: false)
+        let draft = Self.makeWakeSessionDraft(mode: .suhoor)
+        store.upsertScheduledSession(from: draft)
+
+        _ = store.confirmAwake(
+            wakeSessionID: draft.wakeSessionID,
+            mode: .suhoor,
+            cancelledScheduledEventIDs: draft.wakeCheckScheduledEventIDs
+        )
+
+        let log = store.morningLog(for: draft.dateKey)
+        #expect(log?.suhoorWakeOutcome == .confirmedAwakeForSuhoor)
+        #expect(log?.fastingIntentOutcome == .fastingIntentConfirmed)
+        #expect(log?.fastingDayPlanned == true)
+        #expect(log?.fajrPrayerOutcome == .unconfirmed)
+        #expect(log?.fastCompletionOutcome == .unconfirmed)
+    }
+
+    @Test
+    @MainActor
+    func fajrPrayerConfirmationIsSeparateFromAwakeConfirmation() {
+        let store = WakeSessionStore(loadPersistedData: false)
+        let draft = Self.makeWakeSessionDraft(mode: .fajr)
+        store.upsertScheduledSession(from: draft)
+
+        _ = store.confirmAwake(
+            wakeSessionID: draft.wakeSessionID,
+            mode: .fajr,
+            cancelledScheduledEventIDs: draft.wakeCheckScheduledEventIDs
+        )
+        #expect(store.morningLog(for: draft.dateKey)?.fajrPrayerOutcome == .unconfirmed)
+
+        _ = store.confirmFajrPrayer(dateKey: draft.dateKey, wakeSessionID: draft.wakeSessionID)
+
+        let log = store.morningLog(for: draft.dateKey)
+        #expect(log?.fajrWakeOutcome == .confirmedAwakeForFajr)
+        #expect(log?.fajrPrayerOutcome == .fajrPrayerConfirmed)
+    }
+
+    @Test
+    func coldReconciliationCancelsStaleWakeCheckIdentifiers() {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let date = Self.makeDate(year: 2026, month: 5, day: 1, timeZone: timeZone)
+        let schedule = Self.makeSchedule(for: date, timeZone: timeZone)
+        let identifiers = SchedulingIdentifierSet.forSchedule(schedule)
+        let wakeCheckID = WakeSessionPlanner.wakeCheckEventID(dateKey: schedule.id, index: 5)
+
+        #expect(identifiers.notificationIdentifiers.contains("\(wakeCheckID).wake"))
+        #expect(identifiers.alarmIdentifiers.contains(DateHelpers.stableUUID(from: "\(wakeCheckID).wake.alarmKit")))
+    }
+
+    @Test
+    func freeEntitlementAllowsCoreWakeSessionBehaviors() {
+        let free = SubhEntitlementSnapshot.free
+
+        #expect(free.allows(.wakeSessions))
+        #expect(free.allows(.wakeChecks))
+        #expect(free.allows(.currentMorningCheckIn))
+        #expect(free.allows(.quietMorning))
+    }
+
+    @Test
     @MainActor
     func scheduleDayCancelsStaleIdentifiersWhenNoPriorPlanIsKnown() async {
         let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
@@ -3339,6 +3544,74 @@ struct ScheduleServiceExtractionTests {
         )
     }
 
+    private static func makeSchedulerActiveDayWithWakeChecks(date: Date, timeZone: TimeZone) -> ActiveAlarmDay {
+        let activeDay = makeSchedulerActiveDay(date: date, timeZone: timeZone)
+        let wakeChecks = WakeSessionPlanner.wakeCheckEvents(
+            dateKey: activeDay.dateKey,
+            wakeSessionID: WakeSessionPlanner.wakeSessionID(for: activeDay.dateKey),
+            mode: .fajr,
+            primaryWakeTime: activeDay.schedule.wakeDate,
+            prayerWindow: activeDay.decisionLog.prayerWindow,
+            soundRole: .inFajrWake
+        )
+
+        return ActiveAlarmDay(
+            date: activeDay.date,
+            dateKey: activeDay.dateKey,
+            schedule: activeDay.schedule,
+            effectiveConfig: activeDay.effectiveConfig,
+            provenances: activeDay.provenances,
+            isImplicitRamadan: activeDay.isImplicitRamadan,
+            isExplicitOneOff: activeDay.isExplicitOneOff,
+            tagResult: activeDay.tagResult,
+            primaryDisplay: activeDay.primaryDisplay,
+            sourceSummaryText: activeDay.sourceSummaryText,
+            resolvedDayContext: activeDay.resolvedDayContext,
+            scheduledEvents: activeDay.scheduledEvents + wakeChecks,
+            decisionLog: activeDay.decisionLog,
+            dailyCompletion: activeDay.dailyCompletion
+        )
+    }
+
+    private static func makeWakeSessionDraft(
+        mode: WakeSessionMode,
+        timeZone: TimeZone = TimeZone(identifier: "America/Toronto") ?? .current
+    ) -> WakeSessionDraft {
+        let date = makeDate(year: 2026, month: 5, day: 1, timeZone: timeZone)
+        let dateKey = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
+        let prayerWindow = makePrayerWindow(timeZone: timeZone)
+        let plannedWakeTime: Date
+        switch mode {
+        case .fajr:
+            plannedWakeTime = (prayerWindow.fajrEnd ?? prayerWindow.fajrStart).addingTimeInterval(-30 * 60)
+        case .suhoor:
+            plannedWakeTime = prayerWindow.fajrStart.addingTimeInterval(-30 * 60)
+        }
+        let primaryEventID = "\(dateKey).wakeAlarm"
+        let wakeChecks = WakeSessionPlanner.wakeCheckEvents(
+            dateKey: dateKey,
+            wakeSessionID: WakeSessionPlanner.wakeSessionID(for: dateKey),
+            mode: mode,
+            primaryWakeTime: plannedWakeTime,
+            prayerWindow: prayerWindow,
+            soundRole: mode == .suhoor ? .preFajrWake : .inFajrWake
+        )
+        return WakeSessionDraft(
+            wakeSessionID: WakeSessionPlanner.wakeSessionID(for: dateKey),
+            dateKey: dateKey,
+            morningDate: date,
+            mode: mode,
+            finalThirdStart: prayerWindow.fajrStart.addingTimeInterval(-2 * 60 * 60),
+            fajrBegins: prayerWindow.fajrStart,
+            fajrEnds: prayerWindow.fajrEnd,
+            plannedWakeTime: plannedWakeTime,
+            primaryAlarmID: "\(primaryEventID).wake",
+            primaryScheduledEventID: primaryEventID,
+            wakeCheckIDs: wakeChecks.map { "\($0.id).wake" },
+            wakeCheckScheduledEventIDs: wakeChecks.map(\.id)
+        )
+    }
+
     private static func expectedDelivery(
         identifier: String,
         alarmIDSeed: String,
@@ -3443,6 +3716,19 @@ struct ScheduleServiceExtractionTests {
             offsetMinutes: 45,
             calculationMethodName: "Test",
             timeZone: timeZone
+        )
+    }
+
+    private static func makePrayerWindow(timeZone: TimeZone) -> DailyPrayerWindow {
+        let dayStart = makeDate(year: 2026, month: 5, day: 1, timeZone: timeZone)
+        let fajrStart = makeDate(year: 2026, month: 5, day: 1, hour: 5, minute: 0, timeZone: timeZone)
+        let fajrEnd = makeDate(year: 2026, month: 5, day: 1, hour: 6, minute: 16, timeZone: timeZone)
+        let maghrib = makeDate(year: 2026, month: 5, day: 1, hour: 19, minute: 30, timeZone: timeZone)
+        return DailyPrayerWindow(
+            date: dayStart,
+            fajrStart: fajrStart,
+            fajrEnd: fajrEnd,
+            maghrib: maghrib
         )
     }
 

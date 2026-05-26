@@ -347,7 +347,7 @@ enum MorningScheduleResolver {
             fixedWakeTimeCompatibilityMinutesFromMidnight: selectedPlan.fixedWakeTimeCompatibilityMinutesFromMidnight,
             reminderEnabled: input.effectiveConfig.reminderEnabled,
             wakeAlarmEnabled: input.effectiveConfig.suhoorEnabled,
-            wakeFollowUpEnabled: FeatureFlags.enableSnooze && input.stateSnapshot.settings.snoozeEnabled,
+            wakeFollowUpEnabled: input.effectiveConfig.suhoorEnabled,
             fajrBoundaryNoticeEnabled: input.effectiveConfig.fajrEnabled,
             iftarReminderEnabled: iftarReminderEnabled,
             resolvedWakeState: wakeResolution.resolvedWakeState,
@@ -451,23 +451,15 @@ enum MorningScheduleResolver {
             )
         }
 
-        if behaviorProfile.wakeFollowUpEnabled {
-            let followUpDate = wakeTime.addingTimeInterval(TimeInterval(input.stateSnapshot.settings.snoozeMinutes * 60))
-            events.append(
-                ScheduledEvent(
-                    id: "\(input.dateKey).wakeFollowUp",
-                    type: .wakeFollowUp,
-                    dateKey: input.dateKey,
-                    fireDate: followUpDate,
-                    relativeTo: .wakeAlarm(offsetMinutes: input.stateSnapshot.settings.snoozeMinutes),
-                    isUserVisible: true,
-                    affectsCompletion: false,
-                    deliveryKinds: [],
-                    soundRole: behaviorProfile.primaryWakeSoundRole,
-                    wakeSessionID: wakeSessionID,
-                    wakeSessionRole: .companion
-                )
-            )
+        if behaviorProfile.wakeAlarmEnabled && behaviorProfile.wakeFollowUpEnabled {
+            events.append(contentsOf: WakeSessionPlanner.wakeCheckEvents(
+                dateKey: input.dateKey,
+                wakeSessionID: wakeSessionID,
+                mode: wakeSessionMode(for: behaviorProfile),
+                primaryWakeTime: wakeTime,
+                prayerWindow: prayerWindow,
+                soundRole: behaviorProfile.primaryWakeSoundRole
+            ))
         }
 
         if let boundaryDate {
@@ -526,6 +518,13 @@ enum MorningScheduleResolver {
             kinds.append(.iftarAdhan)
         }
         return kinds
+    }
+
+    private static func wakeSessionMode(for behaviorProfile: MorningBehaviorProfile) -> WakeSessionMode {
+        if behaviorProfile.plannedWakeState == .preFajr || behaviorProfile.resolvedWakeState == .preFajr {
+            return .suhoor
+        }
+        return .fajr
     }
 
     private static func compatibilityNotes(

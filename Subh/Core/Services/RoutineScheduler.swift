@@ -192,9 +192,7 @@ final class RoutineScheduler: RoutineScheduling {
                     wakeSessionRole: event.wakeSessionRole,
                     fajrStartBehavior: event.fajrStartBehavior,
                     soundName: soundName,
-                    snoozeDuration: event.wakeSessionRole == .primaryWake && FeatureFlags.enableSnooze && settings.snoozeEnabled
-                        ? TimeInterval(settings.snoozeMinutes * 60)
-                        : nil
+                    snoozeDuration: nil
                 )
                 eventLog.record(category: "schedule", message: "Scheduled AlarmKit event id=\(identifier) date=\(event.fireDate) kind=\(deliveryKind.rawValue)")
                 return scheduled
@@ -350,9 +348,6 @@ final class RoutineScheduler: RoutineScheduling {
 
         if canUseAlarmKit, #available(iOS 26.0, *) {
             if FeatureFlags.useAlarmCoordinatorForScheduling, let alarmCoordinator {
-                let snoozeSeconds = FeatureFlags.enableSnooze && settings.snoozeEnabled
-                    ? TimeInterval(settings.snoozeMinutes * 60)
-                    : nil
                 let scheduled = await alarmCoordinator.scheduleAlarm(
                     id: SchedulingIdentifiers.alarmID(for: schedule, kind: .wake),
                     kind: .wake,
@@ -360,7 +355,7 @@ final class RoutineScheduler: RoutineScheduling {
                     label: settings.label,
                     fajrDateTime: schedule.fajrDate,
                     soundName: nil,
-                    snoozeDuration: snoozeSeconds
+                    snoozeDuration: nil
                 )
                 eventLog.record(category: "schedule", message: "Scheduled wake AlarmKit id=\(SchedulingIdentifiers.alarmID(for: schedule, kind: .wake).uuidString) date=\(schedule.wakeDate)")
                 return scheduled
