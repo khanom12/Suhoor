@@ -147,6 +147,38 @@ struct SubhHomeView: View {
                 HomeSettingsFloatingControl {
                     presentSettings()
                 }
+
+                #if DEBUG || INTERNAL_TESTING
+                if let overlay = scheduleManager.homeSimulationOverlayModel {
+                    VStack {
+                        Spacer()
+                        HomeSimulationDock(
+                            model: overlay,
+                            onChangeTime: {
+                                presentSettings()
+                            },
+                            onJumpState: {
+                                scheduleManager.jumpSimulationState()
+                            },
+                            onRunMappedPlayback: {
+                                Task {
+                                    await scheduleManager.runSimulationMappedPlaybackFromHome()
+                                }
+                            },
+                            onCancelTestAlarms: {
+                                scheduleManager.cancelAllSimulationTestAlarms()
+                            },
+                            onExitTestMode: {
+                                scheduleManager.exitSimulationTestMode()
+                            }
+                        )
+                        .padding(.horizontal, DesignTokens.spacingM)
+                        .padding(.bottom, DesignTokens.spacingM)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+                #endif
             }
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(item: $destination) { destination in
@@ -421,6 +453,91 @@ private struct SharedDayTagChip: View {
         }
     }
 }
+
+#if DEBUG || INTERNAL_TESTING
+private struct HomeSimulationDock: View {
+    let model: HomeSimulationOverlayModel
+    let onChangeTime: () -> Void
+    let onJumpState: () -> Void
+    let onRunMappedPlayback: () -> Void
+    let onCancelTestAlarms: () -> Void
+    let onExitTestMode: () -> Void
+
+    var body: some View {
+        AppGlassSurface(
+            variant: .homeGrouped,
+            contentPadding: 12
+        ) {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(model.title)
+                        .font(.footnote.weight(.black))
+                        .foregroundStyle(Color.red)
+                    Spacer(minLength: 12)
+                    Text(model.runMode)
+                        .font(AppTypography.badge)
+                        .foregroundStyle(WakeGlassTheme.secondaryText)
+                }
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(model.scenario)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(WakeGlassTheme.primaryText)
+                        .lineLimit(1)
+                    Text("\(model.simulatedDateTime) - \(model.location)")
+                        .font(.caption)
+                        .foregroundStyle(WakeGlassTheme.secondaryText)
+                        .lineLimit(2)
+                    Text(model.jumpPoint)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(WakeGlassTheme.primaryText.opacity(0.85))
+                        .lineLimit(1)
+                    if let countdown = model.nextRealAlarmCountdown,
+                       let eventName = model.nextSimulatedEventName,
+                       let fireTime = model.nextMappedRealFireTime {
+                        Text("\(eventName): \(countdown) -> \(fireTime)")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(Color.red.opacity(0.92))
+                            .lineLimit(1)
+                    }
+                }
+
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        dockButton("Change Time", systemImage: "clock", action: onChangeTime)
+                        dockButton("Jump State", systemImage: "arrow.triangle.2.circlepath", action: onJumpState)
+                        dockButton("Run Real AlarmKit Playback", systemImage: "alarm.waves.left.and.right", action: onRunMappedPlayback)
+                        dockButton("Cancel Test Alarms", systemImage: "bell.slash", action: onCancelTestAlarms)
+                        dockButton("Exit Test Mode", systemImage: "xmark.circle", role: .destructive, action: onExitTestMode)
+                    }
+                }
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Test mode active")
+    }
+
+    private func dockButton(
+        _ title: String,
+        systemImage: String,
+        role: ButtonRole? = nil,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(role: role, action: action) {
+            Label(title, systemImage: systemImage)
+                .font(.caption.weight(.semibold))
+                .lineLimit(1)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 7)
+                .background {
+                    Capsule(style: .continuous)
+                        .fill(WakeGlassTheme.primaryText.opacity(0.08))
+                }
+        }
+        .buttonStyle(.plain)
+    }
+}
+#endif
 
 private struct TomorrowMorningHero: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize

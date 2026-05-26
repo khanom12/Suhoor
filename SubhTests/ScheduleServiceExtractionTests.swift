@@ -746,24 +746,26 @@ struct ScheduleServiceExtractionTests {
 
     @Test
     @MainActor
-    func wakeSessionLabCompressedFajrScenarioUsesTestTimingOnly() async throws {
+    func wakeSessionLabFajrScenarioUsesFiveMinuteWakeChecks() async throws {
         let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
         let now = Self.makeDate(year: 2026, month: 5, day: 26, hour: 14, timeZone: timeZone)
         let store = WakeSessionStore(loadPersistedData: false)
         let harness = WakeSessionTestingHarness(wakeSessionStore: store, initialNow: now, timeZone: timeZone)
 
-        await harness.start(WakeSessionTestScenario.fajrCompressed)
+        await harness.start(WakeSessionTestScenario.fajrStateExplorer)
 
         let plan = try #require(harness.activePlan)
         let session = try #require(store.session(id: plan.wakeSessionID))
-        #expect(plan.fajrBegins == now.addingTimeInterval(60))
+        #expect(plan.fajrBegins == now.addingTimeInterval(-5 * 60))
         #expect(plan.primaryWakeTime == now.addingTimeInterval(2 * 60))
-        #expect(plan.fajrEnds == now.addingTimeInterval(8 * 60))
+        #expect(plan.fajrEnds == now.addingTimeInterval(35 * 60))
         let wakeCheckFireDates = plan.wakeCheckEvents.map { $0.fireDate }
         #expect(wakeCheckFireDates == [
-            now.addingTimeInterval(3 * 60),
-            now.addingTimeInterval(4 * 60),
-            now.addingTimeInterval(5 * 60)
+            now.addingTimeInterval(7 * 60),
+            now.addingTimeInterval(12 * 60),
+            now.addingTimeInterval(17 * 60),
+            now.addingTimeInterval(22 * 60),
+            now.addingTimeInterval(27 * 60)
         ])
         #expect(WakeSessionPlanner.wakeCheckIntervalMinutes == 5)
         #expect(WakeSessionPlanner.maximumWakeCheckCount == 5)
@@ -773,21 +775,21 @@ struct ScheduleServiceExtractionTests {
 
     @Test
     @MainActor
-    func wakeSessionLabCompressedSuhoorScenarioConfirmsFastingIntentOnly() async throws {
+    func wakeSessionLabSuhoorScenarioConfirmsFastingIntentOnly() async throws {
         let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
         let now = Self.makeDate(year: 2026, month: 5, day: 26, hour: 14, timeZone: timeZone)
         let store = WakeSessionStore(loadPersistedData: false)
         let harness = WakeSessionTestingHarness(wakeSessionStore: store, initialNow: now, timeZone: timeZone)
 
-        await harness.start(WakeSessionTestScenario.suhoorCompressed)
+        await harness.start(WakeSessionTestScenario.suhoorStateExplorer)
         harness.confirmAwakeForSuhoor()
 
         let plan = try #require(harness.activePlan)
         let log = try #require(store.morningLog(for: plan.dateKey))
-        #expect(plan.finalThirdStart == now)
+        #expect(plan.finalThirdStart == now.addingTimeInterval(-10 * 60))
         #expect(plan.primaryWakeTime == now.addingTimeInterval(2 * 60))
-        #expect(plan.fajrBegins == now.addingTimeInterval(8 * 60))
-        #expect(plan.wakeCheckEvents.count == 3)
+        #expect(plan.fajrBegins == now.addingTimeInterval(35 * 60))
+        #expect(plan.wakeCheckEvents.count == 5)
         #expect(log.suhoorWakeOutcome == MorningWakeOutcome.confirmedAwakeForSuhoor)
         #expect(log.fastingIntentOutcome == FastingIntentOutcome.fastingIntentConfirmed)
         #expect(log.fajrPrayerOutcome == FajrPrayerOutcome.unconfirmed)
@@ -817,7 +819,7 @@ struct ScheduleServiceExtractionTests {
         let store = WakeSessionStore(loadPersistedData: false)
         let harness = WakeSessionTestingHarness(wakeSessionStore: store)
 
-        await harness.start(WakeSessionTestScenario.fajrCompressed)
+        await harness.start(WakeSessionTestScenario.fajrStateExplorer)
         harness.confirmAwakeForFajr()
 
         let plan = try #require(harness.activePlan)
@@ -919,7 +921,7 @@ struct ScheduleServiceExtractionTests {
 
     @Test
     @MainActor
-    func wakeSessionLabRealAlarmKitCompressedPathIsExplicitAndSafeForAutomation() async throws {
+    func wakeSessionLabRealAlarmKitMappedPlaybackPreservesFiveMinuteSpacing() async throws {
         let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
         let now = Self.makeDate(year: 2026, month: 5, day: 26, hour: 14, timeZone: timeZone)
         let store = WakeSessionStore(loadPersistedData: false)
@@ -938,17 +940,88 @@ struct ScheduleServiceExtractionTests {
         let preview = harness.makeRealAlarmKitPreviewEvents(now: now)
         let previewFireDates = preview.map { $0.fireDate }
         #expect(previewFireDates == [
-            now.addingTimeInterval(2 * 60),
-            now.addingTimeInterval(3 * 60),
-            now.addingTimeInterval(4 * 60),
-            now.addingTimeInterval(5 * 60)
+            now.addingTimeInterval(90),
+            now.addingTimeInterval(90 + 5 * 60),
+            now.addingTimeInterval(90 + 10 * 60),
+            now.addingTimeInterval(90 + 15 * 60),
+            now.addingTimeInterval(90 + 20 * 60),
+            now.addingTimeInterval(90 + 25 * 60)
         ])
 
-        await harness.start(WakeSessionTestScenario.realAlarmKitCompressed)
+        await harness.start(WakeSessionTestScenario.realAlarmKitMappedPlayback)
 
         #expect(harness.schedulerMode == WakeSessionTestSchedulerMode.realAlarmKit)
         #expect(scheduledEvents == preview)
         #expect(harness.alarmRecords.allSatisfy { $0.channel == WakeSessionTestAlarmChannel.realAlarmKit && $0.isTest })
+        #expect(harness.alarmRecords.map(\.fireDate) == previewFireDates)
+        #expect(harness.alarmRecords.map(\.simulatedFireDate) != previewFireDates)
+    }
+
+    @Test
+    @MainActor
+    func wakeSessionLabMappedPlaybackSequenceSelectorLimitsWakeChecks() throws {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let now = Self.makeDate(year: 2026, month: 5, day: 26, hour: 14, timeZone: timeZone)
+        let store = WakeSessionStore(loadPersistedData: false)
+        let harness = WakeSessionTestingHarness(
+            wakeSessionStore: store,
+            realTimeProvider: FixedTimeProvider(fixedNow: now),
+            initialNow: now,
+            timeZone: timeZone
+        )
+        harness.selectedSequenceLength = .primaryPlusTwo
+        harness.mappedStartDelaySeconds = 20
+
+        let plan = harness.makeMappedPlaybackPreview(now: now)
+
+        #expect(plan.sequenceLength == .primaryPlusTwo)
+        #expect(plan.startDelaySeconds == 60)
+        #expect(plan.mappedEvents.count == 3)
+        #expect(plan.mappedEvents.map(\.mappedRealFireDate) == [
+            now.addingTimeInterval(60),
+            now.addingTimeInterval(60 + 5 * 60),
+            now.addingTimeInterval(60 + 10 * 60)
+        ])
+    }
+
+    @Test
+    @MainActor
+    func wakeSessionLabHomeSimulationSnapshotUsesActiveContextAndRestoresRealHome() async throws {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let now = Self.makeDate(year: 2026, month: 5, day: 26, hour: 14, timeZone: timeZone)
+        let store = WakeSessionStore(loadPersistedData: false)
+        let harness = WakeSessionTestingHarness(wakeSessionStore: store, initialNow: now, timeZone: timeZone)
+        let baseDay = Self.makeSchedulerActiveDay(date: now.addingTimeInterval(24 * 60 * 60), timeZone: timeZone)
+        let realEntry = WakeRowActionResolver.makeEntry(activeDay: baseDay, overrideDateKeys: [])
+        let realSnapshot = MorningHomeSnapshot(
+            tomorrow: realEntry,
+            heroWakeSession: nil,
+            heroMorningLog: nil,
+            weeklyFajrcast: .empty,
+            morningcast: [realEntry],
+            permissionState: .empty,
+            contextFlags: []
+        )
+
+        await harness.activateOnHome(scenario: .fajrStateExplorer)
+        let activePlan = try #require(harness.activePlan)
+
+        let simulatedSnapshot = harness.simulatedHomeSnapshot(
+            realSnapshot: realSnapshot,
+            baseDay: baseDay,
+            timeZone: timeZone
+        )
+        #expect(simulatedSnapshot.tomorrow?.id == activePlan.dateKey)
+        #expect(simulatedSnapshot.heroWakeSession?.isTest == true)
+        #expect(simulatedSnapshot.contextFlags.first?.id == "test-mode")
+
+        harness.exitTestMode()
+        let restoredSnapshot = harness.simulatedHomeSnapshot(
+            realSnapshot: realSnapshot,
+            baseDay: baseDay,
+            timeZone: timeZone
+        )
+        #expect(restoredSnapshot.tomorrow?.id == realSnapshot.tomorrow?.id)
     }
 
     @Test

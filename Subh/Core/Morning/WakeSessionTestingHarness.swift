@@ -10,24 +10,25 @@ enum WakeSessionLabBuildGate {
 }
 
 enum WakeSessionTestScenario: String, CaseIterable, Identifiable, Sendable {
-    case fajrCompressed
-    case suhoorCompressed
+    case fajrStateExplorer
+    case suhoorStateExplorer
     case suhoorUnconfirmedToFajr
     case quietDuringWakeChecks
     case sliderReschedule
     case alarmStopVsAwake
     case permissionFailure
+    case morningLogInspector
     case crossSurfaceConsistency
-    case realAlarmKitCompressed
+    case realAlarmKitMappedPlayback
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
-        case .fajrCompressed:
-            return "Start Fajr Wake Session Test"
-        case .suhoorCompressed:
-            return "Start Suhoor Wake Session Test"
+        case .fajrStateExplorer:
+            return "Fajr State Explorer"
+        case .suhoorStateExplorer:
+            return "Suhoor State Explorer"
         case .suhoorUnconfirmedToFajr:
             return "Start Suhoor Not Confirmed -> Fajr Begins"
         case .quietDuringWakeChecks:
@@ -38,20 +39,47 @@ enum WakeSessionTestScenario: String, CaseIterable, Identifiable, Sendable {
             return "Start Alarm Stop vs Awake Confirmation Test"
         case .permissionFailure:
             return "Start Permission Failure Test"
+        case .morningLogInspector:
+            return "Start MorningLog Inspector Test"
         case .crossSurfaceConsistency:
             return "Start Cross-Surface Consistency Test"
-        case .realAlarmKitCompressed:
-            return "Start Real AlarmKit Compressed Test"
+        case .realAlarmKitMappedPlayback:
+            return "Start Real AlarmKit Mapped Playback"
         }
     }
 
     var mode: WakeSessionMode {
         switch self {
-        case .suhoorCompressed, .suhoorUnconfirmedToFajr:
+        case .suhoorStateExplorer, .suhoorUnconfirmedToFajr:
             return .suhoor
-        case .fajrCompressed, .quietDuringWakeChecks, .sliderReschedule, .alarmStopVsAwake,
-             .permissionFailure, .crossSurfaceConsistency, .realAlarmKitCompressed:
+        case .fajrStateExplorer, .quietDuringWakeChecks, .sliderReschedule, .alarmStopVsAwake,
+             .permissionFailure, .morningLogInspector, .crossSurfaceConsistency, .realAlarmKitMappedPlayback:
             return .fajr
+        }
+    }
+
+    var simulationKind: WakeSessionSimulationScenarioKind {
+        switch self {
+        case .fajrStateExplorer:
+            return .fajrStateExplorer
+        case .suhoorStateExplorer:
+            return .suhoorStateExplorer
+        case .suhoorUnconfirmedToFajr:
+            return .suhoorUnconfirmedToFajr
+        case .quietDuringWakeChecks:
+            return .quietDuringWakeChecks
+        case .sliderReschedule:
+            return .sliderReschedule
+        case .alarmStopVsAwake:
+            return .alarmStopVsAwake
+        case .permissionFailure:
+            return .permissionFailure
+        case .morningLogInspector:
+            return .morningLogInspector
+        case .crossSurfaceConsistency:
+            return .crossSurfaceConsistency
+        case .realAlarmKitMappedPlayback:
+            return .realAlarmKitMappedPlayback
         }
     }
 }
@@ -59,6 +87,7 @@ enum WakeSessionTestScenario: String, CaseIterable, Identifiable, Sendable {
 enum WakeSessionTestSchedulerMode: String, CaseIterable, Identifiable, Sendable {
     case fake
     case realAlarmKit
+    case dryRun
 
     var id: String { rawValue }
 
@@ -68,15 +97,25 @@ enum WakeSessionTestSchedulerMode: String, CaseIterable, Identifiable, Sendable 
             return "Fake"
         case .realAlarmKit:
             return "Real AlarmKit"
+        case .dryRun:
+            return "Dry Run"
         }
     }
 }
 
 enum WakeSessionTestPermissionState: String, CaseIterable, Identifiable, Sendable {
     case available
+    case alarmKitAuthorized
     case alarmKitDenied
+    case alarmKitUnavailable
+    case notificationsAuthorized
     case notificationsDenied
+    case notificationFallbackDegraded
     case scheduleFailure
+    case missingPendingAlarm
+    case mismatchedFireDate
+    case duplicateIdentifier
+    case soundAssetMissing
 
     var id: String { rawValue }
 
@@ -84,17 +123,39 @@ enum WakeSessionTestPermissionState: String, CaseIterable, Identifiable, Sendabl
         switch self {
         case .available:
             return "Available"
+        case .alarmKitAuthorized:
+            return "AlarmKit authorized"
         case .alarmKitDenied:
             return "AlarmKit denied"
+        case .alarmKitUnavailable:
+            return "AlarmKit unavailable"
+        case .notificationsAuthorized:
+            return "Notifications authorized"
         case .notificationsDenied:
             return "Notifications denied"
+        case .notificationFallbackDegraded:
+            return "Notification fallback degraded"
         case .scheduleFailure:
             return "Schedule failure"
+        case .missingPendingAlarm:
+            return "Missing pending alarm"
+        case .mismatchedFireDate:
+            return "Mismatched fire date"
+        case .duplicateIdentifier:
+            return "Duplicate identifier"
+        case .soundAssetMissing:
+            return "Sound asset missing"
         }
     }
 
     var blocksScheduling: Bool {
-        self != .available
+        switch self {
+        case .available, .alarmKitAuthorized, .notificationsAuthorized, .notificationFallbackDegraded,
+             .missingPendingAlarm, .mismatchedFireDate, .duplicateIdentifier:
+            return false
+        case .alarmKitDenied, .alarmKitUnavailable, .notificationsDenied, .scheduleFailure, .soundAssetMissing:
+            return true
+        }
     }
 }
 
@@ -117,6 +178,7 @@ enum WakeSessionTestAlarmRole: String, Codable, CaseIterable, Identifiable, Send
 enum WakeSessionTestAlarmChannel: String, Codable, CaseIterable, Identifiable, Sendable {
     case fake
     case realAlarmKit
+    case notification
 
     var id: String { rawValue }
 
@@ -126,6 +188,8 @@ enum WakeSessionTestAlarmChannel: String, Codable, CaseIterable, Identifiable, S
             return "Fake"
         case .realAlarmKit:
             return "Real AlarmKit"
+        case .notification:
+            return "Notification"
         }
     }
 }
@@ -145,6 +209,8 @@ struct WakeSessionTestAlarmRecord: Identifiable, Equatable, Sendable {
     let scenarioID: String
     let scheduledEventID: String
     let fireDate: Date
+    let simulatedFireDate: Date
+    let mappedRealFireDate: Date?
     let role: WakeSessionTestAlarmRole
     let mode: WakeSessionMode
     let channel: WakeSessionTestAlarmChannel
@@ -207,12 +273,20 @@ final class FakeWakeSessionTestScheduler {
         records.filter { $0.status == .pending }
     }
 
-    func schedule(plan: WakeSessionTestScenarioPlan, channel: WakeSessionTestAlarmChannel, now: Date) {
+    func schedule(
+        plan: WakeSessionTestScenarioPlan,
+        channel: WakeSessionTestAlarmChannel,
+        now: Date,
+        mappingPlan: AlarmKitMappingPlan? = nil
+    ) {
         for event in plan.events {
             let role = event.wakeSessionRole == .primaryWake
                 ? WakeSessionTestAlarmRole.primary
                 : WakeSessionTestAlarmRole.wakeCheck
             let identifier = SchedulingIdentifiers.identifier(for: event, deliveryKind: .wake)
+            let mappedEvent = mappingPlan?.mappedEvents.first {
+                $0.id == event.id || $0.event.id == event.id
+            }
             let status: WakeSessionTestAlarmStatus = permissionState.blocksScheduling ? .failed : .pending
             let failureReason = permissionState.blocksScheduling ? permissionState.displayName : nil
             records.append(
@@ -221,7 +295,9 @@ final class FakeWakeSessionTestScheduler {
                     wakeSessionID: plan.wakeSessionID,
                     scenarioID: plan.scenarioID,
                     scheduledEventID: event.id,
-                    fireDate: event.fireDate,
+                    fireDate: mappedEvent?.mappedRealFireDate ?? event.fireDate,
+                    simulatedFireDate: mappedEvent?.simulatedFireDate ?? event.fireDate,
+                    mappedRealFireDate: mappedEvent?.mappedRealFireDate,
                     role: role,
                     mode: plan.mode,
                     channel: channel,
@@ -243,6 +319,19 @@ final class FakeWakeSessionTestScheduler {
             cancelled.append(records[index].scheduledEventID)
         }
         return cancelled
+    }
+
+    @discardableResult
+    func cancel(identifier: String, now: Date) -> Bool {
+        guard let index = records.firstIndex(where: { $0.id == identifier || $0.scheduledEventID == identifier }) else {
+            return false
+        }
+        guard records[index].status == .pending else {
+            return false
+        }
+        records[index].status = .cancelled
+        records[index].cancelledAt = now
+        return true
     }
 
     func cancelAllTestAlarms(now: Date) -> [String] {
@@ -277,6 +366,7 @@ final class FakeWakeSessionTestScheduler {
 @MainActor
 final class WakeSessionTestingHarness: ObservableObject {
     typealias RealAlarmKitScheduler = @MainActor ([ScheduledEvent], WakeSessionMode, Date) async -> Bool
+    typealias RealAlarmKitCanceller = @MainActor ([WakeSessionTestAlarmRecord], Date) async -> Void
 
     @Published private(set) var clock: MutableTimeProvider
     @Published private(set) var activePlan: WakeSessionTestScenarioPlan?
@@ -285,10 +375,21 @@ final class WakeSessionTestingHarness: ObservableObject {
     @Published private(set) var alarmRecords: [WakeSessionTestAlarmRecord] = []
     @Published private(set) var statusMessage: String = "Test mode is off."
     @Published private(set) var realAlarmKitWarningAcknowledged = false
+    @Published private(set) var activeSimulationContext: ActiveSimulationContext?
+    @Published var selectedScenario: WakeSessionTestScenario = .fajrStateExplorer
+    @Published var selectedDatePreset: WakeSessionSimulationDatePreset = .today
+    @Published var selectedManualDate: Date
+    @Published var selectedLocation: SimulationLocation = .currentAppLocation
+    @Published var selectedPrayerWindowSource: SimulationPrayerWindowSource = .realCalculation
+    @Published var selectedClockMode: SimulationClockMode = .jumpOnly
+    @Published var selectedJumpPoint: WakeSessionSimulationJumpPoint = .beforePrimaryWake
+    @Published var selectedSequenceLength: WakeSessionMappedSequenceLength = .defaultSelection
+    @Published var mappedStartDelaySeconds: TimeInterval = 90
 
     private let wakeSessionStore: WakeSessionStore
     private let fakeScheduler: FakeWakeSessionTestScheduler
     private let realAlarmKitScheduler: RealAlarmKitScheduler?
+    private let realAlarmKitCanceller: RealAlarmKitCanceller?
     private let refreshSurfaces: () -> Void
     private let realTimeProvider: any TimeProviding
     private let timeZone: TimeZone
@@ -297,6 +398,7 @@ final class WakeSessionTestingHarness: ObservableObject {
         wakeSessionStore: WakeSessionStore,
         fakeScheduler: FakeWakeSessionTestScheduler? = nil,
         realAlarmKitScheduler: RealAlarmKitScheduler? = nil,
+        realAlarmKitCanceller: RealAlarmKitCanceller? = nil,
         refreshSurfaces: @escaping () -> Void = {},
         realTimeProvider: any TimeProviding = SystemTimeProvider(),
         initialNow: Date = Date(),
@@ -305,19 +407,21 @@ final class WakeSessionTestingHarness: ObservableObject {
         self.wakeSessionStore = wakeSessionStore
         self.fakeScheduler = fakeScheduler ?? FakeWakeSessionTestScheduler()
         self.realAlarmKitScheduler = realAlarmKitScheduler
+        self.realAlarmKitCanceller = realAlarmKitCanceller
         self.refreshSurfaces = refreshSurfaces
         self.realTimeProvider = realTimeProvider
         self.clock = MutableTimeProvider(now: initialNow)
+        self.selectedManualDate = initialNow
         self.timeZone = timeZone
         refreshPublishedSchedulerState()
     }
 
     var isActive: Bool {
-        activePlan != nil
+        activePlan != nil || activeSimulationContext != nil
     }
 
     var activeScenarioTitle: String {
-        activePlan?.scenario.title ?? "None"
+        activeSimulationContext?.scenarioTitle ?? activePlan?.scenario.title ?? "None"
     }
 
     var simulatedNow: Date {
@@ -329,7 +433,13 @@ final class WakeSessionTestingHarness: ObservableObject {
     }
 
     var activeSession: WakeSession? {
-        activePlan.flatMap { wakeSessionStore.session(id: $0.wakeSessionID) }
+        if let activePlan {
+            return wakeSessionStore.session(id: activePlan.wakeSessionID)
+        }
+        if let wakeSessionID = activeSimulationContext?.wakeSessionID {
+            return wakeSessionStore.session(id: wakeSessionID)
+        }
+        return nil
     }
 
     var testSessions: [WakeSession] {
@@ -348,32 +458,70 @@ final class WakeSessionTestingHarness: ObservableObject {
         alarmRecords.filter { $0.status == .pending }
     }
 
+    var currentRunMode: SimulationRunMode {
+        activeSimulationContext?.runMode ?? .dryRun
+    }
+
+    var hasPendingWakeChecks: Bool {
+        guard let plan = activePlan else { return false }
+        return pendingTestAlarms.contains { $0.wakeSessionID == plan.wakeSessionID && $0.role == .wakeCheck }
+    }
+
     func start(_ scenario: WakeSessionTestScenario) async {
+        await start(scenario, runMode: scenario == .realAlarmKitMappedPlayback ? .realAlarmKitMappedPlayback : .fakeSchedulerPlayback)
+    }
+
+    func activateOnHome(scenario: WakeSessionTestScenario? = nil) async {
+        await start(scenario ?? selectedScenario, runMode: .homeSimulation)
+    }
+
+    func start(_ scenario: WakeSessionTestScenario, runMode: SimulationRunMode) async {
+        selectedScenario = scenario
         permissionState = scenario == .permissionFailure ? .alarmKitDenied : .available
         fakeScheduler.permissionState = permissionState
-        schedulerMode = scenario == .realAlarmKitCompressed ? .realAlarmKit : .fake
-        let now = scenario == .realAlarmKitCompressed ? realTimeProvider.now() : clock.now()
-        clock.setNow(now)
+        schedulerMode = runMode == .realAlarmKitMappedPlayback ? .realAlarmKit : (runMode == .dryRun ? .dryRun : .fake)
+        let realNow = realTimeProvider.now()
+        let now = simulatedDate(for: selectedDatePreset, relativeTo: runMode == .realAlarmKitMappedPlayback ? realNow : clock.now())
         let plan = makePlan(for: scenario, now: now)
+        let jumpPoint = defaultJumpPoint(for: scenario)
+        let simulatedNow = simulatedNow(for: jumpPoint, plan: plan)
+        clock.setNow(simulatedNow)
         activePlan = plan
         _ = wakeSessionStore.upsertScheduledSession(from: plan.draft, now: now)
+        activeSimulationContext = makeSimulationContext(
+            plan: plan,
+            runMode: runMode,
+            clockMode: runMode == .realAlarmKitMappedPlayback ? .mappedPlayback : selectedClockMode,
+            jumpPoint: jumpPoint,
+            mappingPlan: nil,
+            createdAtRealDate: realNow
+        )
 
-        if scenario == .realAlarmKitCompressed {
+        if runMode == .realAlarmKitMappedPlayback {
             realAlarmKitWarningAcknowledged = true
-            let scheduled = await realAlarmKitScheduler?(plan.events, plan.mode, now) ?? false
+            let mappingPlan = makeMappingPlan(
+                for: plan,
+                realNow: realNow,
+                startDelaySeconds: mappedStartDelaySeconds,
+                sequenceLength: selectedSequenceLength
+            )
+            activeSimulationContext?.alarmMapping = mappingPlan
+            let scheduled = await realAlarmKitScheduler?(mappingPlan.realEvents, plan.mode, realNow) ?? false
             fakeScheduler.permissionState = scheduled ? .available : .scheduleFailure
-            fakeScheduler.schedule(plan: plan, channel: .realAlarmKit, now: now)
+            fakeScheduler.schedule(plan: plan, channel: .realAlarmKit, now: realNow, mappingPlan: mappingPlan)
             if !scheduled {
                 markCurrentPendingRecordsFailed(reason: "Real AlarmKit scheduling unavailable")
             }
             statusMessage = scheduled
-                ? "Real AlarmKit compressed test scheduled. Real alarms will ring."
-                : "Real AlarmKit compressed test could not be scheduled on this target."
+                ? "Real AlarmKit mapped playback scheduled. Wake Checks remain 5 minutes apart."
+                : "Real AlarmKit mapped playback could not be scheduled on this target."
+        } else if runMode == .dryRun {
+            statusMessage = "\(scenario.title) dry run prepared. No alarms scheduled."
         } else {
             fakeScheduler.schedule(plan: plan, channel: .fake, now: now)
             statusMessage = permissionState.blocksScheduling
                 ? "Permission failure simulated. Wake intent remains \(plan.mode.confirmationTitle)."
-                : "\(scenario.title) started with compressed test timing."
+                : "\(scenario.title) started with five-minute Wake Check spacing."
         }
 
         if scenario == .quietDuringWakeChecks || scenario == .alarmStopVsAwake {
@@ -385,25 +533,39 @@ final class WakeSessionTestingHarness: ObservableObject {
         refreshSurfaces()
     }
 
+    func makeMappedPlaybackPreview(now: Date? = nil) -> AlarmKitMappingPlan {
+        let realNow = now ?? realTimeProvider.now()
+        let plan = makePlan(for: .realAlarmKitMappedPlayback, now: simulatedDate(for: selectedDatePreset, relativeTo: realNow))
+        return makeMappingPlan(
+            for: plan,
+            realNow: realNow,
+            startDelaySeconds: mappedStartDelaySeconds,
+            sequenceLength: selectedSequenceLength
+        )
+    }
+
     func jumpToPrimaryWake() {
         guard let plan = activePlan else { return }
-        setSimulatedNow(plan.primaryWakeTime)
+        setJumpPoint(plan.mode == .suhoor ? .atPrimarySuhoorWake : .atPrimaryWake)
     }
 
     func jumpToFajrBegins() {
         guard let plan = activePlan else { return }
-        setSimulatedNow(plan.fajrBegins)
+        setJumpPoint(plan.mode == .suhoor ? .fajrBeginsAfterSuhoor : .atFajrBegins)
     }
 
     func jumpToWakeCheck(index: Int) {
-        guard let event = activePlan?.wakeCheckEvents.first(where: { $0.id.hasSuffix(".\(index)") || $0.id.hasSuffix("check.\(index)") }) else {
-            return
-        }
-        setSimulatedNow(event.fireDate)
+        setJumpPoint(wakeCheckJumpPoint(index: index))
+    }
+
+    func setJumpPoint(_ jumpPoint: WakeSessionSimulationJumpPoint) {
+        guard let plan = activePlan else { return }
+        selectedJumpPoint = jumpPoint
+        setSimulatedNow(simulatedNow(for: jumpPoint, plan: plan), jumpPoint: jumpPoint)
     }
 
     func returnToRealTime() {
-        setSimulatedNow(realTimeProvider.now())
+        setSimulatedNow(realTimeProvider.now(), jumpPoint: nil)
     }
 
     func recordPrimaryAlarmFired() {
@@ -415,6 +577,7 @@ final class WakeSessionTestingHarness: ObservableObject {
             scheduledEventID: event.id,
             now: now
         )
+        activeSimulationContext?.jumpPoint = plan.mode == .suhoor ? .primarySuhoorAlarmFired : .primaryAlarmFired
         statusMessage = "Primary alarm fired for \(plan.mode.confirmationTitle)."
         refreshPublishedSchedulerState()
         refreshSurfaces()
@@ -432,6 +595,7 @@ final class WakeSessionTestingHarness: ObservableObject {
             scheduledEventID: record.scheduledEventID,
             now: now
         )
+        activeSimulationContext?.jumpPoint = wakeCheckJumpPoint(index: plan.wakeCheckEvents.firstIndex { $0.id == record.scheduledEventID }.map { $0 + 1 } ?? 1)
         statusMessage = "Wake Check fired."
         refreshPublishedSchedulerState()
         refreshSurfaces()
@@ -445,6 +609,7 @@ final class WakeSessionTestingHarness: ObservableObject {
             scheduledEventID: event.id,
             now: now
         )
+        activeSimulationContext?.jumpPoint = plan.mode == .suhoor ? .primarySuhoorAlarmFired : .primaryAlarmFired
         statusMessage = "Alarm stopped. Awake is still unconfirmed."
         refreshSurfaces()
     }
@@ -464,6 +629,7 @@ final class WakeSessionTestingHarness: ObservableObject {
             wakeSessionID: plan.wakeSessionID,
             now: clock.now()
         )
+        activeSimulationContext?.jumpPoint = plan.mode == .suhoor ? .fajrPrayerConfirmed : .prayerConfirmed
         statusMessage = "Fajr prayer confirmed separately from awake."
         refreshSurfaces()
     }
@@ -478,6 +644,7 @@ final class WakeSessionTestingHarness: ObservableObject {
             cancelledScheduledEventIDs: cancelled,
             now: now
         )
+        activeSimulationContext?.jumpPoint = .quietMorningLogged
         statusMessage = "Quiet Morning logged. Pending test Wake Checks cancelled."
         refreshPublishedSchedulerState()
         refreshSurfaces()
@@ -497,20 +664,89 @@ final class WakeSessionTestingHarness: ObservableObject {
         _ = wakeSessionStore.upsertScheduledSession(from: updated.draft, now: now)
         fakeScheduler.permissionState = .available
         fakeScheduler.schedule(plan: updated, channel: schedulerMode == .realAlarmKit ? .realAlarmKit : .fake, now: now)
+        activeSimulationContext = makeSimulationContext(
+            plan: updated,
+            runMode: activeSimulationContext?.runMode ?? .fakeSchedulerPlayback,
+            clockMode: activeSimulationContext?.clockMode ?? selectedClockMode,
+            jumpPoint: activeSimulationContext?.jumpPoint,
+            mappingPlan: activeSimulationContext?.alarmMapping,
+            createdAtRealDate: activeSimulationContext?.createdAtRealDate ?? realTimeProvider.now()
+        )
         statusMessage = "Wake time rescheduled. Stale test IDs cancelled."
         refreshPublishedSchedulerState()
         refreshSurfaces()
     }
 
     func cancelAllTestAlarms() {
-        _ = fakeScheduler.cancelAllTestAlarms(now: clock.now())
+        let now = clock.now()
+        let realAlarmKitRecords = pendingTestAlarms.filter { $0.channel == .realAlarmKit }
+        _ = fakeScheduler.cancelAllTestAlarms(now: now)
+        if !realAlarmKitRecords.isEmpty {
+            let realNow = realTimeProvider.now()
+            Task { @MainActor in
+                await realAlarmKitCanceller?(realAlarmKitRecords, realNow)
+            }
+        }
         statusMessage = "All pending test alarms cancelled."
         refreshPublishedSchedulerState()
+        refreshSurfaces()
+    }
+
+    func cancelSelectedTestAlarm(identifier: String) {
+        let realAlarmKitRecords = pendingTestAlarms.filter {
+            $0.channel == .realAlarmKit && ($0.id == identifier || $0.scheduledEventID == identifier)
+        }
+        _ = fakeScheduler.cancel(identifier: identifier, now: clock.now())
+        if !realAlarmKitRecords.isEmpty {
+            let realNow = realTimeProvider.now()
+            Task { @MainActor in
+                await realAlarmKitCanceller?(realAlarmKitRecords, realNow)
+            }
+        }
+        statusMessage = "Selected test alarm cancelled."
+        refreshPublishedSchedulerState()
+        refreshSurfaces()
+    }
+
+    func simulatePermissionState(_ state: WakeSessionTestPermissionState) {
+        permissionState = state
+        fakeScheduler.permissionState = state
+        statusMessage = "\(state.displayName) simulated. Real iOS permissions were not changed."
+        refreshPublishedSchedulerState()
+        refreshSurfaces()
+    }
+
+    func refreshInspectors() {
+        refreshPublishedSchedulerState()
+        statusMessage = "Inspectors refreshed."
+        refreshSurfaces()
+    }
+
+    func debugReport() -> String {
+        let lines = [
+            "Wake Session Lab Report",
+            "Scenario: \(activeScenarioTitle)",
+            "Run mode: \(currentRunMode.displayName)",
+            "Simulated now: \(TimeFormatters.shortDateTime.string(from: simulatedNow))",
+            "Scheduler: \(schedulerMode.displayName)",
+            "Permission simulation: \(permissionState.displayName)",
+            "Active session: \(activePlan?.wakeSessionID ?? "none")",
+            "Pending alarms: \(pendingTestAlarms.count)",
+            "Test MorningLogs: \(testMorningLogs.count)"
+        ]
+        let alarms = alarmRecords.map {
+            "- \($0.role.displayName) \($0.status.rawValue) sim=\(TimeFormatters.shortDateTime.string(from: $0.simulatedFireDate)) real=\(TimeFormatters.shortDateTime.string(from: $0.fireDate)) id=\($0.scheduledEventID)"
+        }
+        let logs = testMorningLogs.map {
+            "- \($0.dateKey) isTest=\($0.isTest) records=\($0.records.map(\.type.rawValue).joined(separator: ","))"
+        }
+        return (lines + ["Alarms:"] + alarms + ["MorningLogs:"] + logs).joined(separator: "\n")
     }
 
     func clearTestWakeSessions() {
         wakeSessionStore.clearTestWakeSessions()
         activePlan = nil
+        activeSimulationContext = nil
         statusMessage = "Test Wake Sessions cleared."
         refreshSurfaces()
     }
@@ -526,6 +762,7 @@ final class WakeSessionTestingHarness: ObservableObject {
         wakeSessionStore.clearAllTestRecords()
         fakeScheduler.clearTestRecords()
         activePlan = nil
+        activeSimulationContext = nil
         permissionState = .available
         fakeScheduler.permissionState = .available
         schedulerMode = .fake
@@ -535,7 +772,12 @@ final class WakeSessionTestingHarness: ObservableObject {
     }
 
     func makeRealAlarmKitPreviewEvents(now: Date = Date()) -> [ScheduledEvent] {
-        makePlan(for: .realAlarmKitCompressed, now: now).events
+        makeMappingPlan(
+            for: makePlan(for: .realAlarmKitMappedPlayback, now: now),
+            realNow: now,
+            startDelaySeconds: mappedStartDelaySeconds,
+            sequenceLength: selectedSequenceLength
+        ).realEvents
     }
 
     private func confirmAwake(mode: WakeSessionMode) {
@@ -548,13 +790,16 @@ final class WakeSessionTestingHarness: ObservableObject {
             cancelledScheduledEventIDs: cancelled,
             now: now
         )
+        activeSimulationContext?.jumpPoint = mode == .suhoor ? .suhoorAwakeConfirmed : .awakeConfirmed
         statusMessage = "Awake confirmed for \(mode.confirmationTitle). Remaining test Wake Checks cancelled."
         refreshPublishedSchedulerState()
         refreshSurfaces()
     }
 
-    private func setSimulatedNow(_ now: Date) {
+    private func setSimulatedNow(_ now: Date, jumpPoint: WakeSessionSimulationJumpPoint?) {
         clock.setNow(now)
+        activeSimulationContext?.simulatedNow = now
+        activeSimulationContext?.jumpPoint = jumpPoint
         statusMessage = "Simulated time moved."
         objectWillChange.send()
         refreshSurfaces()
@@ -577,26 +822,26 @@ final class WakeSessionTestingHarness: ObservableObject {
         let primaryWakeTime: Date
 
         switch scenario {
-        case .suhoorCompressed:
-            finalThirdStart = now
-            fajrBegins = now.addingTimeInterval(8 * 60)
-            fajrEnds = now.addingTimeInterval(14 * 60)
+        case .suhoorStateExplorer:
+            finalThirdStart = now.addingTimeInterval(-10 * 60)
+            fajrBegins = now.addingTimeInterval(35 * 60)
+            fajrEnds = now.addingTimeInterval(75 * 60)
             primaryWakeTime = overridePrimaryWakeTime ?? now.addingTimeInterval(2 * 60)
         case .suhoorUnconfirmedToFajr:
-            finalThirdStart = now
-            fajrBegins = now.addingTimeInterval(6 * 60)
-            fajrEnds = now.addingTimeInterval(12 * 60)
+            finalThirdStart = now.addingTimeInterval(-10 * 60)
+            fajrBegins = now.addingTimeInterval(35 * 60)
+            fajrEnds = now.addingTimeInterval(75 * 60)
             primaryWakeTime = overridePrimaryWakeTime ?? now.addingTimeInterval(2 * 60)
-        case .realAlarmKitCompressed:
+        case .realAlarmKitMappedPlayback:
             finalThirdStart = nil
-            fajrBegins = now.addingTimeInterval(60)
-            fajrEnds = now.addingTimeInterval(8 * 60)
+            fajrBegins = now.addingTimeInterval(-5 * 60)
+            fajrEnds = now.addingTimeInterval(35 * 60)
             primaryWakeTime = overridePrimaryWakeTime ?? now.addingTimeInterval(2 * 60)
-        case .fajrCompressed, .quietDuringWakeChecks, .sliderReschedule, .alarmStopVsAwake,
-             .permissionFailure, .crossSurfaceConsistency:
+        case .fajrStateExplorer, .quietDuringWakeChecks, .sliderReschedule, .alarmStopVsAwake,
+             .permissionFailure, .morningLogInspector, .crossSurfaceConsistency:
             finalThirdStart = nil
-            fajrBegins = now.addingTimeInterval(60)
-            fajrEnds = now.addingTimeInterval(8 * 60)
+            fajrBegins = now.addingTimeInterval(-5 * 60)
+            fajrEnds = now.addingTimeInterval(35 * 60)
             primaryWakeTime = overridePrimaryWakeTime ?? now.addingTimeInterval(2 * 60)
         }
 
@@ -606,8 +851,8 @@ final class WakeSessionTestingHarness: ObservableObject {
             fajrEnd: fajrEnds,
             maghrib: morningDate.addingTimeInterval(18 * 60 * 60),
             calculationSource: .userOverride,
-            methodID: "test-compressed",
-            methodDisplayName: "Compressed test window",
+            methodID: "test-simulation-v2",
+            methodDisplayName: "Wake Session Lab simulation",
             authorityName: "Wake Session Lab",
             fajrBeginSource: .userOverride,
             fajrEndSource: fajrEnds == nil ? .unavailable : .userOverride,
@@ -629,7 +874,7 @@ final class WakeSessionTestingHarness: ObservableObject {
             wakeSessionID: wakeSessionID,
             wakeSessionRole: .primaryWake
         )
-        let wakeChecks = makeCompressedWakeCheckEvents(
+        let wakeChecks = makeWakeCheckEvents(
             scenarioID: scenarioID,
             dateKey: dateKey,
             wakeSessionID: wakeSessionID,
@@ -656,7 +901,7 @@ final class WakeSessionTestingHarness: ObservableObject {
         )
     }
 
-    private func makeCompressedWakeCheckEvents(
+    private func makeWakeCheckEvents(
         scenarioID: String,
         dateKey: String,
         wakeSessionID: String,
@@ -665,7 +910,7 @@ final class WakeSessionTestingHarness: ObservableObject {
         prayerWindow: DailyPrayerWindow,
         now: Date
     ) -> [ScheduledEvent] {
-        let configuration = WakeSessionPlanner.WakeCheckConfiguration.compressedTest
+        let configuration = WakeSessionPlanner.WakeCheckConfiguration.production
         guard let cutoff = WakeSessionPlanner.wakeCheckCutoff(
             mode: mode,
             prayerWindow: prayerWindow,
@@ -690,6 +935,344 @@ final class WakeSessionTestingHarness: ObservableObject {
                 wakeSessionID: wakeSessionID,
                 wakeSessionRole: .wakeCheck
             )
+        }
+    }
+
+    private func makeMappingPlan(
+        for plan: WakeSessionTestScenarioPlan,
+        realNow: Date,
+        startDelaySeconds: TimeInterval,
+        sequenceLength: WakeSessionMappedSequenceLength
+    ) -> AlarmKitMappingPlan {
+        let clampedDelay = min(max(startDelaySeconds, 60), 120)
+        let anchor = plan.primaryEvent ?? plan.events[0]
+        let selectedWakeChecks = Array(plan.wakeCheckEvents.prefix(sequenceLength.requestedWakeCheckCount))
+        let selectedEvents = [anchor] + selectedWakeChecks
+        let realAnchor = realNow.addingTimeInterval(clampedDelay)
+        let mapped = selectedEvents.map { event -> MappedAlarmEvent in
+            let mappedFireDate = realAnchor.addingTimeInterval(event.fireDate.timeIntervalSince(anchor.fireDate))
+            let mappedEvent = ScheduledEvent(
+                id: event.id,
+                type: event.type,
+                dateKey: event.dateKey,
+                fireDate: mappedFireDate,
+                relativeTo: event.relativeTo,
+                isUserVisible: event.isUserVisible,
+                affectsCompletion: event.affectsCompletion,
+                deliveryKinds: event.deliveryKinds,
+                soundRole: event.soundRole,
+                wakeSessionID: event.wakeSessionID,
+                wakeSessionRole: event.wakeSessionRole,
+                fajrStartBehavior: event.fajrStartBehavior
+            )
+            return MappedAlarmEvent(
+                id: event.id,
+                event: mappedEvent,
+                role: event.wakeSessionRole == .primaryWake ? .primary : .wakeCheck,
+                simulatedFireDate: event.fireDate,
+                mappedRealFireDate: mappedFireDate
+            )
+        }
+        let explanation: String?
+        if selectedWakeChecks.count < sequenceLength.requestedWakeCheckCount {
+            explanation = "Later Wake Checks would be after the \(plan.mode == .suhoor ? "Suhoor" : "Fajr") cutoff."
+        } else {
+            explanation = nil
+        }
+        return AlarmKitMappingPlan(
+            simulationID: plan.scenarioID,
+            anchorEventID: anchor.id,
+            startDelaySeconds: clampedDelay,
+            sequenceLength: sequenceLength,
+            createdAtRealDate: realNow,
+            mappedEvents: mapped,
+            cutoffExplanation: explanation
+        )
+    }
+
+    private func makeSimulationContext(
+        plan: WakeSessionTestScenarioPlan,
+        runMode: SimulationRunMode,
+        clockMode: SimulationClockMode,
+        jumpPoint: WakeSessionSimulationJumpPoint?,
+        mappingPlan: AlarmKitMappingPlan?,
+        createdAtRealDate: Date
+    ) -> ActiveSimulationContext {
+        ActiveSimulationContext(
+            simulationID: plan.scenarioID,
+            isTest: true,
+            scenarioKind: plan.scenario.simulationKind,
+            runMode: runMode,
+            simulatedDate: plan.morningDate,
+            simulatedNow: clock.now(),
+            simulatedTimeZone: timeZone,
+            simulatedLocation: selectedLocation,
+            prayerWindowSource: selectedPrayerWindowSource,
+            simulatedPrayerWindow: SimulatedPrayerWindow(
+                finalThirdStart: plan.finalThirdStart,
+                fajrBegins: plan.fajrBegins,
+                fajrEnds: plan.fajrEnds,
+                maghrib: plan.prayerWindow.maghrib
+            ),
+            wakeSessionID: plan.wakeSessionID,
+            alarmMapping: mappingPlan,
+            clockMode: clockMode,
+            jumpPoint: jumpPoint,
+            createdAtRealDate: createdAtRealDate
+        )
+    }
+
+    private func simulatedDate(
+        for preset: WakeSessionSimulationDatePreset,
+        relativeTo referenceDate: Date
+    ) -> Date {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+
+        func fixed(_ year: Int, _ month: Int, _ day: Int) -> Date {
+            calendar.date(from: DateComponents(timeZone: timeZone, year: year, month: month, day: day, hour: 14)) ?? referenceDate
+        }
+
+        func nextWeekday(_ weekday: Int) -> Date {
+            let start = DateHelpers.startOfDay(referenceDate, in: timeZone)
+            let current = calendar.component(.weekday, from: start)
+            let delta = (weekday - current + 7) % 7
+            return calendar.date(byAdding: .day, value: delta == 0 ? 7 : delta, to: start)?
+                .addingTimeInterval(14 * 60 * 60) ?? referenceDate
+        }
+
+        switch preset {
+        case .today:
+            return selectedManualDate
+        case .tomorrow:
+            return calendar.date(byAdding: .day, value: 1, to: referenceDate) ?? referenceDate
+        case .ordinaryDay:
+            return fixed(2026, 5, 26)
+        case .ramadanDay:
+            return fixed(2026, 2, 18)
+        case .eidDay:
+            return fixed(2026, 3, 20)
+        case .whiteDay:
+            return fixed(2026, 6, 28)
+        case .monday:
+            return nextWeekday(2)
+        case .thursday:
+            return nextWeekday(5)
+        case .summerLongFajr:
+            return fixed(2026, 6, 21)
+        case .winterShortFajr:
+            return fixed(2026, 12, 21)
+        }
+    }
+
+    private func defaultJumpPoint(for scenario: WakeSessionTestScenario) -> WakeSessionSimulationJumpPoint {
+        switch scenario {
+        case .suhoorStateExplorer, .suhoorUnconfirmedToFajr:
+            return .beforePrimarySuhoorWake
+        case .quietDuringWakeChecks:
+            return .quietWakeChecksActive
+        case .alarmStopVsAwake:
+            return .primaryAlarmFired
+        case .realAlarmKitMappedPlayback:
+            return .beforePrimaryWake
+        case .fajrStateExplorer, .sliderReschedule, .permissionFailure, .morningLogInspector, .crossSurfaceConsistency:
+            return .beforePrimaryWake
+        }
+    }
+
+    private func simulatedNow(
+        for jumpPoint: WakeSessionSimulationJumpPoint,
+        plan: WakeSessionTestScenarioPlan
+    ) -> Date {
+        switch jumpPoint {
+        case .beforeFajrBegins:
+            return plan.fajrBegins.addingTimeInterval(-60)
+        case .atFajrBegins:
+            return plan.fajrBegins
+        case .beforePrimaryWake, .beforePrimarySuhoorWake:
+            return plan.primaryWakeTime.addingTimeInterval(-30)
+        case .atPrimaryWake, .atPrimarySuhoorWake:
+            return plan.primaryWakeTime
+        case .primaryAlarmFired, .primarySuhoorAlarmFired:
+            return plan.primaryWakeTime.addingTimeInterval(10)
+        case .wakeCheck1Pending, .wakeCheck2Pending, .wakeCheck3Pending, .wakeCheck4Pending, .wakeCheck5Pending:
+            let index = max((jumpPoint.wakeCheckIndex ?? 1) - 1, 0)
+            return plan.wakeCheckEvents.indices.contains(index) ? plan.wakeCheckEvents[index].fireDate : plan.primaryWakeTime
+        case .awakeConfirmed, .suhoorAwakeConfirmed, .fastingIntentConfirmed:
+            return plan.primaryWakeTime.addingTimeInterval(60)
+        case .prayerCTAAvailable, .fajrPrayerCTAAvailable:
+            return plan.fajrBegins.addingTimeInterval(60)
+        case .prayerConfirmed, .fajrPrayerConfirmed:
+            return plan.fajrBegins.addingTimeInterval(5 * 60)
+        case .fiveMinutesBeforeFajrEnds:
+            return (plan.fajrEnds ?? plan.fajrBegins.addingTimeInterval(30 * 60)).addingTimeInterval(-5 * 60)
+        case .afterFajrEnds:
+            return (plan.fajrEnds ?? plan.fajrBegins.addingTimeInterval(30 * 60)).addingTimeInterval(60)
+        case .beforeFinalThird:
+            return (plan.finalThirdStart ?? plan.primaryWakeTime).addingTimeInterval(-60)
+        case .atFinalThirdBegins, .suhoorWindowOpen:
+            return plan.finalThirdStart ?? plan.primaryWakeTime.addingTimeInterval(-10 * 60)
+        case .fajrBeginsAfterSuhoor:
+            return plan.fajrBegins
+        case .quietFajrActive, .quietUserTapsQuiet, .quietConfirmationSheetShown, .quietConfirmed, .quietMorningLogged:
+            return plan.fajrBegins.addingTimeInterval(60)
+        case .quietWakeChecksActive:
+            return plan.wakeCheckEvents.first?.fireDate ?? plan.primaryWakeTime
+        }
+    }
+
+    private func wakeCheckJumpPoint(index: Int) -> WakeSessionSimulationJumpPoint {
+        switch index {
+        case 2:
+            return .wakeCheck2Pending
+        case 3:
+            return .wakeCheck3Pending
+        case 4:
+            return .wakeCheck4Pending
+        case 5:
+            return .wakeCheck5Pending
+        default:
+            return .wakeCheck1Pending
+        }
+    }
+
+    func simulatedHomeSnapshot(
+        realSnapshot: MorningHomeSnapshot,
+        baseDay: ActiveAlarmDay?,
+        timeZone: TimeZone = .current
+    ) -> MorningHomeSnapshot {
+        guard let context = activeSimulationContext,
+              let plan = activePlan,
+              let baseDay,
+              let simulatedDay = makeSimulatedActiveDay(baseDay: baseDay, plan: plan, context: context, timeZone: timeZone) else {
+            return realSnapshot
+        }
+        let simulatedEntry = WakeRowActionResolver.makeEntry(activeDay: simulatedDay, overrideDateKeys: [simulatedDay.dateKey])
+        let morningcast = [simulatedEntry] + realSnapshot.morningcast.filter { $0.id != simulatedEntry.id }
+        var flags = realSnapshot.contextFlags
+        flags.insert(MorningHomeContextFlag(id: "test-mode", title: "Test Mode"), at: 0)
+        return MorningHomeSnapshot(
+            tomorrow: simulatedEntry,
+            heroWakeSession: wakeSessionStore.session(id: plan.wakeSessionID),
+            heroMorningLog: wakeSessionStore.morningLog(for: plan.dateKey),
+            weeklyFajrcast: realSnapshot.weeklyFajrcast,
+            morningcast: Array(morningcast.prefix(MorningHomeSnapshot.maximumMorningcastCount)),
+            permissionState: realSnapshot.permissionState,
+            contextFlags: flags
+        )
+    }
+
+    func simulationOverlayModel(realNow: Date = Date()) -> HomeSimulationOverlayModel? {
+        guard let context = activeSimulationContext else { return nil }
+        let next = context.alarmMapping?.nextPending
+        let formatter = TimeFormatters.shortDateTime
+        let countdown: String? = next.map {
+            let remaining = max(0, Int($0.mappedRealFireDate.timeIntervalSince(realNow)))
+            return "\(remaining / 60)m \(remaining % 60)s"
+        }
+        return HomeSimulationOverlayModel(
+            title: "TEST MODE ACTIVE",
+            scenario: context.scenarioTitle,
+            simulatedDateTime: formatter.string(from: context.simulatedNow),
+            simulatedHijriDate: nil,
+            location: context.simulatedLocation.displayName,
+            runMode: context.runMode.displayName,
+            jumpPoint: context.jumpPoint?.title ?? "Custom",
+            nextRealAlarmCountdown: countdown,
+            nextSimulatedEventName: next?.role.displayName,
+            nextMappedRealFireTime: next.map { TimeFormatters.timeFormatter.string(from: $0.mappedRealFireDate) }
+        )
+    }
+
+    func simulatedLocationDisplayText(realLocation: String) -> String {
+        guard activeSimulationContext != nil else { return realLocation }
+        return selectedLocation.displayName
+    }
+
+    private func makeSimulatedActiveDay(
+        baseDay: ActiveAlarmDay,
+        plan: WakeSessionTestScenarioPlan,
+        context: ActiveSimulationContext,
+        timeZone: TimeZone
+    ) -> ActiveAlarmDay? {
+        let selectedMode = simulatedQuickWakeMode(plan: plan, context: context)
+        let baseConfig = baseDay.effectiveConfig
+        let effectiveConfig = EffectiveDailyConfig(
+            date: plan.morningDate,
+            defaultsActive: baseConfig.defaultsActive,
+            skipDay: selectedMode == .quiet,
+            suhoorEnabled: selectedMode != .quiet,
+            reminderEnabled: selectedMode == .suhoor,
+            fajrEnabled: selectedMode != .quiet && selectedMode != .fajr,
+            iftarEnabled: false,
+            defaultWakeRule: baseConfig.defaultWakeRule,
+            resolvedWakeRule: baseConfig.resolvedWakeRule,
+            wakeRuleWasOverridden: true,
+            quickWakeModeOverride: selectedMode,
+            underlyingWakeModeBeforeQuiet: selectedMode == .quiet ? .fajr : nil,
+            earlyWakePurposeOverride: selectedMode == .suhoor ? .fast : nil,
+            alarmDetailFastTypeOverride: baseConfig.alarmDetailFastTypeOverride,
+            alarmDetailAudioPlanOverride: baseConfig.alarmDetailAudioPlanOverride,
+            tahajjudRefinement: baseConfig.tahajjudRefinement,
+            suhoorTimeMode: baseConfig.suhoorTimeMode,
+            suhoorOffsetMinutes: baseConfig.suhoorOffsetMinutes,
+            reminderTimeMode: baseConfig.reminderTimeMode,
+            reminderMinutesBeforeFajr: baseConfig.reminderMinutesBeforeFajr,
+            reminderFixedTimeMinutes: baseConfig.reminderFixedTimeMinutes,
+            suhoorTimeOverrideMinutesFromMidnight: baseConfig.suhoorTimeOverrideMinutesFromMidnight,
+            reminderTimeOverrideMinutesFromMidnight: baseConfig.reminderTimeOverrideMinutesFromMidnight,
+            fajrSoundChoice: baseConfig.fajrSoundChoice,
+            iftarDelivery: baseConfig.iftarDelivery,
+            iftarSoundChoice: baseConfig.iftarSoundChoice,
+            hasOverrides: true
+        )
+        let schedule = DaySchedule(
+            date: plan.morningDate,
+            fajrDate: plan.fajrBegins,
+            fajrEndDate: plan.fajrEnds,
+            maghribDate: plan.prayerWindow.maghrib,
+            wakeDate: plan.primaryWakeTime,
+            reminderDate: nil,
+            boundaryDate: plan.finalThirdStart,
+            iftarDate: nil,
+            fajrSoundChoice: baseDay.schedule.fajrSoundChoice,
+            iftarSoundChoice: nil,
+            locationDescription: context.simulatedLocation.displayName,
+            offsetMinutes: 0,
+            calculationMethodName: context.prayerWindowSource.displayName,
+            timeZone: timeZone
+        )
+        return ActiveAlarmDay(
+            date: plan.morningDate,
+            dateKey: plan.dateKey,
+            schedule: schedule,
+            effectiveConfig: effectiveConfig,
+            provenances: baseDay.provenances,
+            isImplicitRamadan: context.scenarioKind == .suhoorStateExplorer,
+            isExplicitOneOff: true,
+            tagResult: baseDay.tagResult,
+            primaryDisplay: baseDay.primaryDisplay,
+            sourceSummaryText: "Wake Session Lab",
+            resolvedDayContext: baseDay.resolvedDayContext,
+            resolvedDayPurpose: baseDay.resolvedDayPurpose,
+            scheduledEvents: plan.events,
+            decisionLog: nil,
+            dailyCompletion: .empty(dateKey: plan.dateKey)
+        )
+    }
+
+    private func simulatedQuickWakeMode(plan: WakeSessionTestScenarioPlan, context: ActiveSimulationContext) -> QuickWakeMode {
+        switch context.scenarioKind {
+        case .quietDuringWakeChecks:
+            if context.jumpPoint == .quietConfirmed || context.jumpPoint == .quietMorningLogged {
+                return .quiet
+            }
+            return .fajr
+        case .suhoorStateExplorer, .suhoorUnconfirmedToFajr:
+            return .suhoor
+        case .fajrStateExplorer, .sliderReschedule, .alarmStopVsAwake, .permissionFailure,
+             .morningLogInspector, .crossSurfaceConsistency, .realAlarmKitMappedPlayback:
+            return plan.mode == .suhoor ? .suhoor : .fajr
         }
     }
 

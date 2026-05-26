@@ -1,9 +1,11 @@
 #if DEBUG || INTERNAL_TESTING
 import SwiftUI
+import UIKit
 
 struct WakeSessionLabView: View {
     @ObservedObject var harness: WakeSessionTestingHarness
     @State private var showingQuietConfirmation = false
+    @State private var showingRealAlarmConfirmation = false
 
     var body: some View {
         SettingsScrollPage {
@@ -49,7 +51,136 @@ struct WakeSessionLabView: View {
                 )
             }
 
+            SettingsGroup(title: "State Explorer") {
+                pickerRow(
+                    title: "Scenario",
+                    subtitle: "Choose the simulated morning graph.",
+                    systemImage: "square.stack.3d.up",
+                    selection: $harness.selectedScenario
+                ) {
+                    ForEach(WakeSessionTestScenario.allCases) { scenario in
+                        Text(scenario.title).tag(scenario)
+                    }
+                }
+                AppGroupDivider()
+                pickerRow(
+                    title: "Date Preset",
+                    subtitle: "Select a real or artificial test date.",
+                    systemImage: "calendar",
+                    selection: $harness.selectedDatePreset
+                ) {
+                    ForEach(WakeSessionSimulationDatePreset.allCases) { preset in
+                        Text(preset.title).tag(preset)
+                    }
+                }
+                AppGroupDivider()
+                VStack(alignment: .leading, spacing: 8) {
+                    Label("Date / Time", systemImage: "calendar.badge.clock")
+                        .font(.subheadline.weight(.semibold))
+                    Text("Used by the Today preset for arbitrary simulated date/time checks.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    DatePicker("Simulated date/time", selection: $harness.selectedManualDate)
+                        .datePickerStyle(.compact)
+                }
+                .padding(.vertical, 10)
+                AppGroupDivider()
+                pickerRow(
+                    title: "Location",
+                    subtitle: "Does not change the real app location.",
+                    systemImage: "location",
+                    selection: $harness.selectedLocation
+                ) {
+                    ForEach(SimulationLocation.allCases) { location in
+                        Text(location.displayName).tag(location)
+                    }
+                }
+                AppGroupDivider()
+                pickerRow(
+                    title: "Prayer Window",
+                    subtitle: "Real calculation by default, artificial for edge cases.",
+                    systemImage: "sunrise",
+                    selection: $harness.selectedPrayerWindowSource
+                ) {
+                    ForEach(SimulationPrayerWindowSource.allCases) { source in
+                        Text(source.displayName).tag(source)
+                    }
+                }
+                AppGroupDivider()
+                pickerRow(
+                    title: "Clock Mode",
+                    subtitle: "Jump instantly without scheduling alarms.",
+                    systemImage: "clock.arrow.circlepath",
+                    selection: $harness.selectedClockMode
+                ) {
+                    ForEach(SimulationClockMode.allCases) { mode in
+                        Text(mode.displayName).tag(mode)
+                    }
+                }
+                AppGroupDivider()
+                pickerRow(
+                    title: "Jump Point",
+                    subtitle: "Move Home through supported Fajr, Suhoor, and Quiet states.",
+                    systemImage: "arrow.triangle.2.circlepath",
+                    selection: $harness.selectedJumpPoint
+                ) {
+                    ForEach(WakeSessionSimulationJumpPoint.allCases) { point in
+                        Text(point.title).tag(point)
+                    }
+                }
+                AppGroupDivider()
+                actionButton("Activate on Home", subtitle: "Routes the real Home Hero through the simulated morning state.", systemImage: "house.fill", tone: .warning) {
+                    Task {
+                        await harness.activateOnHome()
+                        harness.setJumpPoint(harness.selectedJumpPoint)
+                    }
+                }
+            }
+
+            SettingsGroup(title: "Real AlarmKit Mapped Playback") {
+                labRow(
+                    title: "Real alarms will ring",
+                    subtitle: "Mapped playback pins the simulated primary alarm to a near-future real AlarmKit alarm. Wake Checks remain 5 minutes apart.",
+                    systemImage: "alarm.waves.left.and.right",
+                    badgeText: "Real",
+                    badgeTone: .warning
+                )
+                AppGroupDivider()
+                pickerRow(
+                    title: "Sequence Length",
+                    subtitle: "Default is Primary + 5 Wake Checks.",
+                    systemImage: "list.number",
+                    selection: $harness.selectedSequenceLength
+                ) {
+                    ForEach(WakeSessionMappedSequenceLength.allCases) { length in
+                        Text(length.title).tag(length)
+                    }
+                }
+                AppGroupDivider()
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Start Delay")
+                        .font(.subheadline.weight(.semibold))
+                    Slider(value: $harness.mappedStartDelaySeconds, in: 60...120, step: 5)
+                    Text("\(Int(harness.mappedStartDelaySeconds)) seconds")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.vertical, 10)
+                AppGroupDivider()
+                mappedPreviewRows
+                AppGroupDivider()
+                actionButton("Schedule Real Test Alarms", subtitle: "Shows confirmation before AlarmKit scheduling.", systemImage: "alarm.fill", tone: .warning) {
+                    showingRealAlarmConfirmation = true
+                }
+            }
+
             SettingsGroup(title: "Scenario Launcher") {
+                actionButton("Dry Run Selected Scenario", subtitle: "Builds the simulated plan without scheduling fake or real alarms.", systemImage: "doc.text.magnifyingglass") {
+                    Task {
+                        await harness.start(harness.selectedScenario, runMode: .dryRun)
+                    }
+                }
+                AppGroupDivider()
                 ForEach(Array(WakeSessionTestScenario.allCases.enumerated()), id: \.element.id) { index, scenario in
                     Button {
                         Task {
@@ -62,12 +193,12 @@ struct WakeSessionLabView: View {
                         SettingsRow {
                             SettingsSummaryRow(
                                 title: scenario.title,
-                                subtitle: scenario == .realAlarmKitCompressed
+                                subtitle: scenario == .realAlarmKitMappedPlayback
                                     ? "Explicit physical-device test. Real alarms will ring."
-                                    : "Uses compressed test time and test-scoped records.",
-                                systemImage: scenario == .realAlarmKitCompressed ? "alarm.waves.left.and.right" : "play.circle",
-                                badgeText: scenario == .realAlarmKitCompressed ? "Real" : "Fake",
-                                badgeTone: scenario == .realAlarmKitCompressed ? .warning : .neutral
+                                    : "Uses test-scoped records and production 5-minute Wake Check spacing.",
+                                systemImage: scenario == .realAlarmKitMappedPlayback ? "alarm.waves.left.and.right" : "play.circle",
+                                badgeText: scenario == .realAlarmKitMappedPlayback ? "Real" : "Fake",
+                                badgeTone: scenario == .realAlarmKitMappedPlayback ? .warning : .neutral
                             )
                         }
                     }
@@ -132,6 +263,10 @@ struct WakeSessionLabView: View {
             }
 
             SettingsGroup(title: "Pending Test Alarms") {
+                actionButton("Refresh Pending Test Alarms", subtitle: "Reloads the debug alarm inspector.", systemImage: "arrow.clockwise") {
+                    harness.refreshInspectors()
+                }
+                AppGroupDivider()
                 if harness.alarmRecords.isEmpty {
                     labRow(
                         title: "No test alarms",
@@ -142,13 +277,20 @@ struct WakeSessionLabView: View {
                     )
                 } else {
                     ForEach(Array(harness.alarmRecords.enumerated()), id: \.element.id) { index, record in
-                        labRow(
-                            title: "\(record.role.displayName) - \(record.status.rawValue)",
-                            subtitle: "\(record.scheduledEventID) | \(TimeFormatters.shortDateTime.string(from: record.fireDate))",
-                            systemImage: record.channel == .realAlarmKit ? "alarm.waves.left.and.right" : "bell",
-                            badgeText: record.channel.displayName,
-                            badgeTone: record.status == .failed ? .critical : (record.status == .pending ? .warning : .neutral)
-                        )
+                        Button {
+                            harness.cancelSelectedTestAlarm(identifier: record.id)
+                        } label: {
+                            SettingsRow {
+                                SettingsSummaryRow(
+                                    title: "\(record.role.displayName) - \(record.status.rawValue)",
+                                    subtitle: "\(record.scheduledEventID) | simulated \(TimeFormatters.shortDateTime.string(from: record.simulatedFireDate)) | scheduled \(TimeFormatters.shortDateTime.string(from: record.fireDate))",
+                                    systemImage: record.channel == .realAlarmKit ? "alarm.waves.left.and.right" : "bell",
+                                    badgeText: record.channel.displayName,
+                                    badgeTone: record.status == .failed ? .critical : (record.status == .pending ? .warning : .neutral)
+                                )
+                            }
+                        }
+                        .buttonStyle(.plain)
                         if index < harness.alarmRecords.count - 1 {
                             AppGroupDivider()
                         }
@@ -179,6 +321,25 @@ struct WakeSessionLabView: View {
                         }
                     }
                 }
+                AppGroupDivider()
+                actionButton("Copy Test Report", subtitle: "Copies a local debug summary.", systemImage: "doc.on.doc") {
+                    UIPasteboard.general.string = harness.debugReport()
+                }
+                AppGroupDivider()
+                actionButton("Export Debug Summary", subtitle: "Copies the same local report for manual sharing.", systemImage: "square.and.arrow.up") {
+                    UIPasteboard.general.string = harness.debugReport()
+                }
+            }
+
+            SettingsGroup(title: "Permission / Failure Simulator") {
+                ForEach(Array(WakeSessionTestPermissionState.allCases.enumerated()), id: \.element.id) { index, state in
+                    actionButton(state.displayName, subtitle: "Fake/integration mode only. Real iOS permissions are unchanged.", systemImage: state.blocksScheduling ? "exclamationmark.triangle" : "checkmark.shield") {
+                        harness.simulatePermissionState(state)
+                    }
+                    if index < WakeSessionTestPermissionState.allCases.count - 1 {
+                        AppGroupDivider()
+                    }
+                }
             }
 
             SettingsGroup(title: "Cleanup / Reset Tools") {
@@ -192,6 +353,10 @@ struct WakeSessionLabView: View {
                 AppGroupDivider()
                 actionButton("Clear Test MorningLogs", subtitle: "Removes test logs without deleting real logs.", systemImage: "doc.badge.minus") {
                     harness.clearTestMorningLogs()
+                }
+                AppGroupDivider()
+                actionButton("Reset Test Time", subtitle: "Returns simulated time to the device clock.", systemImage: "clock") {
+                    harness.returnToRealTime()
                 }
                 AppGroupDivider()
                 actionButton("Exit Test Mode", subtitle: "Cancels alarms and clears all test-only state.", systemImage: "escape") {
@@ -212,6 +377,20 @@ struct WakeSessionLabView: View {
             }
         } message: {
             Text("Subh will cancel the remaining alarms and mark this test morning as quiet.")
+        }
+        .confirmationDialog(
+            "Schedule real test alarms?",
+            isPresented: $showingRealAlarmConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Cancel", role: .cancel) {}
+            Button("Schedule Test Alarms") {
+                Task {
+                    await harness.start(.realAlarmKitMappedPlayback, runMode: .realAlarmKitMappedPlayback)
+                }
+            }
+        } message: {
+            Text("Subh will schedule real AlarmKit alarms on this device using your selected alarm sound. These are test alarms mapped from the simulated morning. Wake checks remain 5 minutes apart.")
         }
     }
 
@@ -245,6 +424,48 @@ struct WakeSessionLabView: View {
             }
         }
         .buttonStyle(.plain)
+    }
+
+    private var mappedPreviewRows: some View {
+        let plan = harness.makeMappedPlaybackPreview()
+        return VStack(alignment: .leading, spacing: 8) {
+            Text("Mapped Fire Times")
+                .font(.subheadline.weight(.semibold))
+            ForEach(plan.mappedEvents) { event in
+                let soundRole = event.event.soundRole?.rawValue ?? "default"
+                Text("\(event.role.displayName): simulated \(TimeFormatters.timeFormatter.string(from: event.simulatedFireDate)) -> real \(TimeFormatters.timeFormatter.string(from: event.mappedRealFireDate)) · sound \(soundRole)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if let explanation = plan.cutoffExplanation {
+                Text(explanation)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.orange)
+            }
+        }
+        .padding(.vertical, 10)
+    }
+
+    private func pickerRow<Selection: Hashable, Content: View>(
+        title: String,
+        subtitle: String,
+        systemImage: String,
+        selection: Binding<Selection>,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label(title, systemImage: systemImage)
+                .font(.subheadline.weight(.semibold))
+            Text(subtitle)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            Picker(title, selection: selection) {
+                content()
+            }
+            .pickerStyle(.menu)
+        }
+        .padding(.vertical, 10)
     }
 
     private func labRow(

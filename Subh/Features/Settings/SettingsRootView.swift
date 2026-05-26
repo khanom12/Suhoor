@@ -44,7 +44,7 @@ struct SettingsRootView: View {
                         SettingsRow {
                             SettingsSummaryRow(
                                 title: "Wake Session Lab",
-                                subtitle: "Compressed internal tests for Wake Sessions, Wake Checks, Quiet, logs, and AlarmKit.",
+                                subtitle: "Internal State Explorer, Home Simulation, and mapped AlarmKit playback.",
                                 systemImage: "testtube.2",
                                 badgeText: "Debug",
                                 badgeTone: .warning,

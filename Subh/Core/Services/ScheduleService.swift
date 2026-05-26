@@ -68,6 +68,9 @@ final class ScheduleManager: ObservableObject {
     private var pendingDayRescheduleTasks: [String: Task<Void, Never>] = [:]
     private var fajrWindowDatasetCache: [FajrWindowDatasetKey: FajrWindowDataset] = [:]
     private var fajrWindowOverlaySeriesCache: [FajrWindowOverlayCacheKey: FajrWindowOverlaySeries] = [:]
+#if DEBUG || INTERNAL_TESTING
+    private var wakeSessionLabAlarmKitDay: ActiveAlarmDay?
+#endif
     private var cancellables: Set<AnyCancellable> = []
     private(set) var fajrWindowDatasetBuildCount: Int = 0
     private(set) var fajrWindowOverlayBuildCounts: [FajrWindowOverlay: Int] = [:]
@@ -157,6 +160,9 @@ final class ScheduleManager: ObservableObject {
         wakeSessionStore: wakeSessionStore,
         realAlarmKitScheduler: { [weak self] events, mode, now in
             await self?.scheduleWakeSessionLabRealAlarmKit(events: events, mode: mode, now: now) ?? false
+        },
+        realAlarmKitCanceller: { [weak self] records, now in
+            await self?.cancelWakeSessionLabRealAlarmKit(records: records, now: now)
         },
         refreshSurfaces: { [weak self] in
             self?.refreshCurrentMorningHomeSnapshot()
@@ -326,7 +332,12 @@ final class ScheduleManager: ObservableObject {
     }
 
     var currentDate: Date {
-        timeProvider.now()
+        #if DEBUG || INTERNAL_TESTING
+        if let simulatedNow = wakeSessionTestingHarness.activeSimulationContext?.simulatedNow {
+            return simulatedNow
+        }
+        #endif
+        return timeProvider.now()
     }
 
 #if DEBUG || INTERNAL_TESTING
@@ -356,7 +367,7 @@ final class ScheduleManager: ObservableObject {
             iftarSoundChoice: nil,
             locationDescription: "Wake Session Lab",
             offsetMinutes: 0,
-            calculationMethodName: "Compressed test window",
+            calculationMethodName: "Wake Session Lab mapped playback",
             timeZone: timeZone
         )
         let testDay = ActiveAlarmDay(
@@ -376,6 +387,7 @@ final class ScheduleManager: ObservableObject {
             decisionLog: baseDay.decisionLog,
             dailyCompletion: .empty(dateKey: primary.dateKey)
         )
+        wakeSessionLabAlarmKitDay = testDay
 
         return await alarmScheduler.scheduleDay(
             day: testDay,
@@ -383,15 +395,87 @@ final class ScheduleManager: ObservableObject {
             mode: .alarmKit
         )
     }
+
+    private func cancelWakeSessionLabRealAlarmKit(
+        records: [WakeSessionTestAlarmRecord],
+        now: Date
+    ) async {
+        if let day = wakeSessionLabAlarmKitDay {
+            _ = await alarmScheduler.cancelWakeSessionEvents(
+                day: day,
+                wakeSessionID: day.scheduledEvents.first?.wakeSessionID,
+                now: now
+            )
+            wakeSessionLabAlarmKitDay = nil
+            return
+        }
+
+        let ids = records.map {
+            DateHelpers.stableUUID(from: "\($0.scheduledEventID).wake.alarmKit")
+        }
+        alarmKitScheduler?.cancel(ids: ids)
+    }
 #endif
 
     var currentPrayerLocationDisplayText: String {
+        #if DEBUG || INTERNAL_TESTING
+        return wakeSessionTestingHarness.simulatedLocationDisplayText(realLocation: prayerLocationDisplayText())
+        #else
         prayerLocationDisplayText()
+        #endif
     }
 
     var currentPrayerLocationIconName: String? {
         settingsStore.settings.locationMode == .auto ? "location.fill" : nil
     }
+
+#if DEBUG || INTERNAL_TESTING
+    var homeSimulationOverlayModel: HomeSimulationOverlayModel? {
+        wakeSessionTestingHarness.simulationOverlayModel(realNow: timeProvider.now())
+    }
+
+    func exitSimulationTestMode() {
+        wakeSessionTestingHarness.exitTestMode()
+        refreshCurrentMorningHomeSnapshot()
+    }
+
+    func cancelAllSimulationTestAlarms() {
+        wakeSessionTestingHarness.cancelAllTestAlarms()
+        refreshCurrentMorningHomeSnapshot()
+    }
+
+    func jumpSimulationState() {
+        let active = wakeSessionTestingHarness.activeSimulationContext?.jumpPoint ?? .beforePrimaryWake
+        let next = nextSimulationJumpPoint(after: active)
+        wakeSessionTestingHarness.setJumpPoint(next)
+        refreshCurrentMorningHomeSnapshot()
+    }
+
+    func runSimulationMappedPlaybackFromHome() async {
+        await wakeSessionTestingHarness.start(.realAlarmKitMappedPlayback, runMode: .realAlarmKitMappedPlayback)
+        refreshCurrentMorningHomeSnapshot()
+    }
+
+    private func nextSimulationJumpPoint(after jumpPoint: WakeSessionSimulationJumpPoint) -> WakeSessionSimulationJumpPoint {
+        let points: [WakeSessionSimulationJumpPoint] = [
+            .beforePrimaryWake,
+            .atPrimaryWake,
+            .primaryAlarmFired,
+            .wakeCheck1Pending,
+            .wakeCheck2Pending,
+            .wakeCheck3Pending,
+            .wakeCheck4Pending,
+            .wakeCheck5Pending,
+            .awakeConfirmed,
+            .prayerCTAAvailable,
+            .prayerConfirmed
+        ]
+        guard let index = points.firstIndex(of: jumpPoint) else {
+            return .beforePrimaryWake
+        }
+        return points[(index + 1) % points.count]
+    }
+#endif
 
     var nextWakeEventSummary: NextWakeEventSummary? {
         nextWakeEventResolver.resolve(
@@ -543,7 +627,16 @@ final class ScheduleManager: ObservableObject {
 
     private func refreshCurrentMorningHomeSnapshot(timeZone: TimeZone = .current) {
         currentMorningHomeSnapshot = PerformanceTrace.measure("home.snapshot.build") {
-            buildMorningHomeSnapshot(timeZone: timeZone)
+            let realSnapshot = buildMorningHomeSnapshot(timeZone: timeZone)
+            #if DEBUG || INTERNAL_TESTING
+            return wakeSessionTestingHarness.simulatedHomeSnapshot(
+                realSnapshot: realSnapshot,
+                baseDay: activeWindowSnapshot.visibleDays.first,
+                timeZone: timeZone
+            )
+            #else
+            return realSnapshot
+            #endif
         }
     }
 
@@ -1611,6 +1704,15 @@ final class ScheduleManager: ObservableObject {
 
     @discardableResult
     func commitHeroWakeAdjustment(for date: Date, wakeTime: Date, timeZone: TimeZone = .current) async -> Bool {
+        #if DEBUG || INTERNAL_TESTING
+        if let plan = wakeSessionTestingHarness.activePlan,
+           wakeSessionTestingHarness.activeSimulationContext != nil {
+            let delta = wakeTime.timeIntervalSince(plan.primaryWakeTime)
+            wakeSessionTestingHarness.rescheduleActiveWake(by: delta)
+            refreshCurrentMorningHomeSnapshot(timeZone: timeZone)
+            return true
+        }
+        #endif
         let normalizedDate = DateHelpers.startOfDay(date, in: timeZone)
         guard let currentDay = activeDay(for: normalizedDate, timeZone: timeZone) else {
             return false
@@ -1653,6 +1755,19 @@ final class ScheduleManager: ObservableObject {
 
     @discardableResult
     func selectHeroWakeMode(for date: Date, mode: QuickWakeMode, timeZone: TimeZone = .current) async -> Bool {
+        #if DEBUG || INTERNAL_TESTING
+        if wakeSessionTestingHarness.activeSimulationContext != nil {
+            if mode == .quiet {
+                wakeSessionTestingHarness.setJumpPoint(.quietUserTapsQuiet)
+            } else if mode == .suhoor {
+                await wakeSessionTestingHarness.start(.suhoorStateExplorer, runMode: .homeSimulation)
+            } else {
+                await wakeSessionTestingHarness.start(.fajrStateExplorer, runMode: .homeSimulation)
+            }
+            refreshCurrentMorningHomeSnapshot(timeZone: timeZone)
+            return true
+        }
+        #endif
         let normalizedDate = DateHelpers.startOfDay(date, in: timeZone)
         guard let day = activeDay(for: normalizedDate, timeZone: timeZone) else {
             return false
@@ -1681,6 +1796,11 @@ final class ScheduleManager: ObservableObject {
     }
 
     func requiresQuietConfirmationForWakeSession(on date: Date, timeZone: TimeZone = .current) -> Bool {
+        #if DEBUG || INTERNAL_TESTING
+        if wakeSessionTestingHarness.activeSimulationContext != nil {
+            return wakeSessionTestingHarness.hasPendingWakeChecks
+        }
+        #endif
         let normalizedDate = DateHelpers.startOfDay(date, in: timeZone)
         guard let day = activeDay(for: normalizedDate, timeZone: timeZone) else { return false }
         guard let session = wakeSessionStore.session(for: day.dateKey), !session.status.isTerminal else { return false }
@@ -1693,16 +1813,37 @@ final class ScheduleManager: ObservableObject {
 
     @discardableResult
     func confirmAwakeForFajr(on date: Date, timeZone: TimeZone = .current) async -> Bool {
-        await confirmAwake(on: date, mode: .fajr, timeZone: timeZone)
+        #if DEBUG || INTERNAL_TESTING
+        if wakeSessionTestingHarness.activeSimulationContext != nil {
+            wakeSessionTestingHarness.confirmAwakeForFajr()
+            refreshCurrentMorningHomeSnapshot(timeZone: timeZone)
+            return true
+        }
+        #endif
+        return await confirmAwake(on: date, mode: .fajr, timeZone: timeZone)
     }
 
     @discardableResult
     func confirmAwakeForSuhoor(on date: Date, timeZone: TimeZone = .current) async -> Bool {
-        await confirmAwake(on: date, mode: .suhoor, timeZone: timeZone)
+        #if DEBUG || INTERNAL_TESTING
+        if wakeSessionTestingHarness.activeSimulationContext != nil {
+            wakeSessionTestingHarness.confirmAwakeForSuhoor()
+            refreshCurrentMorningHomeSnapshot(timeZone: timeZone)
+            return true
+        }
+        #endif
+        return await confirmAwake(on: date, mode: .suhoor, timeZone: timeZone)
     }
 
     @discardableResult
     func confirmFajrPrayer(on date: Date, timeZone: TimeZone = .current) async -> Bool {
+        #if DEBUG || INTERNAL_TESTING
+        if wakeSessionTestingHarness.activeSimulationContext != nil {
+            wakeSessionTestingHarness.confirmFajrPrayer()
+            refreshCurrentMorningHomeSnapshot(timeZone: timeZone)
+            return true
+        }
+        #endif
         let normalizedDate = DateHelpers.startOfDay(date, in: timeZone)
         guard let day = activeDay(for: normalizedDate, timeZone: timeZone) else {
             return false
@@ -1726,6 +1867,13 @@ final class ScheduleManager: ObservableObject {
 
     @discardableResult
     func confirmQuietForActiveWakeSession(on date: Date, timeZone: TimeZone = .current) async -> Bool {
+        #if DEBUG || INTERNAL_TESTING
+        if wakeSessionTestingHarness.activeSimulationContext != nil {
+            wakeSessionTestingHarness.confirmQuietMorning()
+            refreshCurrentMorningHomeSnapshot(timeZone: timeZone)
+            return true
+        }
+        #endif
         let normalizedDate = DateHelpers.startOfDay(date, in: timeZone)
         guard let day = activeDay(for: normalizedDate, timeZone: timeZone) else {
             return false
