@@ -1,0 +1,409 @@
+--- original/subh-pricing-entitlement-spec-v3.md
++++ aligned/subh-pricing-entitlement-spec-v3.md
+@@ -4,9 +4,9 @@
+ | --- | --- |
+ | Canonical filename | `subh-pricing-entitlement-spec-v3.md` |
+ | Version | 3 |
+-| Spec status | Draft; proposed canonical working spec; replaces multi-paid-tier model with Free + one paid tier |
++| Spec status | Draft; proposed canonical working spec; replaces multi-paid-tier model with Free + one paid tier; aligned to Wake Sessions and immediate MorningLogs |
+ | Date | 2026-05-26 |
+-| Related specs | `00-subh-spec-index-v2.md`, `subh-mvp-interaction-inventory-v4.md`, `subh-morning-resolution-contract-state-ownership-spec-v3.md`, `subh-planning-horizon-day-resolution-intention-anchoring-spec-v3.md`, `subh-quick-wake-mode-intent-mutation-contract-v2.md`, `subh-day-purpose-opportunity-resolution-spec-v1.md`, `subh-alarm-delivery-schedule-reliability-spec-v3.md`, `subh-morning-hero-item-spec-v15.md`, `subh-alarm-detail-view-screen-spec-v7.md`, `subh-next-7-days-wake-forecast-spec-v1.md`, `subh-weekly-fajrcast-card-spec-v14.md` |
++| Related specs | `00-subh-spec-index-v3.md`, `subh-mvp-interaction-inventory-v4.md`, `subh-morning-resolution-contract-state-ownership-spec-v3.md`, `subh-planning-horizon-day-resolution-intention-anchoring-spec-v3.md`, `subh-quick-wake-mode-intent-mutation-contract-v2.md`, `subh-day-purpose-opportunity-resolution-spec-v1.md`, `subh-alarm-delivery-schedule-reliability-spec-v3.md`, `subh-wake-sessions-wake-checks-morning-logs-spec-v1.md`, `subh-quiet-mode-quiet-morning-contract-spec-v1.md`, `subh-sound-alarm-settings-spec-v1.md`, `subh-morning-hero-item-spec-v15.md`, `subh-alarm-detail-view-screen-spec-v7.md`, `subh-next-7-days-wake-forecast-spec-v1.md`, `subh-weekly-fajrcast-card-spec-v14.md` |
+ | Owning domain / surface | Pricing, entitlement, trial access, paywall rules, downgrade/upgrade behavior, paid-feature data preservation |
+ | Implementation audit status | Needs implementation audit |
+ | Supersedes | `subh-pricing-entitlement-spec-v2.md` |
+@@ -39,6 +39,9 @@
+ - final price selection;
+ - marketing copy;
+ - detailed worship logging mechanics;
++- detailed Wake Session execution mechanics;
++- detailed Quiet Mode restoration mechanics;
++- detailed alarm-sound asset authoring;
+ - family/household accountability design.
+
+ Those concerns should be handled by separate specs or implementation plans.
+@@ -198,6 +201,74 @@
+ 11. Pricing must not create parallel state machines.
+ 12. Core wake planning and alarm control should remain free.
+ 13. Plus should primarily attach to logging, history, analytics, Qada ledgers, export/sync, advanced summaries, and accountability.
++14. Wake Sessions, core Wake Checks, wake-check cancellation, and active-morning awake confirmation are part of the Free core wake utility.
++15. `Alarm stopped` is not `user awake`; pricing must not weaken the Wake Session confirmation model.
++16. `I’m awake for Fajr`, `I’m awake for Suhoor`, `I prayed Fajr`, and `I’m fasting today` are immediate MorningLog/check-in actions when shown in the current active morning loop; they must not be treated as paid-only just because their long-term history can later feed Plus.
++17. Suhoor confirmation may set `fastingIntentConfirmed`; it must not imply `fastCompletionConfirmed`.
++18. Fajr awake confirmation must not imply Fajr prayer completion.
++19. Quiet Morning remains a Free intentional-suppression state and must not be priced, logged, or paywalled as missed prayer.
++20. Core ramped alarm sound assets and sound-role correctness are Free wake-reliability behavior; future premium sound libraries, if any, require a later spec.
++
++---
++
++## Wake Sessions and immediate MorningLogs entitlement alignment
++
++This section is normative and supersedes any lower wording that could accidentally make the active-morning wake loop a Plus-only logging feature.
++
++### Core rule
++
++```text
++Wake Sessions and immediate MorningLogs are Free core utility.
++Durable history, review, analytics, ledgers, export, and advanced accountability are Plus.
++```
++
++Pricing must preserve the product distinction:
++
++```text
++Execution now ≠ historical memory layer
++```
++
++### Free immediate actions
++
++The following actions are Free when they occur inside the current or active morning loop:
++
++| Action | Free meaning | Plus relationship |
++| --- | --- | --- |
++| `I’m awake for Fajr` | Confirms the Fajr Wake Session and cancels remaining wake checks. | May later appear in Plus history, trends, or analytics. |
++| `I’m awake for Suhoor` | Confirms the Suhoor Wake Session and cancels remaining wake checks. | May later appear in Plus history, trends, or analytics. |
++| `I prayed Fajr` | Current-morning prayer check-in / immediate MorningLog. | Full prayer history, historical editing, Qada ledgers, summaries, and analytics are Plus. |
++| `I’m fasting today` / automatic Suhoor fasting intent | Current-day fasting intent check-in. | Fast history, Ramadan summaries, Qada ledgers, fast tabs, and analytics are Plus. |
++| `Quiet for this morning` | Cancels/suppresses wake execution for the active morning and records `quietMorning`. | Quiet patterns may later appear in Plus insight surfaces. |
++
++### Operational records for all users
++
++Subh may store local operational records for all users because the wake system requires them:
++
++```text
++WakeSession created
++primary alarm scheduled/fired/stopped
++wake check scheduled/fired/stopped/cancelled
++awake confirmation recorded
++current-morning prayer check-in recorded
++current-day fasting intent recorded
++quietMorning recorded
++WakeSession expired unconfirmed
++```
++
++These records are not automatically the same as the full paid logging/history product. Free can use them for current/recent status, reliability, cancellation, reconciliation, and immediate user feedback. Plus can expose them over time as history, trends, summaries, Qada context, export, or accountability where supported by dedicated logging specs.
++
++### Paywall boundary
++
++Do not show a paywall before allowing the user to:
++
++- confirm awake;
++- cancel remaining wake checks by confirming awake;
++- mark the active morning as Quiet;
++- acknowledge the current Fajr prayer check-in when that CTA is shown;
++- acknowledge current-day fasting intent when that CTA is shown;
++- keep core alarm delivery reliable.
++
++A paywall may appear when the user tries to open durable historical surfaces, edit historical logs, use Qada ledgers, generate summaries/trends, export/sync records, or use advanced accountability.
+
+ ---
+
+@@ -218,6 +289,9 @@
+ - Full onboarding spec.
+ - Full worship logging implementation spec.
+ - Full Qada tracking implementation spec.
++- Detailed Wake Session scheduling, wake-check, confirmation, and MorningLog mechanics.
++- Detailed Quiet Mode active-session confirmation and restoration mechanics.
++- Detailed sound-asset authoring or audio waveform production.
+ - Family/household accountability design.
+ - Full TestFlight, sandbox, or App Review strategy.
+
+@@ -301,6 +375,8 @@
+ progress/analytics availability
+ backup/export availability
+ advanced accountability availability
++adaptive wake support if later scoped as paid
++advanced wake-check personalization if later scoped as paid
+ paywall routing
+ read/write access to paid-only data
+ ```
+@@ -316,6 +392,10 @@
+ Quiet semantics
+ Suhoor semantics
+ wake adjustment semantics
++Wake Session creation and core Wake Checks
++immediate awake confirmation and current-morning check-ins
++core wake-check cancellation after confirmation
++core ramped sound asset access
+ underlying stored user meaning
+ base data preservation
+ resolved day meaning
+@@ -366,6 +446,11 @@
+ - month browsing and planning where implemented;
+ - broader supported wake-planning horizon where implemented;
+ - basic alarm delivery for resolver-supported wake plans, when permissions allow;
++- Wake Sessions for the active/current morning;
++- core Wake Checks for resolver-supported Fajr and Suhoor wake plans;
++- in-app awake confirmation for Fajr and Suhoor;
++- current-morning Fajr prayer check-in when implemented in the active morning loop;
++- current-day fasting-intent check-in when implemented in the active morning loop;
+ - basic current-day or recent check-in display if implemented;
+ - no ads.
+
+@@ -403,21 +488,29 @@
+ - future household/family coordination;
+ - AI or insight features if added later.
+
+-#### Basic check-in rule
+-
+-If the app includes a lightweight daily completion or check-in interaction in Free, it must be positioned as a simple daily touchpoint, not as the full paid logging system.
++#### Basic check-in and immediate MorningLog rule
++
++If the app includes lightweight completion or check-in interactions in Free, they must be positioned as immediate current-morning touchpoints, not as the full paid logging/history system.
+
+ Recommended distinction:
+
+ | Capability | Free | Plus |
+ | --- | --- | --- |
+-| Mark or acknowledge the current morning | Allowed if implemented | Allowed |
+-| See very recent/basic status | Allowed if implemented | Allowed |
+-| Maintain durable history and analytics | Limited or locked | Full |
+-| Edit historical logs | Limited or locked | Full |
+-| Generate summaries/trends | Locked | Full |
+-
+-This allows the user to taste the logging loop without undermining Plus.
++| Wake Session operational record | Yes | Yes |
++| Primary alarm / wake-check event record | Yes | Yes |
++| `I’m awake for Fajr` / `I’m awake for Suhoor` | Yes | Yes |
++| Cancel remaining wake checks after awake confirmation | Yes | Yes |
++| `I prayed Fajr` for the active/current morning | Yes, basic check-in if implemented | Yes |
++| `I’m fasting today` / fasting intent for the active/current morning | Yes, basic check-in if implemented | Yes |
++| See current or very recent status | Limited/basic | Full where supported |
++| Maintain and browse durable history | Limited/locked | Full |
++| Edit historical logs | Limited/locked | Full where supported |
++| Qada ledgers | No or read-only if prior data exists | Full where supported |
++| Generate summaries/trends/streaks | Locked/preview | Full where supported |
++
++This allows the user to complete the morning loop without paying while preserving Plus as the durable practice-memory layer.
++
++Free may store the operational and immediate check-in records needed to make the wake system work. The entitlement limit applies to historical surfacing, historical editing, analytics, export, ledgers, and advanced accountability, not to the existence of the current-morning record.
+
+ ---
+
+@@ -435,6 +528,8 @@
+
+ - full Fajr prayer logging history;
+ - full fast logging history;
++- historical review of awake confirmations and Wake Session outcomes;
++- historical review of current-morning check-ins recorded while on Free;
+ - Ramadan fast tracking history;
+ - Ramadan summaries;
+ - Qada fast ledger and tracking;
+@@ -453,15 +548,15 @@
+ - advanced accountability features that are individual-only;
+ - selected Ramadan promotional and retention surfaces.
+
+-#### MVP Plus logging scope
++#### MVP Plus durable logging scope
+
+ Plus MVP should support or prepare the data model for:
+
+ | Area | Minimum Plus expectation |
+ | --- | --- |
+-| Fajr log | User can log Fajr as prayed, missed, or not logged. |
++| Fajr log | User can view, edit, and review full Fajr prayer history. Active/current-morning `I prayed Fajr` check-in may exist in Free. |
+ | Fajr qada | User can record Qada Fajr owed/completed if the product keeps this feature. Copy must avoid giving legal/religious rulings. |
+-| Fast log | User can log fast completed, not completed/missed, in progress, or not logged. |
++| Fast log | User can view, edit, and review full fast history, including completion states when implemented. Active/current-day fasting intent may exist in Free. |
+ | Ramadan fast tracking | Ramadan days can be tracked distinctly from voluntary/Qada fasts. |
+ | Qada fast | User can track owed/planned/completed Qada fasts. |
+ | Fast tabs | User can group/filter fasts by meaningful categories, such as Ramadan, Qada, voluntary, Sunnah, or custom tabs if implemented. |
+@@ -536,7 +631,12 @@
+ | Full supported wake-planning range once implemented | Yes | Yes |
+ | Adjusted Days repository for wake-plan review once implemented | Yes, if core wake planning requires it | Yes |
+ | Recurring boundary rules / presets once implemented | Yes, if treated as core wake planning | Yes |
++| Wake Session execution | Yes | Yes |
++| Core Wake Checks | Yes | Yes |
++| Awake confirmation | Yes | Yes |
+ | Basic current-day check-in | Yes, if implemented | Yes |
++| Current Fajr prayer check-in | Yes, if implemented in the active morning loop | Yes |
++| Current fasting-intent check-in | Yes, if implemented in the active morning loop | Yes |
+ | Recent/basic status display | Limited | Yes |
+ | Full Fajr logging history | Limited/locked | Yes |
+ | Fajr Qada tracking | No or read-only if prior data exists | Yes |
+@@ -641,7 +741,7 @@
+
+ Ramadan Promo lets Subh be generous during Ramadan while preserving the long-term value of Plus.
+
+-Because core Suhoor and Ramadan wake planning are Free, Ramadan Promo should not be used to unlock basic Suhoor wake functionality. It should only affect explicitly scoped paid-layer features.
++Because core Suhoor, Ramadan wake planning, Wake Sessions, Wake Checks, and immediate active-morning check-ins are Free, Ramadan Promo should not be used to unlock basic Suhoor wake functionality or the current morning loop. It should only affect explicitly scoped paid-layer features.
+
+ ### Possible Ramadan Promo scope
+
+@@ -713,6 +813,12 @@
+ - wants to plan the Next 7 Days;
+ - wants to open Weekly Fajrcast;
+ - wants to plan Ramadan Suhoor;
++- wants to use Wake Checks;
++- wants to confirm awake for Fajr or Suhoor;
++- wants to cancel remaining wake checks by confirming awake;
++- wants to mark the active morning as Quiet;
++- wants to use an active/current-morning `I prayed Fajr` check-in when that CTA is shown;
++- wants to use an active/current-day `I’m fasting today` check-in when that CTA is shown;
+ - wants to set a wake plan for an upcoming morning;
+ - needs basic alarm delivery;
+ - needs permission warnings;
+@@ -835,7 +941,11 @@
+ | Suhoor plans | All users | Yes | Yes | Core Free utility. |
+ | Quiet plans | All users | Yes | Yes | Core Free utility. |
+ | Fasting-purpose selection for wake planning | All users | Yes | Yes | Core Free utility if implemented. |
++| Wake Session operational records | System / all users | Yes per retention policy | Current/recent operational use; historical surfacing may be limited in Free | Required for wake checks, cancellation, reconciliation, and trust. |
++| Awake confirmations | All users | Yes | Current/recent operational use; historical surfacing may be limited in Free | `I’m awake` is not the same as prayer completion. |
+ | Basic current-day check-in | Free+ | Yes | Yes, if Free supports it | Keep distinction from full logs. |
++| Current Fajr prayer check-in | Free+ | Yes | Current/recent basic status in Free; full history/editing in Plus | `I prayed Fajr` for the active morning should not be paywalled when shown. |
++| Current fasting-intent check-in | Free+ | Yes | Current/recent basic status in Free; full history/editing in Plus | Suhoor may auto-confirm fasting intent; fast completion remains separate. |
+ | Fajr logs | Plus/trial/promo where scoped | Yes | Read-only/limited in Free; editable in Plus | Avoid data hostage. |
+ | Fast logs | Plus/trial/promo where scoped | Yes | Read-only/limited in Free; editable in Plus | Avoid data hostage. |
+ | Ramadan logs | Plus/trial/Ramadan Promo where scoped | Yes | Basic read-only summary in Free; editable in Plus | Preserve after expiry. |
+@@ -885,7 +995,8 @@
+ - Plus logs remain stored.
+ - Plus ledgers remain stored.
+ - Plus summaries remain stored or regenerable.
+-- New log creation and historical editing are locked unless a Free-lite behavior is explicitly allowed.
++- New historical log creation and historical editing are locked unless a Free-lite behavior is explicitly allowed.
++- Active/current-morning check-ins remain available where the Free morning loop exposes them.
+ - Qada ledgers are locked/read-only.
+ - Progress/history analytics are locked/preview.
+ - Export/backup/sync paid surfaces are locked.
+@@ -1023,8 +1134,12 @@
+ | Ramadan Suhoor wake | Free+ |
+ | Qada/voluntary fasting wake plan | Free+, if feature is implemented as wake planning |
+ | Quiet suppression | Free+ |
++| Wake Session primary alarm | Free+ |
++| Wake Check alarms | Free+ |
++| Active-morning awake confirmation flow | Free+ |
++| Active/current-morning check-in CTA | Free+, if implemented in the morning loop |
+ | Basic reminder to review tomorrow's plan | Free+, if implemented |
+-| Logging reminder | Plus / Plus Trial / scoped Ramadan Promo |
++| Logging reminder outside the active morning loop | Plus / Plus Trial / scoped Ramadan Promo |
+ | Qada ledger reminder | Plus / Plus Trial |
+ | Reflection prompt | Plus / Plus Trial / scoped Ramadan Promo |
+ | Progress summary notification | Plus / Plus Trial / scoped Ramadan Promo |
+@@ -1072,6 +1187,10 @@
+ | Location setup | Free. |
+ | Reliability warnings | Free. |
+ | Core alarm delivery | Free. |
++| Wake Sessions | Free. |
++| Core Wake Checks | Free. |
++| Awake confirmation | Free. |
++| Active/current-morning prayer or fasting-intent check-ins | Free when exposed in the morning loop. |
+
+ ---
+
+@@ -1127,8 +1246,12 @@
+ - Free Next 7 Days;
+ - Free Weekly Fajrcast;
+ - Free supported wake-planning horizon;
+-- Plus Fajr logs;
+-- Plus fast logs;
++- Free Wake Sessions;
++- Free core Wake Checks;
++- Free active-morning awake confirmation;
++- Free active/current-morning prayer and fasting-intent check-ins where implemented;
++- Plus full Fajr logging history;
++- Plus full fast logging history;
+ - Plus Ramadan tracking/history;
+ - Plus Qada fast tracking;
+ - Plus Qada Fajr tracking if retained;
+@@ -1246,6 +1369,10 @@
+     case suhoorMode
+     case quietMode
+     case quietTomorrow
++    case wakeSessionExecution
++    case coreWakeChecks
++    case awakeConfirmation
++    case currentMorningCheckIn
+     case weeklyForecastView
+     case weeklyWakeEditing
+     case weeklyQuietEditing
+@@ -1294,6 +1421,7 @@
+
+ - [ ] One normalized entitlement state is available to all feature gates.
+ - [ ] Free can use core setup, hero, Fajr mode, Suhoor mode, Quiet mode, wake adjustment, and supported planning horizons.
++- [ ] Free can use Wake Sessions, core Wake Checks, awake confirmation, and active/current-morning check-ins where implemented.
+ - [ ] Free can use Next 7 Days and Weekly Fajrcast.
+ - [ ] Plus can use durable logging, history, analytics, Qada tracking, summaries, and paid accountability features.
+ - [ ] Lower tiers cannot commit unsupported paid-layer mutations.
+@@ -1325,7 +1453,7 @@
+
+ - [ ] Paywalls are contextual and non-guilt-based.
+ - [ ] Tapping history, analytics, Qada ledgers, summaries, export, or paid accountability from Free opens a Plus-focused paywall.
+-- [ ] Tapping Fajr, Suhoor, Quiet, wake adjustment, Next 7 Days, or Weekly Fajrcast does not open a paywall.
++- [ ] Tapping Fajr, Suhoor, Quiet, wake adjustment, Wake Checks, awake confirmation, active/current-morning check-in, Next 7 Days, or Weekly Fajrcast does not open a paywall.
+ - [ ] Trial expiry opens a Plus renewal/upgrade paywall with Free fallback.
+ - [ ] Existing user data is never threatened in paywall copy.
+
+@@ -1371,7 +1499,11 @@
+ - Qada/voluntary fasting wake planning where implemented as wake planning;
+ - Weekly Fajrcast;
+ - Next 7 Days forecast display and editing;
+-- month browsing/editing if implemented as wake planning.
++- month browsing/editing if implemented as wake planning;
++- Wake Sessions;
++- core Wake Checks;
++- awake confirmation;
++- active/current-morning prayer and fasting-intent check-ins where implemented.
+
+ ### Move formerly Complete memory features to Plus
+
+@@ -1413,28 +1545,31 @@
+
+ Required separate specs / updates:
+
+-1. `subh-worship-logging-qada-tracking-spec-v1.md`
+-   Owns Fajr logs, fast logs, Ramadan tracking, Qada Fajr, Qada fast, fast tabs, history, progress, and Free-vs-Plus logging limits.
+-
+-2. StoreKit / Subscription Implementation Plan
++1. `subh-wake-sessions-wake-checks-morning-logs-spec-v1.md`
++   Already created as the canonical owner for Wake Sessions, Wake Checks, immediate MorningLogs, and the distinction between current-morning confirmation and durable history.
++
++2. `subh-worship-logging-qada-tracking-spec-v1.md`
++   Owns full Fajr logs, full fast logs, Ramadan tracking, Qada Fajr, Qada fast, fast tabs, history, progress, historical editing, and Free-vs-Plus historical access limits.
++
++3. StoreKit / Subscription Implementation Plan
+    Owns final Plus price, App Store product setup, sandbox tests, purchase restoration, receipt/transaction verification, trial/offer configuration, and exact product IDs.
+
+-3. Interaction Inventory update
++4. Interaction Inventory update
+    Removes Complete-tier scenario IDs, reclassifies core wake/planning interactions as Free, and adds Plus exposure for logging/history/accountability scenarios.
+
+-4. Planning Horizon update
++5. Planning Horizon update
+    Removes tier-based gating from core wake-planning horizons and clarifies any remaining Free limits, if any.
+
+-5. Home Composition / Paywall Surface Spec
++6. Home Composition / Paywall Surface Spec
+    Owns where locked previews, Plus cards, history prompts, and subscription entry points appear visually.
+
+-6. Ramadan / Fasting Logging update
++7. Ramadan / Fasting Logging update
+    Clarifies how Free Suhoor planning differs from Plus Ramadan history, summaries, and Qada tracking.
+
+-7. Future Family / Household Accountability Spec
++8. Future Family / Household Accountability Spec
+    Required before adding household plans, family invitations, shared wake confirmations, parent-child accountability, or household pricing.
+
+-8. `subh-testflight-beta-strategy-spec-v1.md`
++9. `subh-testflight-beta-strategy-spec-v1.md`
+    Owns TestFlight phases, cohorts, beta feedback, sandbox purchase testing, and App Store launch readiness.
+
+ ---
+@@ -1449,7 +1584,7 @@
+ | Should Plus have monthly, annual, or both? | Likely both, but not locked. |
+ | Should there be a founder/launch discount? | Deferred to pricing decision / StoreKit plan. |
+ | Should there be a trial? | Likely useful, but duration and mechanism are deferred. |
+-| How much logging should Free allow? | Free may allow basic current-day or recent check-ins; full durable history belongs to Plus. Dedicated logging spec must define exact limit. |
++| How much logging should Free allow? | Wake Session operational records, awake confirmations, active/current-morning `I prayed Fajr`, and active/current-day fasting-intent check-ins are Free when shown in the morning loop. Full durable history, historical editing, ledgers, analytics, export, and advanced accountability belong to Plus. Dedicated logging specs must define the exact recent-history/free-history limits. |
+ | Should Qada Fajr tracking remain in MVP? | Current user direction includes it as possible Plus scope; dedicated logging spec must define carefully. |
+ | Should backup/sync be Plus? | Recommended if it preserves durable history, but implementation cost/privacy constraints must be assessed. |
+ | Should recurring boundary rules be Free? | If they are core wake planning, yes. If they become advanced automation beyond wake planning, revisit. |
+@@ -1477,6 +1612,10 @@
+ - gate Suhoor mode behind payment;
+ - gate Quiet mode behind payment;
+ - gate wake adjustment behind payment;
++- gate Wake Sessions behind payment;
++- gate core Wake Checks behind payment;
++- gate awake confirmation behind payment;
++- gate active/current-morning check-ins behind payment;
+ - gate Next 7 Days behind payment;
+ - gate Weekly Fajrcast behind payment;
+ - delete paid-tier data on downgrade;

@@ -11,7 +11,7 @@ The existing spec corpus already has the important source-of-truth pieces:
 - one canonical morning-resolution graph;
 - Day Purpose separation between opportunity, intention, wake classification, required actions, outcome, and credit;
 - Suhoor/Fajr/Quiet MVP mode alignment;
-- Next 7 Days and Weekly Fajrcast seven-day alignment;
+- Next 7 Mornings and Weekly Fajrcast seven-day alignment;
 - Hero wake execution copy;
 - Alarm Detail context-card location and controls.
 
@@ -27,7 +27,7 @@ The drift risk is that different surfaces currently have enough local context/ta
 
 - A reusable Primary Morning Context module for Home and Day Detail.
 - A shared tag/chip presentation contract.
-- Surgical patch guidance for Index, Day Purpose, Morning Hero, Alarm Detail, Next 7 Days, and Weekly Fajrcast.
+- Surgical patch guidance for Index, Day Purpose, Morning Hero, Alarm Detail, Next 7 Mornings, and Weekly Fajrcast.
 
 ### Clarified
 
@@ -46,7 +46,7 @@ The drift risk is that different surfaces currently have enough local context/ta
 - Pricing/entitlement logic.
 - Seven-day horizon.
 - Weekly Fajrcast chart geometry.
-- Next 7 Days row-grid layout.
+- Next 7 Mornings row-grid layout.
 - Hero slider, relation/status line, selector animation, red warning threshold, and location/date rules.
 - Day Purpose analytics-credit rules.
 - FastIntentEngine compatibility rules.
@@ -86,7 +86,7 @@ Codex should be stopped or corrected if it:
 - rewrites the alarm scheduler;
 - edits Fajr calculation while implementing context copy;
 - removes Qada/Vow/Kaffarah/Other fast support;
-- removes Next 7 Days row geometry;
+- removes Next 7 Mornings row geometry;
 - reintroduces `Fast`, `Early`, or generic `Pre-Fajr` as top-level MVP labels;
 - makes Quiet erase day meaning;
 - duplicates the hero's wake-offset line inside the context card.

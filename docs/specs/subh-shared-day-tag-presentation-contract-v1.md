@@ -7,8 +7,8 @@
 | Spec status | Draft; proposed canonical shared presentation contract |
 | Date | 2026-05-17 |
 | Supersedes | None |
-| Related specs | `00-subh-spec-index-v2.md`, `subh-morning-resolution-contract-state-ownership-spec-v3.md`, `subh-day-purpose-opportunity-resolution-spec-v1.md`, `subh-primary-morning-context-presentation-spec-v1.md`, `subh-next-7-days-wake-forecast-spec-v1.md`, `subh-alarm-detail-view-screen-spec-v7.md`, `subh-weekly-fajrcast-card-spec-v14.md`, `subh-quick-wake-mode-intent-mutation-contract-v2.md` |
-| Owning domain / surface | Shared tag/chip presentation across Home, Next 7 Days, Day Detail, Primary Morning Context, and supporting forecast surfaces |
+| Related specs | `00-subh-spec-index-v3.md`, `subh-morning-resolution-contract-state-ownership-spec-v3.md`, `subh-day-purpose-opportunity-resolution-spec-v1.md`, `subh-primary-morning-context-presentation-spec-v1.md`, `subh-next-7-mornings-wake-forecast-spec-v2.md`, `subh-alarm-detail-view-screen-spec-v7.md`, `subh-weekly-fajrcast-card-spec-v14.md`, `subh-quick-wake-mode-intent-mutation-contract-v2.md` |
+| Owning domain / surface | Shared tag/chip presentation across Home, Next 7 Mornings, Day Detail, Primary Morning Context, and supporting forecast surfaces |
 | Implementation audit status | Needs implementation audit |
 
 ## Purpose
@@ -28,7 +28,7 @@ This contract stabilizes how Subh presents:
 - Shared tag family definitions.
 - Tag labels for MVP presentation.
 - Tag source-of-truth rules.
-- Surface-specific tag behavior for Primary Morning Context, Next 7 Days, Alarm Detail, and Weekly Fajrcast support text.
+- Surface-specific tag behavior for Primary Morning Context, Next 7 Mornings, Alarm Detail, and Weekly Fajrcast support text.
 - Tag precedence and suppression rules.
 - Rules for opportunity-only versus intended Suhoor / fasting-purpose states.
 - Accessibility behavior for visible and hidden tags.
@@ -394,7 +394,7 @@ Rules:
 
 ## 8. Surface-specific behavior
 
-### 8.1 Next 7 Days compact row
+### 8.1 Next 7 Mornings compact row
 
 Purpose:
 
@@ -405,7 +405,7 @@ Date label | compact tag cluster | wake time/status
 Rules:
 
 - Use compact tags.
-- Cap visible tags according to the Next 7 Days spec.
+- Cap visible tags according to the Next 7 Mornings spec.
 - Do not wrap tags.
 - Do not show explanatory prose.
 - Do not infer tags locally in the SwiftUI row.
@@ -460,7 +460,7 @@ Rules:
 - Weekly Fajrcast may surface week-level opportunity context if the chart spec allows it.
 - It should not become a tag-heavy surface.
 - It must not imply a planned Suhoor wake from opportunity-only dates.
-- It must use the same resolved opportunity/tag payload as Next 7 Days for the same visible date set.
+- It must use the same resolved opportunity/tag payload as Next 7 Mornings for the same visible date set.
 
 ---
 
@@ -503,7 +503,7 @@ Do not infer Shawwal completion from fasts completed during Shawwal unless they 
 
 ### 9.5 Monday/Thursday compact suppression
 
-Monday/Thursday should not appear as a mere opportunity-only tag in compact Next 7 Days rows.
+Monday/Thursday should not appear as a mere opportunity-only tag in compact Next 7 Mornings rows.
 
 It may appear:
 
@@ -592,7 +592,7 @@ Compact rows should use compact chip padding and avoid excessive capsule padding
 
 - **GIVEN** the date has an Arafah opportunity
 - **AND** the user has not selected Suhoor
-- **WHEN** tags are resolved for Next 7 Days
+- **WHEN** tags are resolved for Next 7 Mornings
 - **THEN** the row may show `[Fajr] [Arafah]`
 - **AND** it SHALL NOT show `[Suhoor]`
 - **AND** it SHALL NOT show `[Fasting]` as a selected intent.
@@ -625,7 +625,7 @@ Compact rows should use compact chip padding and avoid excessive capsule padding
 
 - **GIVEN** the date has a Dhul Hijjah opportunity
 - **AND** the user selects Quiet
-- **WHEN** tags are resolved for compact Next 7 Days
+- **WHEN** tags are resolved for compact Next 7 Mornings
 - **THEN** the row may show `[Quiet]` only
 - **WHEN** Primary Morning Context renders expanded
 - **THEN** it SHALL still explain the Dhul Hijjah opportunity in text or accessibility.
@@ -634,7 +634,7 @@ Compact rows should use compact chip padding and avoid excessive capsule padding
 
 - **GIVEN** the date is Monday
 - **AND** no fast is intended
-- **WHEN** Next 7 Days compact row tags are resolved
+- **WHEN** Next 7 Mornings compact row tags are resolved
 - **THEN** the row SHALL NOT show `[Mon/Thu]` merely as an opportunity
 - **AND** it may fall back to `[Fajr]`
 - **WHEN** Day Detail context renders
@@ -661,7 +661,7 @@ Recommended first implementation slice:
 
 1. Add a shared `SharedDayTagPresentationBuilder`.
 2. Feed it from `ResolvedDayPurpose` and `ResolvedMorningWakeState`.
-3. Replace local tag-building logic in Next 7 Days with the shared builder.
+3. Replace local tag-building logic in Next 7 Mornings with the shared builder.
 4. Use the same builder in the Primary Morning Context module.
 5. Keep existing `DayTag` and fast-domain types as inputs/compatibility layers where useful.
 6. Add tests for opportunity-only, selected Suhoor, Qada override, Ramadan, Quiet, Shawwal completion, and Monday/Thursday surface-specific suppression.

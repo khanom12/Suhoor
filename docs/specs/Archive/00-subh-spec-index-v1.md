@@ -2,16 +2,16 @@
 
 | Field | Value |
 | --- | --- |
-| Canonical filename | `00-subh-spec-index-v2.md` |
-| Version | 2 |
-| Spec status | Canonical Desktop working-spec index with v2 planning surfaces |
-| Supersedes | `00-subh-spec-index-v1.md` |
+| Canonical filename | `00-subh-spec-index-v1.md` |
+| Version | 1 |
+| Spec status | Canonical Desktop working-spec index |
+| Supersedes | Missing source-of-truth reconciliation reference; this index is the replacement |
 | Related specs | All active Desktop working specifications |
 | Owning domain / surface | Specification navigation, naming, versioning, and source-of-truth reconciliation |
 | Implementation audit status | Needs implementation audit |
 
 ## Purpose
-This index is the entry point for the canonical Subh working specifications mirrored in `docs/specs/`.
+This index is the entry point for the canonical Subh working specifications in `/Users/omar/Desktop/Subh Working Specification/`.
 
 It replaces references to the missing source-of-truth reconciliation document, records the active spec set, standardizes integer revision naming, and creates the later-audit queue for code/spec drift. The repo-tracked mirror for this working corpus lives in `docs/specs/`. This index is a documentation artifact only; it does not change app behavior, OpenSpec library state, or Swift implementation.
 
@@ -37,15 +37,11 @@ This index records the May 2026 P0/P1 product decision for the MVP spec set.
 - External provider/API/mosque timetable source selection remains future work unless a later implementation plan explicitly promotes it.
 - Physical-device alarm QA remains required for AlarmKit permission, audible wake, Focus/silent behavior, reboot, app termination, time-zone changes, wrong-time firing, and missed-delivery reports.
 
-## V2 Planning Canonicalization
-
-This v2 index makes `subh-next-7-mornings-wake-forecast-spec-v2.md` and `subh-month-planning-gregorian-hijri-spec-v2.md` the canonical planning surface specs. The older Next 10/Next 7 Days and Month Planning v1 specs remain historical/superseded references.
-
 ## Out of Scope / Deferred
 - Code/spec divergence classification is deferred to a later implementation audit.
 - App code, tests, and OpenSpec library artifacts are out of scope for this docs-only cleanup.
 - StoreKit implementation, paywalls, feature gates, and Swift behavior changes are out of scope for this docs-only cleanup.
-- Broad internal symbol renaming for entrenched `NextTen` code names is out of scope unless a surface requires visible copy changes.
+- Renaming `Next 10` to `Next Week` in code is out of scope for this docs-only cleanup.
 - Archive filename normalization is out of scope unless a future archive cleanup explicitly requests it.
 
 ## Naming and Versioning Rules
@@ -65,33 +61,13 @@ This v2 index makes `subh-next-7-mornings-wake-forecast-spec-v2.md` and `subh-mo
 | `subh-fajr-time-calculation-determination-selection-spec-v1.md` | 1 | Prayer-time calculation and method/source selection | Needs implementation audit |
 | `subh-early-worship-boundary-spec-v1.md` | 1 | Suhoor before-Fajr boundary model; legacy early-worship terminology is internal/deferred | Needs implementation audit |
 | `subh-day-purpose-opportunity-resolution-spec-v1.md` | 1 | Day purpose, observance opportunity, intention, outcome, and credit resolution | Needs implementation audit |
-| `subh-shared-day-tag-presentation-contract-v1.md` | 1 | Shared tag/chip presentation across Home, Day Detail, Next 7 Mornings, Weekly Fajrcast, and future calendar surfaces | Needs implementation audit |
-| `subh-primary-morning-context-presentation-spec-v1.md` | 1 | Shared Home and Day Detail day-meaning context presentation | Needs implementation audit |
 | `subh-pricing-entitlement-spec-v1.md` | 1 | Tier doctrine, prices, 30-day Complete trial, Ramadan Preview, downgrade/upgrade behavior, paywall rules, and paid-feature data preservation | Needs implementation audit |
 | `subh-morning-hero-item-spec-v14.md` | 14 | Home Morning Hero surface | Needs implementation audit |
 | `subh-alarm-detail-view-screen-spec-v7.md` | 7 | Selected morning detail editor | Needs implementation audit |
-| `subh-next-7-mornings-wake-forecast-spec-v2.md` | 2 | Home Plan ahead / Next 7 Mornings forecast surface | Needs implementation audit |
-| `subh-month-planning-gregorian-hijri-spec-v2.md` | 2 | Home Plan ahead / Gregorian and Hijri month planning | Needs implementation audit |
+| `subh-next-10-mornings-wake-forecast-spec-v4.md` | 4 | Home Next 10 Mornings forecast surface | Needs implementation audit |
 | `subh-weekly-fajrcast-card-spec-v13.md` | 13 | Home Weekly Fajrcast card | Needs implementation audit |
 | `subh-mvp-interaction-inventory-v3.md` | 3 | MVP scenario coverage and traceability | Needs implementation audit |
 | `subh-mvp-interaction-tier-exposure-matrix-v1.md` | 1 | Entitlement exposure overlay for MVP scenarios S001-S235 and pricing-specific P scenarios | Needs implementation audit |
-
-## Supporting Integration Notes
-| Document | Version | Owns | Implementation audit status |
-| --- | ---: | --- | --- |
-| `subh-context-tags-integration-addendum-v1.md` | 1 | Surgical cross-spec integration notes for Primary Morning Context and Shared Day Tags | Needs implementation audit |
-| `subh-context-spec-integrity-review-v1.md` | 1 | Integrity review explaining the context/tag split, conflict resolution, and implementation order | Needs implementation audit |
-
-## Primary Morning Context / Shared Tag Alignment Decision
-
-The active MVP spec set now treats day context presentation as a shared presentation layer rather than a separate resolver.
-
-Rules:
-1. `ResolvedDayPurpose` remains the source for opportunity, intention, required action, and credit separation.
-2. Shared tag presentation consumes resolved opportunity/intention outputs and does not create analytics truth.
-3. The Primary Morning Context module consumes the same resolved payload on Home and Day Detail.
-4. The Hero owns wake execution copy. The Primary Morning Context owns day meaning and selected-purpose explanation.
-5. Alarm Detail must not maintain a separate opportunity/context-copy engine.
 
 ## Scenario, Entitlement, and Pricing Authority
 - `subh-mvp-interaction-inventory-v3.md` remains the scenario authority for `S001-S235`. It owns scenario identity, scenario grouping, and MVP traceability.
@@ -110,8 +86,6 @@ This table is intentionally the only active place where old active filenames sho
 | `Fajr_Time_Calculation_Determination_Selection_Spec_v1.md` | `subh-fajr-time-calculation-determination-selection-spec-v1.md` |
 | `Morning_Hero_Item_Specification_v14.md` | `subh-morning-hero-item-spec-v14.md` |
 | `Next_10_Mornings_Wake_Forecast_Specification_v4.md` | `subh-next-10-mornings-wake-forecast-spec-v4.md` |
-| `subh-next-10-mornings-wake-forecast-spec-v4.md` | `subh-next-7-mornings-wake-forecast-spec-v2.md` |
-| `subh-month-planning-gregorian-hijri-spec-v1.md` | `subh-month-planning-gregorian-hijri-spec-v2.md` |
 | `Subh_Alarm_Delivery_and_Schedule_Reliability_Spec_v2.md` | `subh-alarm-delivery-schedule-reliability-spec-v2.md` |
 | `Subh_Morning_Resolution_Contract_and_State_Ownership_Spec_v2.md` | `subh-morning-resolution-contract-state-ownership-spec-v2.md` |
 | `Subh_Planning_Horizon_Day_Resolution_and_Intention_Anchoring_Spec_v2.md` | `subh-planning-horizon-day-resolution-intention-anchoring-spec-v2.md` |
@@ -124,22 +98,19 @@ This table is intentionally the only active place where old active filenames sho
 ```mermaid
 flowchart TD
     Doctrine["Subh product doctrine in AGENTS.md"]
-    Index["00-subh-spec-index-v2"]
+    Index["00-subh-spec-index-v1"]
     Pricing["Pricing and Entitlement"]
     TierMatrix["MVP Interaction Tier Exposure Matrix"]
     MorningResolution["Morning Resolution Contract"]
     Planning["Planning Horizon and Intention Anchoring"]
     DayPurpose["Day Purpose and Opportunity Resolution"]
-    SharedTags["Shared Day Tag Presentation"]
-    PrimaryContext["Primary Morning Context Presentation"]
     FajrCalc["Fajr Time Calculation"]
     EarlyBoundary["Suhoor Boundary"]
     QuickWake["Quick Wake Mode Mutation Contract"]
     AlarmDelivery["Alarm Delivery and Reliability"]
     Hero["Morning Hero"]
     Detail["Alarm Detail View"]
-    Next7["Next 7 Mornings"]
-    MonthPlanning["Month Planning"]
+    Next10["Next 10 Mornings"]
     Weekly["Weekly Fajrcast"]
     Inventory["MVP Interaction Inventory"]
 
@@ -150,13 +121,6 @@ flowchart TD
     Index --> Inventory
     MorningResolution --> Planning
     MorningResolution --> DayPurpose
-    DayPurpose --> SharedTags
-    SharedTags --> PrimaryContext
-    PrimaryContext --> Hero
-    PrimaryContext --> Detail
-    SharedTags --> Next7
-    SharedTags --> MonthPlanning
-    SharedTags --> Weekly
     MorningResolution --> FajrCalc
     FajrCalc --> EarlyBoundary
     MorningResolution --> QuickWake
@@ -164,15 +128,13 @@ flowchart TD
     MorningResolution --> AlarmDelivery
     MorningResolution --> Hero
     MorningResolution --> Detail
-    MorningResolution --> Next7
-    MorningResolution --> MonthPlanning
+    MorningResolution --> Next10
     MorningResolution --> Weekly
     Pricing --> TierMatrix
     Inventory --> TierMatrix
     Inventory --> Hero
     Inventory --> Detail
-    Inventory --> Next7
-    Inventory --> MonthPlanning
+    Inventory --> Next10
     Inventory --> Weekly
     Inventory --> AlarmDelivery
 ```
@@ -180,15 +142,13 @@ flowchart TD
 ## Reading Order
 1. Start with `subh-morning-resolution-contract-state-ownership-spec-v2.md`.
 2. Read `subh-planning-horizon-day-resolution-intention-anchoring-spec-v2.md` and `subh-day-purpose-opportunity-resolution-spec-v1.md` for date meaning, future edits, and intention ownership.
-3. Read `subh-shared-day-tag-presentation-contract-v1.md` and `subh-primary-morning-context-presentation-spec-v1.md` before implementing Home, Alarm Detail, Next 7 Mornings, Month Planning, or Weekly Fajrcast context/tag presentation.
-4. Read `subh-context-tags-integration-addendum-v1.md` for surgical cross-spec patch direction when updating existing surfaces.
-5. Read `subh-fajr-time-calculation-determination-selection-spec-v1.md` and `subh-early-worship-boundary-spec-v1.md` for prayer-window and Suhoor before-Fajr boundary assumptions.
-6. Read `subh-quick-wake-mode-intent-mutation-contract-v1.md` before implementing Home or detail wake-mode edits.
-7. Read `subh-alarm-delivery-schedule-reliability-spec-v2.md` before making scheduling, permission, fallback, or diagnostics claims.
-8. Read surface specs after the contracts they consume: Morning Hero, Alarm Detail, Next 7 Mornings, Month Planning, and Weekly Fajrcast.
-9. Use `subh-mvp-interaction-inventory-v3.md` as the scenario traceability backbone for `S001-S235`.
-10. Read `subh-pricing-entitlement-spec-v1.md` for tier doctrine, prices, trial, downgrade/upgrade, paywall, entitlement, and data-preservation rules.
-11. Read `subh-mvp-interaction-tier-exposure-matrix-v1.md` after the inventory and pricing spec when mapping `S001-S235` to Free, Plus, Complete, Complete Lifetime, Trial Complete, and Ramadan Preview exposure.
+3. Read `subh-fajr-time-calculation-determination-selection-spec-v1.md` and `subh-early-worship-boundary-spec-v1.md` for prayer-window and Suhoor before-Fajr boundary assumptions.
+4. Read `subh-quick-wake-mode-intent-mutation-contract-v1.md` before implementing Home or detail wake-mode edits.
+5. Read `subh-alarm-delivery-schedule-reliability-spec-v2.md` before making scheduling, permission, fallback, or diagnostics claims.
+6. Read surface specs after the contracts they consume: Morning Hero, Alarm Detail, Next 10 Mornings, and Weekly Fajrcast.
+7. Use `subh-mvp-interaction-inventory-v3.md` as the scenario traceability backbone for `S001-S235`.
+8. Read `subh-pricing-entitlement-spec-v1.md` for tier doctrine, prices, trial, downgrade/upgrade, paywall, entitlement, and data-preservation rules.
+9. Read `subh-mvp-interaction-tier-exposure-matrix-v1.md` after the inventory and pricing spec when mapping `S001-S235` to Free, Plus, Complete, Complete Lifetime, Trial Complete, and Ramadan Preview exposure.
 
 ## Later Code/Spec Audit Queue
 The cleanup pass deliberately does not classify app conformance. A later audit should:
@@ -196,7 +156,7 @@ The cleanup pass deliberately does not classify app conformance. A later audit s
 - Classify MVP inventory scenarios as Implemented, Partially Implemented, Missing, Risky, or Not Testable Yet.
 - Identify claims in the prose specs that describe future targets but are already implemented, partially implemented, or no longer accurate.
 - Separate specification gaps from implementation gaps.
-- Produce a prioritized gap matrix covering resolution precedence, quick wake mutations, alarm delivery reliability, Fajr calculation assumptions, early worship boundaries, day purpose, Home hero, Alarm Detail, Next 7 Mornings, Month Planning, Weekly Fajrcast, accessibility, privacy, and degraded states.
+- Produce a prioritized gap matrix covering resolution precedence, quick wake mutations, alarm delivery reliability, Fajr calculation assumptions, early worship boundaries, day purpose, Home hero, Alarm Detail, Next 10, Weekly Fajrcast, accessibility, privacy, and degraded states.
 - Add entitlement implementation mapping only after a dedicated implementation pass; this docs pass does not implement StoreKit, paywalls, feature gates, or entitlement-dependent scheduling behavior.
 - Update implementation audit status fields only after that audit has evidence.
 

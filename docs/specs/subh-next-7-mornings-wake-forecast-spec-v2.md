@@ -6,7 +6,7 @@
 | Version | 2 |
 | Spec status | Product / implementation direction; canonical update to v1 |
 | Supersedes | `subh-next-7-days-wake-forecast-spec-v1.md`; `subh-next-10-mornings-wake-forecast-spec-v4.md` |
-| Related specs | `00-subh-spec-index-v2.md`, `subh-morning-resolution-contract-state-ownership-spec-v3.md`, `subh-quick-wake-mode-intent-mutation-contract-v2.md`, `subh-planning-horizon-day-resolution-intention-anchoring-spec-v3.md`, `subh-alarm-detail-view-screen-spec-v7.md`, `subh-month-planning-gregorian-hijri-spec-v2.md` |
+| Related specs | `00-subh-spec-index-v3.md`, `subh-morning-resolution-contract-state-ownership-spec-v3.md`, `subh-quick-wake-mode-intent-mutation-contract-v2.md`, `subh-planning-horizon-day-resolution-intention-anchoring-spec-v3.md`, `subh-alarm-detail-view-screen-spec-v7.md`, `subh-month-planning-gregorian-hijri-spec-v2.md` |
 | Owning domain / surface | Home / Plan ahead / Next 7 Mornings forecast surface |
 | Implementation audit status | Needs implementation audit after v2 implementation |
 
@@ -159,7 +159,7 @@ Do not show:
 NEXT 7 DAYS
 7-DAY WAKE FORECAST
 Next 7 Days
-Next 10 mornings
+Historical removed copy: Next 10 mornings
 10-DAY WAKE FORECAST
 ```
 

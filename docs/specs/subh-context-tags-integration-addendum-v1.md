@@ -6,7 +6,7 @@
 | Version | 1 |
 | Spec status | Draft; surgical integration addendum for existing working specs |
 | Date | 2026-05-17 |
-| Related specs | `00-subh-spec-index-v2.md`, `subh-morning-resolution-contract-state-ownership-spec-v3.md`, `subh-day-purpose-opportunity-resolution-spec-v1.md`, `subh-primary-morning-context-presentation-spec-v1.md`, `subh-shared-day-tag-presentation-contract-v1.md`, `subh-morning-hero-item-spec-v15.md`, `subh-alarm-detail-view-screen-spec-v7.md`, `subh-next-7-days-wake-forecast-spec-v1.md`, `subh-weekly-fajrcast-card-spec-v14.md` |
+| Related specs | `00-subh-spec-index-v3.md`, `subh-morning-resolution-contract-state-ownership-spec-v3.md`, `subh-day-purpose-opportunity-resolution-spec-v1.md`, `subh-primary-morning-context-presentation-spec-v1.md`, `subh-shared-day-tag-presentation-contract-v1.md`, `subh-morning-hero-item-spec-v15.md`, `subh-alarm-detail-view-screen-spec-v7.md`, `subh-next-7-mornings-wake-forecast-spec-v2.md`, `subh-weekly-fajrcast-card-spec-v14.md` |
 | Owning domain / surface | Cross-spec integration and no-drift patch guidance |
 | Implementation audit status | Needs implementation audit |
 
@@ -14,7 +14,7 @@
 
 Provide a controlled, additive integration path for the new Primary Morning Context and Shared Day Tag Presentation specs without rewriting unrelated behavior or weakening the existing source-of-truth spine.
 
-This addendum is intentionally surgical. It does not replace the current Morning Resolution, Day Purpose, Hero, Alarm Detail, Next 7 Days, or Weekly Fajrcast specs. It adds the missing presentation layer and tells each existing spec how to consume it.
+This addendum is intentionally surgical. It does not replace the current Morning Resolution, Day Purpose, Hero, Alarm Detail, Next 7 Mornings, or Weekly Fajrcast specs. It adds the missing presentation layer and tells each existing spec how to consume it.
 
 ---
 
@@ -24,7 +24,7 @@ This addendum is intentionally surgical. It does not replace the current Morning
 2. Do not create a second opportunity resolver.
 3. Do not derive observances from SwiftUI views.
 4. Do not remove existing opportunity/intention/outcome/credit separation.
-5. Do not remove Next 7 Days row-layout requirements.
+5. Do not remove Next 7 Mornings row-layout requirements.
 6. Do not remove Weekly Fajrcast chart behavior.
 7. Do not remove Hero wake-boundary, slider, relation/status, or quick-mode rules.
 8. Do not remove Alarm Detail editing controls; only route its context copy through the shared presentation module.
@@ -47,12 +47,12 @@ subh-shared-day-tag-presentation-contract-v1.md
 Recommended reading order insertion:
 
 ```text
-1. 00-subh-spec-index-v2.md
+1. 00-subh-spec-index-v3.md
 2. subh-morning-resolution-contract-state-ownership-spec-v3.md
 3. subh-day-purpose-opportunity-resolution-spec-v1.md
 4. subh-shared-day-tag-presentation-contract-v1.md
 5. subh-primary-morning-context-presentation-spec-v1.md
-6. surface specs: Hero, Alarm Detail, Next 7 Days, Weekly Fajrcast
+6. surface specs: Hero, Alarm Detail, Next 7 Mornings, Weekly Fajrcast
 ```
 
 ---
@@ -64,7 +64,7 @@ Add the two new specs to the canonical spec list.
 Suggested rows:
 
 ```md
-| `subh-shared-day-tag-presentation-contract-v1.md` | 1 | Shared tag/chip presentation across Home, Day Detail, Next 7 Days, Weekly Fajrcast, and future calendar surfaces | Needs implementation audit |
+| `subh-shared-day-tag-presentation-contract-v1.md` | 1 | Shared tag/chip presentation across Home, Day Detail, Next 7 Mornings, Weekly Fajrcast, and future calendar surfaces | Needs implementation audit |
 | `subh-primary-morning-context-presentation-spec-v1.md` | 1 | Shared Home and Day Detail day-meaning context presentation | Needs implementation audit |
 ```
 
@@ -129,7 +129,7 @@ This addendum is normative for Home composition.
 - The Primary Morning Context module owns day meaning and selected-purpose explanation below the Hero.
 - The Hero must not absorb the Primary Morning Context module's role by adding long observance explanations or tag clusters into the hero stack.
 - The Primary Morning Context module must not repeat the Hero relation/status line such as `Wake up {X} min before Fajr ends`, `Wake up {X} min before Fajr begins`, or `No alarm will ring for tomorrow`.
-- Home order is: Hero, Primary Morning Context, Next 7 Days, Weekly Fajrcast.
+- Home order is: Hero, Primary Morning Context, Next 7 Mornings, Weekly Fajrcast.
 - Hero quick-mode changes still emit shared mutation commands and then consume the re-resolved snapshot. The context module updates from that same snapshot.
 ```
 
@@ -159,7 +159,7 @@ Do not remove Alarm Detail hero parity, immediate save/reset behavior, fasting-p
 
 ---
 
-## Patch E — Next 7 Days
+## Patch E — Next 7 Mornings
 
 Add the following addendum after the MVP Suhoor Alignment Addendum.
 
@@ -168,9 +168,9 @@ Add the following addendum after the MVP Suhoor Alignment Addendum.
 
 This addendum is normative for semantic tag meaning and supersedes lower tag examples only where they conflict with MVP `Suhoor | Fajr | Quiet` vocabulary.
 
-- Next 7 Days continues to own row anatomy, row grid, lane measurement, collapsed/expanded behavior, row height, dividers, and no-wrap compact tag layout.
-- Next 7 Days must consume `SharedDayTagPresentation` or an equivalent presentation payload derived from `ResolvedDayPurpose` and `ResolvedMorningWakeState`.
-- Next 7 Days must not infer opportunity, fasting intention, Quiet, Ramadan, or forbidden-day status locally.
+- Next 7 Mornings continues to own row anatomy, row grid, lane measurement, collapsed/expanded behavior, row height, dividers, and no-wrap compact tag layout.
+- Next 7 Mornings must consume `SharedDayTagPresentation` or an equivalent presentation payload derived from `ResolvedDayPurpose` and `ResolvedMorningWakeState`.
+- Next 7 Mornings must not infer opportunity, fasting intention, Quiet, Ramadan, or forbidden-day status locally.
 - Generic compact `[Fasting]` examples should be treated as legacy unless a later product decision deliberately keeps them. MVP compact mode should prefer `[Suhoor]` for the before-Fajr wake mode and specific purpose/opportunity chips such as `[Arafah]`, `[Qada]`, `[Ramadan]`, or `[White Days]`.
 - Opportunity-only dates may show `[Fajr]` plus an opportunity chip where the surface allows it, but they must not show `[Suhoor]`.
 - Compact density may suppress lower-priority tags for layout, but suppression must not change the resolved context available to Day Detail or accessibility.
@@ -193,7 +193,7 @@ This addendum is normative for context/tag consistency.
 - Opportunity-only dates may be surfaced as weekly context only when the resolved day-purpose payload says they exist.
 - The weekly footer must not imply a planned Suhoor wake from an opportunity-only date.
 - Scrubbing/inspection changes temporary focus only. It must not mutate context, tags, intention, or wake mode.
-- The chart must remain aligned to the same seven visible date keys as Next 7 Days.
+- The chart must remain aligned to the same seven visible date keys as Next 7 Mornings.
 ```
 
 Do not change chart geometry, snap-back behavior, seven-day window, footer trend model, or interaction model as part of this patch.
@@ -241,7 +241,7 @@ The new context/tag specs are presentation consumers only.
 
 ## Final cross-spec acceptance checklist
 
-- [ ] Home shows Hero, then Primary Morning Context, then Next 7 Days, then Weekly Fajrcast.
+- [ ] Home shows Hero, then Primary Morning Context, then Next 7 Mornings, then Weekly Fajrcast.
 - [ ] The context module does not repeat the Hero wake relation/status line.
 - [ ] Alarm Detail and Home consume the same Primary Morning Context payload.
 - [ ] Tags are derived from shared presentation payload, not local surface logic.
@@ -250,8 +250,8 @@ The new context/tag specs are presentation consumers only.
 - [ ] Ramadan is locked and suppresses optional alternatives.
 - [ ] Eid/Tashreeq do not show ordinary fasting controls.
 - [ ] Quiet preserves underlying day meaning.
-- [ ] Next 7 Days still has exactly seven rows and keeps its row-grid rules.
-- [ ] Weekly Fajrcast still has exactly the same visible date keys as Next 7 Days.
+- [ ] Next 7 Mornings still has exactly seven rows and keeps its row-grid rules.
+- [ ] Weekly Fajrcast still has exactly the same visible date keys as Next 7 Mornings.
 - [ ] No delivery, Fajr calculation, final-third, pricing, or analytics source-of-truth behavior is changed by presentation specs.
 
 ---

@@ -7,7 +7,7 @@
 | Spec status | Draft; proposed canonical working spec |
 | Date | 2026-05-17 |
 | Supersedes | None |
-| Related specs | `00-subh-spec-index-v2.md`, `subh-morning-resolution-contract-state-ownership-spec-v3.md`, `subh-day-purpose-opportunity-resolution-spec-v1.md`, `subh-shared-day-tag-presentation-contract-v1.md`, `subh-morning-hero-item-spec-v15.md`, `subh-alarm-detail-view-screen-spec-v7.md`, `subh-next-7-days-wake-forecast-spec-v1.md`, `subh-weekly-fajrcast-card-spec-v14.md`, `subh-quick-wake-mode-intent-mutation-contract-v2.md` |
+| Related specs | `00-subh-spec-index-v3.md`, `subh-morning-resolution-contract-state-ownership-spec-v3.md`, `subh-day-purpose-opportunity-resolution-spec-v1.md`, `subh-shared-day-tag-presentation-contract-v1.md`, `subh-morning-hero-item-spec-v15.md`, `subh-alarm-detail-view-screen-spec-v7.md`, `subh-next-7-mornings-wake-forecast-spec-v2.md`, `subh-weekly-fajrcast-card-spec-v14.md`, `subh-quick-wake-mode-intent-mutation-contract-v2.md` |
 | Owning domain / surface | Shared Home and Day Detail primary day-context presentation |
 | Implementation audit status | Needs implementation audit |
 
@@ -61,7 +61,7 @@ Will the alarm ring / not ring as the primary wake-execution state?
 - Day-purpose opportunity and credit derivation.
 - Quick wake-mode mutation rules.
 - Alarm scheduling or delivery reliability.
-- Next 7 Days row geometry.
+- Next 7 Mornings row geometry.
 - Weekly Fajrcast chart geometry.
 - Full fasting-program education or Islamic-learning content.
 - Progress/analytics reporting.
@@ -96,7 +96,7 @@ The module MUST NOT:
 - create date-specific overrides;
 - duplicate Hero wake relation text.
 
-If the Primary Morning Context output disagrees with Next 7 Days, Alarm Detail, Weekly Fajrcast, or the Hero for the same date, the defect is a source-of-truth / resolver consumption defect, not a reason to add local presentation logic.
+If the Primary Morning Context output disagrees with Next 7 Mornings, Alarm Detail, Weekly Fajrcast, or the Hero for the same date, the defect is a source-of-truth / resolver consumption defect, not a reason to add local presentation logic.
 
 ---
 
@@ -113,7 +113,7 @@ Subh is a Fajr-centered morning system. The Hero gives the immediate wake-execut
 ```text
 Hero = wake execution
 Primary Morning Context = day meaning + user purpose
-Next 7 Days = compact weekly preview
+Next 7 Mornings = compact weekly preview
 Weekly Fajrcast = weekly Fajr-window trend
 Day Detail = editable selected-day explanation and controls
 ```
@@ -164,12 +164,12 @@ Minimal screen time. Maximum execution.
 
 ### 3.1 Home placement
 
-On Home, the module appears below the Morning Hero and above Next 7 Days:
+On Home, the module appears below the Morning Hero and above Next 7 Mornings:
 
 ```text
 1. Morning Hero
 2. Primary Morning Context, compact
-3. Next 7 Days
+3. Next 7 Mornings
 4. Weekly Fajrcast
 ```
 
@@ -877,15 +877,15 @@ Entitlement may affect controls and routing, but it must not change resolved day
 Rules:
 
 - A Free or Plus user may still have underlying recognized opportunities in the resolver.
-- If the current tier cannot activate Suhoor or fasting controls, the module may show the opportunity as informational or route to a paywall according to the pricing spec.
+- If a Plus-only durable history, insight, Qada, export/sync, or advanced accountability action is selected, the module may show a paid-layer affordance according to the pricing spec.
 - The module must not pretend an opportunity does not exist simply because the user cannot activate it under the current tier.
 - The module must not create a paid-tier-only day resolver.
 
-Suggested compact Plus/Free informational copy, if needed:
+Suggested compact informational copy, if needed:
 
 ```text
 Arafah recognized
-Complete unlocks Suhoor planning for this morning.
+Suhoor is available for this morning.
 ```
 
 Only use paywall-oriented copy when the pricing spec explicitly allows it for this surface.
@@ -969,10 +969,10 @@ Inline chips should not independently navigate unless a later spec deliberately 
 
 - **GIVEN** a date is within the supported first nine days of Dhul Hijjah
 - **AND** the user has not selected Suhoor
-- **WHEN** Home, Next 7 Days, and Day Detail render the same date
+- **WHEN** Home, Next 7 Mornings, and Day Detail render the same date
 - **THEN** each surface SHALL consume the same resolved opportunity
 - **AND** none of them SHALL infer a planned fast from the opportunity alone
-- **AND** Day Detail SHALL not omit the opportunity if Next 7 Days shows it.
+- **AND** Day Detail SHALL not omit the opportunity if Next 7 Mornings shows it.
 
 ### Scenario PMC-004: Opportunity-only does not duplicate Hero mechanics
 

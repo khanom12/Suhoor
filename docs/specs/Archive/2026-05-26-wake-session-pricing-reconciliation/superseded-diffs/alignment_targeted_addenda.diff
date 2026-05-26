@@ -1,0 +1,265 @@
+--- /mnt/data/subh-morning-hero-item-spec-v15.md	2026-05-26 15:19:27.677703800 +0000
++++ /mnt/data/subh_wake_session_spec_alignment_v1/subh-morning-hero-item-spec-v15.md	2026-05-26 15:25:34.079964751 +0000
+@@ -6,7 +6,7 @@
+ | Version | 15 |
+ | Spec status | Product / implementation direction; canonical Desktop working spec; aligned to Next 7 Days horizon |
+ | Supersedes | `subh-morning-hero-item-spec-v14.md`; Archive/Morning_Hero_Item_Specification_v13.md |
+-| Related specs | `00-subh-spec-index-v2.md`, `subh-morning-resolution-contract-state-ownership-spec-v3.md`, `subh-quick-wake-mode-intent-mutation-contract-v2.md`, `subh-early-worship-boundary-spec-v2.md`, `subh-next-7-days-wake-forecast-spec-v1.md`, `subh-weekly-fajrcast-card-spec-v14.md` |
++| Related specs | `00-subh-spec-index-v3.md`, `subh-morning-resolution-contract-state-ownership-spec-v3.md`, `subh-quick-wake-mode-intent-mutation-contract-v2.md`, `subh-early-worship-boundary-spec-v2.md`, `subh-next-7-days-wake-forecast-spec-v1.md`, `subh-weekly-fajrcast-card-spec-v14.md`, `subh-wake-sessions-wake-checks-morning-logs-spec-v1.md`, `subh-quiet-mode-quiet-morning-contract-spec-v1.md`, `subh-sound-alarm-settings-spec-v1.md` |
+ | Owning domain / surface | Home / Morning Hero surface |
+ | Implementation audit status | Needs implementation audit |
+
+@@ -55,11 +55,30 @@
+ - Weekly Fajrcast uses the same seven visible dates as Next 7 Days.
+ - The Morning Hero remains the immediate answer surface; the forecast and chart provide matching weekly context below it.
+
++
++## Wake Sessions / Hero Action Slot Alignment Addendum
++
++This addendum is normative for the current MVP wake-execution pass and supersedes conflicting lower hero wording only for wake confirmation, wake checks, immediate morning logs, and active-window CTAs.
++
++- The Morning Hero consumes Wake Session, MorningLog, and resolved morning snapshot state from the canonical system layer. It must not infer awake, prayer, fasting, or missed outcomes locally.
++- The Hero must include a fixed-height **Hero Action Slot** inside the settled hero stack. The slot content may change, but the surrounding hero layout must not jump vertically across planning, active-window, fired, confirmed, or Quiet states.
++- In ordinary planning state, the Hero Action Slot preserves the existing wake-adjustment control where that control is valid for the selected mode.
++- In an active confirmation window before the primary alarm fires, the slot preserves the adjustment control and may add a compact mode-specific action: `Already awake? [I’m awake]`.
++- After the primary alarm or a wake check has fired, and before awake confirmation, the slot replaces the adjuster with the prominent mode-specific CTA: `I’m awake for Fajr` or `I’m awake for Suhoor`.
++- `I’m awake for Fajr` confirms only Fajr awake status. It must not mark `I prayed Fajr`.
++- `I’m awake for Suhoor` confirms Suhoor awake status and the fasting intention for that morning. It must not mark `I prayed Fajr` and must not mark fast completion.
++- After Fajr begins, a Suhoor user who already confirmed Suhoor awake should see `I prayed Fajr` as the primary next completion CTA. A Suhoor user who did not confirm Suhoor awake should see `I’m awake for Fajr` first, then `I prayed Fajr`.
++- `I prayed Fajr` remains a separate user action and separate log outcome from both Fajr awake confirmation and Suhoor awake confirmation.
++- Selecting Quiet during an active Wake Session must route through the Quiet confirmation sheet defined by the Quiet Mode contract before remaining alarms or wake checks are cancelled.
++- The Hero may emit user intents such as `confirmAwakeForFajr`, `confirmAwakeForSuhoor`, `confirmFajrPrayer`, `selectQuickWakeMode(.quiet)`, and `confirmQuietMorning`, but it must not directly cancel platform alarms.
++- Lock Screen `Open Subh` actions should route the user to the relevant hero state. Lock Screen `Stop` alone must not mark the user awake.
++- The active MVP selector label set is `Suhoor | Fajr | Quiet`. Legacy `Pre-Fajr`, `Fast`, or `Early` examples retained lower in this document are historical or compatibility wording unless a later approved spec reintroduces them.
++
+ ## 0. v15 source-of-truth alignment
+
+ This v15 revision preserves the v13 visual, layout, animation, Dynamic Type, accessibility, and Home-surface behavior unless explicitly clarified here. The purpose of this revision is to align the Morning Hero with:
+
+-1. `00-subh-spec-index-v2.md`;
++1. `00-subh-spec-index-v3.md`;
+ 2. `subh-mvp-interaction-inventory-v4.md`;
+ 3. `subh-quick-wake-mode-intent-mutation-contract-v2.md`;
+ 4. the parent `subh-morning-resolution-contract-state-ownership-spec-v3.md`.
+
+--- /mnt/data/subh-morning-resolution-contract-state-ownership-spec-v3.md	2026-05-26 15:19:27.720817997 +0000
++++ /mnt/data/subh_wake_session_spec_alignment_v1/subh-morning-resolution-contract-state-ownership-spec-v3.md	2026-05-26 15:25:34.082213662 +0000
+@@ -6,7 +6,7 @@
+ | Version | 3 |
+ | Spec status | Draft; reconciled Desktop working spec; aligned to Next 7 Days / Weekly Fajrcast horizon |
+ | Supersedes | `subh-morning-resolution-contract-state-ownership-spec-v2.md` |
+-| Related specs | `00-subh-spec-index-v2.md`, `subh-planning-horizon-day-resolution-intention-anchoring-spec-v3.md`, `subh-day-purpose-opportunity-resolution-spec-v1.md`, `subh-quick-wake-mode-intent-mutation-contract-v2.md`, `subh-alarm-delivery-schedule-reliability-spec-v3.md`, `subh-fajr-time-calculation-determination-selection-spec-v1.md` |
++| Related specs | `00-subh-spec-index-v3.md`, `subh-planning-horizon-day-resolution-intention-anchoring-spec-v3.md`, `subh-day-purpose-opportunity-resolution-spec-v1.md`, `subh-quick-wake-mode-intent-mutation-contract-v2.md`, `subh-alarm-delivery-schedule-reliability-spec-v3.md`, `subh-fajr-time-calculation-determination-selection-spec-v1.md`, `subh-wake-sessions-wake-checks-morning-logs-spec-v1.md`, `subh-quiet-mode-quiet-morning-contract-spec-v1.md`, `subh-sound-alarm-settings-spec-v1.md` |
+ | Owning domain / surface | Core morning resolution graph and state ownership |
+ | Implementation audit status | Needs implementation audit |
+
+@@ -56,6 +56,23 @@
+ - Forecast visibility does not imply platform scheduling.
+ - The resolver/window builder must distinguish `visibleDateKeys` from `activeScheduledDateKeys` exactly as before.
+
++
++## Wake Sessions / Morning Logs Alignment Addendum
++
++This addendum is normative for wake execution and immediate morning logging. It preserves the existing one-morning resolver while adding Wake Session and MorningLog as operational records downstream of resolution.
++
++- The canonical morning resolver owns day meaning, selected mode, wake boundary, resolved wake time, alarm activation, and materialized delivery events.
++- The Wake Session owns execution state for one operational morning: primary alarm, wake checks, awake confirmation, quiet cancellation, expiry, and reconciliation.
++- MorningLog owns factual local records needed for reliability, restoration, and immediate user confirmations. It must not become a parallel day-purpose resolver.
++- These records must remain separate: `suhoorWakeOutcome`, `fastingDayPlanned`, `fastingIntentConfirmed`, `fajrWakeOutcome`, `fajrPrayerOutcome`, and future `fastCompletionOutcome`.
++- Selecting Suhoor sets `fastingDayPlanned` for the resolved morning. Tapping `I’m awake for Suhoor` confirms Suhoor wake and sets `fastingIntentConfirmed` for that morning.
++- Tapping `I’m awake for Fajr` confirms Fajr awake status only. It must not mark Fajr prayer as prayed.
++- Tapping `I prayed Fajr` confirms Fajr prayer outcome only. It must not invent or rewrite Suhoor, fasting, or wake outcomes except where the user action explicitly says so.
++- Lack of awake confirmation may produce `expiredUnconfirmed` or `unconfirmed`. It must not automatically produce `Fajr missed`, `Fast missed`, or prayer judgment.
++- Quiet remains an intentional suppression overlay. It may log `quietMorning`, cancel wake execution, and preserve underlying Fajr/Suhoor meaning, but it must not log a missed prayer or missed fast.
++- Wake Session state must be recomputed or reconciled after mode changes, wake-time changes, date rollover, app relaunch, timezone/location changes, and delivery-ledger discrepancies.
++- Wake Sessions and local operational MorningLogs are core system records for all users. Long-term analytics, streaks, adaptive recommendations, and advanced reporting remain separate future/paid surfaces unless another spec changes that scope.
++
+ ## 0. One-page summary
+
+ Subh already has a clear product doctrine: it is a **Fajr-centered morning system**. Suhoor, fasting, Ramadan, Qada, observance opportunities, Quiet Mode, and one-day edits are not separate engines. They are layered states over the same morning-resolution system.
+
+--- /mnt/data/subh-alarm-delivery-schedule-reliability-spec-v3.md	2026-05-26 15:19:27.729972322 +0000
++++ /mnt/data/subh_wake_session_spec_alignment_v1/subh-alarm-delivery-schedule-reliability-spec-v3.md	2026-05-26 15:25:34.084672352 +0000
+@@ -6,7 +6,7 @@
+ | Version | 3 |
+ | Spec status | Draft; reconciled Desktop working spec; aligned to Next 7 Days horizon |
+ | Supersedes | None recorded in the active Desktop set |
+-| Related specs | `00-subh-spec-index-v2.md`, `subh-morning-resolution-contract-state-ownership-spec-v3.md`, `subh-planning-horizon-day-resolution-intention-anchoring-spec-v3.md`, `subh-quick-wake-mode-intent-mutation-contract-v2.md`, `subh-fajr-time-calculation-determination-selection-spec-v1.md` |
++| Related specs | `00-subh-spec-index-v3.md`, `subh-morning-resolution-contract-state-ownership-spec-v3.md`, `subh-planning-horizon-day-resolution-intention-anchoring-spec-v3.md`, `subh-quick-wake-mode-intent-mutation-contract-v2.md`, `subh-fajr-time-calculation-determination-selection-spec-v1.md`, `subh-wake-sessions-wake-checks-morning-logs-spec-v1.md`, `subh-quiet-mode-quiet-morning-contract-spec-v1.md`, `subh-sound-alarm-settings-spec-v1.md` |
+ | Owning domain / surface | Alarm delivery, scheduling, reconciliation, and diagnostics |
+ | Implementation audit status | Needs implementation audit |
+
+@@ -52,6 +52,25 @@
+ - `Next 7 Days` and Weekly Fajrcast may show the same seven visible dates, but that display horizon is still distinct from the active scheduled horizon.
+ - The delivery layer schedules only resolver-materialized events explicitly included in the active scheduled horizon or technical safety horizon.
+
++
++## Wake Sessions / Wake Check Delivery Alignment Addendum
++
++This addendum is normative for MVP wake-check delivery and supersedes any lower wording that treats snooze as the primary Subh wake-retry mechanism.
++
++- A Wake Session materializes one primary wake alarm plus eligible wake-check alarms. Wake checks are separate scheduled deliveries, not native snooze for MVP.
++- Default core behavior is one primary alarm plus up to five wake checks at five-minute intervals, for a maximum of six total wake attempts.
++- Fajr wake checks must not be scheduled later than five minutes before Fajr ends.
++- Suhoor wake checks must not be scheduled later than five minutes before Fajr begins.
++- Each Wake Session delivery should carry or deterministically derive: `wakeSessionID`, date key, fire date, mode, role (`primaryWake` or `wakeCheck`), wake-check sequence number, sound role, and schedule signature.
++- Platform identifiers for primary and wake-check alarms must be deterministic and scoped so stale wake checks can be cancelled without affecting unrelated dates or events.
++- Lock Screen actions for Wake Session alarms should expose `Stop` and `Open Subh`. The `Open Subh` action routes to the relevant in-app confirmation CTA.
++- Stopping or dismissing one AlarmKit alarm stops only that occurrence. It must not mark the user awake and must not cancel later wake checks by itself.
++- When the user taps `I’m awake for Fajr` or `I’m awake for Suhoor`, delivery must cancel any pending primary alarm and all remaining wake checks for that Wake Session.
++- When the user confirms Quiet during an active Wake Session, delivery must cancel all remaining primary/wake-check alarms for that session and report `notScheduledBecauseQuiet` or the equivalent structured quiet status.
++- Mode changes, wake-time commits, time/location/timezone changes, and resolver boundary changes must cancel stale Wake Session alarm identifiers and schedule only the corrected eligible set.
++- Reconciliation must detect missing, stale, duplicate, or mismatched wake-check deliveries, not only primary alarms.
++- Advanced wake-check intervals, adaptive wake checks, and heavy-sleeper escalation are out of this MVP delivery pass unless another approved spec explicitly requests them.
++
+ ## 0. One-page summary
+
+ Subh’s morning-resolution system decides **what should happen** for a morning: the prayer window, day meaning, user intention, wake boundary, wake time, alarm activation, and materialized scheduled events.
+
+--- /mnt/data/subh-mvp-interaction-inventory-v4.md	2026-05-26 15:19:27.671615740 +0000
++++ /mnt/data/subh_wake_session_spec_alignment_v1/subh-mvp-interaction-inventory-v4.md	2026-05-26 15:25:34.086168243 +0000
+@@ -6,7 +6,7 @@
+ | Version | 4 |
+ | Spec status | Source-of-truth stabilized MVP inventory; pre-implementation-audit draft; aligned to Next 7 Days horizon |
+ | Supersedes | `subh-mvp-interaction-inventory-v3.md`; Archive/subh_mvp_interaction_inventory_v2.md |
+-| Related specs | `00-subh-spec-index-v2.md`, `subh-morning-resolution-contract-state-ownership-spec-v3.md`, `subh-quick-wake-mode-intent-mutation-contract-v2.md`, `subh-alarm-detail-view-screen-spec-v7.md`, `subh-morning-hero-item-spec-v15.md`, `subh-alarm-delivery-schedule-reliability-spec-v3.md` |
++| Related specs | `00-subh-spec-index-v3.md`, `subh-morning-resolution-contract-state-ownership-spec-v3.md`, `subh-quick-wake-mode-intent-mutation-contract-v2.md`, `subh-alarm-detail-view-screen-spec-v7.md`, `subh-morning-hero-item-spec-v15.md`, `subh-alarm-delivery-schedule-reliability-spec-v3.md`, `subh-wake-sessions-wake-checks-morning-logs-spec-v1.md`, `subh-quiet-mode-quiet-morning-contract-spec-v1.md`, `subh-sound-alarm-settings-spec-v1.md` |
+ | Owning domain / surface | MVP interaction coverage and traceability |
+ | Implementation audit status | Needs implementation audit |
+
+@@ -80,6 +80,35 @@
+ - S075 now expects seven upcoming days.
+ - Scenario IDs are preserved.
+
++
++## Wake Sessions / Morning Logs Interaction Addendum
++
++This addendum preserves the original `S001–S235` inventory and adds supplemental Wake Session traceability IDs. No existing scenario is removed, renumbered, or narrowed by this addendum.
++
++Primary mapping: these supplemental scenarios refine Group Z (`S212–S219`) and also support Groups F, G, and AB where active wake execution intersects Quiet, wake-time adjustment, and rapid repeated interactions.
++
++| Supplemental ID | Scenario | Owning spec |
++|---|---|---|
++| `WKS001` | Primary Fajr alarm fires; user stops it from Lock Screen. Wake Session remains unconfirmed. | Wake Sessions; Alarm Delivery |
++| `WKS002` | Primary Suhoor alarm fires; user stops it from Lock Screen. Suhoor Wake Session remains unconfirmed. | Wake Sessions; Alarm Delivery |
++| `WKS003` | A wake check fires after the primary alarm was stopped and no awake confirmation was recorded. | Wake Sessions; Alarm Delivery |
++| `WKS004` | User taps `Open Subh` from an alarm or wake check and lands on the active Hero confirmation state. | Wake Sessions; Morning Hero |
++| `WKS005` | User wakes before the primary Fajr alarm, opens Subh, and taps `I’m awake for Fajr`; pending alarms are cancelled. | Wake Sessions; Morning Hero; Alarm Delivery |
++| `WKS006` | User wakes before the primary Suhoor alarm, opens Subh, and taps `I’m awake for Suhoor`; pending Suhoor alarms are cancelled and fasting intention is confirmed. | Wake Sessions; Morning Hero |
++| `WKS007` | User confirms Fajr awake, then separately taps `I prayed Fajr`. Awake and prayer outcomes remain separate records. | Wake Sessions; Morning Logs |
++| `WKS008` | User confirms Suhoor awake; after Fajr begins the Hero shows `I prayed Fajr` as the next primary CTA. | Wake Sessions; Morning Hero |
++| `WKS009` | User does not confirm Suhoor awake; after Fajr begins the Hero shows `I’m awake for Fajr` before `I prayed Fajr`. | Wake Sessions; Morning Hero |
++| `WKS010` | User stops every alarm and never opens Subh; the Wake Session expires unconfirmed without logging Fajr as missed. | Wake Sessions; Morning Logs |
++| `WKS011` | User selects Quiet during active wake checks; app asks for confirmation before cancelling. | Quiet Mode; Wake Sessions |
++| `WKS012` | User chooses `Keep wake checks` in the Quiet confirmation sheet; pending wake checks remain. | Quiet Mode; Wake Sessions |
++| `WKS013` | User chooses `Stop for this morning`; remaining wake alarms are cancelled and `quietMorning` is logged. | Quiet Mode; Alarm Delivery |
++| `WKS014` | User changes the wake time while a Wake Session is still valid; stale primary/wake-check alarms are cancelled and replaced. | Wake Sessions; Alarm Delivery |
++| `WKS015` | User switches Fajr ↔ Suhoor for the target morning; old Wake Session deliveries are cancelled and mode-appropriate deliveries are scheduled. | Morning Resolution; Wake Sessions |
++| `WKS016` | User reopens the app after termination or reboot; Subh reconciles MorningLog state with pending alarm identifiers. | Wake Sessions; Alarm Delivery |
++| `WKS017` | Location/timezone/prayer-window change affects the active morning; Wake Session boundaries and pending deliveries are re-resolved. | Morning Resolution; Alarm Delivery |
++| `WKS018` | Primary alarm is close to the mode cutoff; only wake checks that fit before the hard cutoff are scheduled. | Wake Sessions; Alarm Delivery |
++| `WKS019` | Basic local Wake Session logs exist for all users; long-term analytics and adaptive recommendations remain future/paid. | Wake Sessions; Pricing |
++
+ ## 0. v4 purpose
+
+ This v4 inventory preserves the complete MVP interaction universe from v2 while stabilizing terminology, ownership, and spec-coverage status.
+@@ -838,7 +867,7 @@
+ ## 10. Updated Codex audit prompt
+
+ ```text
+-Review the current Subh codebase against `subh-mvp-interaction-inventory-v4.md` and `00-subh-spec-index-v2.md`. For each scenario ID S001-S235, classify implementation status as Implemented, Partially Implemented, Missing, Risky, or Not Testable Yet.
++Review the current Subh codebase against `subh-mvp-interaction-inventory-v4.md` and `00-subh-spec-index-v3.md`. For each scenario ID S001-S235, classify implementation status as Implemented, Partially Implemented, Missing, Risky, or Not Testable Yet.
+
+ Use MVP Suhoor terminology: Early, Fast, and Pre-Fajr are legacy aliases that normalize to Suhoor; Tahajjud-only and Other early worship are deferred from active MVP; Other fast is a separate fasting intention concept.
+
+
+--- /mnt/data/subh-planning-horizon-day-resolution-intention-anchoring-spec-v3.md	2026-05-26 15:19:27.206257990 +0000
++++ /mnt/data/subh_wake_session_spec_alignment_v1/subh-planning-horizon-day-resolution-intention-anchoring-spec-v3.md	2026-05-26 15:25:34.088197575 +0000
+@@ -6,7 +6,7 @@
+ | Version | 3 |
+ | Spec status | Product / design / engineering draft; aligned Desktop working spec; aligned to Next 7 Days horizon |
+ | Supersedes | None recorded in the active Desktop set |
+-| Related specs | `00-subh-spec-index-v2.md`, `subh-morning-resolution-contract-state-ownership-spec-v3.md`, `subh-day-purpose-opportunity-resolution-spec-v1.md`, `subh-alarm-delivery-schedule-reliability-spec-v3.md`, `subh-quick-wake-mode-intent-mutation-contract-v2.md` |
++| Related specs | `00-subh-spec-index-v3.md`, `subh-morning-resolution-contract-state-ownership-spec-v3.md`, `subh-day-purpose-opportunity-resolution-spec-v1.md`, `subh-alarm-delivery-schedule-reliability-spec-v3.md`, `subh-quick-wake-mode-intent-mutation-contract-v2.md`, `subh-wake-sessions-wake-checks-morning-logs-spec-v1.md`, `subh-quiet-mode-quiet-morning-contract-spec-v1.md`, `subh-sound-alarm-settings-spec-v1.md` |
+ | Owning domain / surface | Planning horizon, browsable days, and future intention anchoring |
+ | Implementation audit status | Needs implementation audit |
+
+@@ -58,6 +58,21 @@
+
+ ---
+
++
++## Wake Sessions / Morning Logs Planning Alignment Addendum
++
++This addendum is normative for how wake execution and immediate logs relate to planning, anchoring, and history.
++
++- A Wake Session is not a durable future plan. It is generated from the resolved morning when that morning enters the active scheduled horizon.
++- Displaying a morning in `Next 7 Days`, Weekly Fajrcast, or month browsing does not create a Wake Session and does not schedule wake checks unless the active scheduled window includes that date.
++- Future Suhoor, Fajr, and Quiet intentions remain anchored planning records until the resolver brings them into the active operational window.
++- When Suhoor is selected for a current or future morning, the durable meaning is `fastingDayPlanned` / Suhoor fasting intention according to the existing anchoring rules. The later operational action `I’m awake for Suhoor` records `fastingIntentConfirmed` for the actual morning.
++- `fastingDayPlanned`, `fastingIntentConfirmed`, and future `fastCompletionOutcome` are distinct. The first may be planned in advance; the second occurs in the morning; the third is a later-day completion record.
++- `fajrWakeOutcome` and `fajrPrayerOutcome` are distinct. Awake confirmation does not imply prayer confirmation.
++- MorningLogs are history/execution records. Once recorded, they remain tied to the actual local date/time and calendar context at the time of action; they must not silently move because a future Hijri/calendar adjustment changes planned observances.
++- If a future anchored intention moves after a calendar adjustment, its eventual Wake Session should be generated from the moved resolved morning when it enters the active scheduled horizon.
++- Quiet selected for a morning becomes a quiet suppression record/overlay for that scope. It does not become a missed-prayer record and does not delete the underlying anchored intention unless the user explicitly removes that intention through the appropriate planning surface.
++
+ ## 0. Executive Summary
+
+ Subh is a Fajr-centered morning system. Its core job is not merely to ring an alarm. Its core job is to help the user understand and shape what the next meaningful morning looks like.
+
+--- /mnt/data/subh-pricing-entitlement-spec-v2.md	2026-05-26 15:19:27.765405317 +0000
++++ /mnt/data/subh_wake_session_spec_alignment_v1/subh-pricing-entitlement-spec-v2.md	2026-05-26 15:25:34.089727581 +0000
+@@ -6,7 +6,7 @@
+ | Version | 2 |
+ | Spec status | Draft; proposed canonical working spec; aligned to Next 7 Days forecast horizon |
+ | Date | 2026-05-17 |
+-| Related specs | `00-subh-spec-index-v2.md`, `subh-mvp-interaction-inventory-v4.md`, `subh-morning-resolution-contract-state-ownership-spec-v3.md`, `subh-planning-horizon-day-resolution-intention-anchoring-spec-v3.md`, `subh-quick-wake-mode-intent-mutation-contract-v2.md`, `subh-day-purpose-opportunity-resolution-spec-v1.md`, `subh-alarm-delivery-schedule-reliability-spec-v3.md`, `subh-morning-hero-item-spec-v15.md`, `subh-alarm-detail-view-screen-spec-v7.md`, `subh-next-7-days-wake-forecast-spec-v1.md`, `subh-weekly-fajrcast-card-spec-v14.md` |
++| Related specs | `00-subh-spec-index-v3.md`, `subh-mvp-interaction-inventory-v4.md`, `subh-morning-resolution-contract-state-ownership-spec-v3.md`, `subh-planning-horizon-day-resolution-intention-anchoring-spec-v3.md`, `subh-quick-wake-mode-intent-mutation-contract-v2.md`, `subh-day-purpose-opportunity-resolution-spec-v1.md`, `subh-alarm-delivery-schedule-reliability-spec-v3.md`, `subh-morning-hero-item-spec-v15.md`, `subh-alarm-detail-view-screen-spec-v7.md`, `subh-next-7-days-wake-forecast-spec-v1.md`, `subh-weekly-fajrcast-card-spec-v14.md`, `subh-wake-sessions-wake-checks-morning-logs-spec-v1.md`, `subh-quiet-mode-quiet-morning-contract-spec-v1.md`, `subh-sound-alarm-settings-spec-v1.md` |
+ | Owning domain / surface | Pricing, entitlement, trial access, paywall rules, downgrade/upgrade behavior, paid-feature data preservation |
+ | Implementation audit status | Needs implementation audit |
+
+@@ -56,6 +56,19 @@
+
+ ---
+
++
++## Wake Sessions / Basic Morning Logs Entitlement Addendum
++
++This addendum is normative for the current Wake Session implementation pass and supersedes conflicting lower entitlement tables only for the core wake-execution and basic immediate-log behaviors listed here.
++
++- Wake Sessions, Wake Checks, active-morning reconciliation, and the local operational MorningLog are core/free reliability infrastructure.
++- The immediate-morning actions `I’m awake for Fajr`, `I’m awake for Suhoor`, and `I prayed Fajr` are core/free confirmation actions for the current MVP implementation pass.
++- Selecting Suhoor for the immediate morning may set `fastingDayPlanned`; tapping `I’m awake for Suhoor` may set `fastingIntentConfirmed`. These basic immediate records are core/free.
++- Basic local records needed to cancel alarms, reconcile stale deliveries, restore the hero state, and avoid false missed labels must not be paywalled.
++- Lower sections that classify `Fajr logging`, `Suhoor mode`, or `fast logging` as Complete-only should be read as applying to long-term planning/tracking surfaces, Qada ledgers, full fasting-purpose management, historical review, progress analytics, and advanced organization—not the immediate core Wake Session confirmations above.
++- This implementation pass must not add StoreKit, entitlement checks, paywalls, adaptive recommendations, advanced wake-check interval customization, streaks, long-term analytics, export/backup, or paid-only history surfaces.
++- Future/paid scope may still include adaptive wake support, advanced intervals/counts, heavy-sleeper profiles, long-term wake/prayer/fasting history, Qada tracking, progress analytics, and full-year planning controls.
++
+ ## Out of scope
+
+ This spec does **not** define:
+
+--- /mnt/data/subh-wake-sessions-wake-checks-morning-logs-spec-v1.md	2026-05-26 15:19:27.624824212 +0000
++++ /mnt/data/subh_wake_session_spec_alignment_v1/subh-wake-sessions-wake-checks-morning-logs-spec-v1.md	2026-05-26 15:25:34.090698440 +0000
+@@ -4,9 +4,21 @@
+ **Scope:** Core/free MVP behavior
+ **Product spine:** Fajr-centered morning system
+ **Canonical owner:** This spec owns wake execution, wake confirmation, wake checks, and immediate morning logs. Other specs should reference this spec rather than duplicate its rules.
++**Related specs:** `00-subh-spec-index-v3.md`, `subh-morning-resolution-contract-state-ownership-spec-v3.md`, `subh-alarm-delivery-schedule-reliability-spec-v3.md`, `subh-morning-hero-item-spec-v15.md`, `subh-quiet-mode-quiet-morning-contract-spec-v1.md`, `subh-sound-alarm-settings-spec-v1.md`
+
+ ---
+
++## v1.1 Alignment Note
++
++This bundle adds the missing companion specs referenced by this Wake Sessions spec:
++
++- `subh-quiet-mode-quiet-morning-contract-spec-v1.md`
++- `subh-sound-alarm-settings-spec-v1.md`
++- `00-subh-spec-index-v3.md`
++
++The Wake Sessions spec remains the canonical owner for wake execution, wake checks, awake confirmation, and immediate MorningLog behavior. The new Quiet Mode and Sound specs own their narrower domains and should be referenced rather than duplicating their rules here.
++
++
+ ## 1. Purpose
+
+ Subh must not treat a dismissed alarm as proof that the user is awake. This spec defines a **Wake Session** model in which Subh continues wake support through scheduled wake checks until the user explicitly confirms they are awake or the relevant morning window closes.

@@ -713,22 +713,22 @@ Tapping a locked tile should open the approved upgrade or feature-preview experi
 
 Plus users:
 
-- can access Calendar Month planning;
-- can access Hijri Month planning;
+- can access durable month-level history, summaries, analytics, historical editing, Qada ledgers, export/sync, and other paid-layer overlays where those features are implemented;
+- can view preserved Plus-layer data after downgrade according to the active pricing entitlement spec;
+- must use the same generated future-morning resolver as Free.
+
+### 15.3 Free/core planning
+
+Free/core users:
+
+- can access Calendar Month planning where this surface is implemented;
+- can access Hijri Month planning where this surface is implemented;
 - can browse the current month plus the next 12 months;
 - can plan allowed future Fajr-oriented mornings;
-- can use allowed Fajr / Quiet controls across the planning horizon;
-- can view Hijri and Ramadan context where the resolver provides it;
-- cannot use Complete-only Suhoor/Fasting capabilities unless the entitlement model permits them.
+- can use allowed Suhoor / Fajr / Quiet controls across the planning horizon;
+- can view Hijri and Ramadan context where the resolver provides it.
 
-### 15.3 Complete
-
-Complete users:
-
-- receive full month-planning access;
-- can use Suhoor/Fasting planning where supported;
-- can receive Ramadan/Suhoor defaults where supported by the resolver;
-- can use deeper fasting, Ramadan, Qada, and history/progress capabilities as defined in the pricing entitlement spec.
+The historical Complete tier is superseded by `subh-pricing-entitlement-spec-v3.md` and is not an active MVP pricing concept.
 
 ### 15.4 MVP guardrail
 
@@ -929,7 +929,7 @@ This spec does not define:
 - Tile copy matches the approved language.
 - Month-planning tile shells maintain stable square/near-square sizing across ordinary text-size changes.
 - Free users see locked or preview-only behavior unless a debug/development override is active.
-- Plus and Complete users can enter the month picker according to entitlement.
+- Free users can enter implemented core month-planning surfaces; Plus may add paid-layer overlays according to entitlement.
 
 ### 21.2 Month Picker
 
@@ -972,10 +972,10 @@ This spec does not define:
 ### 21.5 Entitlement
 
 - Plus unlocks both Gregorian and Hijri month planning surfaces.
-- Plus supports allowed Fajr/Quiet future planning controls.
-- Complete unlocks Suhoor/Fasting planning where supported.
+- Free/core supports allowed Suhoor/Fajr/Quiet future planning controls.
+- Plus unlocks durable history, historical editing, Qada ledgers, export/sync, analytics, summaries, and other paid-layer overlays where implemented.
 - UI behavior is driven by the shared entitlement model.
-- Debug/development override may expose the full feature without permanently forcing Release/production users to Complete.
+- Debug/development override may expose unreleased paid-layer overlays without changing Release/production entitlement doctrine.
 
 ### 21.6 Guardrails
 
