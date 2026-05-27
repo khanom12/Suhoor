@@ -444,36 +444,24 @@ final class ScheduleManager: ObservableObject {
         refreshCurrentMorningHomeSnapshot()
     }
 
-    func jumpSimulationState() {
-        let active = wakeSessionTestingHarness.activeSimulationContext?.jumpPoint ?? .beforePrimaryWake
-        let next = nextSimulationJumpPoint(after: active)
-        wakeSessionTestingHarness.setJumpPoint(next)
+    func nextSimulationState() {
+        wakeSessionTestingHarness.moveToNextPreviewState()
+        refreshCurrentMorningHomeSnapshot()
+    }
+
+    func previousSimulationState() {
+        wakeSessionTestingHarness.moveToPreviousPreviewState()
+        refreshCurrentMorningHomeSnapshot()
+    }
+
+    func changeSimulationState() {
+        wakeSessionTestingHarness.moveToNextPreviewState()
         refreshCurrentMorningHomeSnapshot()
     }
 
     func runSimulationMappedPlaybackFromHome() async {
-        await wakeSessionTestingHarness.start(.realAlarmKitMappedPlayback, runMode: .realAlarmKitMappedPlayback)
+        await wakeSessionTestingHarness.scheduleSelectedRealAlarmTest()
         refreshCurrentMorningHomeSnapshot()
-    }
-
-    private func nextSimulationJumpPoint(after jumpPoint: WakeSessionSimulationJumpPoint) -> WakeSessionSimulationJumpPoint {
-        let points: [WakeSessionSimulationJumpPoint] = [
-            .beforePrimaryWake,
-            .atPrimaryWake,
-            .primaryAlarmFired,
-            .wakeCheck1Pending,
-            .wakeCheck2Pending,
-            .wakeCheck3Pending,
-            .wakeCheck4Pending,
-            .wakeCheck5Pending,
-            .awakeConfirmed,
-            .prayerCTAAvailable,
-            .prayerConfirmed
-        ]
-        guard let index = points.firstIndex(of: jumpPoint) else {
-            return .beforePrimaryWake
-        }
-        return points[(index + 1) % points.count]
     }
 #endif
 

@@ -154,11 +154,14 @@ struct SubhHomeView: View {
                         Spacer()
                         HomeSimulationDock(
                             model: overlay,
-                            onChangeTime: {
-                                presentSettings()
+                            onPreviousState: {
+                                scheduleManager.previousSimulationState()
                             },
-                            onJumpState: {
-                                scheduleManager.jumpSimulationState()
+                            onNextState: {
+                                scheduleManager.nextSimulationState()
+                            },
+                            onChangeState: {
+                                scheduleManager.changeSimulationState()
                             },
                             onRunMappedPlayback: {
                                 Task {
@@ -457,8 +460,9 @@ private struct SharedDayTagChip: View {
 #if DEBUG || INTERNAL_TESTING
 private struct HomeSimulationDock: View {
     let model: HomeSimulationOverlayModel
-    let onChangeTime: () -> Void
-    let onJumpState: () -> Void
+    let onPreviousState: () -> Void
+    let onNextState: () -> Void
+    let onChangeState: () -> Void
     let onRunMappedPlayback: () -> Void
     let onCancelTestAlarms: () -> Void
     let onExitTestMode: () -> Void
@@ -492,6 +496,10 @@ private struct HomeSimulationDock: View {
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(WakeGlassTheme.primaryText.opacity(0.85))
                         .lineLimit(1)
+                    Text(model.expectedStateGuidance)
+                        .font(.caption)
+                        .foregroundStyle(WakeGlassTheme.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
                     if let countdown = model.nextRealAlarmCountdown,
                        let eventName = model.nextSimulatedEventName,
                        let fireTime = model.nextMappedRealFireTime {
@@ -504,11 +512,14 @@ private struct HomeSimulationDock: View {
 
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
-                        dockButton("Change Time", systemImage: "clock", action: onChangeTime)
-                        dockButton("Jump State", systemImage: "arrow.triangle.2.circlepath", action: onJumpState)
-                        dockButton("Run Real AlarmKit Playback", systemImage: "alarm.waves.left.and.right", action: onRunMappedPlayback)
-                        dockButton("Cancel Test Alarms", systemImage: "bell.slash", action: onCancelTestAlarms)
-                        dockButton("Exit Test Mode", systemImage: "xmark.circle", role: .destructive, action: onExitTestMode)
+                        dockButton("Previous State", systemImage: "chevron.left", action: onPreviousState)
+                        dockButton("Next State", systemImage: "chevron.right", action: onNextState)
+                        dockButton("Change State", systemImage: "arrow.triangle.2.circlepath", action: onChangeState)
+                        dockButton("Run Real Alarm Test", systemImage: "alarm.waves.left.and.right", action: onRunMappedPlayback)
+                        if model.hasScheduledTestAlarms {
+                            dockButton("Cancel Test Alarms", systemImage: "bell.slash", action: onCancelTestAlarms)
+                        }
+                        dockButton("Exit", systemImage: "xmark.circle", role: .destructive, action: onExitTestMode)
                     }
                 }
             }

@@ -56,6 +56,7 @@ enum WakeSessionSimulationScenarioKind: String, CaseIterable, Identifiable, Send
 
 enum SimulationRunMode: String, CaseIterable, Identifiable, Sendable {
     case stateExplorer
+    case previewHomeUI
     case homeSimulation
     case realAlarmKitMappedPlayback
     case fakeSchedulerPlayback
@@ -67,10 +68,12 @@ enum SimulationRunMode: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .stateExplorer:
             return "State Explorer"
+        case .previewHomeUI:
+            return "Preview Home UI"
         case .homeSimulation:
             return "Home Simulation"
         case .realAlarmKitMappedPlayback:
-            return "Real AlarmKit Mapped Playback"
+            return "Real Alarm Test"
         case .fakeSchedulerPlayback:
             return "Fake Scheduler Playback"
         case .dryRun:
@@ -145,6 +148,7 @@ enum SimulationLocation: String, CaseIterable, Identifiable, Sendable {
 enum WakeSessionSimulationDatePreset: String, CaseIterable, Identifiable, Sendable {
     case today
     case tomorrow
+    case pickDate
     case ordinaryDay
     case ramadanDay
     case eidDay
@@ -162,6 +166,8 @@ enum WakeSessionSimulationDatePreset: String, CaseIterable, Identifiable, Sendab
             return "Today"
         case .tomorrow:
             return "Tomorrow"
+        case .pickDate:
+            return "Pick date"
         case .ordinaryDay:
             return "Ordinary Day"
         case .ramadanDay:
@@ -405,7 +411,159 @@ struct HomeSimulationOverlayModel: Equatable, Sendable {
     let location: String
     let runMode: String
     let jumpPoint: String
+    let expectedStateGuidance: String
+    let hasScheduledTestAlarms: Bool
     let nextRealAlarmCountdown: String?
     let nextSimulatedEventName: String?
     let nextMappedRealFireTime: String?
+}
+
+enum WakeSessionLabTopLevelArea: String, CaseIterable, Identifiable, Sendable {
+    case previewHomeUI
+    case realAlarmTest
+    case diagnostics
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .previewHomeUI:
+            return "Preview Home UI"
+        case .realAlarmTest:
+            return "Real Alarm Test"
+        case .diagnostics:
+            return "Diagnostics"
+        }
+    }
+}
+
+enum WakeSessionCustomPreviewMode: String, CaseIterable, Identifiable, Sendable {
+    case fajr
+    case suhoor
+    case quiet
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .fajr:
+            return "Fajr"
+        case .suhoor:
+            return "Suhoor"
+        case .quiet:
+            return "Quiet"
+        }
+    }
+
+    var scenario: WakeSessionTestScenario {
+        switch self {
+        case .fajr:
+            return .fajrStateExplorer
+        case .suhoor:
+            return .suhoorStateExplorer
+        case .quiet:
+            return .quietDuringWakeChecks
+        }
+    }
+}
+
+struct WakeSessionPreviewScenarioCard: Identifiable, Equatable, Sendable {
+    let id: String
+    let title: String
+    let description: String
+    let whatThisTests: String
+    let realAlarms: String
+    let approximateDuration: String
+    let whatToExpect: String
+    let primaryActionTitle: String
+    let scenario: WakeSessionTestScenario?
+    let initialJumpPoint: WakeSessionSimulationJumpPoint?
+
+    static let defaultCards: [WakeSessionPreviewScenarioCard] = [
+        WakeSessionPreviewScenarioCard(
+            id: "fajr-flow",
+            title: "Fajr Flow",
+            description: "Preview the Home Hero from Fajr beginning to prayer confirmation.",
+            whatThisTests: "Awake confirmation, Wake Check pending state, Hero Action Slot, and Fajr prayer confirmation.",
+            realAlarms: "No. This is a Home preview.",
+            approximateDuration: "1-2 minutes.",
+            whatToExpect: "Home will open with TEST MODE ACTIVE. Use Next State to move through the Fajr flow.",
+            primaryActionTitle: "Start Fajr Preview",
+            scenario: .fajrStateExplorer,
+            initialJumpPoint: .atFajrBegins
+        ),
+        WakeSessionPreviewScenarioCard(
+            id: "suhoor-flow",
+            title: "Suhoor Flow",
+            description: "Preview Suhoor wake, fasting intention, and the handoff to Fajr prayer.",
+            whatThisTests: "Suhoor awake confirmation, fasting intent, and the separate Fajr prayer path.",
+            realAlarms: "No. This is a Home preview.",
+            approximateDuration: "1-2 minutes.",
+            whatToExpect: "Home will open in a Suhoor state. Use Next State to reach Fajr handoff states.",
+            primaryActionTitle: "Start Suhoor Preview",
+            scenario: .suhoorStateExplorer,
+            initialJumpPoint: .suhoorWindowOpen
+        ),
+        WakeSessionPreviewScenarioCard(
+            id: "quiet-flow",
+            title: "Quiet During Wake Checks",
+            description: "Preview what happens when Quiet is selected while Wake Checks are active.",
+            whatThisTests: "The active-session confirmation sheet, Keep wake checks, Stop for this morning, and quietMorning logging.",
+            realAlarms: "No. This is a Home preview.",
+            approximateDuration: "1-2 minutes.",
+            whatToExpect: "Home will show pending Wake Checks. Selecting Quiet should ask before cancelling them.",
+            primaryActionTitle: "Start Quiet Preview",
+            scenario: .quietDuringWakeChecks,
+            initialJumpPoint: .quietWakeChecksActive
+        ),
+        WakeSessionPreviewScenarioCard(
+            id: "custom-date-time",
+            title: "Custom Date & Time",
+            description: "Choose any date, time, location, and state to preview on Home.",
+            whatThisTests: "Seasonal timing, Ramadan/Eid/White Day contexts, custom locations, and specific Hero states.",
+            realAlarms: "No. This is a Home preview.",
+            approximateDuration: "As long as needed.",
+            whatToExpect: "Choose Date, Location, Mode, and State, then preview the real Home UI.",
+            primaryActionTitle: "Open Custom Preview",
+            scenario: nil,
+            initialJumpPoint: nil
+        )
+    ]
+}
+
+struct WakeSessionRealAlarmScenarioCard: Identifiable, Equatable, Sendable {
+    let id: String
+    let title: String
+    let description: String
+    let whatThisTests: String
+    let realAlarms: String
+    let approximateDuration: String
+    let whatToExpect: String
+    let primaryActionTitle: String
+    let scenario: WakeSessionTestScenario
+
+    static let defaultCards: [WakeSessionRealAlarmScenarioCard] = [
+        WakeSessionRealAlarmScenarioCard(
+            id: "fajr-alarm-test",
+            title: "Fajr Alarm Test",
+            description: "Map a simulated Fajr Wake Session onto real alarms starting soon.",
+            whatThisTests: "Real AlarmKit ringing, Stop, Open Subh, and five-minute Wake Checks.",
+            realAlarms: "Yes. Your iPhone will ring.",
+            approximateDuration: "Primary only: a few minutes. Full sequence: about 25-30 minutes.",
+            whatToExpect: "The primary alarm rings first. If you stop it without confirming awake, the next Wake Check rings five minutes later.",
+            primaryActionTitle: "Set Up Fajr Alarm Test",
+            scenario: .fajrStateExplorer
+        ),
+        WakeSessionRealAlarmScenarioCard(
+            id: "suhoor-alarm-test",
+            title: "Suhoor Alarm Test",
+            description: "Map a simulated Suhoor Wake Session onto real alarms starting soon.",
+            whatThisTests: "Suhoor alarm delivery, awake confirmation, fasting intent, and Wake Check cancellation.",
+            realAlarms: "Yes. Your iPhone will ring.",
+            approximateDuration: "Primary only: a few minutes. Full sequence: about 25-30 minutes.",
+            whatToExpect: "Confirming awake for Suhoor cancels remaining checks and records fasting intent only.",
+            primaryActionTitle: "Set Up Suhoor Alarm Test",
+            scenario: .suhoorStateExplorer
+        )
+    ]
 }

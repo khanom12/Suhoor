@@ -108,7 +108,7 @@ Display horizon, edit horizon, and active scheduled horizon remain distinct.
 | `subh-early-worship-boundary-spec-v2.md` | 2 | Suhoor before-Fajr boundary model; legacy early-worship terminology is internal/deferred. |
 | `subh-alarm-delivery-schedule-reliability-spec-v3.md` | 3 | Platform delivery, identifiers, stale cancellation, reconciliation, delivery ledger, diagnostics. |
 | `subh-wake-sessions-wake-checks-morning-logs-spec-v1.md` | 1 | Wake Session execution, primary alarm + wake checks, awake confirmation, immediate MorningLogs. |
-| `subh-wake-session-testing-and-simulation-harness-spec-v2.md` | 2 | Debug/internal Wake Session testing harness, State Explorer, Home Simulation Mode, fake scheduling, real AlarmKit mapped playback with five-minute Wake Check spacing, release guardrails. |
+| `subh-wake-session-testing-and-simulation-harness-spec-v3.md` | 3 | Debug/internal tester-first Wake Session Lab UX, Preview Home UI, Home Simulation Mode, Diagnostics, fake scheduling, and Real Alarm Test with five-minute Wake Check spacing and release guardrails. |
 | `subh-quiet-mode-quiet-morning-contract-spec-v1.md` | 1 | Quiet Mode overlay, Quiet Morning semantics, active-session confirmation, restoration, quiet cancellation. |
 | `subh-sound-alarm-settings-spec-v1.md` | 1 | Alarm sound roles, ramped audio asset policy, sound-setting boundaries. |
 | `subh-morning-hero-item-spec-v15.md` | 15 | Home hero layout, visible state hierarchy, Hero Action Slot, selector presentation, hero CTAs. |
@@ -133,6 +133,7 @@ Display horizon, edit horizon, and active scheduled horizon remain distinct.
 | `Archive/2026-05-26-wake-session-pricing-reconciliation/superseded-bundles/subh_wake_session_spec_alignment_v1/` | Historical wake-session alignment bundle; superseded by the pricing v3 alignment bundle. |
 | `Archive/2026-05-26-wake-session-pricing-reconciliation/superseded-bundles/subh_wake_pricing_alignment_v2/` | Historical promotion source; active files have been reconciled into root. |
 | `Archive/2026-05-26-wake-session-testing-harness-v1-superseded/subh-wake-session-testing-and-simulation-harness-spec-v1.md` | Historical/superseded by Wake Session Testing Harness v2. |
+| `Archive/2026-05-27-wake-session-testing-harness-v2-superseded/subh-wake-session-testing-and-simulation-harness-spec-v2.md` | Historical/superseded by Wake Session Testing Harness v3. |
 | `Archive/subh-next-10-mornings-wake-forecast-spec-v4.md` | Historical forecast spec; superseded by seven-morning forecast direction. |
 
 ## Source-Of-Truth Hierarchy
@@ -175,7 +176,7 @@ When specs overlap, use this hierarchy:
 2. Read `subh-planning-horizon-day-resolution-intention-anchoring-spec-v3.md` and `subh-day-purpose-opportunity-resolution-spec-v1.md` for date meaning, future edits, and intention ownership.
 3. Read `subh-fajr-time-calculation-determination-selection-spec-v1.md` and `subh-early-worship-boundary-spec-v2.md` for prayer-window and Suhoor before-Fajr assumptions.
 4. Read `subh-quick-wake-mode-intent-mutation-contract-v2.md` before implementing Home or detail wake-mode edits.
-5. Read `subh-wake-sessions-wake-checks-morning-logs-spec-v1.md`, `subh-wake-session-testing-and-simulation-harness-spec-v2.md`, `subh-quiet-mode-quiet-morning-contract-spec-v1.md`, and `subh-sound-alarm-settings-spec-v1.md` before making wake-execution, testing-harness, Quiet, or sound claims.
+5. Read `subh-wake-sessions-wake-checks-morning-logs-spec-v1.md`, `subh-wake-session-testing-and-simulation-harness-spec-v3.md`, `subh-quiet-mode-quiet-morning-contract-spec-v1.md`, and `subh-sound-alarm-settings-spec-v1.md` before making wake-execution, testing-harness, Quiet, or sound claims.
 6. Read `subh-alarm-delivery-schedule-reliability-spec-v3.md` before changing scheduling, permission, fallback, or diagnostics behavior.
 7. Read surface specs after the contracts they consume: Hero, Detail, Next 7 Mornings, Weekly Fajrcast, Month Planning, Primary Context, and Shared Tags.
 8. Read `subh-pricing-entitlement-spec-v3.md` and `subh-mvp-interaction-tier-exposure-matrix-v2.md` before implementing paywalls, trials, feature gates, downgrade behavior, or paid-layer surfaces.

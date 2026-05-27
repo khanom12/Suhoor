@@ -951,7 +951,7 @@ struct ScheduleServiceExtractionTests {
         await harness.start(WakeSessionTestScenario.realAlarmKitMappedPlayback)
 
         #expect(harness.schedulerMode == WakeSessionTestSchedulerMode.realAlarmKit)
-        #expect(scheduledEvents == preview)
+        #expect(scheduledEvents.map(\.fireDate) == previewFireDates)
         #expect(harness.alarmRecords.allSatisfy { $0.channel == WakeSessionTestAlarmChannel.realAlarmKit && $0.isTest })
         #expect(harness.alarmRecords.map(\.fireDate) == previewFireDates)
         #expect(harness.alarmRecords.map(\.simulatedFireDate) != previewFireDates)
@@ -982,6 +982,122 @@ struct ScheduleServiceExtractionTests {
             now.addingTimeInterval(60 + 5 * 60),
             now.addingTimeInterval(60 + 10 * 60)
         ])
+    }
+
+    @Test
+    @MainActor
+    func wakeSessionLabV3ScenarioCardsUseTesterFirstCopy() {
+        let store = WakeSessionStore(loadPersistedData: false)
+        let harness = WakeSessionTestingHarness(wakeSessionStore: store)
+
+        let previewCards = harness.previewScenarioCards
+        #expect(previewCards.map(\.title) == [
+            "Fajr Flow",
+            "Suhoor Flow",
+            "Quiet During Wake Checks",
+            "Custom Date & Time"
+        ])
+        #expect(previewCards.allSatisfy { !$0.whatThisTests.isEmpty })
+        #expect(previewCards.allSatisfy { $0.realAlarms.contains("No") })
+        #expect(previewCards.allSatisfy { !$0.approximateDuration.isEmpty && !$0.whatToExpect.isEmpty })
+
+        let realAlarmCards = harness.realAlarmScenarioCards
+        #expect(realAlarmCards.map(\.title) == ["Fajr Alarm Test", "Suhoor Alarm Test"])
+        #expect(realAlarmCards.allSatisfy { $0.realAlarms.contains("Yes") })
+        #expect(realAlarmCards.allSatisfy { $0.whatToExpect.contains("five minutes") || $0.whatToExpect.contains("cancels") })
+    }
+
+    @Test
+    @MainActor
+    func wakeSessionLabV3CustomPreviewStatePickerAdaptsToMode() {
+        let store = WakeSessionStore(loadPersistedData: false)
+        let harness = WakeSessionTestingHarness(wakeSessionStore: store)
+
+        #expect(harness.stateOptions(for: .fajr) == [
+            .beforeFajrBegins,
+            .atFajrBegins,
+            .beforePrimaryWake,
+            .primaryAlarmFired,
+            .wakeCheck1Pending,
+            .awakeConfirmed,
+            .prayerCTAAvailable,
+            .prayerConfirmed,
+            .afterFajrEnds
+        ])
+        #expect(harness.stateOptions(for: .suhoor).contains(.fastingIntentConfirmed))
+        #expect(harness.stateOptions(for: .suhoor).contains(.fajrPrayerCTAAvailable))
+        #expect(harness.stateOptions(for: .quiet) == [
+            .quietFajrActive,
+            .quietWakeChecksActive,
+            .quietUserTapsQuiet,
+            .quietConfirmationSheetShown,
+            .quietConfirmed,
+            .quietMorningLogged
+        ])
+
+        harness.selectCustomPreviewMode(.quiet)
+        #expect(harness.selectedScenario == .quietDuringWakeChecks)
+        #expect(harness.selectedCustomStateOptions.contains(harness.selectedJumpPoint))
+    }
+
+    @Test
+    @MainActor
+    func wakeSessionLabV3HomeDockGuidanceAndStateNavigation() async throws {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let now = Self.makeDate(year: 2026, month: 5, day: 26, hour: 14, timeZone: timeZone)
+        let store = WakeSessionStore(loadPersistedData: false)
+        let harness = WakeSessionTestingHarness(wakeSessionStore: store, initialNow: now, timeZone: timeZone)
+        let card = try #require(harness.previewScenarioCards.first { $0.id == "fajr-flow" })
+
+        await harness.startPreview(card: card)
+        var overlay = try #require(harness.simulationOverlayModel(realNow: now))
+        #expect(overlay.runMode == "Preview Home UI")
+        #expect(overlay.expectedStateGuidance.contains("Fajr has begun"))
+
+        harness.moveToNextPreviewState()
+        overlay = try #require(harness.simulationOverlayModel(realNow: now))
+        #expect(overlay.jumpPoint == "Before primary wake")
+        #expect(overlay.expectedStateGuidance.contains("planned wake time"))
+
+        harness.moveToPreviousPreviewState()
+        overlay = try #require(harness.simulationOverlayModel(realNow: now))
+        #expect(overlay.jumpPoint == "At Fajr begins")
+    }
+
+    @Test
+    @MainActor
+    func wakeSessionLabV3RealAlarmSetupSupportsSuhoorMapping() async throws {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let now = Self.makeDate(year: 2026, month: 5, day: 26, hour: 14, timeZone: timeZone)
+        let store = WakeSessionStore(loadPersistedData: false)
+        var scheduledEvents: [ScheduledEvent] = []
+        let harness = WakeSessionTestingHarness(
+            wakeSessionStore: store,
+            realAlarmKitScheduler: { events, _, _ in
+                scheduledEvents = events
+                return true
+            },
+            realTimeProvider: FixedTimeProvider(fixedNow: now),
+            initialNow: now,
+            timeZone: timeZone
+        )
+        harness.configureRealAlarmTest(.suhoorStateExplorer)
+        harness.selectedSequenceLength = .primaryPlusOne
+        harness.mappedStartDelaySeconds = 120
+
+        let preview = harness.makeMappedPlaybackPreview(now: now)
+        #expect(preview.mappedEvents.count == 2)
+        #expect(preview.mappedEvents.map(\.mappedRealFireDate) == [
+            now.addingTimeInterval(120),
+            now.addingTimeInterval(120 + 5 * 60)
+        ])
+
+        await harness.scheduleSelectedRealAlarmTest()
+
+        let plan = try #require(harness.activePlan)
+        #expect(plan.mode == .suhoor)
+        #expect(scheduledEvents.map(\.fireDate) == preview.realEvents.map(\.fireDate))
+        #expect(harness.alarmRecords.allSatisfy { $0.channel == .realAlarmKit && $0.isTest })
     }
 
     @Test

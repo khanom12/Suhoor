@@ -385,6 +385,8 @@ final class WakeSessionTestingHarness: ObservableObject {
     @Published var selectedJumpPoint: WakeSessionSimulationJumpPoint = .beforePrimaryWake
     @Published var selectedSequenceLength: WakeSessionMappedSequenceLength = .defaultSelection
     @Published var mappedStartDelaySeconds: TimeInterval = 90
+    @Published var selectedCustomPreviewMode: WakeSessionCustomPreviewMode = .fajr
+    @Published var selectedRealAlarmScenario: WakeSessionTestScenario = .fajrStateExplorer
 
     private let wakeSessionStore: WakeSessionStore
     private let fakeScheduler: FakeWakeSessionTestScheduler
@@ -467,6 +469,134 @@ final class WakeSessionTestingHarness: ObservableObject {
         return pendingTestAlarms.contains { $0.wakeSessionID == plan.wakeSessionID && $0.role == .wakeCheck }
     }
 
+    var previewScenarioCards: [WakeSessionPreviewScenarioCard] {
+        WakeSessionPreviewScenarioCard.defaultCards
+    }
+
+    var realAlarmScenarioCards: [WakeSessionRealAlarmScenarioCard] {
+        WakeSessionRealAlarmScenarioCard.defaultCards
+    }
+
+    var selectedCustomStateOptions: [WakeSessionSimulationJumpPoint] {
+        stateOptions(for: selectedCustomPreviewMode)
+    }
+
+    var currentExpectedStateGuidance: String {
+        expectedStateGuidance(for: activeSimulationContext?.jumpPoint ?? selectedJumpPoint)
+    }
+
+    func stateOptions(for mode: WakeSessionCustomPreviewMode) -> [WakeSessionSimulationJumpPoint] {
+        switch mode {
+        case .fajr:
+            return fajrPreviewFlow
+        case .suhoor:
+            return suhoorPreviewFlow
+        case .quiet:
+            return quietPreviewFlow
+        }
+    }
+
+    func selectCustomPreviewMode(_ mode: WakeSessionCustomPreviewMode) {
+        selectedCustomPreviewMode = mode
+        selectedScenario = mode.scenario
+        let options = stateOptions(for: mode)
+        if !options.contains(selectedJumpPoint), let first = options.first {
+            selectedJumpPoint = first
+        }
+    }
+
+    func expectedStateGuidance(for jumpPoint: WakeSessionSimulationJumpPoint?) -> String {
+        switch jumpPoint {
+        case .beforeFajrBegins:
+            return "Expected: The Hero should show an upcoming Fajr morning before the window opens."
+        case .atFajrBegins:
+            return "Expected: The Hero should show that Fajr has begun."
+        case .beforePrimaryWake:
+            return "Expected: The Hero should show the planned wake time before the alarm fires."
+        case .atPrimaryWake, .primaryAlarmFired:
+            return "Expected: The Hero should show \"I'm awake for Fajr\" while awake is still unconfirmed."
+        case .wakeCheck1Pending, .wakeCheck2Pending, .wakeCheck3Pending, .wakeCheck4Pending, .wakeCheck5Pending:
+            return "Expected: Wake Checks should remain pending until the in-app awake confirmation."
+        case .awakeConfirmed:
+            return "Expected: Fajr awake should be confirmed and remaining Wake Checks should be cancelled."
+        case .prayerCTAAvailable:
+            return "Expected: The Hero should show \"I prayed Fajr.\""
+        case .prayerConfirmed:
+            return "Expected: Fajr prayer should be confirmed separately from awake."
+        case .fiveMinutesBeforeFajrEnds:
+            return "Expected: The Hero should show the Fajr cutoff is near."
+        case .afterFajrEnds:
+            return "Expected: The Hero should show the Fajr window has passed without creating a test missed-prayer record."
+        case .beforeFinalThird:
+            return "Expected: Suhoor should not yet be in its active window."
+        case .atFinalThirdBegins, .suhoorWindowOpen:
+            return "Expected: The Hero should show Suhoor context before Fajr."
+        case .beforePrimarySuhoorWake:
+            return "Expected: The Hero should show the planned Suhoor wake time."
+        case .atPrimarySuhoorWake, .primarySuhoorAlarmFired:
+            return "Expected: The Hero should show \"I'm awake for Suhoor.\""
+        case .suhoorAwakeConfirmed:
+            return "Expected: Suhoor awake should be confirmed without marking Fajr prayed."
+        case .fastingIntentConfirmed:
+            return "Expected: Fasting intent should be test-confirmed, not fast completion."
+        case .fajrBeginsAfterSuhoor:
+            return "Expected: Fajr has begun after Suhoor; the Fajr path should remain available."
+        case .fajrPrayerCTAAvailable:
+            return "Expected: The Hero should show \"I prayed Fajr\" after the Fajr handoff."
+        case .fajrPrayerConfirmed:
+            return "Expected: Fajr prayer should be confirmed as a separate test record."
+        case .quietFajrActive:
+            return "Expected: Quiet should be available without changing the underlying Fajr meaning."
+        case .quietWakeChecksActive:
+            return "Expected: Tapping Quiet should show the stop Wake Checks sheet."
+        case .quietUserTapsQuiet, .quietConfirmationSheetShown:
+            return "Expected: The active-session confirmation should let you keep checks or stop for this morning."
+        case .quietConfirmed, .quietMorningLogged:
+            return "Expected: quietMorning should be logged and no missed prayer should be created."
+        case nil:
+            return "Expected: Home should reflect the active test state."
+        }
+    }
+
+    func startPreview(card: WakeSessionPreviewScenarioCard) async {
+        guard let scenario = card.scenario else {
+            selectCustomPreviewMode(selectedCustomPreviewMode)
+            return
+        }
+        selectedScenario = scenario
+        selectedClockMode = .jumpOnly
+        await start(scenario, runMode: .previewHomeUI)
+        if let jumpPoint = card.initialJumpPoint {
+            setJumpPoint(jumpPoint)
+        }
+    }
+
+    func previewCustomOnHome() async {
+        selectedScenario = selectedCustomPreviewMode.scenario
+        selectedClockMode = .jumpOnly
+        await start(selectedCustomPreviewMode.scenario, runMode: .previewHomeUI)
+        setJumpPoint(selectedJumpPoint)
+    }
+
+    func configureRealAlarmTest(_ scenario: WakeSessionTestScenario) {
+        selectedRealAlarmScenario = scenario
+        selectedScenario = scenario
+        selectedSequenceLength = selectedSequenceLength
+        mappedStartDelaySeconds = min(max(mappedStartDelaySeconds, 60), 120)
+    }
+
+    func scheduleSelectedRealAlarmTest() async {
+        await start(selectedRealAlarmScenario, runMode: .realAlarmKitMappedPlayback)
+    }
+
+    func moveToNextPreviewState() {
+        movePreviewState(offset: 1)
+    }
+
+    func moveToPreviousPreviewState() {
+        movePreviewState(offset: -1)
+    }
+
     func start(_ scenario: WakeSessionTestScenario) async {
         await start(scenario, runMode: scenario == .realAlarmKitMappedPlayback ? .realAlarmKitMappedPlayback : .fakeSchedulerPlayback)
     }
@@ -535,7 +665,7 @@ final class WakeSessionTestingHarness: ObservableObject {
 
     func makeMappedPlaybackPreview(now: Date? = nil) -> AlarmKitMappingPlan {
         let realNow = now ?? realTimeProvider.now()
-        let plan = makePlan(for: .realAlarmKitMappedPlayback, now: simulatedDate(for: selectedDatePreset, relativeTo: realNow))
+        let plan = makePlan(for: selectedRealAlarmScenario, now: simulatedDate(for: selectedDatePreset, relativeTo: realNow))
         return makeMappingPlan(
             for: plan,
             realNow: realNow,
@@ -773,11 +903,67 @@ final class WakeSessionTestingHarness: ObservableObject {
 
     func makeRealAlarmKitPreviewEvents(now: Date = Date()) -> [ScheduledEvent] {
         makeMappingPlan(
-            for: makePlan(for: .realAlarmKitMappedPlayback, now: now),
+            for: makePlan(for: selectedRealAlarmScenario, now: now),
             realNow: now,
             startDelaySeconds: mappedStartDelaySeconds,
             sequenceLength: selectedSequenceLength
         ).realEvents
+    }
+
+    private var fajrPreviewFlow: [WakeSessionSimulationJumpPoint] {
+        [
+            .beforeFajrBegins,
+            .atFajrBegins,
+            .beforePrimaryWake,
+            .primaryAlarmFired,
+            .wakeCheck1Pending,
+            .awakeConfirmed,
+            .prayerCTAAvailable,
+            .prayerConfirmed,
+            .afterFajrEnds
+        ]
+    }
+
+    private var suhoorPreviewFlow: [WakeSessionSimulationJumpPoint] {
+        [
+            .beforeFinalThird,
+            .suhoorWindowOpen,
+            .beforePrimarySuhoorWake,
+            .primarySuhoorAlarmFired,
+            .wakeCheck1Pending,
+            .suhoorAwakeConfirmed,
+            .fastingIntentConfirmed,
+            .fajrBeginsAfterSuhoor,
+            .fajrPrayerCTAAvailable,
+            .fajrPrayerConfirmed
+        ]
+    }
+
+    private var quietPreviewFlow: [WakeSessionSimulationJumpPoint] {
+        [
+            .quietFajrActive,
+            .quietWakeChecksActive,
+            .quietUserTapsQuiet,
+            .quietConfirmationSheetShown,
+            .quietConfirmed,
+            .quietMorningLogged
+        ]
+    }
+
+    private func movePreviewState(offset: Int) {
+        guard let plan = activePlan else { return }
+        let flow: [WakeSessionSimulationJumpPoint]
+        if plan.scenario == .suhoorStateExplorer || plan.scenario == .suhoorUnconfirmedToFajr {
+            flow = suhoorPreviewFlow
+        } else if plan.scenario == .quietDuringWakeChecks {
+            flow = quietPreviewFlow
+        } else {
+            flow = fajrPreviewFlow
+        }
+        let active = activeSimulationContext?.jumpPoint ?? selectedJumpPoint
+        let currentIndex = flow.firstIndex(of: active) ?? 0
+        let nextIndex = (currentIndex + offset + flow.count) % flow.count
+        setJumpPoint(flow[nextIndex])
     }
 
     private func confirmAwake(mode: WakeSessionMode) {
@@ -1046,6 +1232,8 @@ final class WakeSessionTestingHarness: ObservableObject {
             return selectedManualDate
         case .tomorrow:
             return calendar.date(byAdding: .day, value: 1, to: referenceDate) ?? referenceDate
+        case .pickDate:
+            return selectedManualDate
         case .ordinaryDay:
             return fixed(2026, 5, 26)
         case .ramadanDay:
@@ -1178,6 +1366,8 @@ final class WakeSessionTestingHarness: ObservableObject {
             location: context.simulatedLocation.displayName,
             runMode: context.runMode.displayName,
             jumpPoint: context.jumpPoint?.title ?? "Custom",
+            expectedStateGuidance: expectedStateGuidance(for: context.jumpPoint),
+            hasScheduledTestAlarms: pendingTestAlarms.isEmpty == false,
             nextRealAlarmCountdown: countdown,
             nextSimulatedEventName: next?.role.displayName,
             nextMappedRealFireTime: next.map { TimeFormatters.timeFormatter.string(from: $0.mappedRealFireDate) }
