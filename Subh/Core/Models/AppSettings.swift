@@ -28,6 +28,7 @@ struct AppSettings: Codable, Equatable, Sendable {
     var lastScheduledDate: Date?
     var lastSchedulingMode: SchedulingMode
     var hijriSpecialDaySettings: HijriSpecialDaySettings
+    var wakeAlarmsPausedIndefinitely: Bool
     var quietPeriodEnabled: Bool
     var pausePrayerPrompts: Bool
     var pauseFastingPrompts: Bool
@@ -60,6 +61,7 @@ struct AppSettings: Codable, Equatable, Sendable {
         lastScheduledDate: nil,
         lastSchedulingMode: .none,
         hijriSpecialDaySettings: .default,
+        wakeAlarmsPausedIndefinitely: false,
         quietPeriodEnabled: false,
         pausePrayerPrompts: false,
         pauseFastingPrompts: false
@@ -117,6 +119,7 @@ extension AppSettings {
         case lastScheduledDate
         case lastSchedulingMode
         case hijriSpecialDaySettings
+        case wakeAlarmsPausedIndefinitely
         case snoozeEnabled
         case snoozeMinutes
         case quietPeriodEnabled
@@ -207,6 +210,7 @@ extension AppSettings {
         lastScheduledDate = try container.decodeIfPresent(Date.self, forKey: .lastScheduledDate)
         lastSchedulingMode = try container.decodeIfPresent(SchedulingMode.self, forKey: .lastSchedulingMode) ?? .none
         hijriSpecialDaySettings = try container.decodeIfPresent(HijriSpecialDaySettings.self, forKey: .hijriSpecialDaySettings) ?? .default
+        wakeAlarmsPausedIndefinitely = try container.decodeIfPresent(Bool.self, forKey: .wakeAlarmsPausedIndefinitely) ?? false
         quietPeriodEnabled = try container.decodeIfPresent(Bool.self, forKey: .quietPeriodEnabled) ?? false
         pausePrayerPrompts = try container.decodeIfPresent(Bool.self, forKey: .pausePrayerPrompts) ?? false
         pauseFastingPrompts = try container.decodeIfPresent(Bool.self, forKey: .pauseFastingPrompts) ?? false
@@ -241,9 +245,16 @@ extension AppSettings {
         try container.encodeIfPresent(lastScheduledDate, forKey: .lastScheduledDate)
         try container.encode(lastSchedulingMode, forKey: .lastSchedulingMode)
         try container.encode(hijriSpecialDaySettings, forKey: .hijriSpecialDaySettings)
+        try container.encode(wakeAlarmsPausedIndefinitely, forKey: .wakeAlarmsPausedIndefinitely)
         try container.encode(quietPeriodEnabled, forKey: .quietPeriodEnabled)
         try container.encode(pausePrayerPrompts, forKey: .pausePrayerPrompts)
         try container.encode(pauseFastingPrompts, forKey: .pauseFastingPrompts)
+    }
+}
+
+extension AppSettings {
+    var globalWakeAlarmPolicy: GlobalWakeAlarmPolicy {
+        wakeAlarmsPausedIndefinitely ? .pausedIndefinitely : .active
     }
 }
 

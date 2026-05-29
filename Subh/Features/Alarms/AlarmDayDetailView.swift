@@ -914,7 +914,7 @@ enum AlarmDetailChipStyle: Equatable {
 
 enum AlarmDayDetailPresentation {
     static func detailHeroDisplay(_ display: MorningHomeHeroDisplay) -> MorningHomeHeroDisplay {
-        guard isQuiet(display), display.primaryText != "Quiet Mode" else {
+        guard isQuiet(display), display.primaryText != "Quiet" else {
             return display
         }
         return MorningHomeHeroDisplay(
@@ -924,7 +924,7 @@ enum AlarmDayDetailPresentation {
             dateLine: display.dateLine,
             wakeState: display.wakeState,
             primaryTime: display.primaryTime,
-            primaryText: "Quiet Mode",
+            primaryText: "Quiet",
             wakeIconName: display.wakeIconName,
             statusText: display.statusText,
             detailText: display.detailText,
@@ -971,9 +971,6 @@ enum AlarmDayDetailPresentation {
     }
 
     static func relationText(for display: MorningHomeHeroDisplay) -> String {
-        if isQuiet(display) {
-            return "No alarm will ring for this date"
-        }
         return display.detailText
     }
 
@@ -1070,8 +1067,8 @@ enum AlarmDayDetailPresentation {
             isEnabled: isEnabled,
             isLocked: false,
             subtitle: isEnabled
-                ? "Keep the Fajr adhan after the Suhoor wake."
-                : "Only the Suhoor wake alarm will ring.",
+                ? "Keep the Fajr adhan after the Suhoor alarm."
+                : "Only the Suhoor alarm will ring.",
             lockedNote: nil
         )
     }
@@ -1141,7 +1138,7 @@ enum AlarmDayDetailPresentation {
     ) -> String {
         var parts = [dateLine]
         if isQuiet(display) {
-            parts.append("Quiet Mode")
+            parts.append("Quiet")
         } else {
             parts.append(display.primaryText)
         }
@@ -1219,11 +1216,11 @@ enum AlarmDayDetailPresentation {
 
         if selectedMode == .quiet || isQuiet(display) {
             if opportunities.isEmpty {
-                return sentence("Quiet Mode is on for this date. No alarm will ring. There are no Sunnah fasting opportunities for this day.")
+                return sentence("Quiet for this date. No alarm will ring. There are no Sunnah fasting opportunities for this day.")
             }
             return (
-                "Quiet Mode is on for this date. No alarm will ring. This day has Sunnah fasting opportunities: \(opportunityList).",
-                "Quiet Mode is on for this date. No alarm will ring. This day has Sunnah fasting opportunities:",
+                "Quiet for this date. No alarm will ring. This day has Sunnah fasting opportunities: \(opportunityList).",
+                "Quiet for this date. No alarm will ring. This day has Sunnah fasting opportunities:",
                 opportunities,
                 "."
             )
@@ -1268,11 +1265,11 @@ enum AlarmDayDetailPresentation {
             )
         case .quiet:
             if opportunities.isEmpty {
-                return sentence("Quiet Mode is on for this date. No alarm will ring. There are no Sunnah fasting opportunities for this day.")
+                return sentence("Quiet for this date. No alarm will ring. There are no Sunnah fasting opportunities for this day.")
             }
             return (
-                "Quiet Mode is on for this date. No alarm will ring. This day has Sunnah fasting opportunities: \(opportunityList).",
-                "Quiet Mode is on for this date. No alarm will ring. This day has Sunnah fasting opportunities:",
+                "Quiet for this date. No alarm will ring. This day has Sunnah fasting opportunities: \(opportunityList).",
+                "Quiet for this date. No alarm will ring. This day has Sunnah fasting opportunities:",
                 opportunities,
                 "."
             )

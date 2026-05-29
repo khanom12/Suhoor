@@ -122,9 +122,51 @@ struct WakeTimeResolution: Codable, Equatable, Sendable {
     let minutesBeforeFajrBegin: Int?
 }
 
+enum WakePurpose: String, Codable, CaseIterable, Identifiable, Sendable {
+    case fajr
+    case suhoor
+
+    var id: String { rawValue }
+}
+
+enum DateAlarmOverride: String, Codable, CaseIterable, Identifiable, Sendable {
+    case none
+    case quiet
+    case ringDespitePause
+
+    var id: String { rawValue }
+}
+
+enum GlobalWakeAlarmPolicy: String, Codable, CaseIterable, Identifiable, Sendable {
+    case active
+    case pausedIndefinitely
+
+    var id: String { rawValue }
+}
+
+enum ResolvedAlarmState: String, Codable, CaseIterable, Identifiable, Sendable {
+    case active
+    case quiet
+    case pausedInherited
+    case ringsOnceDespitePause
+    case blocked
+    case issue
+    case unavailable
+
+    var id: String { rawValue }
+}
+
+enum WakeAcknowledgementSource: String, Codable, CaseIterable, Identifiable, Sendable {
+    case inAppButton
+    case systemAlarmDismiss
+
+    var id: String { rawValue }
+}
+
 enum AlarmActivation: String, Codable, CaseIterable, Identifiable, Sendable {
     case active
     case quietSuppressed
+    case pausedSuppressed
     case offWithAnchor
     case noAnchor
     case unavailable
@@ -138,6 +180,8 @@ enum MorningWakeScheduleStatus: String, Codable, CaseIterable, Identifiable, Sen
     case failed
     case permissionBlocked
     case notScheduledBecauseQuiet
+    case notScheduledBecausePaused
+    case scheduledDespitePause
     case notScheduledBecauseNoAnchor
     case notScheduledBecauseUnavailable
     case unavailable
@@ -188,8 +232,12 @@ struct ResolvedMorningWakeState: Codable, Equatable, Sendable {
     let dateKey: String
     let morningDate: Date
     let dayContext: MorningWakeDayContextKind
+    let wakePurpose: WakePurpose
     let quickWakeSelection: QuickWakeMode
     let underlyingWakeMode: MorningWakeUnderlyingMode
+    let dateAlarmOverride: DateAlarmOverride
+    let globalWakeAlarmPolicy: GlobalWakeAlarmPolicy
+    let resolvedAlarmState: ResolvedAlarmState
     let boundaryRegime: WakeBoundaryRegime
     let wakeBoundaryResolution: WakeBoundaryResolution
     let wakeTimeResolution: WakeTimeResolution

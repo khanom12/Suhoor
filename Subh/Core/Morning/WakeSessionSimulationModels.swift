@@ -231,9 +231,9 @@ enum WakeSessionSimulationJumpPoint: String, CaseIterable, Identifiable, Sendabl
         case .atFajrBegins:
             return "At Fajr begins"
         case .beforePrimaryWake:
-            return "Before primary wake"
+            return "Before primary alarm"
         case .atPrimaryWake:
-            return "At primary wake"
+            return "At primary alarm"
         case .primaryAlarmFired:
             return "Primary alarm fired"
         case .wakeCheck1Pending:
@@ -263,9 +263,9 @@ enum WakeSessionSimulationJumpPoint: String, CaseIterable, Identifiable, Sendabl
         case .suhoorWindowOpen:
             return "Suhoor window open"
         case .beforePrimarySuhoorWake:
-            return "Before primary Suhoor wake"
+            return "Before primary Suhoor alarm"
         case .atPrimarySuhoorWake:
-            return "At primary Suhoor wake"
+            return "At primary Suhoor alarm"
         case .primarySuhoorAlarmFired:
             return "Primary Suhoor alarm fired"
         case .suhoorAwakeConfirmed:
@@ -484,7 +484,7 @@ struct WakeSessionPreviewScenarioCard: Identifiable, Equatable, Sendable {
             id: "fajr-flow",
             title: "Fajr Flow",
             description: "Preview the Home Hero from Fajr beginning to prayer confirmation.",
-            whatThisTests: "Awake confirmation, Wake Check pending state, Hero Action Slot, and Fajr prayer confirmation.",
+            whatThisTests: "Active Fajr, Time to wake, Next alarm soon, Final alarm this morning, post-awake Fajr, and Fajr prayer confirmation.",
             realAlarms: "No. This is a Home preview.",
             approximateDuration: "1-2 minutes.",
             whatToExpect: "Home will open with TEST MODE ACTIVE. Use Next State to move through the Fajr flow.",
@@ -495,8 +495,8 @@ struct WakeSessionPreviewScenarioCard: Identifiable, Equatable, Sendable {
         WakeSessionPreviewScenarioCard(
             id: "suhoor-flow",
             title: "Suhoor Flow",
-            description: "Preview Suhoor wake, fasting intention, and the handoff to Fajr prayer.",
-            whatThisTests: "Suhoor awake confirmation, fasting intent, and the separate Fajr prayer path.",
+            description: "Preview the Suhoor alarm, fasting intention, and the handoff to Fajr prayer.",
+            whatThisTests: "Active Suhoor, post-awake Suhoor, boundary cutoff, fasting intent, and the Fajr-end handoff.",
             realAlarms: "No. This is a Home preview.",
             approximateDuration: "1-2 minutes.",
             whatToExpect: "Home will open in a Suhoor state. Use Next State to reach Fajr handoff states.",
@@ -508,13 +508,49 @@ struct WakeSessionPreviewScenarioCard: Identifiable, Equatable, Sendable {
             id: "quiet-flow",
             title: "Quiet During Wake Checks",
             description: "Preview what happens when Quiet is selected while Wake Checks are active.",
-            whatThisTests: "The active-session confirmation sheet, Keep wake checks, Stop for this morning, and quietMorning logging.",
+            whatThisTests: "Quiet Fajr, Quiet Suhoor vocabulary, active-session confirmation, keeping checks, Quiet for this morning, and quietMorning logging.",
             realAlarms: "No. This is a Home preview.",
             approximateDuration: "1-2 minutes.",
             whatToExpect: "Home will show pending Wake Checks. Selecting Quiet should ask before cancelling them.",
             primaryActionTitle: "Start Quiet Preview",
             scenario: .quietDuringWakeChecks,
             initialJumpPoint: .quietWakeChecksActive
+        ),
+        WakeSessionPreviewScenarioCard(
+            id: "paused-exception-states",
+            title: "Paused & Ring Exception",
+            description: "Preview the wording for globally paused alarms and the one-morning ring exception.",
+            whatThisTests: "Paused Fajr, Paused Suhoor, Rings tomorrow only while paused, and alarm-state vocabulary separate from Fajr/Suhoor purpose.",
+            realAlarms: "No. This is a Home preview.",
+            approximateDuration: "1 minute.",
+            whatToExpect: "Use Custom Preview for the exact date; the card keeps Pause and ring-once checks grouped for review.",
+            primaryActionTitle: "Start Pause Preview",
+            scenario: .fajrStateExplorer,
+            initialJumpPoint: .beforePrimaryWake
+        ),
+        WakeSessionPreviewScenarioCard(
+            id: "setup-issue-states",
+            title: "Setup & Alarm Issue",
+            description: "Preview setup and delivery issue language without changing real permissions.",
+            whatThisTests: "Turn on alarms, Set location, Alarm issue, permission failure, and degraded delivery messaging.",
+            realAlarms: "No. This is a Home preview.",
+            approximateDuration: "1 minute.",
+            whatToExpect: "The harness uses simulated permission states; real iOS permission settings are not changed.",
+            primaryActionTitle: "Start Issue Preview",
+            scenario: .permissionFailure,
+            initialJumpPoint: .beforePrimaryWake
+        ),
+        WakeSessionPreviewScenarioCard(
+            id: "boundary-handoff-states",
+            title: "Boundary & Handoff",
+            description: "Preview state changes around Fajr begin, Fajr end, and Suhoor-to-Fajr handoff.",
+            whatThisTests: "Boundary state, cutoff behavior, post-awake handoff, and Fajr-end next-morning handoff.",
+            realAlarms: "No. This is a Home preview.",
+            approximateDuration: "1-2 minutes.",
+            whatToExpect: "Home will open near the handoff path; use Next State to walk through the boundary states.",
+            primaryActionTitle: "Start Handoff Preview",
+            scenario: .suhoorUnconfirmedToFajr,
+            initialJumpPoint: .fajrBeginsAfterSuhoor
         ),
         WakeSessionPreviewScenarioCard(
             id: "custom-date-time",
@@ -558,10 +594,10 @@ struct WakeSessionRealAlarmScenarioCard: Identifiable, Equatable, Sendable {
             id: "suhoor-alarm-test",
             title: "Suhoor Alarm Test",
             description: "Map a simulated Suhoor Wake Session onto real alarms starting soon.",
-            whatThisTests: "Suhoor alarm delivery, awake confirmation, fasting intent, and Wake Check cancellation.",
+            whatThisTests: "Suhoor alarm delivery, awake confirmation, separate fasting intent, and Wake Check cancellation.",
             realAlarms: "Yes. Your iPhone will ring.",
             approximateDuration: "Primary only: a few minutes. Full sequence: about 25-30 minutes.",
-            whatToExpect: "Confirming awake for Suhoor cancels remaining checks and records fasting intent only.",
+            whatToExpect: "Confirming awake for Suhoor cancels remaining checks; fasting intent is confirmed separately.",
             primaryActionTitle: "Set Up Suhoor Alarm Test",
             scenario: .suhoorStateExplorer
         )

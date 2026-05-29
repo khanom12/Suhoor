@@ -121,6 +121,10 @@ final class AlarmConfigStore: ObservableObject {
 
         if isEnabled {
             current.skipDay = false
+            if current.dateAlarmOverride == .quiet {
+                current.dateAlarmOverride = nil
+                current.quietOverlay = false
+            }
 
             let defaultsActive = isDefaultsActive(on: date, timeZone: timeZone)
             let suhoorEnabled = current.suhoorEnabled ?? (defaultsActive ? defaults.suhoorEnabledDefault : false)
@@ -665,6 +669,7 @@ final class AlarmConfigStore: ObservableObject {
         let key = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
         let override = overridesByDay[key]
         let skipDay = override?.skipDay ?? false
+        let dateAlarmOverride = resolvedDateAlarmOverride(from: override)
         let defaultWakeRule = defaults.defaultWakeRule
         let overrideWakeRule = override?.resolvedWakeRule(defaults: defaults)
         let resolvedWakeRule = overrideWakeRule ?? defaultWakeRule
@@ -729,6 +734,7 @@ final class AlarmConfigStore: ObservableObject {
             defaultWakeRule: defaultWakeRule,
             resolvedWakeRule: resolvedWakeRule,
             wakeRuleWasOverridden: overrideWakeRule != nil,
+            dateAlarmOverride: dateAlarmOverride,
             quickWakeModeOverride: override?.quickWakeModeOverride,
             underlyingWakeModeBeforeQuiet: override?.underlyingWakeModeBeforeQuiet,
             earlyWakePurposeOverride: override?.earlyWakePurposeOverride,
@@ -850,5 +856,15 @@ final class AlarmConfigStore: ObservableObject {
             guard let data = try? JSONEncoder().encode(snapshot) else { return }
             defaultsStore.set(data, forKey: overridesKey)
         }
+    }
+
+    private func resolvedDateAlarmOverride(from override: DailyAlarmOverride?) -> DateAlarmOverride {
+        if let explicit = override?.dateAlarmOverride, explicit != .none {
+            return explicit
+        }
+        if override?.quickWakeModeOverride == .quiet || override?.quietOverlay == true {
+            return .quiet
+        }
+        return .none
     }
 }

@@ -372,6 +372,7 @@ struct DailyAlarmOverride: Codable, Equatable, Identifiable, Sendable {
     var wakeStateOverride: MorningWakeRuleState?
     var wakeAnchorTypeOverride: WakeAnchorType?
     var wakeDeltaOverrideMinutes: Int?
+    var dateAlarmOverride: DateAlarmOverride?
     var quickWakeModeOverride: QuickWakeMode?
     var underlyingWakeModeBeforeQuiet: QuickWakeMode?
     var earlyWakePurposeOverride: EarlyWakePurposeOverride?
@@ -412,6 +413,7 @@ struct DailyAlarmOverride: Codable, Equatable, Identifiable, Sendable {
         self.wakeStateOverride = nil
         self.wakeAnchorTypeOverride = nil
         self.wakeDeltaOverrideMinutes = nil
+        self.dateAlarmOverride = nil
         self.quickWakeModeOverride = nil
         self.underlyingWakeModeBeforeQuiet = nil
         self.earlyWakePurposeOverride = nil
@@ -446,6 +448,7 @@ struct DailyAlarmOverride: Codable, Equatable, Identifiable, Sendable {
         if wakeStateOverride != nil { return true }
         if wakeAnchorTypeOverride != nil { return true }
         if wakeDeltaOverrideMinutes != nil { return true }
+        if let dateAlarmOverride, dateAlarmOverride != .none { return true }
         if quickWakeModeOverride != nil { return true }
         if quickWakeModeOverride == .quiet && underlyingWakeModeBeforeQuiet != nil { return true }
         if earlyWakePurposeOverride != nil { return true }
@@ -510,6 +513,7 @@ struct EffectiveDailyConfig: Codable, Equatable, Sendable {
     let defaultWakeRule: MorningWakeRule
     let resolvedWakeRule: MorningWakeRule
     let wakeRuleWasOverridden: Bool
+    let dateAlarmOverride: DateAlarmOverride
     let quickWakeModeOverride: QuickWakeMode?
     let underlyingWakeModeBeforeQuiet: QuickWakeMode?
     let earlyWakePurposeOverride: EarlyWakePurposeOverride?
@@ -543,6 +547,7 @@ struct EffectiveDailyConfig: Codable, Equatable, Sendable {
         case defaultWakeRule
         case resolvedWakeRule
         case wakeRuleWasOverridden
+        case dateAlarmOverride
         case quickWakeModeOverride
         case underlyingWakeModeBeforeQuiet
         case earlyWakePurposeOverride
@@ -573,6 +578,7 @@ struct EffectiveDailyConfig: Codable, Equatable, Sendable {
         defaultWakeRule: MorningWakeRule = DefaultAlarmConfig.default.defaultWakeRule,
         resolvedWakeRule: MorningWakeRule = DefaultAlarmConfig.default.defaultWakeRule,
         wakeRuleWasOverridden: Bool = false,
+        dateAlarmOverride: DateAlarmOverride = .none,
         quickWakeModeOverride: QuickWakeMode? = nil,
         underlyingWakeModeBeforeQuiet: QuickWakeMode? = nil,
         earlyWakePurposeOverride: EarlyWakePurposeOverride? = nil,
@@ -601,6 +607,7 @@ struct EffectiveDailyConfig: Codable, Equatable, Sendable {
         self.defaultWakeRule = defaultWakeRule
         self.resolvedWakeRule = resolvedWakeRule
         self.wakeRuleWasOverridden = wakeRuleWasOverridden
+        self.dateAlarmOverride = dateAlarmOverride
         self.quickWakeModeOverride = quickWakeModeOverride
         self.underlyingWakeModeBeforeQuiet = underlyingWakeModeBeforeQuiet
         self.earlyWakePurposeOverride = earlyWakePurposeOverride
@@ -625,6 +632,9 @@ struct EffectiveDailyConfig: Codable, Equatable, Sendable {
         let fallbackWakeRule = DefaultAlarmConfig.default.defaultWakeRule
         let decodedDefaultWakeRule = try container.decodeIfPresent(MorningWakeRule.self, forKey: .defaultWakeRule)
         let decodedResolvedWakeRule = try container.decodeIfPresent(MorningWakeRule.self, forKey: .resolvedWakeRule)
+        let decodedQuickWakeMode = try container.decodeIfPresent(QuickWakeMode.self, forKey: .quickWakeModeOverride)
+        let decodedDateAlarmOverride = try container.decodeIfPresent(DateAlarmOverride.self, forKey: .dateAlarmOverride)
+            ?? (decodedQuickWakeMode == .quiet ? .quiet : .none)
 
         self.init(
             date: try container.decode(Date.self, forKey: .date),
@@ -638,7 +648,8 @@ struct EffectiveDailyConfig: Codable, Equatable, Sendable {
             resolvedWakeRule: decodedResolvedWakeRule ?? decodedDefaultWakeRule ?? fallbackWakeRule,
             wakeRuleWasOverridden: try container.decodeIfPresent(Bool.self, forKey: .wakeRuleWasOverridden)
                 ?? false,
-            quickWakeModeOverride: try container.decodeIfPresent(QuickWakeMode.self, forKey: .quickWakeModeOverride),
+            dateAlarmOverride: decodedDateAlarmOverride,
+            quickWakeModeOverride: decodedQuickWakeMode,
             underlyingWakeModeBeforeQuiet: try container.decodeIfPresent(
                 QuickWakeMode.self,
                 forKey: .underlyingWakeModeBeforeQuiet
@@ -674,6 +685,7 @@ struct EffectiveDailyConfig: Codable, Equatable, Sendable {
         try container.encode(defaultWakeRule, forKey: .defaultWakeRule)
         try container.encode(resolvedWakeRule, forKey: .resolvedWakeRule)
         try container.encode(wakeRuleWasOverridden, forKey: .wakeRuleWasOverridden)
+        try container.encode(dateAlarmOverride, forKey: .dateAlarmOverride)
         try container.encodeIfPresent(quickWakeModeOverride, forKey: .quickWakeModeOverride)
         try container.encodeIfPresent(underlyingWakeModeBeforeQuiet, forKey: .underlyingWakeModeBeforeQuiet)
         try container.encodeIfPresent(earlyWakePurposeOverride, forKey: .earlyWakePurposeOverride)

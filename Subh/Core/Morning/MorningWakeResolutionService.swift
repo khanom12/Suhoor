@@ -4,14 +4,21 @@ enum MorningWakeResolutionService {
     static func resolve(
         for day: ActiveAlarmDay,
         scheduleStatusOverride: MorningWakeScheduleStatus? = nil,
+        globalWakeAlarmPolicy: GlobalWakeAlarmPolicy = .active,
         timeZone: TimeZone = .current
     ) -> ResolvedMorningWakeState {
         let selection = WakeStateSelectionResolver.selectedMode(for: day)
         let underlyingMode = WakeStateSelectionResolver.underlyingMode(for: day)
+        let wakePurpose = underlyingMode == .earlyWorship ? WakePurpose.suhoor : .fajr
+        let dateAlarmOverride = day.effectiveConfig.dateAlarmOverride == .none
+            && day.effectiveConfig.quickWakeModeOverride == .quiet
+            ? .quiet
+            : day.effectiveConfig.dateAlarmOverride
         let dayContext = WakeStateSelectionResolver.dayContextKind(for: day)
         let boundary = resolveBoundary(
             day: day,
             selection: selection,
+            dateAlarmOverride: dateAlarmOverride,
             underlyingMode: underlyingMode,
             dayContext: dayContext,
             timeZone: timeZone
@@ -20,11 +27,20 @@ enum MorningWakeResolutionService {
         let activation = resolveAlarmActivation(
             day: day,
             selection: selection,
+            dateAlarmOverride: dateAlarmOverride,
+            globalWakeAlarmPolicy: globalWakeAlarmPolicy,
             wakeTime: wakeTime
+        )
+        let resolvedAlarmState = resolveAlarmState(
+            activation: activation,
+            dateAlarmOverride: dateAlarmOverride,
+            globalWakeAlarmPolicy: globalWakeAlarmPolicy
         )
         let scheduleStatus = resolveScheduleStatus(
             day: day,
             activation: activation,
+            dateAlarmOverride: dateAlarmOverride,
+            globalWakeAlarmPolicy: globalWakeAlarmPolicy,
             override: scheduleStatusOverride
         )
         let visualMode = resolveVisualMode(
@@ -35,6 +51,7 @@ enum MorningWakeResolutionService {
         )
         let boundaryRegime = resolveBoundaryRegime(
             selection: selection,
+            dateAlarmOverride: dateAlarmOverride,
             underlyingMode: underlyingMode,
             boundary: boundary,
             visualMode: visualMode
@@ -42,6 +59,8 @@ enum MorningWakeResolutionService {
         let copy = resolveCopyState(
             day: day,
             selection: selection,
+            dateAlarmOverride: dateAlarmOverride,
+            globalWakeAlarmPolicy: globalWakeAlarmPolicy,
             underlyingMode: underlyingMode,
             wakeTime: wakeTime,
             boundary: boundary,
@@ -54,8 +73,12 @@ enum MorningWakeResolutionService {
             dateKey: day.dateKey,
             morningDate: day.date,
             dayContext: dayContext,
+            wakePurpose: wakePurpose,
             quickWakeSelection: selection,
             underlyingWakeMode: underlyingMode,
+            dateAlarmOverride: dateAlarmOverride,
+            globalWakeAlarmPolicy: globalWakeAlarmPolicy,
+            resolvedAlarmState: resolvedAlarmState,
             boundaryRegime: boundaryRegime,
             wakeBoundaryResolution: boundary,
             wakeTimeResolution: wakeTime,
@@ -71,6 +94,7 @@ enum MorningWakeResolutionService {
     private static func resolveBoundary(
         day: ActiveAlarmDay,
         selection: QuickWakeMode,
+        dateAlarmOverride: DateAlarmOverride,
         underlyingMode: MorningWakeUnderlyingMode,
         dayContext: MorningWakeDayContextKind,
         timeZone: TimeZone
@@ -93,7 +117,7 @@ enum MorningWakeResolutionService {
                 finalThirdStart: nil,
                 fajrBegins: fajrBegins,
                 fajrEnds: fajrEnds,
-                reason: selection == .quiet ? .quietPreserved : .defaultFajrMorning,
+                reason: dateAlarmOverride == .quiet ? .quietPreserved : .defaultFajrMorning,
                 isEstimated: window.fajrEndSource == .unavailable
             )
         case .earlyWorship:
@@ -121,7 +145,7 @@ enum MorningWakeResolutionService {
                 finalThirdStart: finalThirdStart,
                 fajrBegins: fajrBegins,
                 fajrEnds: fajrEnds,
-                reason: selection == .quiet ? .quietPreserved : reason,
+                reason: dateAlarmOverride == .quiet ? .quietPreserved : reason,
                 isEstimated: false
             )
         }
@@ -264,13 +288,19 @@ enum MorningWakeResolutionService {
     private static func resolveAlarmActivation(
         day: ActiveAlarmDay,
         selection: QuickWakeMode,
+        dateAlarmOverride: DateAlarmOverride,
+        globalWakeAlarmPolicy: GlobalWakeAlarmPolicy,
         wakeTime: WakeTimeResolution
     ) -> AlarmActivation {
         if wakeTime.wakeTime == nil {
             return .unavailable
         }
-        if selection == .quiet {
+        if dateAlarmOverride == .quiet || selection == .quiet {
             return .quietSuppressed
+        }
+        if globalWakeAlarmPolicy == .pausedIndefinitely,
+           dateAlarmOverride != .ringDespitePause {
+            return .pausedSuppressed
         }
         if day.effectiveConfig.skipDay {
             return .offWithAnchor
@@ -281,9 +311,34 @@ enum MorningWakeResolutionService {
         return .active
     }
 
+    private static func resolveAlarmState(
+        activation: AlarmActivation,
+        dateAlarmOverride: DateAlarmOverride,
+        globalWakeAlarmPolicy: GlobalWakeAlarmPolicy
+    ) -> ResolvedAlarmState {
+        switch activation {
+        case .active:
+            if globalWakeAlarmPolicy == .pausedIndefinitely,
+               dateAlarmOverride == .ringDespitePause {
+                return .ringsOnceDespitePause
+            }
+            return .active
+        case .quietSuppressed:
+            return .quiet
+        case .pausedSuppressed:
+            return .pausedInherited
+        case .offWithAnchor, .noAnchor:
+            return .blocked
+        case .unavailable:
+            return .unavailable
+        }
+    }
+
     private static func resolveScheduleStatus(
         day: ActiveAlarmDay,
         activation: AlarmActivation,
+        dateAlarmOverride: DateAlarmOverride,
+        globalWakeAlarmPolicy: GlobalWakeAlarmPolicy,
         override: MorningWakeScheduleStatus?
     ) -> MorningWakeScheduleStatus {
         if let override {
@@ -292,10 +347,19 @@ enum MorningWakeResolutionService {
 
         switch activation {
         case .active:
+            if globalWakeAlarmPolicy == .pausedIndefinitely,
+               dateAlarmOverride == .ringDespitePause,
+               day.scheduledEvents.contains(where: { $0.type == .wakeAlarm }) {
+                return .scheduledDespitePause
+            }
             return day.scheduledEvents.contains(where: { $0.type == .wakeAlarm })
                 ? .scheduled
                 : .pending
-        case .quietSuppressed, .offWithAnchor:
+        case .quietSuppressed:
+            return .notScheduledBecauseQuiet
+        case .pausedSuppressed:
+            return .notScheduledBecausePaused
+        case .offWithAnchor:
             return .notScheduledBecauseQuiet
         case .noAnchor:
             return .notScheduledBecauseNoAnchor
@@ -330,6 +394,8 @@ enum MorningWakeResolutionService {
             return .staticDefaultFajrQuiet
         case (.quietSuppressed, .earlyWorship):
             return .staticEarlyWorshipQuiet
+        case (.pausedSuppressed, _):
+            return .staticNoAlarmWithBoundaries
         case (.offWithAnchor, _), (.noAnchor, _):
             return .staticNoAlarmWithBoundaries
         case (.unavailable, _):
@@ -339,6 +405,7 @@ enum MorningWakeResolutionService {
 
     private static func resolveBoundaryRegime(
         selection: QuickWakeMode,
+        dateAlarmOverride: DateAlarmOverride,
         underlyingMode: MorningWakeUnderlyingMode,
         boundary: WakeBoundaryResolution,
         visualMode: MorningWakeVisualMode
@@ -349,7 +416,7 @@ enum MorningWakeResolutionService {
         if visualMode == .hiddenOutOfRange {
             return .customOutOfRange
         }
-        if selection == .quiet {
+        if dateAlarmOverride == .quiet || selection == .quiet {
             return underlyingMode == .earlyWorship ? .quietEarlyWorshipWindow : .quietDefaultFajrWindow
         }
         return underlyingMode == .earlyWorship ? .earlyWorshipWindow : .defaultFajrWindow
@@ -358,6 +425,8 @@ enum MorningWakeResolutionService {
     private static func resolveCopyState(
         day: ActiveAlarmDay,
         selection: QuickWakeMode,
+        dateAlarmOverride: DateAlarmOverride,
+        globalWakeAlarmPolicy: GlobalWakeAlarmPolicy,
         underlyingMode: MorningWakeUnderlyingMode,
         wakeTime: WakeTimeResolution,
         boundary: WakeBoundaryResolution,
@@ -366,15 +435,31 @@ enum MorningWakeResolutionService {
         timeZone: TimeZone
     ) -> WakeCopyState {
         let scheduleWarning = scheduleWarningText(for: scheduleStatus)
-        if selection == .quiet {
-            let accessibility = "Quiet mode selected. Quiet mode. No alarm will ring for tomorrow. \(boundaryAccessibilityText(boundary, timeZone: timeZone))"
+        if dateAlarmOverride == .quiet || selection == .quiet {
+            let savedRelation = wakeTime.wakeTime.map {
+                "Alarm saved for \(timeFormatter(timeZone: timeZone).string(from: $0))"
+            } ?? "Alarm saved"
+            let accessibility = "Quiet. No alarm will ring for this morning. \(boundaryAccessibilityText(boundary, timeZone: timeZone))"
             return WakeCopyState(
-                primaryHeroText: "Quiet mode",
-                finalRelationText: "No alarm will ring for tomorrow",
+                primaryHeroText: "Quiet",
+                finalRelationText: savedRelation,
                 relationTone: .stateText,
-                detailExplanation: "Quiet suppresses the wake alarm without deleting this morning's underlying plan.",
+                detailExplanation: "Quiet keeps this morning's plan saved without ringing an alarm.",
                 scheduleWarningText: scheduleWarning,
                 accessibilityText: accessibility
+            )
+        }
+
+        if activation == .pausedSuppressed,
+           let wake = wakeTime.wakeTime {
+            let savedRelation = "Alarm saved for \(timeFormatter(timeZone: timeZone).string(from: wake))"
+            return WakeCopyState(
+                primaryHeroText: "Alarms paused",
+                finalRelationText: savedRelation,
+                relationTone: .stateText,
+                detailExplanation: "Wake alarms are paused until resumed.",
+                scheduleWarningText: scheduleWarning,
+                accessibilityText: "Alarms paused. \(savedRelation)."
             )
         }
 
@@ -385,7 +470,7 @@ enum MorningWakeResolutionService {
                 underlyingMode: underlyingMode,
                 boundary: boundary
             )
-            let plannedRelation = relation.replacingOccurrences(of: "Wake up", with: "Planned wake was")
+            let plannedRelation = "Alarm saved for \(timeFormatter(timeZone: timeZone).string(from: wake)). \(relation)"
             return WakeCopyState(
                 primaryHeroText: "Alarm off",
                 finalRelationText: plannedRelation,
@@ -399,7 +484,7 @@ enum MorningWakeResolutionService {
         guard activation != .unavailable,
               let wake = wakeTime.wakeTime else {
             return WakeCopyState(
-                primaryHeroText: "Wake time unavailable",
+                primaryHeroText: "Set location",
                 finalRelationText: "Fajr times are not available yet",
                 relationTone: .warning,
                 detailExplanation: "Required timing data is missing for this morning.",
@@ -421,14 +506,16 @@ enum MorningWakeResolutionService {
             boundary: boundary
         )
         let accessibility = [
-            "\(selection.displayTitle) wake selected",
+            "\(selection.displayTitle) selected",
             "Alarm at \(formatter.string(from: wake))",
             relation
         ].joined(separator: ". ")
 
         return WakeCopyState(
             primaryHeroText: formatter.string(from: wake),
-            finalRelationText: relation,
+            finalRelationText: globalWakeAlarmPolicy == .pausedIndefinitely && dateAlarmOverride == .ringDespitePause
+                ? "Rings tomorrow only"
+                : relation,
             relationTone: tone,
             detailExplanation: nil,
             scheduleWarningText: scheduleWarning,
@@ -444,28 +531,28 @@ enum MorningWakeResolutionService {
         switch underlyingMode {
         case .earlyWorship:
             if isEndpoint(wakeTime, boundary.finalThirdStart) {
-                return "Wake up for the last third of the night"
+                return "At the last third of the night"
             }
             if isEndpoint(wakeTime, boundary.fajrBegins) {
-                return "Wake up as Fajr begins"
+                return "As Fajr begins"
             }
             if let fajrBegins = boundary.fajrBegins {
                 let minutes = Int(round(fajrBegins.timeIntervalSince(wakeTime) / 60))
-                return "Wake up \(minutes) min before Fajr begins"
+                return "\(minutes) min before Fajr begins"
             }
         case .fajr:
             if isEndpoint(wakeTime, boundary.fajrBegins) {
-                return "Wake up as Fajr begins"
+                return "As Fajr begins"
             }
             if isEndpoint(wakeTime, boundary.fajrEnds) {
-                return "Wake up as Fajr ends"
+                return "As Fajr ends"
             }
             if let fajrEnds = boundary.fajrEnds {
                 let minutes = Int(round(fajrEnds.timeIntervalSince(wakeTime) / 60))
-                return "Wake up \(minutes) min before Fajr ends"
+                return "\(minutes) min before Fajr ends"
             }
         }
-        return "Wake time selected"
+        return "Alarm saved"
     }
 
     private static func relationTone(
@@ -491,7 +578,9 @@ enum MorningWakeResolutionService {
         case .failed:
             return "Alarm could not be scheduled"
         case .pending:
-            return "Wake time selected, but alarm is not scheduled yet"
+            return "Next alarm soon"
+        case .notScheduledBecausePaused, .scheduledDespitePause:
+            return nil
         case .scheduled,
              .notScheduledBecauseQuiet,
              .notScheduledBecauseNoAnchor,

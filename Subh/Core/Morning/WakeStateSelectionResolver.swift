@@ -6,6 +6,9 @@ enum WakeStateSelectionResolver {
 
     static func selectedMode(for day: ActiveAlarmDay) -> QuickWakeMode {
         if let explicitMode = day.effectiveConfig.quickWakeModeOverride {
+            if explicitMode == .quiet {
+                return underlyingQuickWakeMode(for: day)
+            }
             return explicitMode
         }
 
@@ -18,7 +21,8 @@ enum WakeStateSelectionResolver {
     }
 
     static func isQuiet(_ day: ActiveAlarmDay) -> Bool {
-        selectedMode(for: day) == .quiet
+        day.effectiveConfig.dateAlarmOverride == .quiet
+            || day.effectiveConfig.quickWakeModeOverride == .quiet
     }
 
     static func isSelectedFast(_ day: ActiveAlarmDay) -> Bool {
@@ -36,13 +40,7 @@ enum WakeStateSelectionResolver {
         case .fajr:
             return .fajr
         case .quiet:
-            if let preservedMode = day.effectiveConfig.underlyingWakeModeBeforeQuiet {
-                return preservedMode == .suhoor ? .earlyWorship : .fajr
-            }
-            if day.effectiveConfig.resolvedWakeRule.state == .preFajr || isIntendedEarlyWorship(day) {
-                return .earlyWorship
-            }
-            return .fajr
+            return underlyingQuickWakeMode(for: day) == .suhoor ? .earlyWorship : .fajr
         }
     }
 
@@ -89,7 +87,9 @@ enum WakeStateSelectionResolver {
         switch mode {
         case .suhoor:
             override.skipDay = false
+            override.dateAlarmOverride = nil
             override.quickWakeModeOverride = .suhoor
+            override.underlyingWakeModeBeforeQuiet = nil
             override.earlyWakePurposeOverride = .fast
             override.suhoorEnabled = true
             override.reminderEnabled = true
@@ -104,9 +104,12 @@ enum WakeStateSelectionResolver {
             override.suhoorTimeOverrideMinutesFromMidnight = nil
             override.bypassLatestWakeCap = true
             override.tahajjudRefinement = false
+            override.quietOverlay = false
         case .fajr:
             override.skipDay = false
+            override.dateAlarmOverride = nil
             override.quickWakeModeOverride = .fajr
+            override.underlyingWakeModeBeforeQuiet = nil
             override.earlyWakePurposeOverride = nil
             override.alarmDetailFastTypeOverride = nil
             override.suhoorEnabled = true
@@ -122,15 +125,29 @@ enum WakeStateSelectionResolver {
             override.suhoorTimeOverrideMinutesFromMidnight = nil
             override.bypassLatestWakeCap = true
             override.tahajjudRefinement = nil
+            override.quietOverlay = false
         case .quiet:
             override.skipDay = true
-            override.quickWakeModeOverride = .quiet
+            override.dateAlarmOverride = .quiet
+            if override.quickWakeModeOverride == nil {
+                override.quickWakeModeOverride = override.underlyingWakeModeBeforeQuiet ?? .fajr
+            }
             override.suhoorEnabled = false
             override.reminderEnabled = false
             override.fajrEnabled = false
             override.iftarEnabled = false
             override.quietOverlay = true
         }
+    }
+
+    private static func underlyingQuickWakeMode(for day: ActiveAlarmDay) -> QuickWakeMode {
+        if let preservedMode = day.effectiveConfig.underlyingWakeModeBeforeQuiet {
+            return preservedMode == .quiet ? .fajr : preservedMode
+        }
+        if day.effectiveConfig.resolvedWakeRule.state == .preFajr || isIntendedEarlyWorship(day) {
+            return .suhoor
+        }
+        return .fajr
     }
 
     private static func isIntendedEarlyWorship(_ day: ActiveAlarmDay) -> Bool {
@@ -159,7 +176,9 @@ enum MorningDateIntentReducer {
         now: Date
     ) {
         let previousMode = WakeStateSelectionResolver.selectedMode(for: day)
-        let wasQuiet = previousMode == .quiet || override.quickWakeModeOverride == .quiet
+        let wasQuiet = WakeStateSelectionResolver.isQuiet(day)
+            || override.dateAlarmOverride == .quiet
+            || override.quickWakeModeOverride == .quiet
         let preservedMode = override.underlyingWakeModeBeforeQuiet
 
         switch mode {
@@ -180,7 +199,7 @@ enum MorningDateIntentReducer {
             WakeStateSelectionResolver.apply(.fajr, to: &override)
 
         case .quiet:
-            if previousMode != .quiet {
+            if !wasQuiet {
                 override.underlyingWakeModeBeforeQuiet = previousMode
             } else if override.underlyingWakeModeBeforeQuiet == nil {
                 override.underlyingWakeModeBeforeQuiet = day.effectiveConfig.underlyingWakeModeBeforeQuiet
@@ -208,6 +227,7 @@ enum MorningDateIntentReducer {
         override.suhoorTimeOverrideMinutesFromMidnight = nil
         override.bypassLatestWakeCap = true
         override.quietOverlay = false
+        override.dateAlarmOverride = nil
         if override.quickWakeModeOverride == .quiet {
             override.quickWakeModeOverride = override.underlyingWakeModeBeforeQuiet ?? .fajr
         }
@@ -278,6 +298,7 @@ enum MorningDateIntentReducer {
         override.wakeDeltaOverrideMinutes = nil
         override.quickWakeModeOverride = nil
         override.underlyingWakeModeBeforeQuiet = nil
+        override.dateAlarmOverride = nil
         override.earlyWakePurposeOverride = nil
         override.alarmDetailFastTypeOverride = nil
         override.alarmDetailAudioPlanOverride = nil
@@ -324,6 +345,7 @@ enum MorningDateIntentReducer {
         override.skipDay = false
         override.quickWakeModeOverride = mode
         override.underlyingWakeModeBeforeQuiet = nil
+        override.dateAlarmOverride = nil
         override.quietOverlay = false
         override.iftarEnabled = nil
     }

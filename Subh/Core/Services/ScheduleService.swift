@@ -689,8 +689,20 @@ final class ScheduleManager: ObservableObject {
     }
 
     private func syncWakeSession(for day: ActiveAlarmDay, now: Date) {
+        guard shouldPrepareWakeSession(for: day) else { return }
         guard let draft = WakeSessionPlanner.wakeSessionDraft(for: day) else { return }
         _ = wakeSessionStore.upsertScheduledSession(from: draft, now: now)
+    }
+
+    private func shouldPrepareWakeSession(for day: ActiveAlarmDay) -> Bool {
+        if day.effectiveConfig.dateAlarmOverride == .quiet {
+            return false
+        }
+        if settingsStore.settings.wakeAlarmsPausedIndefinitely,
+           day.effectiveConfig.dateAlarmOverride != .ringDespitePause {
+            return false
+        }
+        return true
     }
 
     var currentHijriAdjustmentYear: Int {
@@ -715,6 +727,10 @@ final class ScheduleManager: ObservableObject {
 
     var usesNotificationFallback: Bool {
         hasAnyEnabledAlarms && schedulingMode == .notifications
+    }
+
+    var wakeAlarmPolicy: GlobalWakeAlarmPolicy {
+        settingsStore.settings.globalWakeAlarmPolicy
     }
 
     var showsHome: Bool {
@@ -1783,6 +1799,39 @@ final class ScheduleManager: ObservableObject {
         return true
     }
 
+    @discardableResult
+    func setWakeAlarmsPausedIndefinitely(_ isPaused: Bool) async -> Bool {
+        guard settingsStore.settings.wakeAlarmsPausedIndefinitely != isPaused else { return true }
+        settingsStore.update { draft in
+            draft.wakeAlarmsPausedIndefinitely = isPaused
+        }
+        await refreshSchedules(force: true, reason: .settingsChanged)
+        return true
+    }
+
+    @discardableResult
+    func ringOnceDespitePause(on date: Date, timeZone: TimeZone = .current) async -> Bool {
+        let normalizedDate = DateHelpers.startOfDay(date, in: timeZone)
+        guard activeDay(for: normalizedDate, timeZone: timeZone) != nil else {
+            return false
+        }
+        alarmConfigStore.updateOverride(for: normalizedDate, timeZone: timeZone) { override in
+            override.skipDay = false
+            override.dateAlarmOverride = .ringDespitePause
+            override.quietOverlay = false
+            if override.quickWakeModeOverride == .quiet {
+                override.quickWakeModeOverride = override.underlyingWakeModeBeforeQuiet ?? .fajr
+            }
+            override.updatedAt = timeProvider.now()
+            if override.createdAt == nil {
+                override.createdAt = timeProvider.now()
+            }
+            override.overrideSource = .heroQuickMode
+        }
+        await rescheduleDay(normalizedDate, preferCached: false)
+        return true
+    }
+
     func requiresQuietConfirmationForWakeSession(on date: Date, timeZone: TimeZone = .current) -> Bool {
         #if DEBUG || INTERNAL_TESTING
         if wakeSessionTestingHarness.activeSimulationContext != nil {
@@ -1854,6 +1903,37 @@ final class ScheduleManager: ObservableObject {
     }
 
     @discardableResult
+    func confirmFastingToday(on date: Date, timeZone: TimeZone = .current) async -> Bool {
+        let normalizedDate = DateHelpers.startOfDay(date, in: timeZone)
+        guard let day = activeDay(for: normalizedDate, timeZone: timeZone) else {
+            return false
+        }
+        let session = ensureWakeSession(for: day)
+        let now = timeProvider.now()
+        _ = wakeSessionStore.confirmFastingIntent(
+            dateKey: day.dateKey,
+            wakeSessionID: session?.wakeSessionID,
+            now: now
+        )
+        let primaryIntent = day.tagResult.computedPrimaryIntent == .other
+            ? FastPrimaryIntent.voluntary
+            : day.tagResult.computedPrimaryIntent
+        fastLogStore.setStatus(
+            .inProgress,
+            for: day.dateKey,
+            intentSnapshot: FastIntentSnapshot(
+                primaryIntent: primaryIntent,
+                secondaryTags: day.tagResult.computedSecondaryTags
+            ),
+            now: now,
+            qadaEffect: nil,
+            source: "currentMorningFastingIntent"
+        )
+        refreshCurrentMorningHomeSnapshot(timeZone: timeZone)
+        return true
+    }
+
+    @discardableResult
     func confirmQuietForActiveWakeSession(on date: Date, timeZone: TimeZone = .current) async -> Bool {
         #if DEBUG || INTERNAL_TESTING
         if wakeSessionTestingHarness.activeSimulationContext != nil {
@@ -1904,22 +1984,6 @@ final class ScheduleManager: ObservableObject {
             cancelledScheduledEventIDs: cancelled.map(\.id),
             now: now
         )
-        if mode == .suhoor {
-            let primaryIntent = day.tagResult.computedPrimaryIntent == .other
-                ? FastPrimaryIntent.voluntary
-                : day.tagResult.computedPrimaryIntent
-            fastLogStore.setStatus(
-                .inProgress,
-                for: day.dateKey,
-                intentSnapshot: FastIntentSnapshot(
-                    primaryIntent: primaryIntent,
-                    secondaryTags: day.tagResult.computedSecondaryTags
-                ),
-                now: now,
-                qadaEffect: nil,
-                source: "currentMorningSuhoorIntent"
-            )
-        }
         refreshCurrentMorningHomeSnapshot(timeZone: timeZone)
         return true
     }

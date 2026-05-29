@@ -185,6 +185,15 @@ final class AlarmScheduler {
 
             for event in day.scheduledEvents where event.fireDate > now {
                 for deliveryKind in event.deliveryKinds {
+                    guard !shouldSuppressDelivery(
+                        day: day,
+                        event: event,
+                        deliveryKind: deliveryKind,
+                        settings: settings
+                    ) else {
+                        continue
+                    }
+
                     guard let channel = plannedChannel(for: event, deliveryKind: deliveryKind, mode: mode) else {
                         continue
                     }
@@ -208,6 +217,25 @@ final class AlarmScheduler {
         }
 
         return plans
+    }
+
+    private func shouldSuppressDelivery(
+        day: ActiveAlarmDay,
+        event: ScheduledEvent,
+        deliveryKind: ScheduleEventKind,
+        settings: AppSettings
+    ) -> Bool {
+        guard deliveryKind == .wake || event.wakeSessionRole == .primaryWake || event.wakeSessionRole == .wakeCheck else {
+            return false
+        }
+        if day.effectiveConfig.dateAlarmOverride == .quiet {
+            return true
+        }
+        if settings.wakeAlarmsPausedIndefinitely,
+           day.effectiveConfig.dateAlarmOverride != .ringDespitePause {
+            return true
+        }
+        return false
     }
 
     private func schedule(_ plan: PlannedScheduledEvent, settings: AppSettings) async -> Bool {

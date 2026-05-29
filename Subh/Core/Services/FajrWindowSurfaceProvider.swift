@@ -502,7 +502,7 @@ struct FajrWindowSurfaceProvider {
             secondaryItems.append(
                 FajrWindowValueItem(
                     id: "fasting-wake",
-                    label: "Suhoor wake",
+                    label: "Suhoor alarm",
                     value: TimeFormatters.timeFormatter.string(from: fastingWake),
                     emphasis: .secondary
                 )
@@ -552,7 +552,7 @@ struct FajrWindowSurfaceProvider {
             label = "Safer option"
             value = point.saferWake
         case .compareFasting:
-            label = "Suhoor wake"
+            label = "Suhoor alarm"
             value = point.fastingWake
         }
 

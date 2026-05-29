@@ -71,6 +71,7 @@ struct SubhHomeView: View {
                             locationDisplayText: scheduleManager.currentPrayerLocationDisplayText,
                             locationIconName: scheduleManager.currentPrayerLocationIconName,
                             currentDate: scheduleManager.currentDate,
+                            globalWakeAlarmPolicy: scheduleManager.wakeAlarmPolicy,
                             onCommitWakeAdjustment: { date, wakeTime in
                                 await scheduleManager.commitHeroWakeAdjustment(for: date, wakeTime: wakeTime)
                             },
@@ -95,6 +96,12 @@ struct SubhHomeView: View {
                             onConfirmFajrPrayer: { date in
                                 await scheduleManager.confirmFajrPrayer(on: date)
                             },
+                            onConfirmFastingToday: { date in
+                                await scheduleManager.confirmFastingToday(on: date)
+                            },
+                            onRingOnceDespitePause: { date in
+                                await scheduleManager.ringOnceDespitePause(on: date)
+                            },
                             onPreviewWakeAdjustment: previewHeroWakeAdjustment
                         ) {
                             if let entry = snapshot.tomorrow {
@@ -115,7 +122,7 @@ struct SubhHomeView: View {
                                 .padding(.horizontal, 2)
                                 .accessibilityAddTraits(.isHeader)
 
-                            NextTenMorningsCard(entries: snapshot.morningcast) { entry in
+                            NextTenMorningsCard(entries: snapshot.morningcast, globalWakeAlarmPolicy: scheduleManager.wakeAlarmPolicy) { entry in
                                 destination = .day(entry.schedule)
                             }
 
@@ -561,10 +568,13 @@ private struct TomorrowMorningHero: View {
     let locationDisplayText: String
     let locationIconName: String?
     let currentDate: Date
+    let globalWakeAlarmPolicy: GlobalWakeAlarmPolicy
     let onCommitWakeAdjustment: (Date, Date) async -> Bool
     let onSelectWakeMode: (Date, QuickWakeMode) async -> Bool
     let onConfirmAwake: (Date, WakeSessionMode) async -> Bool
     let onConfirmFajrPrayer: (Date) async -> Bool
+    let onConfirmFastingToday: (Date) async -> Bool
+    let onRingOnceDespitePause: (Date) async -> Bool
     let onPreviewWakeAdjustment: (Date, Date?) -> Void
     let onOpen: () -> Void
 
@@ -582,7 +592,8 @@ private struct TomorrowMorningHero: View {
             permissionSummary: permissionSummary,
             locationDisplayText: locationDisplayText,
             locationIconName: locationIconName,
-            currentDate: currentDate
+            currentDate: currentDate,
+            globalWakeAlarmPolicy: globalWakeAlarmPolicy
         )
         let display = tentativeWakeTime.map {
             MorningHomePresentation.heroDisplay(adjusting: baseDisplay, tentativeWakeTime: $0)
@@ -636,27 +647,22 @@ private struct TomorrowMorningHero: View {
             )
                 .padding(.top, display.fajrWindowVisualMode.rendersRange ? metrics.windowToRelationGap : metrics.primaryToRelationGap)
 
-            MorningHeroActionSlotView(
-                display: display.actionSlot,
+            MorningHeroSlot6View(
+                actionSlot: display.actionSlot,
+                quickWakeModeOptions: display.quickWakeModeOptions,
                 metrics: metrics,
-                isDisabled: isCommittingActionSlot || isSelectingWakeMode || isCommittingWakeAdjustment
-            ) {
-                commitActionSlot(display.actionSlot.action)
-            }
-            .padding(.top, metrics.relationToActionSlotGap)
-
-            if !display.quickWakeModeOptions.isEmpty {
-                MorningHeroQuickWakeModeSelector(
-                    options: display.quickWakeModeOptions,
-                    metrics: metrics,
-                    highlightNamespace: quickSelectorHighlight,
-                    reduceMotion: reduceMotion,
-                    isDisabled: isSelectingWakeMode || isCommittingWakeAdjustment
-                ) { mode in
+                highlightNamespace: quickSelectorHighlight,
+                reduceMotion: reduceMotion,
+                isActionDisabled: isCommittingActionSlot || isSelectingWakeMode || isCommittingWakeAdjustment,
+                isSelectorDisabled: isSelectingWakeMode || isCommittingWakeAdjustment,
+                onAction: {
+                    commitActionSlot(display.actionSlot.action)
+                },
+                onSelectWakeMode: { mode in
                     selectWakeMode(mode)
                 }
-                .padding(.top, metrics.relationToSelectorGap)
-            }
+            )
+            .padding(.top, metrics.relationToActionSlotGap)
         }
         .frame(maxWidth: metrics.maxContentWidth)
         .padding(.horizontal, DesignTokens.spacingS)
@@ -790,6 +796,22 @@ private struct TomorrowMorningHero: View {
                     isCommittingActionSlot = false
                 }
             }
+        case .confirmFastingToday:
+            isCommittingActionSlot = true
+            Task {
+                _ = await onConfirmFastingToday(date)
+                await MainActor.run {
+                    isCommittingActionSlot = false
+                }
+            }
+        case .ringOnceDespitePause:
+            isCommittingActionSlot = true
+            Task {
+                _ = await onRingOnceDespitePause(date)
+                await MainActor.run {
+                    isCommittingActionSlot = false
+                }
+            }
         }
     }
 
@@ -824,6 +846,43 @@ private struct TomorrowMorningHero: View {
             onPreviewWakeAdjustment(date, clamped)
         }
         commitWakeAdjustment(clamped)
+    }
+}
+
+private struct MorningHeroSlot6View: View {
+    let actionSlot: MorningHeroActionSlotDisplay
+    let quickWakeModeOptions: [MorningHeroQuickWakeModeOption]
+    let metrics: MorningHeroMetrics
+    let highlightNamespace: Namespace.ID
+    let reduceMotion: Bool
+    let isActionDisabled: Bool
+    let isSelectorDisabled: Bool
+    let onAction: () -> Void
+    let onSelectWakeMode: (QuickWakeMode) -> Void
+
+    var body: some View {
+        Group {
+            if actionSlot.style != .empty {
+                MorningHeroActionSlotView(
+                    display: actionSlot,
+                    metrics: metrics,
+                    isDisabled: isActionDisabled,
+                    onAction: onAction
+                )
+            } else if !quickWakeModeOptions.isEmpty {
+                MorningHeroQuickWakeModeSelector(
+                    options: quickWakeModeOptions,
+                    metrics: metrics,
+                    highlightNamespace: highlightNamespace,
+                    reduceMotion: reduceMotion,
+                    isDisabled: isSelectorDisabled,
+                    onSelect: onSelectWakeMode
+                )
+            } else {
+                Color.clear
+            }
+        }
+        .frame(maxWidth: metrics.maxContentWidth, minHeight: metrics.actionSlotHeight, alignment: .center)
     }
 }
 
@@ -2059,13 +2118,17 @@ private struct HomeFloatingIconButton: View {
 
 private struct NextTenMorningsCard: View {
     let entries: [WakeRowEntry]
+    let globalWakeAlarmPolicy: GlobalWakeAlarmPolicy
     let onSelect: (WakeRowEntry) -> Void
 
     @State private var isExpanded = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        let forecast = MorningHomePresentation.nextTenMorningsSnapshot(from: entries)
+        let forecast = MorningHomePresentation.nextTenMorningsSnapshot(
+            from: entries,
+            globalWakeAlarmPolicy: globalWakeAlarmPolicy
+        )
 
         AppGlassSurface(
             variant: WakeGlassTheme.homeSurfaceVariant,

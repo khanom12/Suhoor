@@ -10,6 +10,7 @@ enum DeliveryPlanningSkipReason: String, Codable, Sendable {
     case skippedPast
     case noDeliveryChannel
     case deliverySuppressed
+    case wakeAlarmsPaused
 }
 
 struct SkippedAlarmDelivery: Equatable, Sendable {
@@ -292,6 +293,25 @@ enum DeliveryReconciliation {
                 }
 
                 for deliveryKind in event.deliveryKinds {
+                    if let suppressionReason = wakeDeliverySuppressionReason(
+                        day: day,
+                        event: event,
+                        deliveryKind: deliveryKind,
+                        settings: settings
+                    ) {
+                        skippedDeliveries.append(
+                            SkippedAlarmDelivery(
+                                dateKey: day.dateKey,
+                                eventID: event.id,
+                                eventType: event.type,
+                                deliveryKind: deliveryKind,
+                                fireDate: event.fireDate,
+                                reason: suppressionReason
+                            )
+                        )
+                        continue
+                    }
+
                     guard let channel = channel(
                         for: event,
                         deliveryKind: deliveryKind,
@@ -347,6 +367,25 @@ enum DeliveryReconciliation {
         now: Date
     ) -> [ExpectedAlarmDelivery] {
         plan(snapshot: snapshot, settings: settings, mode: mode, now: now).expectedDeliveries
+    }
+
+    private static func wakeDeliverySuppressionReason(
+        day: ActiveAlarmDay,
+        event: ScheduledEvent,
+        deliveryKind: ScheduleEventKind,
+        settings: AppSettings
+    ) -> DeliveryPlanningSkipReason? {
+        guard deliveryKind == .wake || event.wakeSessionRole == .primaryWake || event.wakeSessionRole == .wakeCheck else {
+            return nil
+        }
+        if day.effectiveConfig.dateAlarmOverride == .quiet {
+            return .deliverySuppressed
+        }
+        if settings.wakeAlarmsPausedIndefinitely,
+           day.effectiveConfig.dateAlarmOverride != .ringDespitePause {
+            return .wakeAlarmsPaused
+        }
+        return nil
     }
 
     static func report(

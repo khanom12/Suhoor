@@ -153,7 +153,9 @@ struct SettingsRootView: View {
         case .hijriCalendarCorrections:
             return SettingsSummaryFormatter.hijriCorrectionsSummary(scheduleManager: scheduleManager)
         case .alarmBehavior:
+            let pause = settingsStore.settings.wakeAlarmsPausedIndefinitely ? "Alarms paused" : "Alarms active"
             return [
+                pause,
                 "Sounds \(ProductSurfacePresentation.soundSummaryText(settings: settingsStore.settings))",
                 "Reserve \(settingsStore.settings.clampedReserveBeforeEndMinutes) min",
                 "Fajr start \(settingsStore.settings.fajrStartSoundSelectionGlobal.displayName)"
@@ -345,11 +347,23 @@ struct AlarmBehaviorSettingsView: View {
     var body: some View {
         SettingsScrollPage {
             SettingsGroup(
+                title: "Wake Alarm Pause",
+                supportingText: "Pause wake alarms indefinitely while keeping your morning plans saved."
+            ) {
+                SettingsRow {
+                    Toggle(
+                        draftSettings.wakeAlarmsPausedIndefinitely ? "Alarms paused" : "Alarms active",
+                        isOn: pauseBinding
+                    )
+                }
+            }
+
+            SettingsGroup(
                 title: "Wake Sounds",
                 supportingText: "Choose the sound used before Fajr, at Fajr start, during Fajr, after Fajr, and for fixed wakes."
             ) {
                 soundPickerRow(
-                    title: "Suhoor wake sound",
+                    title: "Suhoor alarm sound",
                     binding: soundBinding(\.preFajrWakeSoundSelectionGlobal)
                 )
                 AppGroupDivider()
@@ -369,7 +383,7 @@ struct AlarmBehaviorSettingsView: View {
                 )
                 AppGroupDivider()
                 soundPickerRow(
-                    title: "Fixed wake sound",
+                    title: "Fixed alarm sound",
                     binding: soundBinding(\.fixedWakeSoundSelectionGlobal)
                 )
             }
@@ -390,7 +404,7 @@ struct AlarmBehaviorSettingsView: View {
                 }
             }
         }
-        .navigationTitle("Wake Sounds & Reserve")
+        .navigationTitle("Wake Alarms")
         .navigationBarTitleDisplayMode(.inline)
         .task {
             loadDraftFromStore()
@@ -428,6 +442,15 @@ struct AlarmBehaviorSettingsView: View {
             normalizedDraftSettings.clampedReserveBeforeEndMinutes
         }, set: { newValue in
             draftSettings.reserveBeforeEndMinutes = max(1, newValue)
+            scheduleDraftCommit()
+        })
+    }
+
+    private var pauseBinding: Binding<Bool> {
+        Binding(get: {
+            draftSettings.wakeAlarmsPausedIndefinitely
+        }, set: { newValue in
+            draftSettings.wakeAlarmsPausedIndefinitely = newValue
             scheduleDraftCommit()
         })
     }

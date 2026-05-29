@@ -1868,7 +1868,7 @@ struct ScheduleManagerHijriTests {
         let startWake = manager.activeDay(for: target.date, timeZone: timeZone)?.schedule.wakeDate
         #expect(startWake ?? .distantPast >= fajrStart)
         #expect(startWake ?? .distantFuture <= fajrEnd)
-        #expect(startDisplay.detailText == "Wake up as Fajr begins")
+        #expect(startDisplay.detailText == "As Fajr begins")
         #expect(startDisplay.relationTone == .normal)
         #expect(startDisplay.fajrWindowVisualMode == .interactiveWithinFajrWindow)
         #expect(startDisplay.wakeAdjustmentEnabled)
@@ -1887,7 +1887,7 @@ struct ScheduleManagerHijriTests {
         let endWake = manager.activeDay(for: target.date, timeZone: timeZone)?.schedule.wakeDate
         #expect(endWake ?? .distantPast >= fajrStart)
         #expect(endWake ?? .distantFuture <= fajrEnd)
-        #expect(endDisplay.detailText == "Wake up as Fajr ends")
+        #expect(endDisplay.detailText == "As Fajr ends")
         #expect(endDisplay.relationTone == .urgentRed)
         #expect(endDisplay.fajrWindowVisualMode == .interactiveWithinFajrWindow)
         #expect(endDisplay.wakeAdjustmentEnabled)
@@ -1949,7 +1949,7 @@ struct ScheduleManagerHijriTests {
         }
 
         #expect(earlyDisplay.fajrWindowVisualMode == .interactiveEarlyWorshipWindow)
-        #expect(earlyDisplay.detailText == "Wake up 30 min before Fajr begins")
+        #expect(earlyDisplay.detailText == "30 min before Fajr begins")
 
         let defaultWakeRule = alarmConfigStore.defaults.defaultWakeRule
         let committed = await manager.commitHeroWakeAdjustment(
@@ -1975,7 +1975,7 @@ struct ScheduleManagerHijriTests {
         #expect(updated.schedule.wakeDate >= finalThirdStart)
         #expect(updated.schedule.wakeDate.timeIntervalSince(finalThirdStart) < 60)
         #expect(updatedDisplay.fajrWindowVisualMode == .interactiveEarlyWorshipWindow)
-        #expect(updatedDisplay.detailText == "Wake up for the last third of the night")
+        #expect(updatedDisplay.detailText == "At the last third of the night")
         #expect((updatedDisplay.wakeWindowPositionRatio ?? 1) < 0.01)
     }
 
@@ -2040,7 +2040,7 @@ struct ScheduleManagerHijriTests {
         #expect(fastDay.effectiveConfig.quickWakeModeOverride == .suhoor)
         #expect(fastDisplay.selectedQuickWakeMode == .suhoor)
         #expect(fastDisplay.fajrWindowVisualMode == .interactiveEarlyWorshipWindow)
-        #expect(fastDisplay.detailText == "Wake up 30 min before Fajr begins")
+        #expect(fastDisplay.detailText == "30 min before Fajr begins")
         #expect(abs(fastDay.schedule.wakeDate.timeIntervalSince(expectedFastWake)) < 60)
         #expect(fastPoint?.primaryWake == fastDay.schedule.wakeDate)
 
@@ -2086,7 +2086,7 @@ struct ScheduleManagerHijriTests {
         guard let quietOverride = alarmConfigStore.override(for: target.date, timeZone: timeZone),
               let quietDay = manager.activeDay(for: target.date, timeZone: timeZone),
               let quietDisplay = heroDisplay(for: target.date, manager: manager, timeZone: timeZone) else {
-            Issue.record("Expected the selected Quiet mode to persist and re-resolve.")
+            Issue.record("Expected Quiet to persist as a date alarm override and re-resolve.")
             return
         }
 
@@ -2097,7 +2097,8 @@ struct ScheduleManagerHijriTests {
             $0.id == quietDay.dateKey
         }
 
-        #expect(quietOverride.quickWakeModeOverride == .quiet)
+        #expect(quietOverride.dateAlarmOverride == .quiet)
+        #expect(quietOverride.quickWakeModeOverride == .suhoor)
         #expect(quietOverride.underlyingWakeModeBeforeQuiet == .suhoor)
         #expect(quietOverride.earlyWakePurposeOverride == .fast)
         #expect(quietOverride.alarmDetailFastTypeOverride == .qada)
@@ -2108,14 +2109,16 @@ struct ScheduleManagerHijriTests {
         #expect(quietOverride.suhoorEnabled == false)
         #expect(quietOverride.reminderEnabled == false)
         #expect(quietOverride.fajrEnabled == false)
-        #expect(quietDay.effectiveConfig.quickWakeModeOverride == .quiet)
-        #expect(quietDisplay.primaryText == "Quiet mode")
-        #expect(quietDisplay.detailText == "No alarm will ring for tomorrow")
+        #expect(quietDay.effectiveConfig.dateAlarmOverride == .quiet)
+        #expect(quietDay.effectiveConfig.quickWakeModeOverride == .suhoor)
+        #expect(quietDisplay.selectedQuickWakeMode == .suhoor)
+        #expect(quietDisplay.primaryText == "Quiet")
+        #expect(quietDisplay.detailText.hasPrefix("Alarm saved for"))
         #expect(quietDisplay.fajrWindowVisualMode == .staticEarlyWorshipWindow)
         #expect(quietDisplay.wakeAdjustmentEnabled == false)
         #expect(quietPoint?.isSkipped == true)
         if let quietMorningcastEntry {
-            #expect(quietMorningcastEntry.config.quickWakeModeOverride == .quiet || quietMorningcastEntry.config.skipDay)
+            #expect(quietMorningcastEntry.config.dateAlarmOverride == .quiet || quietMorningcastEntry.config.skipDay)
         }
 
         let restoredFast = await manager.selectHeroWakeMode(for: target.date, mode: .suhoor, timeZone: timeZone)

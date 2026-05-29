@@ -512,9 +512,9 @@ final class WakeSessionTestingHarness: ObservableObject {
         case .atFajrBegins:
             return "Expected: The Hero should show that Fajr has begun."
         case .beforePrimaryWake:
-            return "Expected: The Hero should show the planned wake time before the alarm fires."
+            return "Expected: The Hero should show the planned alarm time before it fires."
         case .atPrimaryWake, .primaryAlarmFired:
-            return "Expected: The Hero should show \"I'm awake for Fajr\" while awake is still unconfirmed."
+            return "Expected: The Hero should show \"Time to wake\" and one \"I’m awake\" action while awake is still unconfirmed."
         case .wakeCheck1Pending, .wakeCheck2Pending, .wakeCheck3Pending, .wakeCheck4Pending, .wakeCheck5Pending:
             return "Expected: Wake Checks should remain pending until the in-app awake confirmation."
         case .awakeConfirmed:
@@ -532,9 +532,9 @@ final class WakeSessionTestingHarness: ObservableObject {
         case .atFinalThirdBegins, .suhoorWindowOpen:
             return "Expected: The Hero should show Suhoor context before Fajr."
         case .beforePrimarySuhoorWake:
-            return "Expected: The Hero should show the planned Suhoor wake time."
+            return "Expected: The Hero should show the planned Suhoor alarm time."
         case .atPrimarySuhoorWake, .primarySuhoorAlarmFired:
-            return "Expected: The Hero should show \"I'm awake for Suhoor.\""
+            return "Expected: The Hero should show \"Time to wake\" and one \"I’m awake\" action for Suhoor."
         case .suhoorAwakeConfirmed:
             return "Expected: Suhoor awake should be confirmed without marking Fajr prayed."
         case .fastingIntentConfirmed:
@@ -548,9 +548,9 @@ final class WakeSessionTestingHarness: ObservableObject {
         case .quietFajrActive:
             return "Expected: Quiet should be available without changing the underlying Fajr meaning."
         case .quietWakeChecksActive:
-            return "Expected: Tapping Quiet should show the stop Wake Checks sheet."
+            return "Expected: Tapping Quiet should show the active-session confirmation sheet."
         case .quietUserTapsQuiet, .quietConfirmationSheetShown:
-            return "Expected: The active-session confirmation should let you keep checks or stop for this morning."
+            return "Expected: The active-session confirmation should let you keep checks or set Quiet for this morning."
         case .quietConfirmed, .quietMorningLogged:
             return "Expected: quietMorning should be logged and no missed prayer should be created."
         case nil:
@@ -740,7 +740,7 @@ final class WakeSessionTestingHarness: ObservableObject {
             now: now
         )
         activeSimulationContext?.jumpPoint = plan.mode == .suhoor ? .primarySuhoorAlarmFired : .primaryAlarmFired
-        statusMessage = "Alarm stopped. Awake is still unconfirmed."
+        statusMessage = "Alarm dismissed. Awake confirmed."
         refreshSurfaces()
     }
 
@@ -1398,6 +1398,7 @@ final class WakeSessionTestingHarness: ObservableObject {
             defaultWakeRule: baseConfig.defaultWakeRule,
             resolvedWakeRule: baseConfig.resolvedWakeRule,
             wakeRuleWasOverridden: true,
+            dateAlarmOverride: selectedMode == .quiet ? .quiet : baseConfig.dateAlarmOverride,
             quickWakeModeOverride: selectedMode,
             underlyingWakeModeBeforeQuiet: selectedMode == .quiet ? .fajr : nil,
             earlyWakePurposeOverride: selectedMode == .suhoor ? .fast : nil,

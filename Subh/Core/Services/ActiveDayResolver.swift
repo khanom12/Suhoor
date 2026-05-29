@@ -456,6 +456,7 @@ final class ActiveDayResolver {
         let defaultWakeRule = defaultConfig.defaultWakeRule
         let overrideWakeRule = override?.resolvedWakeRule(defaults: defaultConfig)
         let resolvedWakeRule = overrideWakeRule ?? defaultWakeRule
+        let dateAlarmOverride = resolvedDateAlarmOverride(from: override)
 
         let baseSuhoorEnabled = defaultsActive && !defaultConfig.deletedDates.contains(key) ? defaultConfig.suhoorEnabledDefault : false
         let baseReminderEnabled = defaultsActive && !defaultConfig.deletedDates.contains(key) ? defaultConfig.reminderEnabledDefault : false
@@ -511,7 +512,9 @@ final class ActiveDayResolver {
             defaultWakeRule: defaultWakeRule,
             resolvedWakeRule: resolvedWakeRule,
             wakeRuleWasOverridden: overrideWakeRule != nil,
+            dateAlarmOverride: dateAlarmOverride,
             quickWakeModeOverride: override?.quickWakeModeOverride,
+            underlyingWakeModeBeforeQuiet: override?.underlyingWakeModeBeforeQuiet,
             earlyWakePurposeOverride: override?.earlyWakePurposeOverride,
             alarmDetailFastTypeOverride: override?.alarmDetailFastTypeOverride,
             alarmDetailAudioPlanOverride: override?.alarmDetailAudioPlanOverride,
@@ -533,5 +536,15 @@ final class ActiveDayResolver {
     nonisolated static func sourceSummary(from provenances: [ResolvedScheduledDateProvenance]) -> String {
         let labels = provenances.map(\.label)
         return Array(NSOrderedSet(array: labels)).compactMap { $0 as? String }.joined(separator: " • ")
+    }
+
+    nonisolated private static func resolvedDateAlarmOverride(from override: DailyAlarmOverride?) -> DateAlarmOverride {
+        if let explicit = override?.dateAlarmOverride, explicit != .none {
+            return explicit
+        }
+        if override?.quickWakeModeOverride == .quiet || override?.quietOverlay == true {
+            return .quiet
+        }
+        return .none
     }
 }

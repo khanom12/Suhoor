@@ -77,6 +77,7 @@ struct WakeSession: Codable, Equatable, Identifiable, Sendable {
     var wakeCheckScheduledEventIDs: [String]
     var status: WakeSessionStatus
     var confirmedAt: Date?
+    var acknowledgementSource: WakeAcknowledgementSource?
     var expiredAt: Date?
     var cancelledAt: Date?
     var quietReason: String?
@@ -114,6 +115,7 @@ struct WakeSession: Codable, Equatable, Identifiable, Sendable {
         self.wakeCheckScheduledEventIDs = draft.wakeCheckScheduledEventIDs
         self.status = .scheduled
         self.confirmedAt = nil
+        self.acknowledgementSource = nil
         self.expiredAt = nil
         self.cancelledAt = nil
         self.quietReason = nil
@@ -164,6 +166,7 @@ struct WakeSession: Codable, Equatable, Identifiable, Sendable {
         case wakeCheckScheduledEventIDs
         case status
         case confirmedAt
+        case acknowledgementSource
         case expiredAt
         case cancelledAt
         case quietReason
@@ -193,6 +196,7 @@ struct WakeSession: Codable, Equatable, Identifiable, Sendable {
         wakeCheckScheduledEventIDs = try container.decode([String].self, forKey: .wakeCheckScheduledEventIDs)
         status = try container.decode(WakeSessionStatus.self, forKey: .status)
         confirmedAt = try container.decodeIfPresent(Date.self, forKey: .confirmedAt)
+        acknowledgementSource = try container.decodeIfPresent(WakeAcknowledgementSource.self, forKey: .acknowledgementSource)
         expiredAt = try container.decodeIfPresent(Date.self, forKey: .expiredAt)
         cancelledAt = try container.decodeIfPresent(Date.self, forKey: .cancelledAt)
         quietReason = try container.decodeIfPresent(String.self, forKey: .quietReason)
@@ -541,7 +545,18 @@ final class WakeSessionStore: ObservableObject {
             appendUnique(&session.stoppedScheduledEventIDs, value: scheduledEventID)
         }
         if !session.status.isTerminal {
-            session.status = .unconfirmed
+            session.status = .confirmedAwake
+            session.confirmedWakeMode = session.mode
+            session.confirmedAt = now
+            session.acknowledgementSource = .systemAlarmDismiss
+            updateMorningLog(dateKey: session.dateKey, now: now) { log in
+                switch session.mode {
+                case .fajr:
+                    log.fajrWakeOutcome = .confirmedAwakeForFajr
+                case .suhoor:
+                    log.suhoorWakeOutcome = .confirmedAwakeForSuhoor
+                }
+            }
         }
         let record = appendRecord(
             dateKey: session.dateKey,
@@ -563,12 +578,14 @@ final class WakeSessionStore: ObservableObject {
         wakeSessionID: String,
         mode: WakeSessionMode,
         cancelledScheduledEventIDs: [String],
+        source: WakeAcknowledgementSource = .inAppButton,
         now: Date = Date()
     ) -> WakeSession? {
         guard var session = sessionsByID[wakeSessionID] else { return nil }
         session.status = .confirmedAwake
         session.confirmedWakeMode = mode
         session.confirmedAt = now
+        session.acknowledgementSource = source
         session.cancelledAt = nil
         session.quietReason = nil
 
@@ -583,8 +600,6 @@ final class WakeSessionStore: ObservableObject {
             confirmationType = .confirmedAwakeForSuhoor
             updateMorningLog(dateKey: session.dateKey, now: now) { log in
                 log.suhoorWakeOutcome = .confirmedAwakeForSuhoor
-                log.fastingIntentOutcome = .fastingIntentConfirmed
-                log.fastingDayPlanned = true
             }
         }
 
@@ -597,18 +612,6 @@ final class WakeSessionStore: ObservableObject {
             scenarioID: session.scenarioID
         )
         appendUnique(&session.operationalLogIDs, value: confirmationRecord.id)
-
-        if mode == .suhoor {
-            let fastingRecord = appendRecord(
-                dateKey: session.dateKey,
-                wakeSessionID: wakeSessionID,
-                type: .fastingIntentConfirmed,
-                timestamp: now,
-                isTest: session.isTest,
-                scenarioID: session.scenarioID
-            )
-            appendUnique(&session.operationalLogIDs, value: fastingRecord.id)
-        }
 
         if !cancelledScheduledEventIDs.isEmpty {
             let cancelRecord = appendRecord(
@@ -625,6 +628,32 @@ final class WakeSessionStore: ObservableObject {
         session.updatedAt = now
         updateSession(session)
         return session
+    }
+
+    @discardableResult
+    func confirmFastingIntent(
+        dateKey: String,
+        wakeSessionID: String?,
+        now: Date = Date()
+    ) -> MorningLogEntry {
+        updateMorningLog(dateKey: dateKey, now: now) { log in
+            log.fastingIntentOutcome = .fastingIntentConfirmed
+            log.fastingDayPlanned = true
+        }
+        let record = appendRecord(
+            dateKey: dateKey,
+            wakeSessionID: wakeSessionID,
+            type: .fastingIntentConfirmed,
+            timestamp: now,
+            isTest: wakeSessionID.flatMap { sessionsByID[$0]?.isTest } ?? false,
+            scenarioID: wakeSessionID.flatMap { sessionsByID[$0]?.scenarioID }
+        )
+        if let wakeSessionID, var session = sessionsByID[wakeSessionID] {
+            appendUnique(&session.operationalLogIDs, value: record.id)
+            session.updatedAt = now
+            updateSession(session)
+        }
+        return morningLogsByDateKey[dateKey] ?? MorningLogEntry(dateKey: dateKey, updatedAt: now)
     }
 
     @discardableResult
@@ -926,6 +955,7 @@ enum WakeSessionPlanner {
 
     static func wakeSessionDraft(for day: ActiveAlarmDay) -> WakeSessionDraft? {
         guard !day.effectiveConfig.skipDay else { return nil }
+        guard day.effectiveConfig.dateAlarmOverride != .quiet else { return nil }
         guard let primary = primaryWakeEvent(for: day) else { return nil }
         let wakeChecks = wakeCheckEvents(for: day)
         let mode = wakeSessionMode(for: day)

@@ -483,6 +483,8 @@ enum MonthPlanningPresentation {
             return (wakeTime, nil)
         case .quietSuppressed:
             return (nil, "Quiet")
+        case .pausedSuppressed:
+            return (nil, "Paused")
         case .offWithAnchor, .noAnchor:
             return (nil, "No alarm")
         case .unavailable:

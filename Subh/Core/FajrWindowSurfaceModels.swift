@@ -66,22 +66,22 @@ enum FajrWindowOverlay: String, CaseIterable, Identifiable, Hashable, Sendable {
     var title: String {
         switch self {
         case .myWake:
-            return "My wake"
+            return "My alarm"
         case .compareSafe:
             return "Safer option"
         case .compareFasting:
-            return "Suhoor wake"
+            return "Suhoor alarm"
         }
     }
 
     var accessibilityHint: String {
         switch self {
         case .myWake:
-            return "Shows your planned wake across the selected mornings."
+            return "Shows your planned alarm across the selected mornings."
         case .compareSafe:
-            return "Compares your wake with a safer option that keeps the same lead before the supported Fajr end."
+            return "Compares your alarm with a safer option that keeps the same lead before the supported Fajr end."
         case .compareFasting:
-            return "Compares your wake with the fasting wake when that plan differs."
+            return "Compares your alarm with the Suhoor alarm when that plan differs."
         }
     }
 }

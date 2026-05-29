@@ -19,7 +19,7 @@ enum ScheduleEventKind: String, CaseIterable, Codable, Sendable {
 
     var body: String {
         switch self {
-        case .wake: return "Time to wake up before Fajr."
+        case .wake: return "Time to wake"
         case .reminder: return "Fajr is coming soon."
         case .boundary: return "Fajr has started."
         case .iftarNotification, .iftarAlarm, .iftarAdhan: return "Maghrib has begun."
