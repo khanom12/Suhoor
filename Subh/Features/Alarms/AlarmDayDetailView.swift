@@ -16,6 +16,7 @@ struct AlarmDayDetailView: View {
     @State private var isSelectingFastType = false
     @State private var isTogglingFajrAdhan = false
     @State private var isResettingOverride = false
+    @State private var isShowingAlarmStateActions = false
     @Namespace private var quickSelectorHighlight
 
     private let timeZone: TimeZone = .current
@@ -55,6 +56,7 @@ struct AlarmDayDetailView: View {
             isSelectingFastType = false
             isTogglingFajrAdhan = false
             isResettingOverride = false
+            isShowingAlarmStateActions = false
         }
         .onChange(of: currentSchedule.wakeDate) { _, _ in
             if !isCommittingWakeAdjustment {
@@ -195,6 +197,15 @@ struct AlarmDayDetailView: View {
             fastType: fastType,
             fajrAdhan: fajrAdhan
         ))
+        .confirmationDialog(
+            alarmStateDialogTitle(for: display),
+            isPresented: $isShowingAlarmStateActions,
+            titleVisibility: .visible
+        ) {
+            alarmStateDialogActions(for: display)
+        } message: {
+            Text(alarmStateDialogMessage(for: display))
+        }
     }
 
     private var activeDay: ActiveAlarmDay? {
@@ -247,6 +258,7 @@ struct AlarmDayDetailView: View {
             || isSelectingFastType
             || isTogglingFajrAdhan
             || isResettingOverride
+            || isShowingAlarmStateActions
     }
 
     private var heroModeAnimation: Animation {
@@ -297,17 +309,30 @@ struct AlarmDayDetailView: View {
             .accessibilityIdentifier("alarmDetail.dateLine")
     }
 
-    @ViewBuilder
     private func primaryWakeRow(
         display: MorningHomeHeroDisplay,
         metrics: MorningHeroMetrics
     ) -> some View {
-        MorningHeroPrimaryWakeRow(
+        let row = MorningHeroPrimaryWakeRow(
             display: display,
             metrics: metrics,
             rollsActiveWakeTime: tentativeWakeTime == nil,
             reduceMotion: reduceMotion
         )
+
+        return Group {
+            if alarmStateActionsAreAvailable(for: display) {
+                Button {
+                    isShowingAlarmStateActions = true
+                } label: {
+                    row
+                }
+                .buttonStyle(.plain)
+                .disabled(controlsAreBusy)
+            } else {
+                row
+            }
+        }
         .accessibilityIdentifier("alarmDetail.primaryWakeTime")
     }
 
@@ -771,6 +796,93 @@ struct AlarmDayDetailView: View {
                 }
             }
         }
+    }
+
+    private func alarmStateActionsAreAvailable(for display: MorningHomeHeroDisplay) -> Bool {
+        guard wakeEntry != nil else { return false }
+        guard display.primaryText != "Time to wake" else { return false }
+
+        switch display.wakeState {
+        case .active:
+            return display.primaryTime != nil && display.actionSlot.style == .empty
+        case .quietHours:
+            return true
+        case .offWithAnchor:
+            return display.statusText == "Alarms paused" || display.primaryText == "Alarms paused"
+        case .noAlarm, .unavailable:
+            return false
+        }
+    }
+
+    private func alarmStateDialogTitle(for display: MorningHomeHeroDisplay) -> String {
+        switch display.wakeState {
+        case .quietHours:
+            return quietTitle(for: display)
+        case .offWithAnchor where display.statusText == "Alarms paused" || display.primaryText == "Alarms paused":
+            return "Alarms paused"
+        default:
+            return "\(display.primaryText) alarm is on"
+        }
+    }
+
+    private func alarmStateDialogMessage(for display: MorningHomeHeroDisplay) -> String {
+        switch display.wakeState {
+        case .quietHours:
+            return "Subh won’t ring. Your alarm is saved."
+        case .offWithAnchor where display.statusText == "Alarms paused" || display.primaryText == "Alarms paused":
+            return "Subh won’t ring until you resume wake alarms."
+        default:
+            return "Subh will ring \(targetMorningPhrase(for: display))."
+        }
+    }
+
+    @ViewBuilder
+    private func alarmStateDialogActions(for display: MorningHomeHeroDisplay) -> some View {
+        switch display.wakeState {
+        case .quietHours:
+            Button("Turn alarm on") {
+                selectWakeMode(display.selectedQuickWakeMode ?? .fajr)
+            }
+            Button("Keep quiet", role: .cancel) {}
+        case .offWithAnchor where display.statusText == "Alarms paused" || display.primaryText == "Alarms paused":
+            Button(ringOnceTitle(for: display)) {
+                ringOnceDespitePause()
+            }
+            Button("Resume alarms") {
+                resumeAlarms()
+            }
+            Button("Keep paused", role: .cancel) {}
+        default:
+            Button(quietTitle(for: display)) {
+                selectWakeMode(.quiet)
+            }
+            Button("Cancel", role: .cancel) {}
+        }
+    }
+
+    private func ringOnceDespitePause() {
+        let date = currentSchedule.date
+        Task {
+            _ = await scheduleManager.ringOnceDespitePause(on: date, timeZone: timeZone)
+        }
+    }
+
+    private func resumeAlarms() {
+        Task {
+            _ = await scheduleManager.setWakeAlarmsPausedIndefinitely(false)
+        }
+    }
+
+    private func quietTitle(for display: MorningHomeHeroDisplay) -> String {
+        display.title == "Tomorrow" ? "Quiet tomorrow" : "Quiet this morning"
+    }
+
+    private func ringOnceTitle(for display: MorningHomeHeroDisplay) -> String {
+        display.title == "Tomorrow" ? "Ring tomorrow only" : "Ring this morning only"
+    }
+
+    private func targetMorningPhrase(for display: MorningHomeHeroDisplay) -> String {
+        display.title == "Tomorrow" ? "tomorrow morning" : "this morning"
     }
 
     private func adjustWakeAccessibility(

@@ -1,6 +1,6 @@
 ## Context
 
-The May 29 Desktop spec bundle makes `subh-quiet-pause-hero-wake-flow-alignment-spec-v1.md` normative for this pass. The current app already has the important building blocks: `WakeStateSelectionResolver`, `MorningWakeResolutionService`, `MorningPlanStore`, `WakeSessionStore`, `WakeSessionTestingHarness`, `MorningHomePresentation`, `SubhHomeView`, `AlarmDayDetailView`, forecast/month presentation models, Settings surfaces, and scheduling/reconciliation services. Some legacy naming remains intentionally compatible with earlier storage and AlarmKit identifier choices.
+The May 30 Desktop spec bundle makes `subh-quiet-pause-hero-wake-flow-alignment-spec-v2.md` normative for this pass. The current app already has the important building blocks: `WakeStateSelectionResolver`, `MorningWakeResolutionService`, `MorningPlanStore`, `WakeSessionStore`, `WakeSessionTestingHarness`, `MorningHomePresentation`, `SubhHomeView`, `AlarmDayDetailView`, forecast/month presentation models, Settings surfaces, and scheduling/reconciliation services. Some legacy naming remains intentionally compatible with earlier storage and AlarmKit identifier choices.
 
 The implementation should therefore align behavior and visible copy without a broad storage rewrite. The controlling model is one resolved morning with separate wake purpose, date alarm override, global wake-alarm policy, resolved delivery/alarm state, and execution state.
 
@@ -49,7 +49,7 @@ The implementation should therefore align behavior and visible copy without a br
 ## Migration Plan
 
 1. Add/extend typed models for date alarm overrides, global pause policy, resolved alarm state, and acknowledgement source while preserving existing decoded values.
-2. Update stores and resolvers to preserve separate Fajr/Suhoor alarm configurations and apply the May 29 precedence order.
+2. Update stores and resolvers to preserve separate Fajr/Suhoor alarm configurations and apply the May 30 precedence order.
 3. Update Home, Detail, forecast/month, Settings, and harness presentation to consume resolved alarm state and copy.
 4. Update scheduling and Wake Session handling so Quiet/Pause suppress or cancel only affected Subh wake alarms; acknowledgement cancels remaining follow-up alarms for that morning.
 5. Add tests around model precedence, setting persistence, copy mapping, and wake-session state.

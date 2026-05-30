@@ -13,7 +13,7 @@ enum WakeSessionTestScenario: String, CaseIterable, Identifiable, Sendable {
     case fajrStateExplorer
     case suhoorStateExplorer
     case suhoorUnconfirmedToFajr
-    case quietDuringWakeChecks
+    case quietBeforeExecution
     case sliderReschedule
     case alarmStopVsAwake
     case permissionFailure
@@ -31,8 +31,8 @@ enum WakeSessionTestScenario: String, CaseIterable, Identifiable, Sendable {
             return "Suhoor State Explorer"
         case .suhoorUnconfirmedToFajr:
             return "Start Suhoor Not Confirmed -> Fajr Begins"
-        case .quietDuringWakeChecks:
-            return "Start Quiet During Wake Checks Test"
+        case .quietBeforeExecution:
+            return "Start Quiet Before Execution Test"
         case .sliderReschedule:
             return "Start Slider Reschedule Test"
         case .alarmStopVsAwake:
@@ -52,7 +52,7 @@ enum WakeSessionTestScenario: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .suhoorStateExplorer, .suhoorUnconfirmedToFajr:
             return .suhoor
-        case .fajrStateExplorer, .quietDuringWakeChecks, .sliderReschedule, .alarmStopVsAwake,
+        case .fajrStateExplorer, .quietBeforeExecution, .sliderReschedule, .alarmStopVsAwake,
              .permissionFailure, .morningLogInspector, .crossSurfaceConsistency, .realAlarmKitMappedPlayback:
             return .fajr
         }
@@ -66,8 +66,8 @@ enum WakeSessionTestScenario: String, CaseIterable, Identifiable, Sendable {
             return .suhoorStateExplorer
         case .suhoorUnconfirmedToFajr:
             return .suhoorUnconfirmedToFajr
-        case .quietDuringWakeChecks:
-            return .quietDuringWakeChecks
+        case .quietBeforeExecution:
+            return .quietBeforeExecution
         case .sliderReschedule:
             return .sliderReschedule
         case .alarmStopVsAwake:
@@ -546,13 +546,9 @@ final class WakeSessionTestingHarness: ObservableObject {
         case .fajrPrayerConfirmed:
             return "Expected: Fajr prayer should be confirmed as a separate test record."
         case .quietFajrActive:
-            return "Expected: Quiet should be available without changing the underlying Fajr meaning."
-        case .quietWakeChecksActive:
-            return "Expected: Tapping Quiet should show the active-session confirmation sheet."
-        case .quietUserTapsQuiet, .quietConfirmationSheetShown:
-            return "Expected: The active-session confirmation should let you keep checks or set Quiet for this morning."
-        case .quietConfirmed, .quietMorningLogged:
-            return "Expected: quietMorning should be logged and no missed prayer should be created."
+            return "Expected: Quiet should suppress this morning's alarm before execution without changing the underlying Fajr meaning."
+        case .quietMorningLogged:
+            return "Expected: quietMorning should be logged without a missed-prayer record or pending wake alarms."
         case nil:
             return "Expected: Home should reflect the active test state."
         }
@@ -647,6 +643,8 @@ final class WakeSessionTestingHarness: ObservableObject {
                 : "Real AlarmKit mapped playback could not be scheduled on this target."
         } else if runMode == .dryRun {
             statusMessage = "\(scenario.title) dry run prepared. No alarms scheduled."
+        } else if scenario == .quietBeforeExecution {
+            statusMessage = "Quiet preview started without scheduling test wake alarms."
         } else {
             fakeScheduler.schedule(plan: plan, channel: .fake, now: now)
             statusMessage = permissionState.blocksScheduling
@@ -654,7 +652,7 @@ final class WakeSessionTestingHarness: ObservableObject {
                 : "\(scenario.title) started with five-minute Wake Check spacing."
         }
 
-        if scenario == .quietDuringWakeChecks || scenario == .alarmStopVsAwake {
+        if scenario == .alarmStopVsAwake {
             recordPrimaryAlarmFired()
             recordAlarmStopped()
         }
@@ -775,7 +773,9 @@ final class WakeSessionTestingHarness: ObservableObject {
             now: now
         )
         activeSimulationContext?.jumpPoint = .quietMorningLogged
-        statusMessage = "Quiet Morning logged. Pending test Wake Checks cancelled."
+        statusMessage = cancelled.isEmpty
+            ? "Quiet morning logged. No test wake alarms were scheduled."
+            : "Quiet morning logged. Pending test wake alarms cancelled."
         refreshPublishedSchedulerState()
         refreshSurfaces()
     }
@@ -942,10 +942,6 @@ final class WakeSessionTestingHarness: ObservableObject {
     private var quietPreviewFlow: [WakeSessionSimulationJumpPoint] {
         [
             .quietFajrActive,
-            .quietWakeChecksActive,
-            .quietUserTapsQuiet,
-            .quietConfirmationSheetShown,
-            .quietConfirmed,
             .quietMorningLogged
         ]
     }
@@ -955,7 +951,7 @@ final class WakeSessionTestingHarness: ObservableObject {
         let flow: [WakeSessionSimulationJumpPoint]
         if plan.scenario == .suhoorStateExplorer || plan.scenario == .suhoorUnconfirmedToFajr {
             flow = suhoorPreviewFlow
-        } else if plan.scenario == .quietDuringWakeChecks {
+        } else if plan.scenario == .quietBeforeExecution {
             flow = quietPreviewFlow
         } else {
             flow = fajrPreviewFlow
@@ -1023,7 +1019,7 @@ final class WakeSessionTestingHarness: ObservableObject {
             fajrBegins = now.addingTimeInterval(-5 * 60)
             fajrEnds = now.addingTimeInterval(35 * 60)
             primaryWakeTime = overridePrimaryWakeTime ?? now.addingTimeInterval(2 * 60)
-        case .fajrStateExplorer, .quietDuringWakeChecks, .sliderReschedule, .alarmStopVsAwake,
+        case .fajrStateExplorer, .quietBeforeExecution, .sliderReschedule, .alarmStopVsAwake,
              .permissionFailure, .morningLogInspector, .crossSurfaceConsistency:
             finalThirdStart = nil
             fajrBegins = now.addingTimeInterval(-5 * 60)
@@ -1257,8 +1253,8 @@ final class WakeSessionTestingHarness: ObservableObject {
         switch scenario {
         case .suhoorStateExplorer, .suhoorUnconfirmedToFajr:
             return .beforePrimarySuhoorWake
-        case .quietDuringWakeChecks:
-            return .quietWakeChecksActive
+        case .quietBeforeExecution:
+            return .quietFajrActive
         case .alarmStopVsAwake:
             return .primaryAlarmFired
         case .realAlarmKitMappedPlayback:
@@ -1302,10 +1298,8 @@ final class WakeSessionTestingHarness: ObservableObject {
             return plan.finalThirdStart ?? plan.primaryWakeTime.addingTimeInterval(-10 * 60)
         case .fajrBeginsAfterSuhoor:
             return plan.fajrBegins
-        case .quietFajrActive, .quietUserTapsQuiet, .quietConfirmationSheetShown, .quietConfirmed, .quietMorningLogged:
-            return plan.fajrBegins.addingTimeInterval(60)
-        case .quietWakeChecksActive:
-            return plan.wakeCheckEvents.first?.fireDate ?? plan.primaryWakeTime
+        case .quietFajrActive, .quietMorningLogged:
+            return plan.primaryWakeTime.addingTimeInterval(-60)
         }
     }
 
@@ -1454,11 +1448,8 @@ final class WakeSessionTestingHarness: ObservableObject {
 
     private func simulatedQuickWakeMode(plan: WakeSessionTestScenarioPlan, context: ActiveSimulationContext) -> QuickWakeMode {
         switch context.scenarioKind {
-        case .quietDuringWakeChecks:
-            if context.jumpPoint == .quietConfirmed || context.jumpPoint == .quietMorningLogged {
-                return .quiet
-            }
-            return .fajr
+        case .quietBeforeExecution:
+            return .quiet
         case .suhoorStateExplorer, .suhoorUnconfirmedToFajr:
             return .suhoor
         case .fajrStateExplorer, .sliderReschedule, .alarmStopVsAwake, .permissionFailure,

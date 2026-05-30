@@ -42,7 +42,6 @@ struct SubhHomeView: View {
     @State private var lockedMonthPreviewMode: MonthPlanningCalendarMode?
     @State private var weeklyFajrcastFocusedDateKey: String?
     @State private var heroWakeAdjustment: FajrWindowLiveWakeAdjustment?
-    @State private var pendingQuietConfirmationDate: Date?
 
     var body: some View {
         let weeklyFajrcast = weeklyFajrcastSnapshot
@@ -76,13 +75,6 @@ struct SubhHomeView: View {
                                 await scheduleManager.commitHeroWakeAdjustment(for: date, wakeTime: wakeTime)
                             },
                             onSelectWakeMode: { date, mode in
-                                if mode == .quiet,
-                                   scheduleManager.requiresQuietConfirmationForWakeSession(on: date) {
-                                    await MainActor.run {
-                                        pendingQuietConfirmationDate = date
-                                    }
-                                    return false
-                                }
                                 return await scheduleManager.selectHeroWakeMode(for: date, mode: mode)
                             },
                             onConfirmAwake: { date, mode in
@@ -101,6 +93,9 @@ struct SubhHomeView: View {
                             },
                             onRingOnceDespitePause: { date in
                                 await scheduleManager.ringOnceDespitePause(on: date)
+                            },
+                            onResumeAlarms: {
+                                await scheduleManager.setWakeAlarmsPausedIndefinitely(false)
                             },
                             onPreviewWakeAdjustment: previewHeroWakeAdjustment
                         ) {
@@ -224,31 +219,6 @@ struct SubhHomeView: View {
                 mode: mode,
                 entitlement: entitlementStore.effectiveSnapshot
             )
-        }
-        .confirmationDialog(
-            "Stop wake checks for this morning?",
-            isPresented: Binding(
-                get: { pendingQuietConfirmationDate != nil },
-                set: { isPresented in
-                    if !isPresented {
-                        pendingQuietConfirmationDate = nil
-                    }
-                }
-            ),
-            titleVisibility: .visible
-        ) {
-            Button("Keep wake checks", role: .cancel) {
-                pendingQuietConfirmationDate = nil
-            }
-            Button("Stop for this morning", role: .destructive) {
-                guard let date = pendingQuietConfirmationDate else { return }
-                pendingQuietConfirmationDate = nil
-                Task {
-                    await scheduleManager.confirmQuietForActiveWakeSession(on: date)
-                }
-            }
-        } message: {
-            Text("Subh will cancel remaining alarms and mark this morning as quiet.")
         }
         .onReceive(appNavigator.$latestRequest.compactMap { $0 }) { request in
             handle(request.intent)
@@ -575,6 +545,7 @@ private struct TomorrowMorningHero: View {
     let onConfirmFajrPrayer: (Date) async -> Bool
     let onConfirmFastingToday: (Date) async -> Bool
     let onRingOnceDespitePause: (Date) async -> Bool
+    let onResumeAlarms: () async -> Bool
     let onPreviewWakeAdjustment: (Date, Date?) -> Void
     let onOpen: () -> Void
 
@@ -582,6 +553,7 @@ private struct TomorrowMorningHero: View {
     @State private var isCommittingWakeAdjustment = false
     @State private var isSelectingWakeMode = false
     @State private var isCommittingActionSlot = false
+    @State private var isShowingAlarmStateActions = false
     @Namespace private var quickSelectorHighlight
 
     var body: some View {
@@ -695,6 +667,15 @@ private struct TomorrowMorningHero: View {
         .accessibilityAddTraits(entry == nil ? [] : .isButton)
         .accessibilityLabel(display.accessibilityLabel)
         .accessibilityHint(entry == nil ? "" : "Double-tap for details.")
+        .confirmationDialog(
+            alarmStateDialogTitle(for: display),
+            isPresented: $isShowingAlarmStateActions,
+            titleVisibility: .visible
+        ) {
+            alarmStateDialogActions(for: display)
+        } message: {
+            Text(alarmStateDialogMessage(for: display))
+        }
     }
 
     private var heroModeAnimation: Animation {
@@ -729,18 +710,31 @@ private struct TomorrowMorningHero: View {
         .accessibilityIdentifier(MorningHeroUIIdentifier.location)
     }
 
-    @ViewBuilder
     private func primaryWakeRow(
         display: MorningHomeHeroDisplay,
         metrics: MorningHeroMetrics,
         rollsActiveWakeTime: Bool
     ) -> some View {
-        MorningHeroPrimaryWakeRow(
+        let row = MorningHeroPrimaryWakeRow(
             display: display,
             metrics: metrics,
             rollsActiveWakeTime: rollsActiveWakeTime,
             reduceMotion: reduceMotion
         )
+
+        return Group {
+            if alarmStateActionsAreAvailable(for: display) {
+                Button {
+                    isShowingAlarmStateActions = true
+                } label: {
+                    row
+                }
+                .buttonStyle(.plain)
+                .disabled(isSelectingWakeMode || isCommittingWakeAdjustment || isCommittingActionSlot)
+            } else {
+                row
+            }
+        }
     }
 
     private func commitWakeAdjustment(_ wakeTime: Date) {
@@ -813,6 +807,86 @@ private struct TomorrowMorningHero: View {
                 }
             }
         }
+    }
+
+    private func alarmStateActionsAreAvailable(for display: MorningHomeHeroDisplay) -> Bool {
+        guard entry != nil else { return false }
+        guard display.primaryText != "Time to wake" else { return false }
+
+        switch display.wakeState {
+        case .active:
+            return display.primaryTime != nil && display.actionSlot.style == .empty
+        case .quietHours:
+            return true
+        case .offWithAnchor:
+            return display.statusText == "Alarms paused" || display.primaryText == "Alarms paused"
+        case .noAlarm, .unavailable:
+            return false
+        }
+    }
+
+    private func alarmStateDialogTitle(for display: MorningHomeHeroDisplay) -> String {
+        switch display.wakeState {
+        case .quietHours:
+            return quietTitle(for: display)
+        case .offWithAnchor where display.statusText == "Alarms paused" || display.primaryText == "Alarms paused":
+            return "Alarms paused"
+        default:
+            return "\(display.primaryText) alarm is on"
+        }
+    }
+
+    private func alarmStateDialogMessage(for display: MorningHomeHeroDisplay) -> String {
+        switch display.wakeState {
+        case .quietHours:
+            return "Subh won’t ring. Your alarm is saved."
+        case .offWithAnchor where display.statusText == "Alarms paused" || display.primaryText == "Alarms paused":
+            return "Subh won’t ring until you resume wake alarms."
+        default:
+            return "Subh will ring \(targetMorningPhrase(for: display))."
+        }
+    }
+
+    @ViewBuilder
+    private func alarmStateDialogActions(for display: MorningHomeHeroDisplay) -> some View {
+        switch display.wakeState {
+        case .quietHours:
+            Button("Turn alarm on") {
+                selectWakeMode(display.selectedQuickWakeMode ?? .fajr)
+            }
+            Button("Keep quiet", role: .cancel) {}
+        case .offWithAnchor where display.statusText == "Alarms paused" || display.primaryText == "Alarms paused":
+            Button(ringOnceTitle(for: display)) {
+                commitActionSlot(.ringOnceDespitePause)
+            }
+            Button("Resume alarms") {
+                isCommittingActionSlot = true
+                Task {
+                    _ = await onResumeAlarms()
+                    await MainActor.run {
+                        isCommittingActionSlot = false
+                    }
+                }
+            }
+            Button("Keep paused", role: .cancel) {}
+        default:
+            Button(quietTitle(for: display)) {
+                selectWakeMode(.quiet)
+            }
+            Button("Cancel", role: .cancel) {}
+        }
+    }
+
+    private func quietTitle(for display: MorningHomeHeroDisplay) -> String {
+        display.title == "Tomorrow" ? "Quiet tomorrow" : "Quiet this morning"
+    }
+
+    private func ringOnceTitle(for display: MorningHomeHeroDisplay) -> String {
+        display.title == "Tomorrow" ? "Ring tomorrow only" : "Ring this morning only"
+    }
+
+    private func targetMorningPhrase(for display: MorningHomeHeroDisplay) -> String {
+        display.title == "Tomorrow" ? "tomorrow morning" : "this morning"
     }
 
     private func adjustWakeAccessibility(

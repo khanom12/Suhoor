@@ -8,7 +8,7 @@ enum WakeSessionSimulationScenarioKind: String, CaseIterable, Identifiable, Send
     case fajrStateExplorer
     case suhoorStateExplorer
     case suhoorUnconfirmedToFajr
-    case quietDuringWakeChecks
+    case quietBeforeExecution
     case sliderReschedule
     case alarmStopVsAwake
     case permissionFailure
@@ -26,8 +26,8 @@ enum WakeSessionSimulationScenarioKind: String, CaseIterable, Identifiable, Send
             return "Suhoor State Explorer"
         case .suhoorUnconfirmedToFajr:
             return "Suhoor Not Confirmed -> Fajr Begins"
-        case .quietDuringWakeChecks:
-            return "Quiet During Active Wake Checks"
+        case .quietBeforeExecution:
+            return "Quiet Before Execution"
         case .sliderReschedule:
             return "Slider Reschedule Test"
         case .alarmStopVsAwake:
@@ -47,7 +47,7 @@ enum WakeSessionSimulationScenarioKind: String, CaseIterable, Identifiable, Send
         switch self {
         case .suhoorStateExplorer, .suhoorUnconfirmedToFajr:
             return .suhoor
-        case .fajrStateExplorer, .quietDuringWakeChecks, .sliderReschedule, .alarmStopVsAwake,
+        case .fajrStateExplorer, .quietBeforeExecution, .sliderReschedule, .alarmStopVsAwake,
              .permissionFailure, .morningLogInspector, .crossSurfaceConsistency, .realAlarmKitMappedPlayback:
             return .fajr
         }
@@ -216,10 +216,6 @@ enum WakeSessionSimulationJumpPoint: String, CaseIterable, Identifiable, Sendabl
     case fajrPrayerCTAAvailable
     case fajrPrayerConfirmed
     case quietFajrActive
-    case quietWakeChecksActive
-    case quietUserTapsQuiet
-    case quietConfirmationSheetShown
-    case quietConfirmed
     case quietMorningLogged
 
     var id: String { rawValue }
@@ -279,15 +275,7 @@ enum WakeSessionSimulationJumpPoint: String, CaseIterable, Identifiable, Sendabl
         case .fajrPrayerConfirmed:
             return "Fajr prayer confirmed"
         case .quietFajrActive:
-            return "Fajr active"
-        case .quietWakeChecksActive:
-            return "Wake checks active"
-        case .quietUserTapsQuiet:
-            return "User taps Quiet"
-        case .quietConfirmationSheetShown:
-            return "Quiet confirmation sheet shown"
-        case .quietConfirmed:
-            return "Quiet confirmed"
+            return "Quiet before alarm"
         case .quietMorningLogged:
             return "quietMorning logged"
         }
@@ -462,7 +450,7 @@ enum WakeSessionCustomPreviewMode: String, CaseIterable, Identifiable, Sendable 
         case .suhoor:
             return .suhoorStateExplorer
         case .quiet:
-            return .quietDuringWakeChecks
+            return .quietBeforeExecution
         }
     }
 }
@@ -506,15 +494,15 @@ struct WakeSessionPreviewScenarioCard: Identifiable, Equatable, Sendable {
         ),
         WakeSessionPreviewScenarioCard(
             id: "quiet-flow",
-            title: "Quiet During Wake Checks",
-            description: "Preview what happens when Quiet is selected while Wake Checks are active.",
-            whatThisTests: "Quiet Fajr, Quiet Suhoor vocabulary, active-session confirmation, keeping checks, Quiet for this morning, and quietMorning logging.",
+            title: "Quiet Before Execution",
+            description: "Preview a morning that is set Quiet before the first alarm begins.",
+            whatThisTests: "Quiet Fajr, Quiet Suhoor vocabulary, preserved wake purpose, no active-session Quiet action, and quietMorning logging.",
             realAlarms: "No. This is a Home preview.",
             approximateDuration: "1-2 minutes.",
-            whatToExpect: "Home will show pending Wake Checks. Selecting Quiet should ask before cancelling them.",
+            whatToExpect: "Home will show Quiet as an alarm state without scheduling or exposing an active wake action.",
             primaryActionTitle: "Start Quiet Preview",
-            scenario: .quietDuringWakeChecks,
-            initialJumpPoint: .quietWakeChecksActive
+            scenario: .quietBeforeExecution,
+            initialJumpPoint: .quietFajrActive
         ),
         WakeSessionPreviewScenarioCard(
             id: "paused-exception-states",

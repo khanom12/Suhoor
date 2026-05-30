@@ -1762,7 +1762,7 @@ final class ScheduleManager: ObservableObject {
         #if DEBUG || INTERNAL_TESTING
         if wakeSessionTestingHarness.activeSimulationContext != nil {
             if mode == .quiet {
-                wakeSessionTestingHarness.setJumpPoint(.quietUserTapsQuiet)
+                await wakeSessionTestingHarness.start(.quietBeforeExecution, runMode: .homeSimulation)
             } else if mode == .suhoor {
                 await wakeSessionTestingHarness.start(.suhoorStateExplorer, runMode: .homeSimulation)
             } else {
@@ -1830,22 +1830,6 @@ final class ScheduleManager: ObservableObject {
         }
         await rescheduleDay(normalizedDate, preferCached: false)
         return true
-    }
-
-    func requiresQuietConfirmationForWakeSession(on date: Date, timeZone: TimeZone = .current) -> Bool {
-        #if DEBUG || INTERNAL_TESTING
-        if wakeSessionTestingHarness.activeSimulationContext != nil {
-            return wakeSessionTestingHarness.hasPendingWakeChecks
-        }
-        #endif
-        let normalizedDate = DateHelpers.startOfDay(date, in: timeZone)
-        guard let day = activeDay(for: normalizedDate, timeZone: timeZone) else { return false }
-        guard let session = wakeSessionStore.session(for: day.dateKey), !session.status.isTerminal else { return false }
-        return WakeSessionPlanner.cancellableWakeSessionEvents(
-            for: day,
-            wakeSessionID: session.wakeSessionID,
-            now: timeProvider.now()
-        ).isEmpty == false
     }
 
     @discardableResult
@@ -1929,38 +1913,6 @@ final class ScheduleManager: ObservableObject {
             qadaEffect: nil,
             source: "currentMorningFastingIntent"
         )
-        refreshCurrentMorningHomeSnapshot(timeZone: timeZone)
-        return true
-    }
-
-    @discardableResult
-    func confirmQuietForActiveWakeSession(on date: Date, timeZone: TimeZone = .current) async -> Bool {
-        #if DEBUG || INTERNAL_TESTING
-        if wakeSessionTestingHarness.activeSimulationContext != nil {
-            wakeSessionTestingHarness.confirmQuietMorning()
-            refreshCurrentMorningHomeSnapshot(timeZone: timeZone)
-            return true
-        }
-        #endif
-        let normalizedDate = DateHelpers.startOfDay(date, in: timeZone)
-        guard let day = activeDay(for: normalizedDate, timeZone: timeZone) else {
-            return false
-        }
-        let session = ensureWakeSession(for: day)
-        let cancelled = await alarmScheduler.cancelWakeSessionEvents(
-            day: day,
-            wakeSessionID: session?.wakeSessionID,
-            now: timeProvider.now()
-        )
-        if let session {
-            _ = wakeSessionStore.markQuietMorning(
-                wakeSessionID: session.wakeSessionID,
-                reason: "userSelectedQuiet",
-                cancelledScheduledEventIDs: cancelled.map(\.id),
-                now: timeProvider.now()
-            )
-        }
-        _ = await selectHeroWakeMode(for: normalizedDate, mode: .quiet, timeZone: timeZone)
         refreshCurrentMorningHomeSnapshot(timeZone: timeZone)
         return true
     }

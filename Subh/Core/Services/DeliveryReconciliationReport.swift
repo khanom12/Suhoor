@@ -196,7 +196,7 @@ struct DeliveryReconciliationReport: Equatable, Sendable {
             parts.append("Verification limited")
         }
         if issues.contains(where: { $0.category == .permissionBlocked }) {
-            parts.append("Permission blocked")
+            parts.append("Turn on alarms")
         }
         return parts.joined(separator: " · ")
     }

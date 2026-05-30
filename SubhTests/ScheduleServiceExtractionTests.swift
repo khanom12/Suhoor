@@ -843,12 +843,12 @@ struct ScheduleServiceExtractionTests {
 
     @Test
     @MainActor
-    func wakeSessionLabQuietCancelsChecksWithoutMissedPrayer() async throws {
+    func wakeSessionLabQuietBeforeExecutionLogsWithoutMissedPrayer() async throws {
         let store = WakeSessionStore(loadPersistedData: false)
         let harness = WakeSessionTestingHarness(wakeSessionStore: store)
 
-        await harness.start(WakeSessionTestScenario.quietDuringWakeChecks)
-        #expect(harness.pendingTestAlarms.contains { $0.role == WakeSessionTestAlarmRole.wakeCheck })
+        await harness.start(WakeSessionTestScenario.quietBeforeExecution)
+        #expect(harness.pendingTestAlarms.isEmpty)
 
         harness.confirmQuietMorning()
 
@@ -1001,7 +1001,7 @@ struct ScheduleServiceExtractionTests {
         #expect(previewCards.map(\.title) == [
             "Fajr Flow",
             "Suhoor Flow",
-            "Quiet During Wake Checks",
+            "Quiet Before Execution",
             "Paused & Ring Exception",
             "Setup & Alarm Issue",
             "Boundary & Handoff",
@@ -1060,15 +1060,11 @@ struct ScheduleServiceExtractionTests {
         #expect(harness.stateOptions(for: .suhoor).contains(.fajrPrayerCTAAvailable))
         #expect(harness.stateOptions(for: .quiet) == [
             .quietFajrActive,
-            .quietWakeChecksActive,
-            .quietUserTapsQuiet,
-            .quietConfirmationSheetShown,
-            .quietConfirmed,
             .quietMorningLogged
         ])
 
         harness.selectCustomPreviewMode(.quiet)
-        #expect(harness.selectedScenario == .quietDuringWakeChecks)
+        #expect(harness.selectedScenario == .quietBeforeExecution)
         #expect(harness.selectedCustomStateOptions.contains(harness.selectedJumpPoint))
     }
 
@@ -3074,6 +3070,12 @@ struct ScheduleServiceExtractionTests {
             permissionSummary: "",
             timeZone: timeZone
         )
+        let paused = MorningHomePresentation.heroDisplay(
+            entry: Self.makeWakeEntry(date: date, timeZone: timeZone),
+            permissionSummary: "",
+            globalWakeAlarmPolicy: .pausedIndefinitely,
+            timeZone: timeZone
+        )
         let fixed = MorningHomePresentation.heroDisplay(
             entry: Self.makeWakeEntry(date: date, timeZone: timeZone, plannedWakeState: .fixedWake),
             permissionSummary: "",
@@ -3096,6 +3098,9 @@ struct ScheduleServiceExtractionTests {
         #expect(skipped.wakeWindowPositionRatio != nil)
         #expect(skipped.fajrWindowVisualMode == .staticWithinFajrWindow)
         #expect(skipped.wakeAdjustmentEnabled == false)
+        #expect(paused.wakeState == .offWithAnchor)
+        #expect(paused.primaryText == "Alarms paused")
+        #expect(paused.actionSlot.primaryTitle == "Ring tomorrow only")
         #expect(fixed.detailText == "31 min before Fajr ends")
         #expect(fixed.relationTone == .normal)
     }

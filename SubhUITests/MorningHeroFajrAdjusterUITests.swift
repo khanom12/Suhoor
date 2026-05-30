@@ -279,13 +279,6 @@ final class MorningHeroFajrAdjusterUITests: XCTestCase {
         return false
     }
 
-    private func confirmQuietCancellationIfNeeded(in app: XCUIApplication) {
-        let stopButton = app.buttons["Stop for this morning"]
-        if stopButton.waitForExistence(timeout: 2) {
-            stopButton.tap()
-        }
-    }
-
     private func waitForElementValue(
         in app: XCUIApplication,
         identifier: String,

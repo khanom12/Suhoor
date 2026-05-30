@@ -1,6 +1,6 @@
 ## Why
 
-The latest May 29 specification bundle resolves several product-model conflicts around Quiet, indefinite Pause, Home Hero state, and wake-session copy. Subh needs this pass now so the MVP stays anchored on a single Fajr/Suhoor morning engine instead of exposing Quiet/Pause or older Pre-Fajr terminology as parallel wake modes.
+The latest May 30 reconciled specification bundle resolves several product-model conflicts around Quiet, indefinite Pause, Home Hero state, and wake-session copy. Subh needs this pass now so the MVP stays anchored on a single Fajr/Suhoor morning engine instead of exposing Quiet/Pause or older Pre-Fajr terminology as parallel wake modes.
 
 ## What Changes
 
@@ -13,7 +13,7 @@ The latest May 29 specification bundle resolves several product-model conflicts 
 - Update Wake Session Lab/test harness scenarios to cover the new Quiet/Pause/Hero state model using user-facing labels first.
 - Preserve existing user settings, saved plans, and scheduled-alarm safety; refresh/cancel only the affected Subh wake alarms when state changes require it.
 
-No breaking user-data migration is intended. Existing legacy/internal names may remain where renaming would risk persistence or scheduling compatibility, but visible MVP copy must align with the May 29 vocabulary.
+No breaking user-data migration is intended. Existing legacy/internal names may remain where renaming would risk persistence or scheduling compatibility, but visible MVP copy must align with the May 30 reconciled vocabulary.
 
 ## Capabilities
 

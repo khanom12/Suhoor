@@ -1713,6 +1713,9 @@ enum MorningHomePresentation {
         case .active:
             return resolvedWakeState.copyState.primaryHeroText
         case .offWithAnchor:
+            if resolvedWakeState.resolvedAlarmState == .pausedInherited {
+                return resolvedWakeState.copyState.primaryHeroText
+            }
             return "Alarm off"
         case .noAlarm:
             return "No alarm set"

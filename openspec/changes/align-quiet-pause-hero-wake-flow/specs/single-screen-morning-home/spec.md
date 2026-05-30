@@ -35,7 +35,7 @@ The Home Hero planning state SHALL expose `Fajr | Suhoor` as the only wake-purpo
 - **AND** selecting Quiet SHALL NOT change the wake-purpose selector into a three-option selector
 
 ### Requirement: Home Hero copy follows final alarm-state vocabulary
-The Home Hero SHALL use the May 29 user-facing alarm-state and action vocabulary.
+The Home Hero SHALL use the May 30 user-facing alarm-state and action vocabulary.
 
 #### Scenario: Planning and silent states use approved copy
 - **GIVEN** Home displays active, Quiet, paused, ring-once, setup, blocked, or issue planning states

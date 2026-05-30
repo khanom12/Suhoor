@@ -11,7 +11,6 @@ struct WakeSessionLabView: View {
     @State private var showingAdvancedOptions = false
     @State private var showingRealAlarmSetup = false
     @State private var showingRealAlarmConfirmation = false
-    @State private var showingQuietConfirmation = false
     @State private var scheduledAlarmsExpanded = false
     @State private var testEventLogExpanded = false
     @State private var permissionSimulationExpanded = false
@@ -40,18 +39,6 @@ struct WakeSessionLabView: View {
         }
         .navigationTitle("Wake Session Lab")
         .navigationBarTitleDisplayMode(.inline)
-        .confirmationDialog(
-            "Stop wake checks for this morning?",
-            isPresented: $showingQuietConfirmation,
-            titleVisibility: .visible
-        ) {
-            Button("Keep wake checks", role: .cancel) {}
-            Button("Stop for this morning", role: .destructive) {
-                harness.confirmQuietMorning()
-            }
-        } message: {
-            Text("Subh will cancel the remaining alarms and mark this test morning as quiet.")
-        }
         .confirmationDialog(
             "Schedule real test alarms?",
             isPresented: $showingRealAlarmConfirmation,
