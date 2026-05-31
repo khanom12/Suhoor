@@ -99,6 +99,7 @@
 - `README-MAY30-RECONCILED.md`
 - `SUBH_SPEC_RECONCILIATION_REPORT_MAY30.md`
 - `SUBH_ACTIVE_TERM_AUDIT_MAY30.md`
+- `subh-wake-session-testing-harness-v4-update-report.md`
 
 ## Assumptions And Unresolved Issues
 

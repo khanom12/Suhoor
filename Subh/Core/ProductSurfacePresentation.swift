@@ -1132,7 +1132,7 @@ enum ProductSurfacePresentation {
     private static func includeMondayThursdayOpportunity(on surface: SharedDayTagSurface) -> Bool {
         switch surface {
         case .nextSevenDaysCompactRow:
-            return false
+            return true
         case .primaryMorningContextCompact,
              .primaryMorningContextExpanded,
              .alarmDetailContext,

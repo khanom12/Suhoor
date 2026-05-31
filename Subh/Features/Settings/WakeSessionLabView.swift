@@ -11,6 +11,9 @@ struct WakeSessionLabView: View {
     @State private var showingAdvancedOptions = false
     @State private var showingRealAlarmSetup = false
     @State private var showingRealAlarmConfirmation = false
+    @State private var heroSlotInspectorExpanded = true
+    @State private var timeInspectorExpanded = false
+    @State private var surfaceConsistencyExpanded = false
     @State private var scheduledAlarmsExpanded = false
     @State private var testEventLogExpanded = false
     @State private var permissionSimulationExpanded = false
@@ -55,6 +58,9 @@ struct WakeSessionLabView: View {
         }
         .onChange(of: harness.selectedCustomPreviewMode) { _, mode in
             harness.selectCustomPreviewMode(mode)
+        }
+        .onChange(of: harness.selectedCustomAlarmState) { _, alarmState in
+            harness.selectCustomAlarmState(alarmState)
         }
     }
 
@@ -111,7 +117,7 @@ struct WakeSessionLabView: View {
         VStack(spacing: DesignTokens.spacingM) {
             SettingsGroup(
                 title: "Preview Home UI",
-                footer: "Settings is the launchpad. Home is the testing stage."
+                footer: "Choose a scenario. No real alarms will ring."
             ) {
                 ForEach(Array(harness.previewScenarioCards.enumerated()), id: \.element.id) { index, card in
                     previewCard(card)
@@ -130,27 +136,34 @@ struct WakeSessionLabView: View {
     private func previewCard(_ card: WakeSessionPreviewScenarioCard) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             scenarioCopy(
-                title: card.title,
-                description: card.description,
-                whatThisTests: card.whatThisTests,
-                realAlarms: card.realAlarms,
-                approximateDuration: card.approximateDuration,
-                whatToExpect: card.whatToExpect,
-                systemImage: card.id == "custom-date-time" ? "calendar.badge.clock" : "house"
+                card: card,
+                calculatedTimes: harness.previewTimeSummary(for: card),
+                systemImage: card.id == "custom-test-builder" ? "calendar.badge.clock" : "house"
             )
 
-            Button(card.primaryActionTitle) {
-                if card.id == "custom-date-time" {
-                    showingCustomPreview = true
-                } else {
-                    Task {
-                        await harness.startPreview(card: card)
-                        dismiss()
+            HStack(spacing: 10) {
+                Button(card.primaryActionTitle) {
+                    if card.id == "custom-test-builder" {
+                        showingCustomPreview = true
+                    } else {
+                        Task {
+                            await harness.startPreview(card: card)
+                            dismiss()
+                        }
                     }
                 }
+                .buttonStyle(.borderedProminent)
+
+                Button(card.secondaryActionTitle) {
+                    if card.id == "custom-test-builder" {
+                        showingCustomPreview = true
+                    } else {
+                        selectedArea = .diagnostics
+                    }
+                }
+                .buttonStyle(.bordered)
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.small)
+            .controlSize(.regular)
         }
         .padding(.vertical, 10)
     }
@@ -174,15 +187,44 @@ struct WakeSessionLabView: View {
             }
             .padding(.vertical, 10)
             AppGroupDivider()
+            pickerRow(title: "Scrub horizon", subtitle: "Scrub minute-by-minute from the selected start time.", systemImage: "timeline.selection", selection: $harness.selectedScrubHorizon) {
+                ForEach(WakeSessionSimulationScrubHorizon.allCases) { horizon in
+                    Text(horizon.title).tag(horizon)
+                }
+            }
+            AppGroupDivider()
+            VStack(alignment: .leading, spacing: 8) {
+                Label("Minute scrubber", systemImage: "slider.horizontal.3")
+                    .font(.subheadline.weight(.semibold))
+                Slider(
+                    value: Binding(
+                        get: { harness.selectedScrubOffsetMinutes },
+                        set: { harness.setScrubOffsetMinutes($0) }
+                    ),
+                    in: harness.simulationScrubRange,
+                    step: 1
+                )
+                Text("Scrubbed time: \(harness.scrubbedSimulationTimeText)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.vertical, 10)
+            AppGroupDivider()
             pickerRow(title: "Location", subtitle: "Does not change the real app location.", systemImage: "location", selection: $harness.selectedLocation) {
                 ForEach(SimulationLocation.allCases) { location in
                     Text(location.displayName).tag(location)
                 }
             }
             AppGroupDivider()
-            pickerRow(title: "Mode", subtitle: "Choose the morning mode to preview.", systemImage: "moon.stars", selection: $harness.selectedCustomPreviewMode) {
+            pickerRow(title: "Wake purpose", subtitle: "Choose why this morning wakes the user.", systemImage: "moon.stars", selection: $harness.selectedCustomPreviewMode) {
                 ForEach(WakeSessionCustomPreviewMode.allCases) { mode in
                     Text(mode.title).tag(mode)
+                }
+            }
+            AppGroupDivider()
+            pickerRow(title: "Alarm state", subtitle: "Quiet and Pause live here, not in wake purpose.", systemImage: "bell.badge", selection: $harness.selectedCustomAlarmState) {
+                ForEach(WakeSessionCustomAlarmState.allCases) { state in
+                    Text(state.title).tag(state)
                 }
             }
             AppGroupDivider()
@@ -200,7 +242,7 @@ struct WakeSessionLabView: View {
                         }
                     }
                     AppGroupDivider()
-                    pickerRow(title: "Clock mode", subtitle: "State jumps are instant and do not compress Wake Checks.", systemImage: "clock.arrow.circlepath", selection: $harness.selectedClockMode) {
+                    pickerRow(title: "Clock mode", subtitle: "State jumps are instant and do not compress follow-up alarms.", systemImage: "clock.arrow.circlepath", selection: $harness.selectedClockMode) {
                         ForEach(SimulationClockMode.allCases) { mode in
                             Text(mode.displayName).tag(mode)
                         }
@@ -208,6 +250,15 @@ struct WakeSessionLabView: View {
                 }
             }
             .padding(.vertical, 10)
+            AppGroupDivider()
+            let report = harness.timeValidationReport()
+            labRow(
+                title: report.passed ? "Time validation passed" : "Test setup issue",
+                subtitle: timeValidationSummary(report),
+                systemImage: report.passed ? "checkmark.seal" : "exclamationmark.triangle",
+                badgeText: report.prayerTimeSource,
+                badgeTone: report.passed ? .neutral : .critical
+            )
             AppGroupDivider()
             actionButton("Preview on Home", subtitle: "Routes the real Home Hero through the simulated morning state.", systemImage: "house.fill", tone: .warning) {
                 Task {
@@ -222,7 +273,7 @@ struct WakeSessionLabView: View {
         VStack(spacing: DesignTokens.spacingM) {
             SettingsGroup(
                 title: "Real Alarm Test",
-                footer: "These alarms will actually ring. Wake Checks stay 5 minutes apart."
+                footer: "These alarms will actually ring. Follow-up alarms stay 5 minutes apart."
             ) {
                 ForEach(Array(harness.realAlarmScenarioCards.enumerated()), id: \.element.id) { index, card in
                     realAlarmCard(card)
@@ -264,11 +315,13 @@ struct WakeSessionLabView: View {
     private var realAlarmSetup: some View {
         SettingsGroup(
             title: "Real Alarm Setup",
-            footer: "Subh maps simulated events onto near-future real AlarmKit alarms. Wake Checks remain five minutes apart."
+            footer: "Subh maps simulated events onto near-future real AlarmKit alarms. Follow-up alarms remain five minutes apart."
         ) {
             pickerRow(title: "Scenario", subtitle: "Choose which simulated Wake Session to map.", systemImage: "square.stack.3d.up", selection: $harness.selectedRealAlarmScenario) {
-                Text("Fajr").tag(WakeSessionTestScenario.fajrStateExplorer)
-                Text("Suhoor").tag(WakeSessionTestScenario.suhoorStateExplorer)
+                Text("Fajr alarm test").tag(WakeSessionTestScenario.fajrStateExplorer)
+                Text("Suhoor alarm test").tag(WakeSessionTestScenario.suhoorStateExplorer)
+                Text("System dismissal test").tag(WakeSessionTestScenario.alarmStopVsAwake)
+                Text("Cancel remaining alarms test").tag(WakeSessionTestScenario.sliderReschedule)
             }
             AppGroupDivider()
             pickerRow(title: "Start delay", subtitle: "When the primary alarm should ring.", systemImage: "timer", selection: $harness.mappedStartDelaySeconds) {
@@ -277,7 +330,7 @@ struct WakeSessionLabView: View {
                 Text("120 seconds").tag(TimeInterval(120))
             }
             AppGroupDivider()
-            pickerRow(title: "Sequence length", subtitle: "Default is Primary + 5 Wake Checks.", systemImage: "list.number", selection: $harness.selectedSequenceLength) {
+            pickerRow(title: "Sequence length", subtitle: "Default is Primary + 5 follow-up alarms.", systemImage: "list.number", selection: $harness.selectedSequenceLength) {
                 ForEach(WakeSessionMappedSequenceLength.allCases) { length in
                     Text(length.title).tag(length)
                 }
@@ -304,6 +357,18 @@ struct WakeSessionLabView: View {
             title: "Diagnostics",
             footer: "Use these only when a test does not behave as expected."
         ) {
+            diagnosticDisclosure("Hero Slot Inspector", isExpanded: $heroSlotInspectorExpanded) {
+                heroSlotInspector
+            }
+            AppGroupDivider()
+            diagnosticDisclosure("Time Inspector", isExpanded: $timeInspectorExpanded) {
+                timeInspector
+            }
+            AppGroupDivider()
+            diagnosticDisclosure("Surface Consistency", isExpanded: $surfaceConsistencyExpanded) {
+                surfaceConsistency
+            }
+            AppGroupDivider()
             diagnosticDisclosure("Scheduled Test Alarms", isExpanded: $scheduledAlarmsExpanded) {
                 scheduledTestAlarms
             }
@@ -335,6 +400,85 @@ struct WakeSessionLabView: View {
         }
         .font(.subheadline.weight(.semibold))
         .padding(.vertical, 10)
+    }
+
+    private var heroSlotInspector: some View {
+        VStack(spacing: 0) {
+            ForEach(Array(harness.heroSlotInspectionRows().enumerated()), id: \.element.id) { index, row in
+                labRow(
+                    title: row.slot,
+                    subtitle: "Expected: \(row.expected)\nActual: \(row.actual)",
+                    systemImage: row.passed ? "checkmark.circle" : "xmark.octagon",
+                    badgeText: row.passed ? "Pass" : "Check",
+                    badgeTone: row.passed ? .neutral : .critical
+                )
+                if index < harness.heroSlotInspectionRows().count - 1 {
+                    AppGroupDivider()
+                }
+            }
+        }
+    }
+
+    private var timeInspector: some View {
+        let report = harness.timeValidationReport()
+        return VStack(spacing: 0) {
+            labRow(
+                title: report.passed ? "Time validation passed" : "Time validation failed",
+                subtitle: report.reason ?? "Standard scenario has calculated times.",
+                systemImage: report.passed ? "checkmark.seal" : "exclamationmark.triangle",
+                badgeText: report.prayerTimeSource,
+                badgeTone: report.passed ? .neutral : .critical
+            )
+            AppGroupDivider()
+            labRow(
+                title: "Simulated clock",
+                subtitle: "\(TimeFormatters.shortDateTime.string(from: report.simulatedNow)) · \(report.timeZone.identifier)",
+                systemImage: "clock",
+                badgeText: nil,
+                badgeTone: .neutral
+            )
+            AppGroupDivider()
+            labRow(
+                title: "Location",
+                subtitle: report.location,
+                systemImage: "location",
+                badgeText: nil,
+                badgeTone: .neutral
+            )
+            AppGroupDivider()
+            labRow(
+                title: "Fajr window",
+                subtitle: "\(timeText(report.fajrBegins)) - \(timeText(report.fajrEnds))",
+                systemImage: "sunrise",
+                badgeText: report.selectedWakePurpose.displayTitle,
+                badgeTone: .neutral
+            )
+            AppGroupDivider()
+            labRow(
+                title: "Alarm schedule",
+                subtitle: alarmScheduleSummary(report),
+                systemImage: "alarm",
+                badgeText: nil,
+                badgeTone: .neutral
+            )
+        }
+    }
+
+    private var surfaceConsistency: some View {
+        VStack(spacing: 0) {
+            ForEach(Array(harness.surfaceConsistencyRows().enumerated()), id: \.element.id) { index, row in
+                labRow(
+                    title: row.surface,
+                    subtitle: "Expected: \(row.expectedState)\nActual: \(row.actualState)",
+                    systemImage: row.passed ? "checkmark.circle" : "xmark.octagon",
+                    badgeText: row.passed ? "Pass" : "Check",
+                    badgeTone: row.passed ? .neutral : .critical
+                )
+                if index < harness.surfaceConsistencyRows().count - 1 {
+                    AppGroupDivider()
+                }
+            }
+        }
     }
 
     private var scheduledTestAlarms: some View {
@@ -455,6 +599,32 @@ struct WakeSessionLabView: View {
     }
 
     private func scenarioCopy(
+        card: WakeSessionPreviewScenarioCard,
+        calculatedTimes: String,
+        systemImage: String
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label(card.title, systemImage: systemImage)
+                .font(.headline.weight(.semibold))
+            Text(card.description)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            HStack(spacing: 6) {
+                metadataChip(card.wakePurpose.displayTitle)
+                metadataChip(card.alarmState.shortTitle)
+                metadataChip(card.dateContext)
+            }
+            .fixedSize(horizontal: false, vertical: true)
+            labeledCopy("Calculated times", calculatedTimes)
+            labeledCopy("What this tests", card.whatThisTests)
+            labeledCopy("Real alarms", card.realAlarms)
+            labeledCopy("Estimated test time", card.approximateDuration)
+            labeledCopy("What to expect", card.whatToExpect)
+        }
+        .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func scenarioCopy(
         title: String,
         description: String,
         whatThisTests: String,
@@ -477,6 +647,18 @@ struct WakeSessionLabView: View {
         .fixedSize(horizontal: false, vertical: true)
     }
 
+    private func metadataChip(_ text: String) -> some View {
+        Text(text)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background {
+                Capsule(style: .continuous)
+                    .fill(Color.secondary.opacity(0.12))
+            }
+    }
+
     private func labeledCopy(_ label: String, _ value: String) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(label)
@@ -491,21 +673,21 @@ struct WakeSessionLabView: View {
     private var mappingPreview: some View {
         let plan = harness.makeMappedPlaybackPreview()
         return VStack(alignment: .leading, spacing: 12) {
-            Text("Real alarm schedule")
+            Text("Simulated schedule")
                 .font(.subheadline.weight(.semibold))
             ForEach(plan.mappedEvents) { event in
                 scheduleLine(
                     role: event.role.displayName,
-                    time: TimeFormatters.timeFormatter.string(from: event.mappedRealFireDate)
+                    time: TimeFormatters.timeFormatter.string(from: event.simulatedFireDate)
                 )
             }
-            Text("Simulated as")
+            Text("Real alarm schedule")
                 .font(.subheadline.weight(.semibold))
                 .padding(.top, 4)
             ForEach(plan.mappedEvents) { event in
                 scheduleLine(
                     role: event.role.displayName,
-                    time: TimeFormatters.timeFormatter.string(from: event.simulatedFireDate)
+                    time: TimeFormatters.timeFormatter.string(from: event.mappedRealFireDate)
                 )
             }
             if let explanation = plan.cutoffExplanation {
@@ -541,7 +723,7 @@ struct WakeSessionLabView: View {
         }
         .joined(separator: "\n")
         return [
-            "These alarms will ring on this iPhone using your selected alarm sound. Wake Checks remain 5 minutes apart.",
+            "These alarms will ring on this iPhone using your selected alarm sound. Follow-up alarms remain 5 minutes apart.",
             "Scenario: \(harness.selectedRealAlarmScenario.mode.confirmationTitle)",
             "Sequence: \(harness.selectedSequenceLength.title)",
             "Cancel All Test Alarms is available in Diagnostics and while test mode is active.",
@@ -557,6 +739,33 @@ struct WakeSessionLabView: View {
             record.id
         ]
         .joined(separator: " · ")
+    }
+
+    private func timeValidationSummary(_ report: WakeSessionTimeValidationReport) -> String {
+        if let reason = report.reason {
+            return reason
+        }
+        return [
+            "Fajr \(timeText(report.fajrBegins))-\(timeText(report.fajrEnds))",
+            "Alarm \(timeText(report.primaryAlarmTime))",
+            "\(report.followUpAlarmTimes.count) follow-up alarms"
+        ]
+        .joined(separator: " · ")
+    }
+
+    private func alarmScheduleSummary(_ report: WakeSessionTimeValidationReport) -> String {
+        let followUps = report.followUpAlarmTimes.enumerated().map { index, date in
+            "Follow-up \(index + 1) \(TimeFormatters.timeFormatter.string(from: date))"
+        }
+        let parts = [
+            "Primary \(timeText(report.primaryAlarmTime))",
+            "Cutoff \(timeText(report.cutoffBoundary))"
+        ] + followUps + [report.omittedFollowUpReason].compactMap { $0 }
+        return parts.joined(separator: "\n")
+    }
+
+    private func timeText(_ date: Date?) -> String {
+        date.map { TimeFormatters.timeFormatter.string(from: $0) } ?? "Unavailable"
     }
 
     private func actionButton(

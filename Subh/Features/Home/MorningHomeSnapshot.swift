@@ -11,6 +11,12 @@ struct MorningHomeContextFlag: Identifiable, Equatable, Sendable {
     let title: String
 }
 
+struct LateFajrLoggingPrompt: Equatable, Sendable {
+    let dateKey: String
+    let date: Date
+    let ctaTitle: String
+}
+
 struct MorningHomeSnapshot {
     static let maximumMorningcastCount = 7
     static let forecastTitle = "NEXT 7 MORNINGS"
@@ -25,6 +31,7 @@ struct MorningHomeSnapshot {
     let heroMorningLog: MorningLogEntry?
     let weeklyFajrcast: FajrWindowCompactSnapshot
     let morningcast: [WakeRowEntry]
+    let lateFajrLoggingPrompt: LateFajrLoggingPrompt?
     let permissionState: PermissionSnapshot
     let contextFlags: [MorningHomeContextFlag]
 
@@ -34,6 +41,7 @@ struct MorningHomeSnapshot {
         heroMorningLog: nil,
         weeklyFajrcast: .empty,
         morningcast: [],
+        lateFajrLoggingPrompt: nil,
         permissionState: .empty,
         contextFlags: []
     )

@@ -129,6 +129,8 @@ struct WakeSession: Codable, Equatable, Identifiable, Sendable {
     }
 
     mutating func apply(draft: WakeSessionDraft, now: Date) {
+        let previousStatus = status
+        let previousMode = mode
         mode = draft.mode
         finalThirdStart = draft.finalThirdStart
         fajrBegins = draft.fajrBegins
@@ -140,9 +142,10 @@ struct WakeSession: Codable, Equatable, Identifiable, Sendable {
         wakeCheckScheduledEventIDs = draft.wakeCheckScheduledEventIDs
         isTest = draft.isTest
         scenarioID = draft.scenarioID
-        if !status.isTerminal {
+        if !previousStatus.isTerminal {
             status = .scheduled
-        } else if status == .quietMorning {
+        } else if previousStatus == .quietMorning
+                    || (previousStatus == .cancelledForMorning && previousMode != draft.mode) {
             status = .scheduled
             cancelledAt = nil
             quietReason = nil
@@ -222,6 +225,7 @@ enum MorningLogRecordType: String, Codable, CaseIterable, Identifiable, Sendable
     case fajrPrayerConfirmed
     case fastingIntentConfirmed
     case wakeChecksCancelled
+    case wakeSessionCancelled
     case wakeSessionExpiredUnconfirmed
     case quietMorning
 
@@ -726,6 +730,48 @@ final class WakeSessionStore: ObservableObject {
     }
 
     @discardableResult
+    func cancelForMorning(
+        wakeSessionID: String,
+        reason: String?,
+        cancelledScheduledEventIDs: [String],
+        now: Date = Date()
+    ) -> WakeSession? {
+        guard var session = sessionsByID[wakeSessionID] else { return nil }
+        guard !session.status.isTerminal else { return session }
+        session.status = .cancelledForMorning
+        session.cancelledAt = now
+        session.quietReason = reason
+
+        let cancelRecord = appendRecord(
+            dateKey: session.dateKey,
+            wakeSessionID: wakeSessionID,
+            type: .wakeSessionCancelled,
+            timestamp: now,
+            metadata: reason.map { ["reason": $0] } ?? [:],
+            isTest: session.isTest,
+            scenarioID: session.scenarioID
+        )
+        appendUnique(&session.operationalLogIDs, value: cancelRecord.id)
+
+        if !cancelledScheduledEventIDs.isEmpty {
+            let wakeCheckCancelRecord = appendRecord(
+                dateKey: session.dateKey,
+                wakeSessionID: wakeSessionID,
+                type: .wakeChecksCancelled,
+                timestamp: now,
+                metadata: ["eventIDs": cancelledScheduledEventIDs.joined(separator: ",")],
+                isTest: session.isTest,
+                scenarioID: session.scenarioID
+            )
+            appendUnique(&session.operationalLogIDs, value: wakeCheckCancelRecord.id)
+        }
+
+        session.updatedAt = now
+        updateSession(session)
+        return session
+    }
+
+    @discardableResult
     func markExpiredUnconfirmed(
         wakeSessionID: String,
         now: Date = Date()
@@ -903,6 +949,8 @@ enum WakeSessionPlanner {
 
     static let wakeCheckIntervalMinutes = WakeCheckConfiguration.production.intervalMinutes
     static let maximumWakeCheckCount = WakeCheckConfiguration.production.maximumCount
+    static let latestWakeBufferMinutes = 5
+    static let latestNewSessionBufferMinutes = 6
 
     static func wakeSessionID(for dateKey: String) -> String {
         WakeSessionStore.sessionID(for: dateKey)
@@ -1025,5 +1073,37 @@ enum WakeSessionPlanner {
         case .fajr:
             return prayerWindow.fajrEnd?.addingTimeInterval(-TimeInterval(cutoffBufferMinutes * 60))
         }
+    }
+
+    static func relevantWindowEnd(
+        mode: WakeSessionMode,
+        prayerWindow: DailyPrayerWindow
+    ) -> Date? {
+        switch mode {
+        case .suhoor:
+            return prayerWindow.fajrStart
+        case .fajr:
+            return prayerWindow.fajrEnd
+        }
+    }
+
+    static func latestWakeTime(
+        mode: WakeSessionMode,
+        prayerWindow: DailyPrayerWindow
+    ) -> Date? {
+        relevantWindowEnd(mode: mode, prayerWindow: prayerWindow)?
+            .addingTimeInterval(-TimeInterval(latestWakeBufferMinutes * 60))
+    }
+
+    static func latestNewSessionCreationTime(
+        mode: WakeSessionMode,
+        prayerWindow: DailyPrayerWindow
+    ) -> Date? {
+        relevantWindowEnd(mode: mode, prayerWindow: prayerWindow)?
+            .addingTimeInterval(-TimeInterval(latestNewSessionBufferMinutes * 60))
+    }
+
+    static func earliestNewWakeTime(now: Date) -> Date {
+        now.addingTimeInterval(60)
     }
 }

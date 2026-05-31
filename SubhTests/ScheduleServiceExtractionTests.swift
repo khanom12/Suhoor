@@ -658,6 +658,34 @@ struct ScheduleServiceExtractionTests {
 
     @Test
     @MainActor
+    func wakeSessionStoreAuditsSuhoorCancellationBeforeFajrSwitch() throws {
+        let store = WakeSessionStore(loadPersistedData: false)
+        let suhoorDraft = Self.makeWakeSessionDraft(mode: .suhoor)
+        store.upsertScheduledSession(from: suhoorDraft, now: suhoorDraft.plannedWakeTime.addingTimeInterval(-60))
+
+        let cancelled = try #require(store.cancelForMorning(
+            wakeSessionID: suhoorDraft.wakeSessionID,
+            reason: "switchedToFajrDuringSuhoorWindow",
+            cancelledScheduledEventIDs: suhoorDraft.wakeCheckScheduledEventIDs,
+            now: suhoorDraft.plannedWakeTime
+        ))
+
+        #expect(cancelled.status == .cancelledForMorning)
+        #expect(cancelled.mode == .suhoor)
+        #expect(cancelled.cancelledAt == suhoorDraft.plannedWakeTime)
+
+        let fajrDraft = Self.makeWakeSessionDraft(mode: .fajr)
+        let rescheduled = store.upsertScheduledSession(from: fajrDraft, now: fajrDraft.plannedWakeTime.addingTimeInterval(-60))
+
+        #expect(rescheduled.status == .scheduled)
+        #expect(rescheduled.mode == .fajr)
+        #expect(rescheduled.cancelledAt == nil)
+        #expect(store.morningLog(for: suhoorDraft.dateKey)?.records.contains { $0.type == .wakeSessionCancelled } == true)
+        #expect(store.morningLog(for: suhoorDraft.dateKey)?.records.contains { $0.type == .wakeChecksCancelled } == true)
+    }
+
+    @Test
+    @MainActor
     func quietMorningLogsQuietWithoutMissedPrayer() {
         let store = WakeSessionStore(loadPersistedData: false)
         let draft = Self.makeWakeSessionDraft(mode: .fajr)
@@ -705,6 +733,57 @@ struct ScheduleServiceExtractionTests {
         let updatedLog = store.morningLog(for: draft.dateKey)
         #expect(updatedLog?.fastingIntentOutcome == .fastingIntentConfirmed)
         #expect(updatedLog?.fastingDayPlanned == true)
+    }
+
+    @Test
+    func suhoorAcknowledgementCanOfferIntentionalFajrFollowUpAfterFastingIntent() {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let entry = Self.makeWakeEntry(
+            date: Self.makeDate(year: 2026, month: 5, day: 1, timeZone: timeZone),
+            timeZone: timeZone,
+            plannedWakeState: .preFajr,
+            wakeOffsetMinutesFromFajrStart: -30,
+            quickWakeModeOverride: .suhoor
+        )
+        let dateKey = entry.activeDay.dateKey
+        let prayerWindow = entry.activeDay.decisionLog.prayerWindow
+        let draft = WakeSessionDraft(
+            wakeSessionID: WakeSessionPlanner.wakeSessionID(for: dateKey),
+            dateKey: dateKey,
+            morningDate: entry.activeDay.date,
+            mode: .suhoor,
+            finalThirdStart: prayerWindow.fajrStart.addingTimeInterval(-2 * 60 * 60),
+            fajrBegins: prayerWindow.fajrStart,
+            fajrEnds: prayerWindow.fajrEnd,
+            plannedWakeTime: entry.schedule.wakeDate,
+            primaryAlarmID: "\(dateKey).wakeAlarm.wake",
+            primaryScheduledEventID: "\(dateKey).wakeAlarm",
+            wakeCheckIDs: [],
+            wakeCheckScheduledEventIDs: []
+        )
+        let confirmedAt = entry.schedule.wakeDate.addingTimeInterval(10)
+        var session = WakeSession(draft: draft, now: entry.schedule.wakeDate.addingTimeInterval(-60))
+        session.status = .confirmedAwake
+        session.confirmedWakeMode = .suhoor
+        session.confirmedAt = confirmedAt
+
+        var log = MorningLogEntry(dateKey: dateKey, updatedAt: confirmedAt)
+        log.suhoorWakeOutcome = .confirmedAwakeForSuhoor
+        log.fastingIntentOutcome = .fastingIntentConfirmed
+        log.fastingDayPlanned = true
+
+        let display = MorningHomePresentation.heroDisplay(
+            entry: entry,
+            wakeSession: session,
+            morningLog: log,
+            permissionSummary: "",
+            locationDisplayText: "Toronto",
+            currentDate: confirmedAt.addingTimeInterval(90),
+            timeZone: timeZone
+        )
+
+        #expect(display.actionSlot.primaryTitle == "Wake Me for Fajr")
+        #expect(display.actionSlot.action == .setFajrWakeAlarm)
     }
 
     @Test
@@ -762,17 +841,12 @@ struct ScheduleServiceExtractionTests {
 
         let plan = try #require(harness.activePlan)
         let session = try #require(store.session(id: plan.wakeSessionID))
-        #expect(plan.fajrBegins == now.addingTimeInterval(-5 * 60))
-        #expect(plan.primaryWakeTime == now.addingTimeInterval(2 * 60))
-        #expect(plan.fajrEnds == now.addingTimeInterval(35 * 60))
+        let fajrEnds = try #require(plan.fajrEnds)
+        #expect(plan.prayerWindow.calculationSource == .localCalculated)
+        #expect(plan.fajrBegins < fajrEnds)
+        #expect(plan.primaryWakeTime == fajrEnds.addingTimeInterval(-30 * 60))
         let wakeCheckFireDates = plan.wakeCheckEvents.map { $0.fireDate }
-        #expect(wakeCheckFireDates == [
-            now.addingTimeInterval(7 * 60),
-            now.addingTimeInterval(12 * 60),
-            now.addingTimeInterval(17 * 60),
-            now.addingTimeInterval(22 * 60),
-            now.addingTimeInterval(27 * 60)
-        ])
+        #expect(wakeCheckFireDates == (1...5).map { plan.primaryWakeTime.addingTimeInterval(TimeInterval($0 * 5 * 60)) })
         #expect(WakeSessionPlanner.wakeCheckIntervalMinutes == 5)
         #expect(WakeSessionPlanner.maximumWakeCheckCount == 5)
         #expect(session.isTest)
@@ -792,9 +866,10 @@ struct ScheduleServiceExtractionTests {
 
         let plan = try #require(harness.activePlan)
         let log = try #require(store.morningLog(for: plan.dateKey))
-        #expect(plan.finalThirdStart == now.addingTimeInterval(-10 * 60))
-        #expect(plan.primaryWakeTime == now.addingTimeInterval(2 * 60))
-        #expect(plan.fajrBegins == now.addingTimeInterval(35 * 60))
+        let finalThirdStart = try #require(plan.finalThirdStart)
+        #expect(plan.prayerWindow.calculationSource == .localCalculated)
+        #expect(finalThirdStart < plan.primaryWakeTime)
+        #expect(plan.primaryWakeTime == plan.fajrBegins.addingTimeInterval(-30 * 60))
         #expect(plan.wakeCheckEvents.count == 5)
         #expect(log.suhoorWakeOutcome == MorningWakeOutcome.confirmedAwakeForSuhoor)
         #expect(log.fastingIntentOutcome == FastingIntentOutcome.unconfirmed)
@@ -877,7 +952,7 @@ struct ScheduleServiceExtractionTests {
         let plan = try #require(harness.activePlan)
         let session = try #require(store.session(id: plan.wakeSessionID))
         let pending = harness.pendingTestAlarms.map { $0.scheduledEventID }
-        #expect(session.plannedWakeTime == now.addingTimeInterval(3 * 60))
+        #expect(session.plannedWakeTime == plan.primaryWakeTime)
         let allOriginalPendingCancelled = originalPending.allSatisfy { stale in
             harness.alarmRecords.contains {
                 $0.scheduledEventID == stale && $0.status == WakeSessionTestAlarmStatus.cancelled
@@ -993,108 +1068,148 @@ struct ScheduleServiceExtractionTests {
 
     @Test
     @MainActor
-    func wakeSessionLabV3ScenarioCardsUseTesterFirstCopy() {
+    func wakeSessionLabV4ScenarioCardsUseTesterFirstCopy() {
         let store = WakeSessionStore(loadPersistedData: false)
         let harness = WakeSessionTestingHarness(wakeSessionStore: store)
 
         let previewCards = harness.previewScenarioCards
         #expect(previewCards.map(\.title) == [
-            "Fajr Flow",
-            "Suhoor Flow",
-            "Quiet Before Execution",
-            "Paused & Ring Exception",
-            "Setup & Alarm Issue",
-            "Boundary & Handoff",
-            "Custom Date & Time"
+            "Active Fajr Morning",
+            "Active Suhoor Morning",
+            "Quiet & Pause Pack",
+            "Suhoor -> Fajr Handoff",
+            "Custom Test Builder"
         ])
+        #expect(previewCards.map(\.wakePurpose) == [.fajr, .suhoor, .fajr, .suhoor, .fajr])
+        #expect(previewCards.map(\.alarmState) == [.active, .active, .quiet, .active, .active])
         #expect(previewCards.allSatisfy { !$0.whatThisTests.isEmpty })
         #expect(previewCards.allSatisfy { $0.realAlarms.contains("No") })
-        #expect(previewCards.allSatisfy { !$0.approximateDuration.isEmpty && !$0.whatToExpect.isEmpty })
+        #expect(previewCards.allSatisfy {
+            !$0.approximateDuration.isEmpty
+                && !$0.whatToExpect.isEmpty
+                && !$0.dateContext.isEmpty
+                && !$0.primaryActionTitle.isEmpty
+        })
         let coverageCopy = previewCards.map(\.whatThisTests).joined(separator: " ")
         for expectedLabel in [
             "Active Fajr",
             "Active Suhoor",
             "Quiet Fajr",
             "Quiet Suhoor",
-            "Paused Fajr",
-            "Paused Suhoor",
+            "Alarms paused",
             "Rings tomorrow only",
-            "Turn on alarms",
-            "Set location",
-            "Alarm issue",
-            "Time to wake",
-            "Next alarm soon",
-            "Final alarm this morning",
-            "post-awake Fajr",
-            "post-awake Suhoor",
-            "boundary cutoff",
-            "Fajr-end handoff"
+            "Suhoor I am awake",
+            "I am fasting today",
+            "I am awake for Fajr",
+            "I prayed Fajr",
+            "Day Detail",
+            "Next 7",
+            "Month Planning",
+            "Weekly Fajrcast"
         ] {
             #expect(coverageCopy.contains(expectedLabel))
         }
 
         let realAlarmCards = harness.realAlarmScenarioCards
-        #expect(realAlarmCards.map(\.title) == ["Fajr Alarm Test", "Suhoor Alarm Test"])
+        #expect(realAlarmCards.map(\.title) == [
+            "Fajr Alarm Test",
+            "Suhoor Alarm Test",
+            "System Dismissal Test",
+            "Cancel Remaining Alarms Test"
+        ])
         #expect(realAlarmCards.allSatisfy { $0.realAlarms.contains("Yes") })
-        #expect(realAlarmCards.allSatisfy { $0.whatToExpect.contains("five minutes") || $0.whatToExpect.contains("cancels") })
+        #expect(realAlarmCards.contains { $0.whatToExpect.contains("five minutes") })
+        #expect(realAlarmCards.contains { $0.whatToExpect.contains("cancels") })
+        #expect(realAlarmCards.contains { $0.whatToExpect.contains("Dismiss") })
     }
 
     @Test
     @MainActor
-    func wakeSessionLabV3CustomPreviewStatePickerAdaptsToMode() {
+    func wakeSessionLabV4CustomPreviewSeparatesPurposeAndAlarmState() {
         let store = WakeSessionStore(loadPersistedData: false)
         let harness = WakeSessionTestingHarness(wakeSessionStore: store)
 
+        #expect(WakeSessionCustomPreviewMode.allCases == [.fajr, .suhoor])
+        #expect(WakeSessionCustomAlarmState.allCases == [.active, .quiet, .paused, .ringsOnce, .blocked, .issue])
         #expect(harness.stateOptions(for: .fajr) == [
+            .daytime,
+            .evening,
+            .beforeMidnight,
+            .midnight,
             .beforeFajrBegins,
             .atFajrBegins,
+            .fajrActiveWindow,
             .beforePrimaryWake,
+            .defaultWakeTime,
             .primaryAlarmFired,
             .wakeCheck1Pending,
+            .finalWakeCheck,
             .awakeConfirmed,
             .prayerCTAAvailable,
             .prayerConfirmed,
             .afterFajrEnds
         ])
+        #expect(harness.stateOptions(for: .suhoor).contains(.suhoorCutoff))
         #expect(harness.stateOptions(for: .suhoor).contains(.fastingIntentConfirmed))
         #expect(harness.stateOptions(for: .suhoor).contains(.fajrPrayerCTAAvailable))
-        #expect(harness.stateOptions(for: .quiet) == [
+        #expect(harness.simulationScrubRange == 0...Double(24 * 60))
+        harness.selectedScrubHorizon = .next48Hours
+        #expect(harness.simulationScrubRange == 0...Double(48 * 60))
+        #expect(harness.stateOptions(for: .fajr, alarmState: .quiet) == [
             .quietFajrActive,
             .quietMorningLogged
         ])
+        #expect(harness.stateOptions(for: .suhoor, alarmState: .quiet) == [
+            .quietFajrActive,
+            .quietMorningLogged
+        ])
+        #expect(harness.stateOptions(for: .fajr, alarmState: .paused) == [
+            .beforePrimaryWake,
+            .atFajrBegins,
+            .afterFajrEnds
+        ])
+        #expect(harness.stateOptions(for: .fajr, alarmState: .blocked) == [
+            .beforePrimaryWake,
+            .afterFajrEnds
+        ])
 
-        harness.selectCustomPreviewMode(.quiet)
+        harness.selectCustomAlarmState(.quiet)
         #expect(harness.selectedScenario == .quietBeforeExecution)
         #expect(harness.selectedCustomStateOptions.contains(harness.selectedJumpPoint))
     }
 
     @Test
     @MainActor
-    func wakeSessionLabV3HomeDockGuidanceAndStateNavigation() async throws {
+    func wakeSessionLabV4HomeDockGuidanceAndStateNavigation() async throws {
         let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
         let now = Self.makeDate(year: 2026, month: 5, day: 26, hour: 14, timeZone: timeZone)
         let store = WakeSessionStore(loadPersistedData: false)
         let harness = WakeSessionTestingHarness(wakeSessionStore: store, initialNow: now, timeZone: timeZone)
-        let card = try #require(harness.previewScenarioCards.first { $0.id == "fajr-flow" })
+        let card = try #require(harness.previewScenarioCards.first { $0.id == "active-fajr-morning" })
 
         await harness.startPreview(card: card)
         var overlay = try #require(harness.simulationOverlayModel(realNow: now))
         #expect(overlay.runMode == "Preview Home UI")
-        #expect(overlay.expectedStateGuidance.contains("Fajr has begun"))
+        #expect(overlay.wakePurpose == "Fajr")
+        #expect(overlay.alarmState == "Active")
+        #expect(overlay.fajrRange.contains("-"))
+        #expect(overlay.alarmTime != "Unavailable")
+        #expect(overlay.expectedHeroSummary.contains("Fajr alarm time"))
+        #expect(overlay.expectedStateGuidance.contains("planned alarm time"))
 
         harness.moveToNextPreviewState()
         overlay = try #require(harness.simulationOverlayModel(realNow: now))
-        #expect(overlay.jumpPoint == "Before primary alarm")
-        #expect(overlay.expectedStateGuidance.contains("planned alarm time"))
+        #expect(overlay.jumpPoint == "Default wake time")
+        #expect(overlay.expectedStateGuidance.contains("I’m awake"))
 
         harness.moveToPreviousPreviewState()
         overlay = try #require(harness.simulationOverlayModel(realNow: now))
-        #expect(overlay.jumpPoint == "At Fajr begins")
+        #expect(overlay.jumpPoint == "Before primary alarm")
     }
 
     @Test
     @MainActor
-    func wakeSessionLabV3RealAlarmSetupSupportsSuhoorMapping() async throws {
+    func wakeSessionLabV4RealAlarmSetupSupportsSuhoorMapping() async throws {
         let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
         let now = Self.makeDate(year: 2026, month: 5, day: 26, hour: 14, timeZone: timeZone)
         let store = WakeSessionStore(loadPersistedData: false)
@@ -1130,6 +1245,72 @@ struct ScheduleServiceExtractionTests {
 
     @Test
     @MainActor
+    func wakeSessionLabV4TimeInspectorAndSurfaceDiagnosticsExposeExpectedState() async throws {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let now = Self.makeDate(year: 2026, month: 5, day: 26, hour: 14, timeZone: timeZone)
+        let store = WakeSessionStore(loadPersistedData: false)
+        let harness = WakeSessionTestingHarness(wakeSessionStore: store, initialNow: now, timeZone: timeZone)
+        let card = try #require(harness.previewScenarioCards.first { $0.id == "quiet-pause-pack" })
+
+        let previewSummary = harness.previewTimeSummary(for: card)
+        #expect(previewSummary.contains("Fajr"))
+        #expect(previewSummary.contains("Alarm"))
+
+        await harness.startPreview(card: card)
+
+        let report = harness.timeValidationReport()
+        #expect(report.passed)
+        #expect(report.prayerTimeSource == "Real calculation")
+        #expect(report.selectedWakePurpose == .fajr)
+        #expect(report.primaryAlarmTime != nil)
+        #expect(report.followUpAlarmTimes.isEmpty == false)
+
+        let heroRows = harness.heroSlotInspectionRows()
+        #expect(heroRows.map(\.slot).contains("Slot 3 - Alarm state/status"))
+        #expect(heroRows.allSatisfy { $0.passed })
+
+        let surfaceRows = harness.surfaceConsistencyRows()
+        #expect(surfaceRows.map(\.surface).contains("Home Hero"))
+        #expect(surfaceRows.map(\.surface).contains("Scheduler"))
+        #expect(surfaceRows.allSatisfy { $0.passed })
+        #expect(surfaceRows.contains { $0.expectedState.contains("Quiet") || $0.actualState.contains("Quiet") })
+    }
+
+    @Test
+    @MainActor
+    func wakeSessionLabV4ForbidsLegacyActiveLabels() {
+        let store = WakeSessionStore(loadPersistedData: false)
+        let harness = WakeSessionTestingHarness(wakeSessionStore: store)
+        let activeCopy = (
+            harness.previewScenarioCards.map {
+                [
+                    $0.title,
+                    $0.description,
+                    $0.whatThisTests,
+                    $0.whatToExpect,
+                    $0.primaryActionTitle,
+                    $0.secondaryActionTitle
+                ].joined(separator: " ")
+            }
+            + harness.realAlarmScenarioCards.map {
+                [
+                    $0.title,
+                    $0.description,
+                    $0.whatThisTests,
+                    $0.whatToExpect,
+                    $0.primaryActionTitle
+                ].joined(separator: " ")
+            }
+            + WakeSessionCustomPreviewMode.allCases.map(\.title)
+        ).joined(separator: " ")
+
+        #expect(activeCopy.contains("Stop checks") == false)
+        #expect(WakeSessionCustomPreviewMode.allCases.map(\.title).contains("Quiet mode") == false)
+        #expect(WakeSessionCustomPreviewMode.allCases.map(\.title).contains("Pause mode") == false)
+    }
+
+    @Test
+    @MainActor
     func wakeSessionLabHomeSimulationSnapshotUsesActiveContextAndRestoresRealHome() async throws {
         let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
         let now = Self.makeDate(year: 2026, month: 5, day: 26, hour: 14, timeZone: timeZone)
@@ -1143,6 +1324,7 @@ struct ScheduleServiceExtractionTests {
             heroMorningLog: nil,
             weeklyFajrcast: .empty,
             morningcast: [realEntry],
+            lateFajrLoggingPrompt: nil,
             permissionState: .empty,
             contextFlags: []
         )
@@ -1728,7 +1910,7 @@ struct ScheduleServiceExtractionTests {
 
         #expect(display.locationText == "Toronto")
         #expect(display.locationIconName == nil)
-        #expect(display.title == "Tomorrow")
+        #expect(display.title == "Tomorrow Morning")
         #expect(display.dateLine == "April 27 • Dhul Qadah 10")
         #expect(display.dateLine?.contains("Mon") == false)
         #expect(display.dateLine?.contains("ZQ") == false)
@@ -1748,12 +1930,12 @@ struct ScheduleServiceExtractionTests {
         #expect(display.fajrWindowVisualMode == .interactiveWithinFajrWindow)
         #expect(display.wakeAdjustmentEnabled)
         #expect(display.wakeAdjustmentMinTime == entry.activeDay.decisionLog.prayerWindow.fajrStart)
-        #expect(display.wakeAdjustmentMaxTime == entry.activeDay.decisionLog.prayerWindow.fajrEnd)
+        #expect(display.wakeAdjustmentMaxTime == entry.activeDay.decisionLog.prayerWindow.fajrEnd?.addingTimeInterval(-5 * 60))
         #expect(display.wakeAdjustmentAccessibilityValue?.contains("Adjustable between Fajr begin") == true)
         #expect(display.wakeAdjustmentAccessibilityValue?.contains("30 min before Fajr ends") == true)
         #expect(Self.normalizedTimeSpaces(display.fajrWindowAccessibilityText ?? "") == "Fajr begins: 5:00 AM. Fajr ends: 6:16 AM")
         #expect(display.chipTitles.isEmpty)
-        #expect(display.accessibilityLabel.hasPrefix("Toronto. Tomorrow."))
+        #expect(display.accessibilityLabel.hasPrefix("Toronto. Tomorrow Morning."))
         #expect(display.accessibilityLabel.contains("Wake alarm at"))
         #expect(Self.normalizedTimeSpaces(display.accessibilityLabel).contains("Fajr begins: 5:00 AM"))
         #expect(display.accessibilityLabel.contains("sunrise-derived") == false)
@@ -1808,7 +1990,7 @@ struct ScheduleServiceExtractionTests {
             tentativeWakeTime: entry.activeDay.decisionLog.prayerWindow.fajrEnd ?? adjustedWake,
             timeZone: timeZone
         )
-        #expect(adjustedToEnd.detailText == "As Fajr ends")
+        #expect(adjustedToEnd.detailText == "5 min before Fajr ends")
         #expect(adjustedToEnd.relationTone == .urgentRed)
 
         let adjustedWithinEndGranularity = MorningHomePresentation.heroDisplay(
@@ -1816,7 +1998,7 @@ struct ScheduleServiceExtractionTests {
             tentativeWakeTime: (entry.activeDay.decisionLog.prayerWindow.fajrEnd ?? adjustedWake).addingTimeInterval(-59),
             timeZone: timeZone
         )
-        #expect(adjustedWithinEndGranularity.detailText == "As Fajr ends")
+        #expect(adjustedWithinEndGranularity.detailText == "5 min before Fajr ends")
         #expect(adjustedWithinEndGranularity.relationTone == .urgentRed)
     }
 
@@ -1882,7 +2064,7 @@ struct ScheduleServiceExtractionTests {
         #expect(display.locationText == "East York")
         #expect(display.locationIconName == "location.fill")
         #expect(display.dateLine == "April 27 • Dhul Qadah 10")
-        #expect(display.accessibilityLabel.hasPrefix("East York. Tomorrow."))
+        #expect(display.accessibilityLabel.hasPrefix("East York. Tomorrow Morning."))
     }
 
     @Test
@@ -2098,9 +2280,10 @@ struct ScheduleServiceExtractionTests {
             tentativeWakeTime: maxTime,
             timeZone: timeZone
         )
-        #expect(adjustedToRight.detailText == "As Fajr begins")
+        #expect(adjustedToRight.detailText == "5 min before Fajr begins")
         #expect(adjustedToRight.relationTone == .normal)
-        #expect(adjustedToRight.wakeWindowPositionRatio == 1)
+        #expect((adjustedToRight.wakeWindowPositionRatio ?? 0) > 0.95)
+        #expect((adjustedToRight.wakeWindowPositionRatio ?? 1) < 1)
     }
 
     @Test
@@ -2118,7 +2301,7 @@ struct ScheduleServiceExtractionTests {
         )
 
         #expect(fajrDisplay.selectedQuickWakeMode == .fajr)
-        #expect(fajrDisplay.quickWakeModeOptions.map(\.title) == ["Fajr", "Suhoor"])
+        #expect(fajrDisplay.quickWakeModeOptions.map(\.title) == ["Suhoor", "Fajr"])
         #expect(fajrDisplay.quickWakeModeOptions.first(where: { $0.mode == .fajr })?.isSelected == true)
         #expect(fajrDisplay.primaryTime == fajrEntry.schedule.wakeDate)
         #expect(fajrDisplay.detailText == "30 min before Fajr ends")
@@ -2162,7 +2345,7 @@ struct ScheduleServiceExtractionTests {
         #expect(fastDisplay.fajrWindowVisualMode == .interactiveEarlyWorshipWindow)
         #expect(fastDisplay.wakeAdjustmentRelationAnchor == .fajrStart)
         #expect(fastDisplay.accessibilityLabel.contains("Suhoor selected"))
-        #expect(fastForecastRow.tags.isEmpty)
+        #expect(fastForecastRow.tags.map(\.title) == ["Mon/Thu"])
 
         let quietEntry = Self.makeWakeEntry(
             date: date,
@@ -2185,7 +2368,7 @@ struct ScheduleServiceExtractionTests {
         )
 
         #expect(quietDisplay.selectedQuickWakeMode == .fajr)
-        #expect(quietDisplay.quickWakeModeOptions.map(\.title) == ["Fajr", "Suhoor"])
+        #expect(quietDisplay.quickWakeModeOptions.map(\.title) == ["Suhoor", "Fajr"])
         #expect(quietDisplay.quickWakeModeOptions.first(where: { $0.mode == .fajr })?.isSelected == true)
         #expect(quietDisplay.primaryText == "Quiet")
         #expect(quietDisplay.detailText.hasPrefix("Alarm saved for"))
@@ -2195,9 +2378,10 @@ struct ScheduleServiceExtractionTests {
         #expect(quietDisplay.fajrWindowVisualMode == .staticWithinFajrWindow)
         #expect(quietDisplay.wakeAdjustmentEnabled == false)
         #expect(quietDisplay.wakeAdjustmentAccessibilityValue == nil)
-        #expect(quietForecastRow.tags.isEmpty)
+        #expect(quietForecastRow.tags.map(\.title) == ["Mon/Thu"])
         #expect(quietForecastRow.trailingTime == nil)
-        #expect(quietForecastRow.trailingStatusText == "Quiet")
+        #expect(quietForecastRow.leadingStatusText == "Quiet")
+        #expect(quietForecastRow.trailingStatusText == nil)
     }
 
     @Test
@@ -2222,7 +2406,7 @@ struct ScheduleServiceExtractionTests {
             timeZone: timeZone
         )
         #expect(fajrDisplay.locationText == dateLine)
-        #expect(AlarmDayDetailPresentation.modeOptions(for: fajrDisplay).map(\.title) == ["Fajr", "Suhoor"])
+        #expect(AlarmDayDetailPresentation.modeOptions(for: fajrDisplay).map(\.title) == ["Suhoor", "Fajr"])
         #expect(AlarmDayDetailPresentation.purpose(for: fajrEntry) == nil)
         #expect(AlarmDayDetailPresentation.relationText(for: fajrDisplay) == "30 min before Fajr ends")
         #expect(AlarmDayDetailPresentation.fajrAdhanSetting(for: fajrEntry, purpose: nil) == nil)
@@ -3201,8 +3385,10 @@ struct ScheduleServiceExtractionTests {
 
         #expect(row.dateLabel == "Tomorrow")
         #expect(row.tags.isEmpty)
-        #expect(row.trailingTime == entry.schedule.wakeDate)
+        #expect(row.leadingTime == entry.schedule.wakeDate)
+        #expect(row.trailingTime == nil)
         #expect(row.trailingStatusText == nil)
+        #expect(row.purposeText == "Awake for Fajr")
         #expect(row.accessibilityLabel.contains("Fajr morning"))
         #expect(row.accessibilityLabel.contains("Wake at"))
         #expect(row.accessibilityLabel.contains("Double tap for details"))
@@ -3243,8 +3429,8 @@ struct ScheduleServiceExtractionTests {
         #expect(Self.nextTenTagTitles(opportunities: [.ashura]) == ["Ashura"])
         #expect(Self.nextTenTagTitles(primary: .qadaMakeup, secondary: [.whiteDays]) == ["White Days"])
         #expect(Self.nextTenTagTitles(opportunities: [.ashura], selectedQuickWakeMode: .suhoor) == ["Ashura"])
-        #expect(Self.nextTenTagTitles(opportunities: [.mondayThursday]) == [])
-        #expect(Self.nextTenTagTitles(primary: .voluntary, secondary: [.mondayThursday]) == [])
+        #expect(Self.nextTenTagTitles(opportunities: [.mondayThursday]) == ["Mon/Thu"])
+        #expect(Self.nextTenTagTitles(primary: .voluntary, secondary: [.mondayThursday]) == ["Mon/Thu"])
         #expect(Self.nextTenTagTitles(opportunities: [.whiteDays]) == ["White Days"])
         #expect(Self.nextTenTagTitles(primary: .voluntary, secondary: [.whiteDays]) == ["White Days"])
         #expect(Self.nextTenTagTitles(opportunities: [.shawwalSix]) == ["Shawwal 6"])
@@ -4554,10 +4740,16 @@ struct ScheduleServiceExtractionTests {
             dateKey: dateLabel,
             date: date,
             dateLabel: dateLabel,
+            purposeText: "Awake for Fajr",
             tags: [],
             allAccessibilityTags: [],
+            leadingTime: trailingTime,
+            leadingStatusText: trailingStatusText,
             trailingTime: trailingTime,
             trailingStatusText: trailingStatusText,
+            alarmToggleIsOn: trailingTime != nil,
+            alarmToggleIsEnabled: trailingTime != nil,
+            selectedQuickWakeMode: .fajr,
             isInactive: trailingTime == nil,
             accessibilityLabel: dateLabel
         )

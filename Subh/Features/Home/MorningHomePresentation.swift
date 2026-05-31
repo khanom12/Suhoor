@@ -70,6 +70,7 @@ enum MorningHeroActionSlotAction: Equatable {
     case confirmAwake(WakeSessionMode)
     case confirmFastingToday
     case confirmFajrPrayer
+    case setFajrWakeAlarm
     case ringOnceDespitePause
 }
 
@@ -196,10 +197,16 @@ struct NextTenMorningsRowDisplay: Equatable, Identifiable {
     let dateKey: String
     let date: Date
     let dateLabel: String
+    let purposeText: String
     let tags: [NextTenMorningsTagDisplay]
     let allAccessibilityTags: [NextTenMorningsTagDisplay]
+    let leadingTime: Date?
+    let leadingStatusText: String?
     let trailingTime: Date?
     let trailingStatusText: String?
+    let alarmToggleIsOn: Bool
+    let alarmToggleIsEnabled: Bool
+    let selectedQuickWakeMode: QuickWakeMode?
     let isInactive: Bool
     let accessibilityLabel: String
 }
@@ -319,9 +326,6 @@ enum NextTenMorningsTagResolver {
     }
 
     private static func resolvedSelectedMode(for input: NextTenMorningsTagResolverInput) -> QuickWakeMode {
-        if input.quietModeState == .active {
-            return .quiet
-        }
         if let selectedQuickWakeMode = input.selectedQuickWakeMode {
             return selectedQuickWakeMode
         }
@@ -356,12 +360,7 @@ enum NextTenMorningsTagResolver {
             return nil
         }
 
-        switch display.semantic {
-        case .observanceOpportunity(.mondayThursday), .observanceIntended(.mondayThursday):
-            return nil
-        default:
-            return display
-        }
+        return display
     }
 
     private static func dominantVisibleTags(
@@ -543,7 +542,6 @@ enum NextTenMorningsTagResolver {
         shawwalSixProgress: ShawwalSixProgressSummary?
     ) -> [FastSecondaryVirtueTag] {
         let filtered = tags.filter { secondaryTag in
-            guard secondaryTag != .mondayThursday else { return false }
             guard secondaryTag != .shawwalSix || shawwalSixProgress?.isComplete != true else { return false }
             return true
         }
@@ -819,21 +817,26 @@ enum MorningHomePresentation {
         let isPaused = globalWakeAlarmPolicy == .pausedIndefinitely
             && entry.activeDay.effectiveConfig.dateAlarmOverride != .ringDespitePause
             && !isQuiet
-        let trailingTime = (isQuiet || isPaused) ? nil : (entry.isEnabled ? entry.schedule.wakeDate : nil)
+        let leadingTime = (isQuiet || isPaused) ? nil : (entry.isEnabled ? entry.schedule.wakeDate : nil)
+        let leadingStatusText: String?
         let trailingStatusText: String?
         if isQuiet {
-            trailingStatusText = "Quiet"
+            leadingStatusText = "Quiet"
+            trailingStatusText = nil
         } else if isPaused {
+            leadingStatusText = "Paused"
             trailingStatusText = "Paused"
         } else {
+            leadingStatusText = entry.isEnabled ? nil : "No alarm"
             trailingStatusText = entry.isEnabled ? nil : "No alarm"
         }
+        let purposeText = selectedMode == .suhoor ? "Awake for Suhoor" : "Awake for Fajr"
         let accessibilityLabel = nextTenMorningsAccessibilityLabel(
             entry: entry,
             date: entry.schedule.date,
             tags: tagResolution.accessibilityTags,
-            trailingTime: trailingTime,
-            trailingStatusText: trailingStatusText,
+            trailingTime: leadingTime,
+            trailingStatusText: leadingStatusText,
             currentDate: currentDate,
             timeZone: timeZone
         )
@@ -843,10 +846,16 @@ enum MorningHomePresentation {
             dateKey: entry.id,
             date: entry.schedule.date,
             dateLabel: dateLabel,
+            purposeText: purposeText,
             tags: tagResolution.visibleTags,
             allAccessibilityTags: tagResolution.accessibilityTags,
-            trailingTime: trailingTime,
+            leadingTime: leadingTime,
+            leadingStatusText: leadingStatusText,
+            trailingTime: nil,
             trailingStatusText: trailingStatusText,
+            alarmToggleIsOn: !isQuiet && !isPaused && entry.isEnabled,
+            alarmToggleIsEnabled: !isPaused && entry.isEnabled,
+            selectedQuickWakeMode: selectedMode,
             isInactive: !entry.isEnabled || isQuiet || isPaused,
             accessibilityLabel: accessibilityLabel
         )
@@ -873,7 +882,7 @@ enum MorningHomePresentation {
             return MorningHomeHeroDisplay(
                 locationText: fallbackLocation,
                 locationIconName: locationIconName,
-                title: "Tomorrow",
+                title: "Tomorrow Morning",
                 dateLine: nil,
                 wakeState: .unavailable,
                 primaryTime: nil,
@@ -903,7 +912,7 @@ enum MorningHomePresentation {
                 quickWakeModeOptions: [],
                 actionSlot: .empty,
                 chipTitles: [],
-                accessibilityLabel: "\(fallbackLocation). Tomorrow. Set location. \(detail). Fajr times are not available yet."
+                accessibilityLabel: "\(fallbackLocation). Tomorrow Morning. Set location. \(detail). Fajr times are not available yet."
             )
         }
 
@@ -1101,6 +1110,9 @@ enum MorningHomePresentation {
             if !fastingIntentConfirmed, postAwakeActionReady {
                 return fastingIntentActionSlot()
             }
+            if fastingIntentConfirmed, currentDate < prayerWindow.fajrStart {
+                return fajrFollowUpActionSlot()
+            }
             return confirmedAwakeSlot(session: wakeSession, timeZone: timeZone)
         }
 
@@ -1193,6 +1205,16 @@ enum MorningHomePresentation {
         )
     }
 
+    private static func fajrFollowUpActionSlot() -> MorningHeroActionSlotDisplay {
+        MorningHeroActionSlotDisplay(
+            style: .primary,
+            primaryTitle: "Wake Me for Fajr",
+            secondaryText: nil,
+            action: .setFajrWakeAlarm,
+            accessibilityLabel: "Set a Fajr wake alarm for this morning."
+        )
+    }
+
     static func heroDisplay(
         adjusting display: MorningHomeHeroDisplay,
         tentativeWakeTime: Date,
@@ -1206,18 +1228,18 @@ enum MorningHomePresentation {
         }
 
         let clampedWake = clamped(tentativeWakeTime, min: minTime, max: maxTime)
-        let fajrEndForUrgency = display.wakeAdjustmentFajrEndTime ?? maxTime
+        let upperBoundaryTime = display.wakeAdjustmentFajrEndTime ?? maxTime
         let relation = adjustedWakeRelation(
             wakeTime: clampedWake,
             minTime: minTime,
-            maxTime: maxTime,
+            upperBoundaryTime: upperBoundaryTime,
             visualMode: display.fajrWindowVisualMode
         )
         let detailText = relation.text
         let ratio = wakeWindowPositionRatio(
             wakeDate: clampedWake,
             fajrStart: minTime,
-            fajrEnd: maxTime
+            fajrEnd: upperBoundaryTime
         )
         let primaryText = timeFormatter(timeZone: timeZone).string(from: clampedWake)
         let accessibilityValue = wakeAdjustmentAccessibilityValue(
@@ -1225,7 +1247,7 @@ enum MorningHomePresentation {
             relationText: detailText,
             minTime: minTime,
             maxTime: maxTime,
-            fajrEnd: fajrEndForUrgency,
+            fajrEnd: upperBoundaryTime,
             visualMode: display.fajrWindowVisualMode,
             timeZone: timeZone
         )
@@ -1397,6 +1419,10 @@ enum MorningHomePresentation {
         for row: NextTenMorningsRowDisplay,
         timeZone: TimeZone
     ) -> Double {
+        if row.alarmToggleIsEnabled || row.leadingStatusText == "Quiet" {
+            return 54
+        }
+
         if let trailingTime = row.trailingTime {
             let displayText = timeFormatter(timeZone: timeZone).string(from: trailingTime)
             let mainCharacterCount = displayText.filter { $0.isNumber || $0 == ":" }.count
@@ -1544,11 +1570,39 @@ enum MorningHomePresentation {
         WakeStateSelectionResolver.selectedMode(for: entry.activeDay)
     }
 
+    static func requiresSuhoorToFajrSwitchConfirmation(
+        entry: WakeRowEntry?,
+        wakeSession: WakeSession?,
+        display: MorningHomeHeroDisplay,
+        currentDate: Date,
+        timeZone: TimeZone
+    ) -> Bool {
+        guard display.title == "Today Morning",
+              display.selectedQuickWakeMode == .suhoor,
+              let entry,
+              let wakeSession,
+              wakeSession.mode == .suhoor,
+              !wakeSession.status.isTerminal else {
+            return false
+        }
+
+        let prayerWindow = entry.activeDay.decisionLog.prayerWindow
+        guard let finalThirdStart = EarlyWorshipBoundaryResolver.finalThirdStart(
+            targetFajrStart: prayerWindow.fajrStart,
+            maghrib: prayerWindow.maghrib,
+            timeZone: timeZone
+        ) else {
+            return false
+        }
+
+        return currentDate >= finalThirdStart && currentDate < prayerWindow.fajrStart
+    }
+
     private static func quickWakeModeOptions(
         selected: QuickWakeMode,
         relativeDayLabel: String
     ) -> [MorningHeroQuickWakeModeOption] {
-        [QuickWakeMode.fajr, .suhoor].map { mode in
+        [QuickWakeMode.suhoor, .fajr].map { mode in
             MorningHeroQuickWakeModeOption(
                 mode: mode,
                 title: mode.displayTitle,
@@ -1575,6 +1629,10 @@ enum MorningHomePresentation {
         switch label {
         case "Today", "Tomorrow":
             return label.lowercased()
+        case "Today Morning":
+            return "today morning"
+        case "Tomorrow Morning":
+            return "tomorrow morning"
         default:
             return label
         }
@@ -1901,6 +1959,7 @@ enum MorningHomePresentation {
 
             let beginText = formatter.string(from: finalThirdStart)
             let endText = formatter.string(from: window.fajrStart)
+            let latestWakeTime = window.fajrStart.addingTimeInterval(-5 * 60)
             let accessibilityText = "Final third of the night begins at \(beginText). Fajr begins at \(endText)"
             let ratio = markerDate.flatMap {
                 wakeWindowPositionRatio(wakeDate: $0, fajrStart: finalThirdStart, fajrEnd: window.fajrStart)
@@ -1913,8 +1972,8 @@ enum MorningHomePresentation {
                     wakeTime: entry.schedule.wakeDate,
                     relationText: conciseWakeRelation(for: entry, timeZone: timeZone).text,
                     minTime: finalThirdStart,
-                    maxTime: window.fajrStart,
-                    fajrEnd: fajrEnd,
+                    maxTime: latestWakeTime,
+                    fajrEnd: window.fajrStart,
                     visualMode: visualMode,
                     timeZone: timeZone
                 )
@@ -1933,8 +1992,8 @@ enum MorningHomePresentation {
                 rightBoundaryMarkerStyle: .endpointCircle,
                 visualMode: visualMode,
                 adjustmentMinTime: adjustmentEnabled ? finalThirdStart : nil,
-                adjustmentMaxTime: adjustmentEnabled ? window.fajrStart : nil,
-                adjustmentFajrEndTime: adjustmentEnabled ? fajrEnd : nil,
+                adjustmentMaxTime: adjustmentEnabled ? latestWakeTime : nil,
+                adjustmentFajrEndTime: adjustmentEnabled ? window.fajrStart : nil,
                 adjustmentStepMinutes: 1,
                 adjustmentRelationAnchor: adjustmentEnabled ? .fajrStart : nil,
                 adjustmentAccessibilityValue: adjustmentAccessibilityValue
@@ -1943,6 +2002,7 @@ enum MorningHomePresentation {
 
         let beginText = formatter.string(from: window.fajrStart)
         let endText = formatter.string(from: fajrEnd)
+        let latestWakeTime = fajrEnd.addingTimeInterval(-5 * 60)
         let relationVerbText = "Fajr \(beginVerb): \(beginText). Fajr \(endVerb): \(endText)"
         let ratio = markerDate.flatMap {
             wakeWindowPositionRatio(wakeDate: $0, fajrStart: window.fajrStart, fajrEnd: fajrEnd)
@@ -1956,7 +2016,7 @@ enum MorningHomePresentation {
                 wakeTime: entry.schedule.wakeDate,
                 relationText: conciseWakeRelation(for: entry, timeZone: timeZone).text,
                 minTime: window.fajrStart,
-                maxTime: fajrEnd,
+                maxTime: latestWakeTime,
                 fajrEnd: fajrEnd,
                 visualMode: visualMode,
                 timeZone: timeZone
@@ -1976,7 +2036,7 @@ enum MorningHomePresentation {
             rightBoundaryMarkerStyle: .endpointCircle,
             visualMode: visualMode,
             adjustmentMinTime: adjustmentEnabled ? window.fajrStart : nil,
-            adjustmentMaxTime: adjustmentEnabled ? fajrEnd : nil,
+            adjustmentMaxTime: adjustmentEnabled ? latestWakeTime : nil,
             adjustmentFajrEndTime: adjustmentEnabled ? fajrEnd : nil,
             adjustmentStepMinutes: 1,
             adjustmentRelationAnchor: relationAnchor,
@@ -2037,12 +2097,12 @@ enum MorningHomePresentation {
         let today = calendar.startOfDay(for: currentDate)
 
         if targetStart == today, wakeDate >= currentDate {
-            return "Today"
+            return "Today Morning"
         }
 
         if let tomorrow = calendar.date(byAdding: .day, value: 1, to: today),
            targetStart == tomorrow {
-            return "Tomorrow"
+            return "Tomorrow Morning"
         }
 
         return weekdayFormatter(timeZone: timeZone).string(from: targetDate)
@@ -2225,18 +2285,18 @@ enum MorningHomePresentation {
     private static func adjustedWakeRelation(
         wakeTime: Date,
         minTime: Date,
-        maxTime: Date,
+        upperBoundaryTime: Date,
         visualMode: MorningHeroFajrWindowVisualMode
     ) -> RelationDisplay {
         if visualMode.isEarlyWorship {
             return activeEarlyWorshipWakeRelation(
                 wakeTime: wakeTime,
                 finalThirdStart: minTime,
-                fajrStart: maxTime
+                fajrStart: upperBoundaryTime
             )
         }
 
-        return activeHeroWakeRelation(wakeTime: wakeTime, fajrStart: minTime, fajrEnd: maxTime)
+        return activeHeroWakeRelation(wakeTime: wakeTime, fajrStart: minTime, fajrEnd: upperBoundaryTime)
     }
 
     private static func wakeAdjustmentAccessibilityValue(
@@ -2250,10 +2310,10 @@ enum MorningHomePresentation {
     ) -> String {
         let formatter = timeFormatter(timeZone: timeZone)
         if visualMode.isEarlyWorship {
-            return "Wake alarm at \(formatter.string(from: wakeTime)), \(relationText). Adjustable between the final third of the night at \(formatter.string(from: minTime)) and Fajr begin at \(formatter.string(from: maxTime))."
+            return "Wake alarm at \(formatter.string(from: wakeTime)), \(relationText). Adjustable between the final third of the night at \(formatter.string(from: minTime)) and the latest wake time at \(formatter.string(from: maxTime)), before Fajr begins at \(formatter.string(from: fajrEnd))."
         }
 
-        return "Wake alarm at \(formatter.string(from: wakeTime)), \(relationText). Adjustable between Fajr begin at \(formatter.string(from: minTime)) and Fajr end at \(formatter.string(from: fajrEnd))."
+        return "Wake alarm at \(formatter.string(from: wakeTime)), \(relationText). Adjustable between Fajr begin at \(formatter.string(from: minTime)) and the latest wake time at \(formatter.string(from: maxTime)), before Fajr ends at \(formatter.string(from: fajrEnd))."
     }
 
     private static func adjustedAccessibilityLabel(

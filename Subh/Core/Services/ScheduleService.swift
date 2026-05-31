@@ -649,6 +649,13 @@ final class ScheduleManager: ObservableObject {
         }
         let heroWakeSession = tomorrowDay.flatMap { wakeSessionStore.session(for: $0.dateKey) }
         let heroMorningLog = tomorrowDay.flatMap { wakeSessionStore.morningLog(for: $0.dateKey) }
+        let lateFajrLoggingPrompt = makeLateFajrLoggingPrompt(
+            now: now,
+            today: today,
+            todayDay: todayDay,
+            targetMorning: tomorrowDay,
+            timeZone: timeZone
+        )
         let allMorningEntries = activeWindowSnapshot.visibleDays
             .map { WakeRowActionResolver.makeEntry(activeDay: $0, overrideDateKeys: overrideDateKeys) }
         let morningcast = Array(
@@ -670,9 +677,56 @@ final class ScheduleManager: ObservableObject {
                 timeZone: timeZone
             ),
             morningcast: morningcast,
+            lateFajrLoggingPrompt: lateFajrLoggingPrompt,
             permissionState: permissionSnapshot,
             contextFlags: MorningHomeContextFlag.flags(for: tomorrowDay?.resolvedDayContext ?? .standard)
         )
+    }
+
+    private func makeLateFajrLoggingPrompt(
+        now: Date,
+        today: Date,
+        todayDay: ActiveAlarmDay?,
+        targetMorning: ActiveAlarmDay?,
+        timeZone: TimeZone
+    ) -> LateFajrLoggingPrompt? {
+        let yesterday = Calendar(identifier: .gregorian).date(byAdding: .day, value: -1, to: today) ?? today.addingTimeInterval(-24 * 60 * 60)
+        let yesterdayKey = DateHelpers.dayIdentifier(for: yesterday, timeZone: timeZone)
+        let candidateDays = [
+            todayDay,
+            activeWindowSnapshot.byDateKey[yesterdayKey]
+        ].compactMap { $0 }
+
+        for day in candidateDays {
+            guard let fajrEnd = day.decisionLog.prayerWindow.fajrEnd, now > fajrEnd else { continue }
+            guard fajrLogStore.status(for: day.dateKey) != .completed else { continue }
+            guard wakeSessionStore.morningLog(for: day.dateKey)?.fajrPrayerOutcome != .fajrPrayerConfirmed else { continue }
+            if let expiry = lateFajrPromptExpiry(for: targetMorning, timeZone: timeZone), now >= expiry {
+                continue
+            }
+
+            let cta = isSameCalendarDay(day.date, now, timeZone: timeZone)
+                ? "I Prayed Fajr Earlier Today"
+                : "I Prayed Fajr Yesterday Morning"
+            return LateFajrLoggingPrompt(dateKey: day.dateKey, date: day.date, ctaTitle: cta)
+        }
+
+        return nil
+    }
+
+    private func lateFajrPromptExpiry(for targetMorning: ActiveAlarmDay?, timeZone: TimeZone) -> Date? {
+        guard let targetMorning else { return nil }
+        let selectedMode = WakeStateSelectionResolver.selectedMode(for: targetMorning)
+        switch selectedMode {
+        case .suhoor:
+            return EarlyWorshipBoundaryResolver.finalThirdStart(
+                targetFajrStart: targetMorning.decisionLog.prayerWindow.fajrStart,
+                maghrib: targetMorning.decisionLog.prayerWindow.maghrib,
+                timeZone: timeZone
+            )
+        case .fajr, .quiet:
+            return targetMorning.decisionLog.prayerWindow.fajrStart
+        }
     }
 
     private static func shouldKeepCurrentMorningInHero(_ day: ActiveAlarmDay, now: Date) -> Bool {
@@ -730,7 +784,12 @@ final class ScheduleManager: ObservableObject {
     }
 
     var wakeAlarmPolicy: GlobalWakeAlarmPolicy {
-        settingsStore.settings.globalWakeAlarmPolicy
+        #if DEBUG || INTERNAL_TESTING
+        if let simulatedPolicy = wakeSessionTestingHarness.effectiveSimulationWakeAlarmPolicy {
+            return simulatedPolicy
+        }
+        #endif
+        return settingsStore.settings.globalWakeAlarmPolicy
     }
 
     var showsHome: Bool {
@@ -1762,11 +1821,16 @@ final class ScheduleManager: ObservableObject {
         #if DEBUG || INTERNAL_TESTING
         if wakeSessionTestingHarness.activeSimulationContext != nil {
             if mode == .quiet {
-                await wakeSessionTestingHarness.start(.quietBeforeExecution, runMode: .homeSimulation)
+                wakeSessionTestingHarness.selectCustomAlarmState(.quiet)
+                await wakeSessionTestingHarness.start(.quietBeforeExecution, runMode: .previewHomeUI)
             } else if mode == .suhoor {
-                await wakeSessionTestingHarness.start(.suhoorStateExplorer, runMode: .homeSimulation)
+                wakeSessionTestingHarness.selectCustomPreviewMode(.suhoor)
+                wakeSessionTestingHarness.selectCustomAlarmState(.active)
+                await wakeSessionTestingHarness.start(.suhoorStateExplorer, runMode: .previewHomeUI)
             } else {
-                await wakeSessionTestingHarness.start(.fajrStateExplorer, runMode: .homeSimulation)
+                wakeSessionTestingHarness.selectCustomPreviewMode(.fajr)
+                wakeSessionTestingHarness.selectCustomAlarmState(.active)
+                await wakeSessionTestingHarness.start(.fajrStateExplorer, runMode: .previewHomeUI)
             }
             refreshCurrentMorningHomeSnapshot(timeZone: timeZone)
             return true
@@ -1776,6 +1840,21 @@ final class ScheduleManager: ObservableObject {
         guard let day = activeDay(for: normalizedDate, timeZone: timeZone) else {
             return false
         }
+        if mode == .suhoor,
+           isSameCalendarDay(normalizedDate, timeProvider.now(), timeZone: timeZone),
+           let latestCreation = WakeSessionPlanner.latestNewSessionCreationTime(
+            mode: .suhoor,
+            prayerWindow: day.decisionLog.prayerWindow
+           ),
+           timeProvider.now() > latestCreation {
+            return false
+        }
+        await cancelActiveSuhoorSessionIfNeeded(
+            switchingTo: mode,
+            day: day,
+            normalizedDate: normalizedDate,
+            timeZone: timeZone
+        )
         let isRamadan = Self.isRamadanAlarmDetailDay(day)
 
         alarmConfigStore.updateOverride(for: normalizedDate, timeZone: timeZone) { override in
@@ -1797,6 +1876,41 @@ final class ScheduleManager: ObservableObject {
 
         await rescheduleDay(normalizedDate, preferCached: false)
         return true
+    }
+
+    private func cancelActiveSuhoorSessionIfNeeded(
+        switchingTo mode: QuickWakeMode,
+        day: ActiveAlarmDay,
+        normalizedDate: Date,
+        timeZone: TimeZone
+    ) async {
+        guard mode == .fajr else { return }
+        guard isSameCalendarDay(normalizedDate, timeProvider.now(), timeZone: timeZone) else { return }
+        guard WakeStateSelectionResolver.selectedMode(for: day) == .suhoor else { return }
+        guard let session = wakeSessionStore.session(for: day.dateKey),
+              session.mode == .suhoor,
+              !session.status.isTerminal else { return }
+
+        let prayerWindow = day.decisionLog.prayerWindow
+        guard let finalThirdStart = EarlyWorshipBoundaryResolver.finalThirdStart(
+            targetFajrStart: prayerWindow.fajrStart,
+            maghrib: prayerWindow.maghrib,
+            timeZone: timeZone
+        ) else { return }
+        let now = timeProvider.now()
+        guard now >= finalThirdStart, now < prayerWindow.fajrStart else { return }
+
+        let cancelled = await alarmScheduler.cancelWakeSessionEvents(
+            day: day,
+            wakeSessionID: session.wakeSessionID,
+            now: now
+        )
+        _ = wakeSessionStore.cancelForMorning(
+            wakeSessionID: session.wakeSessionID,
+            reason: "switchedToFajrDuringSuhoorWindow",
+            cancelledScheduledEventIDs: cancelled.map(\.id),
+            now: now
+        )
     }
 
     @discardableResult
@@ -2161,10 +2275,18 @@ final class ScheduleManager: ObservableObject {
            proposedWakeTime <= prayerWindow.fajrStart,
            let minTime = resolvedWakeState.wakeBoundaryResolution.leftBoundaryTime,
            let maxTime = resolvedWakeState.wakeBoundaryResolution.rightBoundaryTime {
-            return HeroWakeAdjustmentWindow(minTime: minTime, maxTime: maxTime)
+            let latestWake = WakeSessionPlanner.latestWakeTime(mode: .suhoor, prayerWindow: prayerWindow) ?? maxTime
+            return HeroWakeAdjustmentWindow(minTime: minTime, maxTime: min(maxTime, latestWake))
         }
 
-        return HeroWakeAdjustmentWindow(minTime: prayerWindow.fajrStart, maxTime: fallbackFajrEnd)
+        let latestWake = WakeSessionPlanner.latestWakeTime(mode: .fajr, prayerWindow: prayerWindow) ?? fallbackFajrEnd
+        return HeroWakeAdjustmentWindow(minTime: prayerWindow.fajrStart, maxTime: min(fallbackFajrEnd, latestWake))
+    }
+
+    private func isSameCalendarDay(_ lhs: Date, _ rhs: Date, timeZone: TimeZone) -> Bool {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        return calendar.isDate(lhs, inSameDayAs: rhs)
     }
 
     private func isEarlyWorshipMorning(_ day: ActiveAlarmDay) -> Bool {

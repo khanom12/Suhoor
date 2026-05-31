@@ -105,8 +105,20 @@ struct SubhHomeView: View {
                         }
 
                         if let entry = snapshot.tomorrow {
-                            PrimaryMorningContextCard(entry: entry) {
+                            PrimaryMorningContextCard(
+                                entry: entry,
+                                currentDate: scheduleManager.currentDate,
+                                globalWakeAlarmPolicy: scheduleManager.wakeAlarmPolicy
+                            ) {
                                 destination = .day(entry.schedule)
+                            }
+                        }
+
+                        if let prompt = snapshot.lateFajrLoggingPrompt {
+                            LateFajrLoggingPromptCard(prompt: prompt) {
+                                Task {
+                                    _ = await scheduleManager.confirmFajrPrayer(on: prompt.date)
+                                }
                             }
                         }
 
@@ -117,7 +129,18 @@ struct SubhHomeView: View {
                                 .padding(.horizontal, 2)
                                 .accessibilityAddTraits(.isHeader)
 
-                            NextTenMorningsCard(entries: snapshot.morningcast, globalWakeAlarmPolicy: scheduleManager.wakeAlarmPolicy) { entry in
+                            NextTenMorningsCard(
+                                entries: snapshot.morningcast,
+                                globalWakeAlarmPolicy: scheduleManager.wakeAlarmPolicy,
+                                onAlarmEnabledChange: { entry, isOn in
+                                    Task {
+                                        let mode = isOn
+                                            ? WakeStateSelectionResolver.selectedMode(for: entry.activeDay)
+                                            : .quiet
+                                        _ = await scheduleManager.selectHeroWakeMode(for: entry.schedule.date, mode: mode)
+                                    }
+                                }
+                            ) { entry in
                                 destination = .day(entry.schedule)
                             }
 
@@ -322,6 +345,8 @@ struct SubhHomeView: View {
 
 private struct PrimaryMorningContextCard: View {
     let entry: WakeRowEntry
+    let currentDate: Date
+    let globalWakeAlarmPolicy: GlobalWakeAlarmPolicy
     let onOpen: () -> Void
 
     private var presentation: PrimaryMorningContextPresentation {
@@ -329,6 +354,43 @@ private struct PrimaryMorningContextCard: View {
             for: entry.activeDay,
             density: .compact
         )
+    }
+
+    private var sentenceCopy: (title: String, body: String) {
+        let selectedMode = WakeStateSelectionResolver.selectedMode(for: entry.activeDay)
+        let isQuiet = entry.activeDay.effectiveConfig.dateAlarmOverride == .quiet
+        let dayLabel = primaryMorningLabel(for: entry.schedule.date, currentDate: currentDate)
+        let wakePurpose = selectedMode == .suhoor ? "Suhoor" : "Fajr"
+        let timeText = TimeFormatters.timeFormatter.string(from: entry.schedule.wakeDate)
+        let opportunity = primaryOpportunityText(for: entry.activeDay)
+
+        if globalWakeAlarmPolicy == .pausedIndefinitely,
+           entry.activeDay.effectiveConfig.dateAlarmOverride != .ringDespitePause,
+           !isQuiet {
+            return (
+                "Alarms are paused.",
+                "Subh will not ring until you resume alarms or choose a one-morning exception."
+            )
+        }
+
+        if isQuiet {
+            return (
+                "\(dayLabel) is quiet.",
+                "No alarm will ring \(dayLabel.lowercased()). Your \(wakePurpose) plan is saved, and you can turn the alarm back on if you want Subh to wake you."
+            )
+        }
+
+        let title = opportunity.map { "\(dayLabel) is a \($0)." } ?? "\(dayLabel) is a regular Fajr morning."
+        let plannedFast = selectedMode == .suhoor
+        let body: String
+        if opportunity != nil {
+            body = plannedFast
+                ? "You have planned to fast, so your alarm is set for \(timeText) for Suhoor."
+                : "You have not planned to fast \(dayLabel == "Tomorrow Morning" ? "tomorrow" : "today"). Your alarm is set for \(timeText) for Fajr."
+        } else {
+            body = "You are waking for \(wakePurpose), and your alarm is set for \(timeText)."
+        }
+        return (title, body)
     }
 
     var body: some View {
@@ -339,22 +401,15 @@ private struct PrimaryMorningContextCard: View {
                     contentPadding: 14
                 ) {
                     VStack(alignment: .leading, spacing: 9) {
-                        Text(presentation.title)
+                        Text(sentenceCopy.title)
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(WakeGlassTheme.primaryText.opacity(0.94))
                             .fixedSize(horizontal: false, vertical: true)
 
-                        if let body = presentation.body, !body.isEmpty {
-                            Text(body)
-                                .font(.footnote)
-                                .foregroundStyle(WakeGlassTheme.secondaryText)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-
-                        if !presentation.compactChips.isEmpty {
-                            SharedDayTagChipFlow(tags: presentation.compactChips)
-                                .padding(.top, 2)
-                        }
+                        Text(sentenceCopy.body)
+                            .font(.footnote)
+                            .foregroundStyle(WakeGlassTheme.secondaryText)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -366,6 +421,74 @@ private struct PrimaryMorningContextCard: View {
             .accessibilityHint("Double-tap for details.")
             .accessibilityIdentifier("primaryMorningContext.compact")
         }
+    }
+
+    private func primaryOpportunityText(for day: ActiveAlarmDay) -> String? {
+        let tags = Set(day.resolvedDayContext.supportingTags)
+        if tags.contains(.ramadan) || day.isImplicitRamadan { return "Ramadan morning" }
+        if tags.contains(.arafah) { return "Arafah fasting opportunity" }
+        if tags.contains(.ashura) { return "Ashura fasting opportunity" }
+        if tags.contains(.whiteDays) { return "White Days fasting opportunity" }
+        if tags.contains(.mondayThursday) { return "Monday or Thursday fasting opportunity" }
+        if tags.contains(.dhulHijjahFirstNine) { return "Dhul Hijjah fasting opportunity" }
+        if tags.contains(.shawwalSix) { return "Shawwal fasting opportunity" }
+        return nil
+    }
+
+    private func primaryMorningLabel(for date: Date, currentDate: Date) -> String {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .current
+        let dateStart = calendar.startOfDay(for: date)
+        let todayStart = calendar.startOfDay(for: currentDate)
+        if dateStart == todayStart { return "Today Morning" }
+        return "Tomorrow Morning"
+    }
+}
+
+private struct LateFajrLoggingPromptCard: View {
+    let prompt: LateFajrLoggingPrompt
+    let onConfirm: () -> Void
+
+    var body: some View {
+        AppGlassSurface(
+            variant: WakeGlassTheme.homeSurfaceVariant,
+            contentPadding: 14
+        ) {
+            HStack(alignment: .center, spacing: DesignTokens.spacingM) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Fajr prayer not logged")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(WakeGlassTheme.primaryText.opacity(0.94))
+                    Text("You can record it for the previous morning.")
+                        .font(.footnote)
+                        .foregroundStyle(WakeGlassTheme.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: DesignTokens.spacingS)
+
+                Button(prompt.ctaTitle, action: onConfirm)
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(WakeGlassTheme.primaryText)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.center)
+                    .minimumScaleFactor(0.82)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 9)
+                    .background {
+                        Capsule(style: .continuous)
+                            .fill(WakeGlassTheme.primaryText.opacity(0.13))
+                            .overlay {
+                                Capsule(style: .continuous)
+                                    .stroke(WakeGlassTheme.primaryText.opacity(0.28), lineWidth: 0.8)
+                            }
+                    }
+                    .buttonStyle(.plain)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("lateFajrLoggingPrompt")
     }
 }
 
@@ -465,14 +588,26 @@ private struct HomeSimulationDock: View {
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(WakeGlassTheme.primaryText)
                         .lineLimit(1)
+                    Text("\(model.wakePurpose) · \(model.alarmState)")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(WakeGlassTheme.primaryText.opacity(0.85))
+                        .lineLimit(1)
                     Text("\(model.simulatedDateTime) - \(model.location)")
                         .font(.caption)
+                        .foregroundStyle(WakeGlassTheme.secondaryText)
+                        .lineLimit(2)
+                    Text("Fajr \(model.fajrRange) · Alarm \(model.alarmTime)")
+                        .font(.caption.monospacedDigit())
                         .foregroundStyle(WakeGlassTheme.secondaryText)
                         .lineLimit(2)
                     Text(model.jumpPoint)
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(WakeGlassTheme.primaryText.opacity(0.85))
                         .lineLimit(1)
+                    Text(model.expectedHeroSummary)
+                        .font(.caption)
+                        .foregroundStyle(WakeGlassTheme.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
                     Text(model.expectedStateGuidance)
                         .font(.caption)
                         .foregroundStyle(WakeGlassTheme.secondaryText)
@@ -554,6 +689,9 @@ private struct TomorrowMorningHero: View {
     @State private var isSelectingWakeMode = false
     @State private var isCommittingActionSlot = false
     @State private var isShowingAlarmStateActions = false
+    @State private var isShowingSuhoorToFajrSwitchConfirmation = false
+    @State private var pendingWakeModeSwitch: QuickWakeMode?
+    @State private var blockedWakeModeMessage: String?
     @Namespace private var quickSelectorHighlight
 
     var body: some View {
@@ -676,6 +814,29 @@ private struct TomorrowMorningHero: View {
         } message: {
             Text(alarmStateDialogMessage(for: display))
         }
+        .confirmationDialog(
+            "Switch to Fajr for Today Morning?",
+            isPresented: $isShowingSuhoorToFajrSwitchConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Keep Suhoor", role: .cancel) {
+                pendingWakeModeSwitch = nil
+            }
+            Button("Switch to Fajr") {
+                let mode = pendingWakeModeSwitch ?? .fajr
+                pendingWakeModeSwitch = nil
+                performSelectWakeMode(mode)
+            }
+        } message: {
+            Text("This will cancel your Suhoor wake session for this morning.")
+        }
+        .alert("Too Close to Schedule Suhoor", isPresented: blockedWakeModeBinding) {
+            Button("OK", role: .cancel) {
+                blockedWakeModeMessage = nil
+            }
+        } message: {
+            Text(blockedWakeModeMessage ?? "")
+        }
     }
 
     private var heroModeAnimation: Animation {
@@ -753,6 +914,25 @@ private struct TomorrowMorningHero: View {
     }
 
     private func selectWakeMode(_ mode: QuickWakeMode) {
+        let baseDisplay = MorningHomePresentation.heroDisplay(
+            entry: entry,
+            wakeSession: wakeSession,
+            morningLog: morningLog,
+            permissionSummary: permissionSummary,
+            locationDisplayText: locationDisplayText,
+            locationIconName: locationIconName,
+            currentDate: currentDate,
+            globalWakeAlarmPolicy: globalWakeAlarmPolicy
+        )
+        if requiresSuhoorToFajrSwitchConfirmation(mode, display: baseDisplay) {
+            pendingWakeModeSwitch = mode
+            isShowingSuhoorToFajrSwitchConfirmation = true
+            return
+        }
+        performSelectWakeMode(mode)
+    }
+
+    private func performSelectWakeMode(_ mode: QuickWakeMode) {
         guard let date = entry?.schedule.date else { return }
         withAnimation(heroModeAnimation) {
             isSelectingWakeMode = true
@@ -760,13 +940,43 @@ private struct TomorrowMorningHero: View {
             onPreviewWakeAdjustment(date, nil)
         }
         Task {
-            _ = await onSelectWakeMode(date, mode)
+            let didSelect = await onSelectWakeMode(date, mode)
             await MainActor.run {
                 withAnimation(heroModeAnimation) {
                     isSelectingWakeMode = false
                 }
+                if !didSelect, mode == .suhoor {
+                    blockedWakeModeMessage = "It is too close to Fajr to schedule Suhoor for Today Morning."
+                }
             }
         }
+    }
+
+    private func requiresSuhoorToFajrSwitchConfirmation(
+        _ mode: QuickWakeMode,
+        display: MorningHomeHeroDisplay
+    ) -> Bool {
+        guard mode == .fajr else {
+            return false
+        }
+        return MorningHomePresentation.requiresSuhoorToFajrSwitchConfirmation(
+            entry: entry,
+            wakeSession: wakeSession,
+            display: display,
+            currentDate: currentDate,
+            timeZone: .current
+        )
+    }
+
+    private var blockedWakeModeBinding: Binding<Bool> {
+        Binding(
+            get: { blockedWakeModeMessage != nil },
+            set: { isPresented in
+                if !isPresented {
+                    blockedWakeModeMessage = nil
+                }
+            }
+        )
     }
 
     private func commitActionSlot(_ action: MorningHeroActionSlotAction) {
@@ -798,6 +1008,8 @@ private struct TomorrowMorningHero: View {
                     isCommittingActionSlot = false
                 }
             }
+        case .setFajrWakeAlarm:
+            performSelectWakeMode(.fajr)
         case .ringOnceDespitePause:
             isCommittingActionSlot = true
             Task {
@@ -828,22 +1040,22 @@ private struct TomorrowMorningHero: View {
     private func alarmStateDialogTitle(for display: MorningHomeHeroDisplay) -> String {
         switch display.wakeState {
         case .quietHours:
-            return quietTitle(for: display)
+            return "\(targetMorningTitle(for: display)) is Quiet"
         case .offWithAnchor where display.statusText == "Alarms paused" || display.primaryText == "Alarms paused":
             return "Alarms paused"
         default:
-            return "\(display.primaryText) alarm is on"
+            return "Make \(targetMorningTitle(for: display)) Quiet?"
         }
     }
 
     private func alarmStateDialogMessage(for display: MorningHomeHeroDisplay) -> String {
         switch display.wakeState {
         case .quietHours:
-            return "Subh won’t ring. Your alarm is saved."
+            return "No alarm or wake checks will ring, but your Suhoor/Fajr plan is saved."
         case .offWithAnchor where display.statusText == "Alarms paused" || display.primaryText == "Alarms paused":
             return "Subh won’t ring until you resume wake alarms."
         default:
-            return "Subh will ring \(targetMorningPhrase(for: display))."
+            return "No alarm or wake checks will ring. Use this only if you do not need Subh to wake you."
         }
     }
 
@@ -851,10 +1063,10 @@ private struct TomorrowMorningHero: View {
     private func alarmStateDialogActions(for display: MorningHomeHeroDisplay) -> some View {
         switch display.wakeState {
         case .quietHours:
-            Button("Turn alarm on") {
+            Button("Turn Alarm On") {
                 selectWakeMode(display.selectedQuickWakeMode ?? .fajr)
             }
-            Button("Keep quiet", role: .cancel) {}
+            Button("Keep Quiet", role: .cancel) {}
         case .offWithAnchor where display.statusText == "Alarms paused" || display.primaryText == "Alarms paused":
             Button(ringOnceTitle(for: display)) {
                 commitActionSlot(.ringOnceDespitePause)
@@ -870,23 +1082,27 @@ private struct TomorrowMorningHero: View {
             }
             Button("Keep paused", role: .cancel) {}
         default:
-            Button(quietTitle(for: display)) {
+            Button("Keep Alarm On", role: .cancel) {}
+            Button("Make Quiet") {
                 selectWakeMode(.quiet)
             }
-            Button("Cancel", role: .cancel) {}
         }
     }
 
     private func quietTitle(for display: MorningHomeHeroDisplay) -> String {
-        display.title == "Tomorrow" ? "Quiet tomorrow" : "Quiet this morning"
+        display.title == "Tomorrow Morning" ? "Make Tomorrow Morning Quiet?" : "Make Today Morning Quiet?"
     }
 
     private func ringOnceTitle(for display: MorningHomeHeroDisplay) -> String {
-        display.title == "Tomorrow" ? "Ring tomorrow only" : "Ring this morning only"
+        display.title == "Tomorrow Morning" ? "Ring tomorrow only" : "Ring this morning only"
     }
 
     private func targetMorningPhrase(for display: MorningHomeHeroDisplay) -> String {
-        display.title == "Tomorrow" ? "tomorrow morning" : "this morning"
+        display.title == "Tomorrow Morning" ? "tomorrow morning" : "this morning"
+    }
+
+    private func targetMorningTitle(for display: MorningHomeHeroDisplay) -> String {
+        display.title == "Tomorrow Morning" ? "Tomorrow Morning" : "Today Morning"
     }
 
     private func adjustWakeAccessibility(
@@ -1215,6 +1431,16 @@ struct MorningHeroPrimaryWakeRow: View {
                 Image(systemName: iconName)
                     .font(.system(size: metrics.iconSize, weight: .regular))
                     .foregroundStyle(WakeGlassTheme.primaryText.opacity(0.92))
+                    .frame(width: max(34, metrics.iconSize + 16), height: max(34, metrics.iconSize + 16))
+                    .background {
+                        Circle()
+                            .fill(WakeGlassTheme.primaryText.opacity(0.10))
+                            .background(.ultraThinMaterial, in: Circle())
+                            .overlay {
+                                Circle()
+                                    .stroke(WakeGlassTheme.primaryText.opacity(0.24), lineWidth: 0.8)
+                            }
+                    }
                     .offset(y: metrics.iconVerticalOffset)
             }
 
@@ -2193,6 +2419,7 @@ private struct HomeFloatingIconButton: View {
 private struct NextTenMorningsCard: View {
     let entries: [WakeRowEntry]
     let globalWakeAlarmPolicy: GlobalWakeAlarmPolicy
+    let onAlarmEnabledChange: (WakeRowEntry, Bool) -> Void
     let onSelect: (WakeRowEntry) -> Void
 
     @State private var isExpanded = false
@@ -2256,7 +2483,14 @@ private struct NextTenMorningsCard: View {
                             .padding(.vertical, DesignTokens.spacingM)
                     } else {
                         ForEach(Array(forecast.rows.enumerated()), id: \.element.id) { index, row in
-                            NextTenMorningsRow(display: row, rowMetrics: forecast.rowMetrics) {
+                            NextTenMorningsRow(
+                                display: row,
+                                rowMetrics: forecast.rowMetrics,
+                                onAlarmEnabledChange: { isOn in
+                                    guard let entry = entries.first(where: { $0.id == row.id }) else { return }
+                                    onAlarmEnabledChange(entry, isOn)
+                                }
+                            ) {
                                 guard let entry = entries.first(where: { $0.id == row.id }) else { return }
                                 onSelect(entry)
                             }
@@ -2280,46 +2514,77 @@ private struct NextTenMorningsCard: View {
 private struct NextTenMorningsRow: View {
     let display: NextTenMorningsRowDisplay
     let rowMetrics: NextTenMorningsRowMetrics
+    let onAlarmEnabledChange: (Bool) -> Void
     let onSelect: () -> Void
 
     var body: some View {
-        Button(action: onSelect) {
-            rowContent
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .frame(minHeight: 50, alignment: .center)
-            .contentShape(Rectangle())
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(display.accessibilityLabel)
+        HStack(alignment: .center, spacing: 0) {
+            Button(action: onSelect) {
+                rowContent
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(minHeight: 58, alignment: .center)
+                    .contentShape(Rectangle())
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(display.accessibilityLabel)
+            }
+            .buttonStyle(.plain)
+
+            Toggle(
+                "",
+                isOn: Binding(
+                    get: { display.alarmToggleIsOn },
+                    set: { onAlarmEnabledChange($0) }
+                )
+            )
+            .labelsHidden()
+            .disabled(!display.alarmToggleIsEnabled)
+            .toggleStyle(.switch)
+            .scaleEffect(0.82)
+            .frame(width: 54, alignment: .trailing)
+            .accessibilityLabel("Alarm will ring")
+            .accessibilityValue(display.alarmToggleIsOn ? "On" : "Quiet")
         }
-        .buttonStyle(.plain)
         .padding(.vertical, DesignTokens.compactRowVerticalPadding)
         .accessibilityIdentifier("nextTenMornings.row")
     }
 
     private var rowContent: some View {
-        HStack(alignment: .center, spacing: 0) {
+        HStack(alignment: .center, spacing: DesignTokens.spacingS) {
+            leadingLockup
+                .frame(width: 92, alignment: .leading)
+
+            VStack(alignment: .leading, spacing: 5) {
+                Text(display.purposeText)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(display.isInactive ? WakeGlassTheme.primaryText.opacity(0.70) : WakeGlassTheme.primaryText.opacity(0.94))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.82)
+
+                tagLane
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    @ViewBuilder
+    private var leadingLockup: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            if let leadingTime = display.leadingTime {
+                NextTenMorningsTimeLockup(date: leadingTime, isDisabled: display.isInactive)
+                    .fixedSize(horizontal: true, vertical: false)
+            } else {
+                Text(display.leadingStatusText ?? "Quiet")
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(WakeGlassTheme.primaryText.opacity(display.isInactive ? 0.72 : 0.94))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.78)
+            }
+
             Text(display.dateLabel)
-                .font(.subheadline.weight(.medium))
-                .foregroundStyle(display.isInactive ? WakeGlassTheme.primaryText.opacity(0.62) : WakeGlassTheme.primaryText.opacity(0.92))
+                .font(.caption2.weight(.medium))
+                .foregroundStyle(WakeGlassTheme.secondaryText.opacity(0.82))
                 .lineLimit(1)
-                .minimumScaleFactor(0.78)
-                .frame(width: CGFloat(rowMetrics.dateLaneWidth), alignment: .leading)
-
-            Color.clear
-                .frame(width: CGFloat(rowMetrics.minimumDateToTagGap))
-
-            tagLane
-                .frame(
-                    minWidth: CGFloat(rowMetrics.minimumTagLaneWidth),
-                    maxWidth: .infinity,
-                    alignment: .center
-                )
-
-            Color.clear
-                .frame(width: CGFloat(rowMetrics.minimumTagToTimeGap))
-
-            trailingLockup
-                .frame(width: CGFloat(rowMetrics.trailingLaneWidth), alignment: .trailing)
+                .minimumScaleFactor(0.82)
         }
     }
 
@@ -2328,6 +2593,7 @@ private struct NextTenMorningsRow: View {
             NextTenMorningsTagCluster(tags: display.tags, isDisabled: display.isInactive)
             NextTenMorningsTagCluster(tags: Array(display.tags.prefix(2)), isDisabled: display.isInactive)
             NextTenMorningsTagCluster(tags: Array(display.tags.prefix(1)), isDisabled: display.isInactive)
+            Color.clear.frame(height: 16)
         }
     }
 
