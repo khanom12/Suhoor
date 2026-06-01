@@ -108,17 +108,27 @@ struct SubhHomeView: View {
                             PrimaryMorningContextCard(
                                 entry: entry,
                                 currentDate: scheduleManager.currentDate,
-                                globalWakeAlarmPolicy: scheduleManager.wakeAlarmPolicy
+                                globalWakeAlarmPolicy: scheduleManager.wakeAlarmPolicy,
+                                wakeSession: snapshot.heroWakeSession,
+                                morningLog: snapshot.heroMorningLog,
+                                lateFajrLoggingPrompt: snapshot.lateFajrLoggingPrompt,
+                                fastCompletionPrompt: snapshot.fastCompletionPrompt,
+                                onConfirmEarlyAwake: { date, mode in
+                                    switch mode {
+                                    case .fajr:
+                                        return await scheduleManager.confirmAlreadyAwakeForFajr(on: date)
+                                    case .suhoor:
+                                        return await scheduleManager.confirmAlreadyAwakeForSuhoor(on: date)
+                                    }
+                                },
+                                onRecordFajrPrayer: { date, didPray in
+                                    await scheduleManager.recordFajrPrayer(on: date, didPray: didPray)
+                                },
+                                onRecordFastCompletion: { date, didComplete in
+                                    await scheduleManager.recordFastCompletion(on: date, didComplete: didComplete)
+                                }
                             ) {
                                 destination = .day(entry.schedule)
-                            }
-                        }
-
-                        if let prompt = snapshot.lateFajrLoggingPrompt {
-                            LateFajrLoggingPromptCard(prompt: prompt) {
-                                Task {
-                                    _ = await scheduleManager.confirmFajrPrayer(on: prompt.date)
-                                }
                             }
                         }
 
@@ -347,7 +357,38 @@ private struct PrimaryMorningContextCard: View {
     let entry: WakeRowEntry
     let currentDate: Date
     let globalWakeAlarmPolicy: GlobalWakeAlarmPolicy
+    let wakeSession: WakeSession?
+    let morningLog: MorningLogEntry?
+    let lateFajrLoggingPrompt: LateFajrLoggingPrompt?
+    let fastCompletionPrompt: FastCompletionPrompt?
+    let onConfirmEarlyAwake: (Date, WakeSessionMode) async -> Bool
+    let onRecordFajrPrayer: (Date, Bool) async -> Bool
+    let onRecordFastCompletion: (Date, Bool) async -> Bool
     let onOpen: () -> Void
+
+    @State private var pendingEarlyAwakeMode: WakeSessionMode?
+    @State private var isSubmittingAction = false
+    @State private var areActionsExpanded = false
+
+    private enum ContextAction: Identifiable {
+        case earlyAwake(WakeSessionMode)
+        case fajrPrayer
+        case lateFajr(LateFajrLoggingPrompt)
+        case fastCompletion(FastCompletionPrompt)
+
+        var id: String {
+            switch self {
+            case .earlyAwake(let mode):
+                return "earlyAwake-\(mode.rawValue)"
+            case .fajrPrayer:
+                return "fajrPrayer"
+            case .lateFajr(let prompt):
+                return "lateFajr-\(prompt.dateKey)"
+            case .fastCompletion(let prompt):
+                return "fastCompletion-\(prompt.dateKey)"
+            }
+        }
+    }
 
     private var presentation: PrimaryMorningContextPresentation {
         ProductSurfacePresentation.primaryMorningContext(
@@ -395,32 +436,277 @@ private struct PrimaryMorningContextCard: View {
 
     var body: some View {
         if presentation.displayModeAvailability == .visible {
-            Button(action: onOpen) {
-                AppGlassSurface(
-                    variant: WakeGlassTheme.homeSurfaceVariant,
-                    contentPadding: 14
-                ) {
-                    VStack(alignment: .leading, spacing: 9) {
-                        Text(sentenceCopy.title)
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(WakeGlassTheme.primaryText.opacity(0.94))
-                            .fixedSize(horizontal: false, vertical: true)
+            AppGlassSurface(
+                variant: WakeGlassTheme.homeSurfaceVariant,
+                contentPadding: 14
+            ) {
+                VStack(alignment: .leading, spacing: 9) {
+                    Text(sentenceCopy.title)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(WakeGlassTheme.primaryText.opacity(0.94))
+                        .fixedSize(horizontal: false, vertical: true)
 
-                        Text(sentenceCopy.body)
-                            .font(.footnote)
-                            .foregroundStyle(WakeGlassTheme.secondaryText)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    Text(sentenceCopy.body)
+                        .font(.footnote)
+                        .foregroundStyle(WakeGlassTheme.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    contextActionArea
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .buttonStyle(.plain)
-            .accessibilityElement(children: .ignore)
+            .contentShape(Rectangle())
+            .onTapGesture(perform: onOpen)
+            .accessibilityElement(children: .contain)
             .accessibilityLabel(presentation.accessibilityLabel)
             .accessibilityValue(presentation.accessibilityValue ?? "")
-            .accessibilityHint("Double-tap for details.")
             .accessibilityIdentifier("primaryMorningContext.compact")
+            .confirmationDialog(
+                earlyAwakeConfirmationTitle,
+                isPresented: earlyAwakeConfirmationBinding,
+                titleVisibility: .visible
+            ) {
+                Button("Keep Alarm On", role: .cancel) {
+                    pendingEarlyAwakeMode = nil
+                }
+                Button("Yes, I’m Awake") {
+                    confirmPendingEarlyAwake()
+                }
+            } message: {
+                Text(earlyAwakeConfirmationMessage)
+            }
         }
+    }
+
+    @ViewBuilder
+    private var contextActionArea: some View {
+        let actions = contextActions
+        let displayedActions = actions.count > 1 && !areActionsExpanded ? Array(actions.prefix(1)) : actions
+        if !actions.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                Divider()
+                    .overlay(WakeGlassTheme.primaryText.opacity(0.14))
+                    .padding(.top, 2)
+
+                ForEach(displayedActions) { action in
+                    contextActionRow(action)
+                }
+
+                if actions.count > 1 {
+                    contextActionsDisclosureButton(hiddenCount: max(actions.count - displayedActions.count, 0))
+                }
+            }
+            .padding(.top, 3)
+        }
+    }
+
+    private var contextActions: [ContextAction] {
+        var actions: [ContextAction] = []
+        if let mode = eligibleEarlyAwakeMode {
+            actions.append(.earlyAwake(mode))
+        }
+        if shouldShowFajrPrayerAction {
+            actions.append(.fajrPrayer)
+        }
+        if let lateFajrLoggingPrompt {
+            actions.append(.lateFajr(lateFajrLoggingPrompt))
+        }
+        if let fastCompletionPrompt {
+            actions.append(.fastCompletion(fastCompletionPrompt))
+        }
+        return actions
+    }
+
+    @ViewBuilder
+    private func contextActionRow(_ action: ContextAction) -> some View {
+        switch action {
+        case .earlyAwake(let mode):
+            contextButton(title: earlyAwakeTitle(for: mode)) {
+                pendingEarlyAwakeMode = mode
+            }
+        case .fajrPrayer:
+            contextButton(title: "I Prayed Fajr") {
+                Task {
+                    await submitAction {
+                        await onRecordFajrPrayer(entry.schedule.date, true)
+                    }
+                }
+            }
+        case .lateFajr(let prompt):
+            CheckXPromptRow(
+                title: prompt.ctaTitle,
+                yesAccessibilityLabel: "Yes, I prayed Fajr.",
+                noAccessibilityLabel: "No, I did not pray Fajr.",
+                isDisabled: isSubmittingAction,
+                onYes: {
+                    Task {
+                        await submitAction {
+                            await onRecordFajrPrayer(prompt.date, true)
+                        }
+                    }
+                },
+                onNo: {
+                    Task {
+                        await submitAction {
+                            await onRecordFajrPrayer(prompt.date, false)
+                        }
+                    }
+                }
+            )
+        case .fastCompletion(let prompt):
+            CheckXPromptRow(
+                title: prompt.promptTitle,
+                yesAccessibilityLabel: "Yes, I completed my fast.",
+                noAccessibilityLabel: "No, I did not complete my fast.",
+                isDisabled: isSubmittingAction,
+                onYes: {
+                    Task {
+                        await submitAction {
+                            await onRecordFastCompletion(prompt.date, true)
+                        }
+                    }
+                },
+                onNo: {
+                    Task {
+                        await submitAction {
+                            await onRecordFastCompletion(prompt.date, false)
+                        }
+                    }
+                }
+            )
+        }
+    }
+
+    private func contextActionsDisclosureButton(hiddenCount: Int) -> some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.16)) {
+                areActionsExpanded.toggle()
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Text(areActionsExpanded ? "Show fewer" : "Show \(hiddenCount) more")
+                    .font(.caption.weight(.semibold))
+                Image(systemName: areActionsExpanded ? "chevron.up" : "chevron.down")
+                    .font(.system(size: 11, weight: .bold))
+            }
+            .foregroundStyle(WakeGlassTheme.primaryText.opacity(0.88))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background {
+                Capsule(style: .continuous)
+                    .fill(WakeGlassTheme.primaryText.opacity(0.08))
+                    .overlay {
+                        Capsule(style: .continuous)
+                            .stroke(WakeGlassTheme.primaryText.opacity(0.16), lineWidth: 0.8)
+                    }
+            }
+        }
+        .buttonStyle(.plain)
+        .disabled(isSubmittingAction)
+        .accessibilityLabel(areActionsExpanded ? "Show fewer context actions." : "Show \(hiddenCount) more context actions.")
+    }
+
+    private var eligibleEarlyAwakeMode: WakeSessionMode? {
+        MorningHomePresentation.eligibleEarlyAwakeMode(
+            for: entry,
+            morningLog: morningLog,
+            currentDate: currentDate
+        )
+    }
+
+    private var shouldShowFajrPrayerAction: Bool {
+        MorningHomePresentation.shouldShowFajrPrayerContextAction(
+            for: entry,
+            wakeSession: wakeSession,
+            morningLog: morningLog,
+            currentDate: currentDate
+        )
+    }
+
+    private var earlyAwakeConfirmationBinding: Binding<Bool> {
+        Binding(
+            get: { pendingEarlyAwakeMode != nil },
+            set: { isPresented in
+                if !isPresented {
+                    pendingEarlyAwakeMode = nil
+                }
+            }
+        )
+    }
+
+    private var earlyAwakeConfirmationTitle: String {
+        switch pendingEarlyAwakeMode {
+        case .suhoor:
+            return "Already Awake for Suhoor?"
+        case .fajr:
+            return "Already Awake for Fajr?"
+        case nil:
+            return "Already Awake?"
+        }
+    }
+
+    private var earlyAwakeConfirmationMessage: String {
+        switch pendingEarlyAwakeMode {
+        case .suhoor:
+            return "This will silence your upcoming Suhoor alarms and wake checks. The Fajr adhan will still sound when Fajr begins."
+        case .fajr:
+            return "This will silence your Fajr adhan, alarm, and wake checks for Today Morning."
+        case nil:
+            return ""
+        }
+    }
+
+    private func confirmPendingEarlyAwake() {
+        guard let mode = pendingEarlyAwakeMode else { return }
+        pendingEarlyAwakeMode = nil
+        Task {
+            await submitAction {
+                await onConfirmEarlyAwake(entry.schedule.date, mode)
+            }
+        }
+    }
+
+    private func submitAction(_ action: () async -> Bool) async {
+        await MainActor.run {
+            isSubmittingAction = true
+        }
+        _ = await action()
+        await MainActor.run {
+            isSubmittingAction = false
+        }
+    }
+
+    private func earlyAwakeTitle(for mode: WakeSessionMode) -> String {
+        switch mode {
+        case .suhoor:
+            return "I’m Already Awake for Suhoor"
+        case .fajr:
+            return "I’m Already Awake for Fajr"
+        }
+    }
+
+    private func contextButton(title: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(WakeGlassTheme.primaryText)
+                .lineLimit(2)
+                .multilineTextAlignment(.leading)
+                .minimumScaleFactor(0.82)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 11)
+                .padding(.vertical, 9)
+                .background {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(WakeGlassTheme.primaryText.opacity(0.10))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .stroke(WakeGlassTheme.primaryText.opacity(0.20), lineWidth: 0.8)
+                        }
+                }
+        }
+        .buttonStyle(.plain)
+        .disabled(isSubmittingAction)
     }
 
     private func primaryOpportunityText(for day: ActiveAlarmDay) -> String? {
@@ -489,6 +775,63 @@ private struct LateFajrLoggingPromptCard: View {
         }
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("lateFajrLoggingPrompt")
+    }
+}
+
+private struct CheckXPromptRow: View {
+    let title: String
+    let yesAccessibilityLabel: String
+    let noAccessibilityLabel: String
+    let isDisabled: Bool
+    let onYes: () -> Void
+    let onNo: () -> Void
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 10) {
+            Text(title)
+                .font(.footnote.weight(.medium))
+                .foregroundStyle(WakeGlassTheme.primaryText.opacity(0.94))
+                .lineLimit(2)
+                .minimumScaleFactor(0.82)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            promptButton(systemImage: "checkmark", accessibilityLabel: yesAccessibilityLabel, action: onYes)
+            promptButton(systemImage: "xmark", accessibilityLabel: noAccessibilityLabel, action: onNo)
+        }
+        .padding(.horizontal, 11)
+        .padding(.vertical, 9)
+        .background {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(WakeGlassTheme.primaryText.opacity(0.08))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(WakeGlassTheme.primaryText.opacity(0.18), lineWidth: 0.8)
+                }
+        }
+    }
+
+    private func promptButton(
+        systemImage: String,
+        accessibilityLabel: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(WakeGlassTheme.primaryText)
+                .frame(width: 34, height: 34)
+                .background {
+                    Circle()
+                        .fill(WakeGlassTheme.primaryText.opacity(0.10))
+                        .overlay {
+                            Circle()
+                                .stroke(WakeGlassTheme.primaryText.opacity(0.22), lineWidth: 0.8)
+                        }
+                }
+        }
+        .buttonStyle(.plain)
+        .disabled(isDisabled)
+        .accessibilityLabel(accessibilityLabel)
     }
 }
 

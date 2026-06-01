@@ -218,6 +218,9 @@ enum MorningDateIntentReducer {
     ) {
         override.skipDay = false
         override.suhoorEnabled = true
+        if override.quickWakeModeOverride == .fajr {
+            override.fajrEnabled = false
+        }
         override.wakeStateOverride = .fixedWake
         override.wakeAnchorTypeOverride = nil
         override.wakeDeltaOverrideMinutes = nil

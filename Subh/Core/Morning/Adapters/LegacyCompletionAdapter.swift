@@ -19,7 +19,7 @@ enum LegacyCompletionAdapter {
                 status: completionStatus(from: entry.status),
                 updatedAt: entry.updatedAt,
                 source: entry.source ?? "fajrLog",
-                metadata: [:]
+                metadata: metadata(for: entry)
             )
         }
 
@@ -78,6 +78,14 @@ enum LegacyCompletionAdapter {
         }
     }
 
+    private static func metadata(for entry: FajrLogEntry) -> [String: String] {
+        guard entry.status == .missed else { return [:] }
+        return [
+            "qadaCandidate": "fajrPrayer",
+            "qadaCandidateSource": "explicitNo",
+        ]
+    }
+
     private static func metadata(for entry: FastLogEntry) -> [String: String] {
         var metadata: [String: String] = [
             "primaryIntent": entry.intentSnapshot?.primaryIntent.rawValue ?? FastPrimaryIntent.other.rawValue,
@@ -93,6 +101,11 @@ enum LegacyCompletionAdapter {
             if let explanation = qadaEffect.explanation {
                 metadata["qadaExplanation"] = explanation
             }
+        }
+        if entry.status == .missed,
+           entry.intentSnapshot?.primaryIntent == .ramadanObligatory {
+            metadata["qadaCandidate"] = "ramadanFast"
+            metadata["qadaCandidateSource"] = "explicitNo"
         }
 
         return metadata

@@ -1333,6 +1333,11 @@ struct ScheduleManagerHijriTests {
                     dateKey: "2026-03-09",
                     status: .completed,
                     updatedAt: Date(timeIntervalSince1970: 10)
+                ),
+                "2026-03-10": FajrLogEntry(
+                    dateKey: "2026-03-10",
+                    status: .missed,
+                    updatedAt: Date(timeIntervalSince1970: 15)
                 )
             ],
             fastEntries: [
@@ -1347,6 +1352,18 @@ struct ScheduleManagerHijriTests {
                     status: .inProgress,
                     updatedAt: Date(timeIntervalSince1970: 30),
                     intentSnapshot: FastIntentSnapshot(primaryIntent: .voluntary, secondaryTags: [])
+                ),
+                "2026-03-11": FastLogEntry(
+                    dateKey: "2026-03-11",
+                    status: .missed,
+                    updatedAt: Date(timeIntervalSince1970: 40),
+                    intentSnapshot: FastIntentSnapshot(primaryIntent: .ramadanObligatory, secondaryTags: [])
+                ),
+                "2026-03-12": FastLogEntry(
+                    dateKey: "2026-03-12",
+                    status: .missed,
+                    updatedAt: Date(timeIntervalSince1970: 50),
+                    intentSnapshot: FastIntentSnapshot(primaryIntent: .voluntary, secondaryTags: [])
                 )
             ],
             qadaBacklogState: QadaBacklogState(
@@ -1355,9 +1372,22 @@ struct ScheduleManagerHijriTests {
             )
         )
 
-        #expect(snapshot.records.count == 3)
-        #expect(snapshot.records.first(where: { $0.kind == .fajr })?.status == .completed)
+        #expect(snapshot.records.count == 6)
+        let completedFajr = snapshot.records.first { $0.dateKey == "2026-03-09" && $0.kind == .fajr }
+        #expect(completedFajr?.status == .completed)
+        #expect(completedFajr?.metadata["qadaCandidate"] == nil)
+        let missedFajr = snapshot.records.first { $0.dateKey == "2026-03-10" && $0.kind == .fajr }
+        #expect(missedFajr?.status == .missed)
+        #expect(missedFajr?.metadata["qadaCandidate"] == "fajrPrayer")
+        #expect(missedFajr?.metadata["qadaCandidateSource"] == "explicitNo")
         #expect(snapshot.records.first(where: { $0.dateKey == "2026-03-10" && $0.kind == .fast })?.status == .unknown)
+        let ramadanMiss = snapshot.records.first { $0.dateKey == "2026-03-11" && $0.kind == .fast }
+        #expect(ramadanMiss?.status == .missed)
+        #expect(ramadanMiss?.metadata["qadaCandidate"] == "ramadanFast")
+        #expect(ramadanMiss?.metadata["qadaCandidateSource"] == "explicitNo")
+        let voluntaryMiss = snapshot.records.first { $0.dateKey == "2026-03-12" && $0.kind == .fast }
+        #expect(voluntaryMiss?.status == .missed)
+        #expect(voluntaryMiss?.metadata["qadaCandidate"] == nil)
         #expect(snapshot.qadaLedgerSnapshot.completed == 1)
         #expect(snapshot.qadaLedgerSnapshot.remaining == 3)
     }
@@ -1887,7 +1917,7 @@ struct ScheduleManagerHijriTests {
         let endWake = manager.activeDay(for: target.date, timeZone: timeZone)?.schedule.wakeDate
         #expect(endWake ?? .distantPast >= fajrStart)
         #expect(endWake ?? .distantFuture <= fajrEnd)
-        #expect(endDisplay.detailText == "As Fajr ends")
+        #expect(endDisplay.detailText == "5 min before Fajr ends")
         #expect(endDisplay.relationTone == .urgentRed)
         #expect(endDisplay.fajrWindowVisualMode == .interactiveWithinFajrWindow)
         #expect(endDisplay.wakeAdjustmentEnabled)

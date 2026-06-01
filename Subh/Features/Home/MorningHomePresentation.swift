@@ -953,8 +953,13 @@ enum MorningHomePresentation {
             wakeSession: wakeSession,
             currentDate: currentDate
         )
-        let primaryTime = wakeState == .active && !awaitingAwakeConfirmation
-            ? resolvedWakeState.wakeTimeResolution.wakeTime
+        let pendingAttemptTime = nextPendingWakeAttemptTime(
+            for: entry,
+            wakeSession: wakeSession,
+            currentDate: currentDate
+        )
+        let primaryTime = wakeState == .active
+            ? (pendingAttemptTime ?? (awaitingAwakeConfirmation ? nil : resolvedWakeState.wakeTimeResolution.wakeTime))
             : nil
         let primaryText = awaitingAwakeConfirmation
             ? "Time to wake"
@@ -1067,12 +1072,12 @@ enum MorningHomePresentation {
         let prayerWindow = entry.activeDay.decisionLog.prayerWindow
         let prayerConfirmed = morningLog?.fajrPrayerOutcome == .fajrPrayerConfirmed
         let fastingIntentConfirmed = morningLog?.fastingIntentOutcome == .fastingIntentConfirmed
-        let fajrWakeConfirmed = morningLog?.fajrWakeOutcome == .confirmedAwakeForFajr
+        let fajrWakeConfirmed = morningLog?.fajrWakeOutcome.isFajrAwakeConfirmed == true
             || (wakeSession.status == .confirmedAwake && wakeSession.confirmedWakeMode == .fajr)
-        let suhoorWakeConfirmed = morningLog?.suhoorWakeOutcome == .confirmedAwakeForSuhoor
+        let suhoorWakeConfirmed = morningLog?.suhoorWakeOutcome.isSuhoorAwakeConfirmed == true
             || (wakeSession.status == .confirmedAwake && wakeSession.confirmedWakeMode == .suhoor)
         let postAwakeActionReady = wakeSession.confirmedAt.map {
-            currentDate >= $0.addingTimeInterval(60)
+            currentDate >= $0.addingTimeInterval(1.5)
         } ?? false
         let primaryHasFired = currentDate >= wakeSession.plannedWakeTime
             || wakeSession.status == .primaryAlarmFired
@@ -1080,39 +1085,27 @@ enum MorningHomePresentation {
             || wakeSession.status == .wakeChecksPending
 
         if prayerConfirmed {
-            return MorningHeroActionSlotDisplay(
-                style: .confirmation,
-                primaryTitle: "Fajr prayer recorded",
-                secondaryText: nil,
-                action: .none,
-                accessibilityLabel: "Fajr prayer recorded for this morning."
-            )
+            return .empty
         }
 
         if wakeSession.mode == .suhoor, currentDate >= prayerWindow.fajrStart {
             if suhoorWakeConfirmed {
-                return postAwakeActionReady ? fajrPrayerActionSlot() : confirmedAwakeSlot(session: wakeSession, timeZone: timeZone)
+                return confirmedAwakeSlot(session: wakeSession, timeZone: timeZone)
             }
             if fajrWakeConfirmed {
-                return postAwakeActionReady ? fajrPrayerActionSlot() : confirmedAwakeSlot(session: wakeSession, timeZone: timeZone)
+                return confirmedAwakeSlot(session: wakeSession, timeZone: timeZone)
             }
             return awaitingConfirmationSlot(session: wakeSession)
         }
 
         if wakeSession.mode == .fajr, fajrWakeConfirmed {
-            if currentDate >= prayerWindow.fajrStart, postAwakeActionReady {
-                return fajrPrayerActionSlot()
-            }
+            _ = postAwakeActionReady
             return confirmedAwakeSlot(session: wakeSession, timeZone: timeZone)
         }
 
         if wakeSession.mode == .suhoor, suhoorWakeConfirmed {
-            if !fastingIntentConfirmed, postAwakeActionReady {
-                return fastingIntentActionSlot()
-            }
-            if fastingIntentConfirmed, currentDate < prayerWindow.fajrStart {
-                return fajrFollowUpActionSlot()
-            }
+            _ = fastingIntentConfirmed
+            _ = postAwakeActionReady
             return confirmedAwakeSlot(session: wakeSession, timeZone: timeZone)
         }
 
@@ -1123,10 +1116,10 @@ enum MorningHomePresentation {
         if isActiveBeforePrimary(wakeSession: wakeSession, currentDate: currentDate) {
             return MorningHeroActionSlotDisplay(
                 style: .compact,
-                primaryTitle: "I’m awake",
-                secondaryText: "Already awake?",
+                primaryTitle: activeWakeConfirmationTitle(for: wakeSession.mode),
+                secondaryText: nil,
                 action: .confirmAwake(wakeSession.mode),
-                accessibilityLabel: "Already awake. Confirm awake for \(wakeSession.mode.confirmationTitle)."
+                accessibilityLabel: "Confirm awake for \(wakeSession.mode.confirmationTitle)."
             )
         }
 
@@ -1164,7 +1157,7 @@ enum MorningHomePresentation {
             : "Tap when you’re awake."
         return MorningHeroActionSlotDisplay(
             style: .primary,
-            primaryTitle: "I’m awake",
+            primaryTitle: activeWakeConfirmationTitle(for: session.mode),
             secondaryText: secondaryText,
             action: .confirmAwake(session.mode),
             accessibilityLabel: "Confirm awake. \(secondaryText)"
@@ -1175,7 +1168,7 @@ enum MorningHomePresentation {
         session: WakeSession,
         timeZone: TimeZone
     ) -> MorningHeroActionSlotDisplay {
-        let confirmedText = "I’m awake"
+        let confirmedText = "Awake for \(session.confirmedWakeMode?.confirmationTitle ?? session.mode.confirmationTitle)"
         return MorningHeroActionSlotDisplay(
             style: .confirmation,
             primaryTitle: confirmedText,
@@ -1185,34 +1178,103 @@ enum MorningHomePresentation {
         )
     }
 
-    private static func fastingIntentActionSlot() -> MorningHeroActionSlotDisplay {
-        MorningHeroActionSlotDisplay(
-            style: .primary,
-            primaryTitle: "I’m fasting today",
-            secondaryText: nil,
-            action: .confirmFastingToday,
-            accessibilityLabel: "Confirm fasting today."
-        )
-    }
-
     private static func fajrPrayerActionSlot() -> MorningHeroActionSlotDisplay {
         MorningHeroActionSlotDisplay(
             style: .primary,
-            primaryTitle: "I prayed Fajr",
+            primaryTitle: "I Prayed Fajr",
             secondaryText: nil,
             action: .confirmFajrPrayer,
             accessibilityLabel: "Confirm Fajr prayer for this morning."
         )
     }
 
-    private static func fajrFollowUpActionSlot() -> MorningHeroActionSlotDisplay {
-        MorningHeroActionSlotDisplay(
-            style: .primary,
-            primaryTitle: "Wake Me for Fajr",
-            secondaryText: nil,
-            action: .setFajrWakeAlarm,
-            accessibilityLabel: "Set a Fajr wake alarm for this morning."
-        )
+    static func fajrPrayerContextActionSlot() -> MorningHeroActionSlotDisplay {
+        fajrPrayerActionSlot()
+    }
+
+    static func shouldShowFajrPrayerContextAction(
+        for entry: WakeRowEntry,
+        wakeSession: WakeSession?,
+        morningLog: MorningLogEntry?,
+        currentDate: Date
+    ) -> Bool {
+        guard let wakeSession else { return false }
+        guard morningLog?.fajrPrayerOutcome == .unconfirmed || morningLog?.fajrPrayerOutcome == nil else { return false }
+        guard morningLog?.fajrWakeOutcome.isFajrAwakeConfirmed == true
+                || (wakeSession.status == .confirmedAwake && wakeSession.confirmedWakeMode == .fajr)
+                || morningLog?.fajrWakeOutcome == .confirmedEarlyAwakeForFajr else {
+            return false
+        }
+        let prayerWindow = entry.activeDay.decisionLog.prayerWindow
+        guard currentDate >= prayerWindow.fajrStart else { return false }
+        if let fajrEnd = prayerWindow.fajrEnd, currentDate >= fajrEnd {
+            return false
+        }
+        guard let confirmedAt = wakeSession.confirmedAt else { return true }
+        return currentDate >= confirmedAt.addingTimeInterval(1.5)
+    }
+
+    static func eligibleEarlyAwakeMode(
+        for entry: WakeRowEntry,
+        morningLog: MorningLogEntry?,
+        currentDate: Date,
+        timeZone: TimeZone = .current
+    ) -> WakeSessionMode? {
+        guard currentDate >= DateHelpers.startOfToday(in: timeZone, now: currentDate) else {
+            return nil
+        }
+        let selectedMode = WakeStateSelectionResolver.selectedMode(for: entry.activeDay)
+        if selectedMode == .suhoor,
+           morningLog?.suhoorWakeOutcome.isSuhoorAwakeConfirmed != true,
+           let finalThirdStart = EarlyWorshipBoundaryResolver.finalThirdStart(
+            targetFajrStart: entry.activeDay.decisionLog.prayerWindow.fajrStart,
+            maghrib: entry.activeDay.decisionLog.prayerWindow.maghrib,
+            timeZone: timeZone
+           ),
+           currentDate < finalThirdStart {
+            return .suhoor
+        }
+        if selectedMode == .fajr,
+           morningLog?.fajrWakeOutcome.isFajrAwakeConfirmed != true,
+           currentDate < entry.activeDay.decisionLog.prayerWindow.fajrStart {
+            return .fajr
+        }
+        return nil
+    }
+
+    private static func activeWakeConfirmationTitle(for mode: WakeSessionMode) -> String {
+        switch mode {
+        case .fajr:
+            return "I’m Awake for Fajr"
+        case .suhoor:
+            return "I’m Awake for Suhoor"
+        }
+    }
+
+    private static func nextPendingWakeAttemptTime(
+        for entry: WakeRowEntry,
+        wakeSession: WakeSession?,
+        currentDate: Date
+    ) -> Date? {
+        guard let wakeSession, !wakeSession.status.isTerminal else {
+            return nil
+        }
+
+        return entry.activeDay.scheduledEvents
+            .filter { event in
+                guard event.deliveryKinds.contains(.wake) else { return false }
+                guard event.wakeSessionRole == .primaryWake || event.wakeSessionRole == .wakeCheck else { return false }
+                if let eventWakeSessionID = event.wakeSessionID {
+                    guard eventWakeSessionID == wakeSession.wakeSessionID else { return false }
+                }
+                guard event.fireDate > currentDate else { return false }
+                guard wakeSession.firedScheduledEventIDs.contains(event.id) == false else { return false }
+                guard wakeSession.stoppedScheduledEventIDs.contains(event.id) == false else { return false }
+                return true
+            }
+            .sorted { $0.fireDate < $1.fireDate }
+            .first?
+            .fireDate
     }
 
     static func heroDisplay(

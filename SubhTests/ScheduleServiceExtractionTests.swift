@@ -638,7 +638,7 @@ struct ScheduleServiceExtractionTests {
 
     @Test
     @MainActor
-    func alarmStopConfirmsWakeSessionWithSystemSource() {
+    func alarmStopRecordsDismissalWithoutConfirmingAwake() {
         let store = WakeSessionStore(loadPersistedData: false)
         let draft = Self.makeWakeSessionDraft(mode: .fajr)
         store.upsertScheduledSession(from: draft, now: draft.plannedWakeTime.addingTimeInterval(-60))
@@ -649,11 +649,13 @@ struct ScheduleServiceExtractionTests {
             now: draft.plannedWakeTime
         )
 
-        #expect(session?.status == .confirmedAwake)
-        #expect(session?.confirmedAt == draft.plannedWakeTime)
-        #expect(session?.acknowledgementSource == .systemAlarmDismiss)
-        #expect(store.morningLog(for: draft.dateKey)?.fajrWakeOutcome == .confirmedAwakeForFajr)
+        #expect(session?.status == .wakeChecksPending)
+        #expect(session?.confirmedAt == nil)
+        #expect(session?.acknowledgementSource == nil)
+        #expect(session?.lastDismissalSource == .systemAlarmDismiss)
+        #expect(store.morningLog(for: draft.dateKey)?.fajrWakeOutcome == .unconfirmed)
         #expect(store.morningLog(for: draft.dateKey)?.records.contains { $0.type == .alarmStopped } == true)
+        #expect(store.morningLog(for: draft.dateKey)?.records.last?.metadata["treatedAsAwake"] == "false")
     }
 
     @Test
@@ -736,7 +738,7 @@ struct ScheduleServiceExtractionTests {
     }
 
     @Test
-    func suhoorAcknowledgementCanOfferIntentionalFajrFollowUpAfterFastingIntent() {
+    func suhoorAcknowledgementDoesNotOfferStandaloneFajrFollowUpCTA() {
         let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
         let entry = Self.makeWakeEntry(
             date: Self.makeDate(year: 2026, month: 5, day: 1, timeZone: timeZone),
@@ -782,8 +784,8 @@ struct ScheduleServiceExtractionTests {
             timeZone: timeZone
         )
 
-        #expect(display.actionSlot.primaryTitle == "Wake Me for Fajr")
-        #expect(display.actionSlot.action == .setFajrWakeAlarm)
+        #expect(display.actionSlot.primaryTitle == "Awake for Suhoor")
+        #expect(display.actionSlot.action == .none)
     }
 
     @Test
@@ -880,7 +882,7 @@ struct ScheduleServiceExtractionTests {
 
     @Test
     @MainActor
-    func wakeSessionLabAlarmStopConfirmsAwakeAndLeavesChecksPending() async throws {
+    func wakeSessionLabAlarmStopLeavesSessionUnresolvedAndChecksPending() async throws {
         let store = WakeSessionStore(loadPersistedData: false)
         let harness = WakeSessionTestingHarness(wakeSessionStore: store)
 
@@ -888,10 +890,12 @@ struct ScheduleServiceExtractionTests {
 
         let plan = try #require(harness.activePlan)
         let session = try #require(store.session(id: plan.wakeSessionID))
-        #expect(session.status == WakeSessionStatus.confirmedAwake)
-        #expect(session.confirmedAt != nil)
-        #expect(session.acknowledgementSource == .systemAlarmDismiss)
+        #expect(session.status == WakeSessionStatus.wakeChecksPending)
+        #expect(session.confirmedAt == nil)
+        #expect(session.acknowledgementSource == nil)
+        #expect(session.lastDismissalSource == .systemAlarmDismiss)
         #expect(harness.pendingTestAlarms.contains { $0.role == WakeSessionTestAlarmRole.wakeCheck })
+        #expect(store.morningLog(for: plan.dateKey)?.fajrWakeOutcome == .unconfirmed)
         #expect(store.morningLog(for: plan.dateKey)?.records.contains { $0.type == .alarmStopped } == true)
     }
 
@@ -1325,6 +1329,7 @@ struct ScheduleServiceExtractionTests {
             weeklyFajrcast: .empty,
             morningcast: [realEntry],
             lateFajrLoggingPrompt: nil,
+            fastCompletionPrompt: nil,
             permissionState: .empty,
             contextFlags: []
         )
@@ -2039,9 +2044,300 @@ struct ScheduleServiceExtractionTests {
 
         #expect(display.primaryTime == nil)
         #expect(display.primaryText == "Time to wake")
-        #expect(display.actionSlot.primaryTitle == "I’m awake")
+        #expect(display.actionSlot.primaryTitle == "I’m Awake for Fajr")
         #expect(display.actionSlot.secondaryText == "Final alarm this morning")
         #expect(display.actionSlot.action == .confirmAwake(.fajr))
+    }
+
+    @Test
+    func activeSuhoorHeroUsesPurposeSpecificAwakeCTA() {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let entry = Self.makeWakeEntry(
+            date: Self.makeDate(year: 2026, month: 5, day: 1, timeZone: timeZone),
+            timeZone: timeZone,
+            context: ResolvedDayContext(
+                primaryContext: .fasting,
+                secondaryContexts: [],
+                supportingTags: [.ramadan],
+                explanation: .empty
+            ),
+            plannedWakeState: .preFajr,
+            wakeOffsetMinutesFromFajrStart: -30,
+            quickWakeModeOverride: .suhoor,
+            earlyWakePurposeOverride: .fast
+        )
+        let dateKey = entry.activeDay.dateKey
+        let prayerWindow = entry.activeDay.decisionLog.prayerWindow
+        let draft = WakeSessionDraft(
+            wakeSessionID: WakeSessionPlanner.wakeSessionID(for: dateKey),
+            dateKey: dateKey,
+            morningDate: entry.activeDay.date,
+            mode: .suhoor,
+            finalThirdStart: prayerWindow.fajrStart.addingTimeInterval(-2 * 60 * 60),
+            fajrBegins: prayerWindow.fajrStart,
+            fajrEnds: prayerWindow.fajrEnd,
+            plannedWakeTime: entry.schedule.wakeDate,
+            primaryAlarmID: "\(dateKey).wakeAlarm.wake",
+            primaryScheduledEventID: "\(dateKey).wakeAlarm",
+            wakeCheckIDs: [],
+            wakeCheckScheduledEventIDs: []
+        )
+        var session = WakeSession(draft: draft, now: entry.schedule.wakeDate.addingTimeInterval(-60))
+        session.status = .primaryAlarmFired
+
+        let display = MorningHomePresentation.heroDisplay(
+            entry: entry,
+            wakeSession: session,
+            permissionSummary: "",
+            locationDisplayText: "Toronto",
+            currentDate: entry.schedule.wakeDate.addingTimeInterval(10),
+            timeZone: timeZone
+        )
+
+        #expect(display.primaryText == "Time to wake")
+        #expect(display.actionSlot.primaryTitle == "I’m Awake for Suhoor")
+        #expect(display.actionSlot.secondaryText == "Final alarm this morning")
+        #expect(display.actionSlot.action == .confirmAwake(.suhoor))
+    }
+
+    @Test
+    func fajrPrayerContextActionWaitsForAwakeAndCooldownWithoutHeroFollowUp() {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let entry = Self.makeWakeEntry(
+            date: Self.makeDate(year: 2026, month: 5, day: 1, timeZone: timeZone),
+            timeZone: timeZone
+        )
+        let draft = Self.makeWakeSessionDraft(mode: .fajr, timeZone: timeZone)
+        let confirmedAt = entry.activeDay.decisionLog.prayerWindow.fajrStart.addingTimeInterval(60)
+        var session = WakeSession(draft: draft, now: confirmedAt.addingTimeInterval(-60))
+        session.status = .confirmedAwake
+        session.confirmedWakeMode = .fajr
+        session.confirmedAt = confirmedAt
+        var log = MorningLogEntry(dateKey: entry.activeDay.dateKey, updatedAt: confirmedAt)
+        log.fajrWakeOutcome = .confirmedAwakeForFajr
+
+        #expect(MorningHomePresentation.shouldShowFajrPrayerContextAction(
+            for: entry,
+            wakeSession: session,
+            morningLog: log,
+            currentDate: confirmedAt.addingTimeInterval(1.4)
+        ) == false)
+        #expect(MorningHomePresentation.shouldShowFajrPrayerContextAction(
+            for: entry,
+            wakeSession: session,
+            morningLog: log,
+            currentDate: confirmedAt.addingTimeInterval(1.5)
+        ))
+
+        let beforeFajr = entry.activeDay.decisionLog.prayerWindow.fajrStart.addingTimeInterval(-1)
+        #expect(MorningHomePresentation.shouldShowFajrPrayerContextAction(
+            for: entry,
+            wakeSession: session,
+            morningLog: log,
+            currentDate: beforeFajr
+        ) == false)
+
+        let unresolvedDisplay = MorningHomePresentation.heroDisplay(
+            entry: entry,
+            wakeSession: session,
+            morningLog: log,
+            permissionSummary: "",
+            locationDisplayText: "Toronto",
+            currentDate: confirmedAt.addingTimeInterval(2),
+            timeZone: timeZone
+        )
+        #expect(unresolvedDisplay.actionSlot.primaryTitle == "Awake for Fajr")
+        #expect(unresolvedDisplay.actionSlot.action == .none)
+
+        log.fajrPrayerOutcome = .fajrPrayerConfirmed
+        #expect(MorningHomePresentation.shouldShowFajrPrayerContextAction(
+            for: entry,
+            wakeSession: session,
+            morningLog: log,
+            currentDate: confirmedAt.addingTimeInterval(2)
+        ) == false)
+
+        let resolvedDisplay = MorningHomePresentation.heroDisplay(
+            entry: entry,
+            wakeSession: session,
+            morningLog: log,
+            permissionSummary: "",
+            locationDisplayText: "Toronto",
+            currentDate: confirmedAt.addingTimeInterval(2),
+            timeZone: timeZone
+        )
+        #expect(resolvedDisplay.actionSlot.primaryTitle == nil)
+        #expect(resolvedDisplay.actionSlot.action == .none)
+    }
+
+    @Test
+    func dismissedWakeAttemptAdvancesHeroToNextPendingWakeCheck() throws {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let activeDay = Self.makeSchedulerActiveDayWithWakeChecks(
+            date: Self.makeDate(year: 2026, month: 5, day: 1, timeZone: timeZone),
+            timeZone: timeZone
+        )
+        let entry = WakeRowActionResolver.makeEntry(activeDay: activeDay, overrideDateKeys: [])
+        let draft = try #require(WakeSessionPlanner.wakeSessionDraft(for: activeDay))
+        let checks = activeDay.scheduledEvents
+            .filter { $0.wakeSessionRole == .wakeCheck }
+            .sorted { $0.fireDate < $1.fireDate }
+        let firstCheck = try #require(checks.first)
+        let secondCheck = try #require(checks.dropFirst().first)
+        var session = WakeSession(draft: draft, now: activeDay.schedule.wakeDate.addingTimeInterval(-60))
+        session.status = .wakeChecksPending
+        session.firedScheduledEventIDs = [draft.primaryScheduledEventID].compactMap { $0 }
+        session.stoppedScheduledEventIDs = [draft.primaryScheduledEventID].compactMap { $0 }
+
+        let afterPrimaryDismissal = MorningHomePresentation.heroDisplay(
+            entry: entry,
+            wakeSession: session,
+            permissionSummary: "",
+            currentDate: activeDay.schedule.wakeDate.addingTimeInterval(10),
+            timeZone: timeZone
+        )
+        #expect(afterPrimaryDismissal.primaryText == "Time to wake")
+        #expect(afterPrimaryDismissal.primaryTime == firstCheck.fireDate)
+        #expect(afterPrimaryDismissal.primaryTime != activeDay.schedule.wakeDate)
+
+        session.firedScheduledEventIDs.append(firstCheck.id)
+        session.stoppedScheduledEventIDs.append(firstCheck.id)
+        let afterFirstCheckDismissal = MorningHomePresentation.heroDisplay(
+            entry: entry,
+            wakeSession: session,
+            permissionSummary: "",
+            currentDate: firstCheck.fireDate.addingTimeInterval(10),
+            timeZone: timeZone
+        )
+        #expect(afterFirstCheckDismissal.primaryTime == secondCheck.fireDate)
+        #expect(afterFirstCheckDismissal.primaryTime != activeDay.schedule.wakeDate)
+    }
+
+    @Test
+    @MainActor
+    func checkXLoggingStoresExplicitYesNoWithoutInferringSilence() throws {
+        let dateKey = "2026-05-01"
+        let now = Date(timeIntervalSince1970: 100)
+        let store = WakeSessionStore(loadPersistedData: false)
+
+        #expect(store.morningLog(for: dateKey) == nil)
+
+        let prayed = store.recordFajrPrayerResponse(
+            dateKey: dateKey,
+            wakeSessionID: nil,
+            didPray: true,
+            now: now
+        )
+        #expect(prayed.fajrPrayerOutcome == .fajrPrayerConfirmed)
+        #expect(prayed.records.contains { $0.type == .fajrPrayerConfirmed })
+
+        let missed = store.recordFajrPrayerResponse(
+            dateKey: dateKey,
+            wakeSessionID: nil,
+            didPray: false,
+            now: now.addingTimeInterval(60)
+        )
+        #expect(missed.fajrPrayerOutcome == .fajrPrayerMissed)
+        #expect(missed.records.contains { $0.type == .fajrPrayerMissed })
+
+        let fastCompleted = store.recordFastCompletionResponse(
+            dateKey: dateKey,
+            wakeSessionID: nil,
+            didComplete: true,
+            now: now.addingTimeInterval(120)
+        )
+        #expect(fastCompleted.fastCompletionOutcome == .fastCompletionConfirmed)
+        #expect(fastCompleted.records.contains { $0.type == .fastCompletionConfirmed })
+
+        let fastMissed = store.recordFastCompletionResponse(
+            dateKey: dateKey,
+            wakeSessionID: nil,
+            didComplete: false,
+            now: now.addingTimeInterval(180)
+        )
+        #expect(fastMissed.fastCompletionOutcome == .fastCompletionMissed)
+        #expect(fastMissed.records.contains { $0.type == .fastCompletionMissed })
+
+        let untouchedStore = WakeSessionStore(loadPersistedData: false)
+        #expect(untouchedStore.morningLog(for: dateKey) == nil)
+    }
+
+    @Test
+    func fastCompletionPromptEligibilityRequiresSelectionRamadanOrInProgressLog() {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let optionalOpportunityDay = Self.makeWakeEntry(
+            date: Self.makeDate(year: 2026, month: 5, day: 1, timeZone: timeZone),
+            timeZone: timeZone,
+            context: ResolvedDayContext(
+                primaryContext: .fasting,
+                secondaryContexts: [],
+                supportingTags: [.arafah],
+                explanation: .empty
+            )
+        ).activeDay
+        let ramadanDay = Self.makeWakeEntry(
+            date: Self.makeDate(year: 2026, month: 5, day: 2, timeZone: timeZone),
+            timeZone: timeZone,
+            context: ResolvedDayContext(
+                primaryContext: .fasting,
+                secondaryContexts: [],
+                supportingTags: [.ramadan],
+                explanation: .empty
+            )
+        ).activeDay
+
+        #expect(FastCompletionPromptEligibility.isEligible(
+            for: optionalOpportunityDay,
+            selectedMode: .fajr,
+            fastingDayPlanned: false,
+            fastLogStatus: .unknown
+        ) == false)
+        #expect(FastCompletionPromptEligibility.isEligible(
+            for: optionalOpportunityDay,
+            selectedMode: .suhoor,
+            fastingDayPlanned: false,
+            fastLogStatus: .unknown
+        ))
+        #expect(FastCompletionPromptEligibility.isEligible(
+            for: optionalOpportunityDay,
+            selectedMode: .fajr,
+            fastingDayPlanned: true,
+            fastLogStatus: .unknown
+        ))
+        #expect(FastCompletionPromptEligibility.isEligible(
+            for: optionalOpportunityDay,
+            selectedMode: .fajr,
+            fastingDayPlanned: false,
+            fastLogStatus: .inProgress
+        ))
+        #expect(FastCompletionPromptEligibility.isEligible(
+            for: ramadanDay,
+            selectedMode: .fajr,
+            fastingDayPlanned: false,
+            fastLogStatus: .unknown
+        ))
+    }
+
+    @Test
+    func postSuhoorFajrSliderCommitDisablesFajrBeginningDelivery() {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let date = Self.makeDate(year: 2026, month: 5, day: 1, timeZone: timeZone)
+        var override = DailyAlarmOverride(date: date, timeZone: timeZone)
+        override.quickWakeModeOverride = .fajr
+        override.fajrEnabled = true
+        override.suhoorEnabled = false
+        override.alarmDetailAudioPlanOverride = .fajrAdhan
+
+        MorningDateIntentReducer.commitWakeAdjustment(
+            minutesFromMidnight: 345,
+            override: &override,
+            now: Self.makeDate(year: 2026, month: 5, day: 1, hour: 5, timeZone: timeZone)
+        )
+
+        #expect(override.quickWakeModeOverride == .fajr)
+        #expect(override.fajrEnabled == false)
+        #expect(override.wakeStateOverride == .fixedWake)
+        #expect(override.fixedWakeTimeOverrideMinutesFromMidnight == 345)
     }
 
     @Test

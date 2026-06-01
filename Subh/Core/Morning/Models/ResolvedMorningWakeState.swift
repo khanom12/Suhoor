@@ -158,7 +158,18 @@ enum ResolvedAlarmState: String, Codable, CaseIterable, Identifiable, Sendable {
 
 enum WakeAcknowledgementSource: String, Codable, CaseIterable, Identifiable, Sendable {
     case inAppButton
+    case earlyAwakeButton
+    case platformAwakeAction
     case systemAlarmDismiss
+
+    var id: String { rawValue }
+}
+
+enum WakeAttemptDismissalSource: String, Codable, CaseIterable, Identifiable, Sendable {
+    case systemAlarmDismiss
+    case alarmKitDismiss
+    case notificationDismiss
+    case unknown
 
     var id: String { rawValue }
 }

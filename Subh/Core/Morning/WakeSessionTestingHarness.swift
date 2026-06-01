@@ -1699,6 +1699,7 @@ final class WakeSessionTestingHarness: ObservableObject {
             weeklyFajrcast: realSnapshot.weeklyFajrcast,
             morningcast: Array(morningcast.prefix(MorningHomeSnapshot.maximumMorningcastCount)),
             lateFajrLoggingPrompt: realSnapshot.lateFajrLoggingPrompt,
+            fastCompletionPrompt: realSnapshot.fastCompletionPrompt,
             permissionState: realSnapshot.permissionState,
             contextFlags: flags
         )

@@ -5,6 +5,21 @@ import UserNotifications
 import os
 import AlarmKit
 
+enum FastCompletionPromptEligibility {
+    static func isEligible(
+        for day: ActiveAlarmDay,
+        selectedMode: QuickWakeMode,
+        fastingDayPlanned: Bool,
+        fastLogStatus: FastLogStatus
+    ) -> Bool {
+        let selectedSuhoor = selectedMode == .suhoor
+            || fastingDayPlanned
+            || fastLogStatus == .inProgress
+        let isRamadan = day.isImplicitRamadan || day.resolvedDayContext.supportingTags.contains(.ramadan)
+        return selectedSuhoor || isRamadan
+    }
+}
+
 @MainActor
 final class ScheduleManager: ObservableObject {
     @Published var schedules: [DaySchedule] = []
@@ -656,6 +671,13 @@ final class ScheduleManager: ObservableObject {
             targetMorning: tomorrowDay,
             timeZone: timeZone
         )
+        let fastCompletionPrompt = makeFastCompletionPrompt(
+            now: now,
+            today: today,
+            todayDay: todayDay,
+            targetMorning: tomorrowDay,
+            timeZone: timeZone
+        )
         let allMorningEntries = activeWindowSnapshot.visibleDays
             .map { WakeRowActionResolver.makeEntry(activeDay: $0, overrideDateKeys: overrideDateKeys) }
         let morningcast = Array(
@@ -678,6 +700,7 @@ final class ScheduleManager: ObservableObject {
             ),
             morningcast: morningcast,
             lateFajrLoggingPrompt: lateFajrLoggingPrompt,
+            fastCompletionPrompt: fastCompletionPrompt,
             permissionState: permissionSnapshot,
             contextFlags: MorningHomeContextFlag.flags(for: tomorrowDay?.resolvedDayContext ?? .standard)
         )
@@ -706,8 +729,8 @@ final class ScheduleManager: ObservableObject {
             }
 
             let cta = isSameCalendarDay(day.date, now, timeZone: timeZone)
-                ? "I Prayed Fajr Earlier Today"
-                : "I Prayed Fajr Yesterday Morning"
+                ? "I prayed Fajr earlier today?"
+                : "I prayed Fajr yesterday morning?"
             return LateFajrLoggingPrompt(dateKey: day.dateKey, date: day.date, ctaTitle: cta)
         }
 
@@ -727,6 +750,49 @@ final class ScheduleManager: ObservableObject {
         case .fajr, .quiet:
             return targetMorning.decisionLog.prayerWindow.fajrStart
         }
+    }
+
+    private func makeFastCompletionPrompt(
+        now: Date,
+        today: Date,
+        todayDay: ActiveAlarmDay?,
+        targetMorning: ActiveAlarmDay?,
+        timeZone: TimeZone
+    ) -> FastCompletionPrompt? {
+        let yesterday = Calendar(identifier: .gregorian).date(byAdding: .day, value: -1, to: today) ?? today.addingTimeInterval(-24 * 60 * 60)
+        let yesterdayKey = DateHelpers.dayIdentifier(for: yesterday, timeZone: timeZone)
+        let candidateDays = [
+            todayDay,
+            activeWindowSnapshot.byDateKey[yesterdayKey]
+        ].compactMap { $0 }
+
+        for day in candidateDays {
+            guard now > day.decisionLog.prayerWindow.maghrib else { continue }
+            guard isFastCompletionPromptEligible(for: day) else { continue }
+            let status = fastLogStore.status(for: day.dateKey)
+            guard status == .unknown || status == .inProgress else { continue }
+            if !isSameCalendarDay(day.date, now, timeZone: timeZone),
+               let expiry = lateFajrPromptExpiry(for: targetMorning, timeZone: timeZone),
+               now >= expiry {
+                continue
+            }
+
+            let title = isSameCalendarDay(day.date, now, timeZone: timeZone)
+                ? "I completed my fast today?"
+                : "I completed my fast yesterday?"
+            return FastCompletionPrompt(dateKey: day.dateKey, date: day.date, promptTitle: title)
+        }
+
+        return nil
+    }
+
+    private func isFastCompletionPromptEligible(for day: ActiveAlarmDay) -> Bool {
+        FastCompletionPromptEligibility.isEligible(
+            for: day,
+            selectedMode: WakeStateSelectionResolver.selectedMode(for: day),
+            fastingDayPlanned: wakeSessionStore.morningLog(for: day.dateKey)?.fastingDayPlanned == true,
+            fastLogStatus: fastLogStore.status(for: day.dateKey)
+        )
     }
 
     private static func shouldKeepCurrentMorningInHero(_ day: ActiveAlarmDay, now: Date) -> Bool {
@@ -1972,9 +2038,16 @@ final class ScheduleManager: ObservableObject {
 
     @discardableResult
     func confirmFajrPrayer(on date: Date, timeZone: TimeZone = .current) async -> Bool {
+        await recordFajrPrayer(on: date, didPray: true, timeZone: timeZone)
+    }
+
+    @discardableResult
+    func recordFajrPrayer(on date: Date, didPray: Bool, timeZone: TimeZone = .current) async -> Bool {
         #if DEBUG || INTERNAL_TESTING
         if wakeSessionTestingHarness.activeSimulationContext != nil {
-            wakeSessionTestingHarness.confirmFajrPrayer()
+            if didPray {
+                wakeSessionTestingHarness.confirmFajrPrayer()
+            }
             refreshCurrentMorningHomeSnapshot(timeZone: timeZone)
             return true
         }
@@ -1985,16 +2058,49 @@ final class ScheduleManager: ObservableObject {
         }
         let session = ensureWakeSession(for: day)
         let now = timeProvider.now()
-        _ = wakeSessionStore.confirmFajrPrayer(
+        _ = wakeSessionStore.recordFajrPrayerResponse(
             dateKey: day.dateKey,
             wakeSessionID: session?.wakeSessionID,
+            didPray: didPray,
             now: now
         )
         fajrLogStore.setStatus(
-            .completed,
+            didPray ? .completed : .missed,
             for: day.dateKey,
             now: now,
-            source: "currentMorningCheckIn"
+            source: didPray ? "fajrPromptYes" : "fajrPromptNo"
+        )
+        refreshCurrentMorningHomeSnapshot(timeZone: timeZone)
+        return true
+    }
+
+    @discardableResult
+    func recordFastCompletion(on date: Date, didComplete: Bool, timeZone: TimeZone = .current) async -> Bool {
+        let normalizedDate = DateHelpers.startOfDay(date, in: timeZone)
+        guard let day = activeDay(for: normalizedDate, timeZone: timeZone) else {
+            return false
+        }
+        guard isFastCompletionPromptEligible(for: day) else {
+            return false
+        }
+        let session = ensureWakeSession(for: day)
+        let now = timeProvider.now()
+        let intentSnapshot = fastLogStore.entry(for: day.dateKey)?.intentSnapshot
+            ?? DailyCompletionResolver.fastIntentSnapshot(for: day.resolvedDayContext)
+            ?? fallbackFastIntentSnapshot(for: day)
+        _ = wakeSessionStore.recordFastCompletionResponse(
+            dateKey: day.dateKey,
+            wakeSessionID: session?.wakeSessionID,
+            didComplete: didComplete,
+            now: now
+        )
+        fastLogStore.setStatus(
+            didComplete ? .completed : .missed,
+            for: day.dateKey,
+            intentSnapshot: intentSnapshot,
+            now: now,
+            qadaEffect: nil,
+            source: didComplete ? "fastCompletionPromptYes" : "fastCompletionPromptNo"
         )
         refreshCurrentMorningHomeSnapshot(timeZone: timeZone)
         return true
@@ -2054,6 +2160,116 @@ final class ScheduleManager: ObservableObject {
         return true
     }
 
+    @discardableResult
+    func confirmAlreadyAwakeForSuhoor(on date: Date, timeZone: TimeZone = .current) async -> Bool {
+        let normalizedDate = DateHelpers.startOfDay(date, in: timeZone)
+        let now = timeProvider.now()
+        guard let day = activeDay(for: normalizedDate, timeZone: timeZone),
+              WakeStateSelectionResolver.selectedMode(for: day) == .suhoor,
+              let session = ensureWakeSession(for: day),
+              let suhoorWindowStart = EarlyWorshipBoundaryResolver.finalThirdStart(
+                targetFajrStart: day.decisionLog.prayerWindow.fajrStart,
+                maghrib: day.decisionLog.prayerWindow.maghrib,
+                timeZone: timeZone
+              ),
+              now >= normalizedDate,
+              now < suhoorWindowStart else {
+            return false
+        }
+
+        let cancelled = await alarmScheduler.cancelWakeSessionEvents(
+            day: day,
+            wakeSessionID: session.wakeSessionID,
+            now: now
+        )
+        _ = wakeSessionStore.confirmEarlyAwake(
+            wakeSessionID: session.wakeSessionID,
+            mode: .suhoor,
+            cancelledScheduledEventIDs: cancelled.map(\.id),
+            now: now
+        )
+        alarmConfigStore.updateOverride(for: normalizedDate, timeZone: timeZone) { override in
+            override.skipDay = false
+            override.dateAlarmOverride = nil
+            override.quickWakeModeOverride = .fajr
+            override.underlyingWakeModeBeforeQuiet = nil
+            override.earlyWakePurposeOverride = nil
+            override.alarmDetailFastTypeOverride = nil
+            override.suhoorEnabled = false
+            override.reminderEnabled = false
+            override.fajrEnabled = true
+            override.alarmDetailAudioPlanOverride = .fajrAdhan
+            override.wakeStateOverride = .inFajr
+            override.wakeAnchorTypeOverride = .fajrStart
+            override.wakeDeltaOverrideMinutes = 0
+            override.fixedWakeTimeOverrideMinutesFromMidnight = nil
+            override.bypassLatestWakeCap = true
+            override.quietOverlay = false
+            override.updatedAt = now
+            if override.createdAt == nil {
+                override.createdAt = now
+            }
+            override.overrideSource = .heroQuickMode
+            override.notes = "Early Suhoor awake confirmed; Fajr-start event remains eligible."
+        }
+        await rescheduleDay(normalizedDate, preferCached: false)
+        refreshCurrentMorningHomeSnapshot(timeZone: timeZone)
+        return true
+    }
+
+    @discardableResult
+    func confirmAlreadyAwakeForFajr(on date: Date, timeZone: TimeZone = .current) async -> Bool {
+        let normalizedDate = DateHelpers.startOfDay(date, in: timeZone)
+        let now = timeProvider.now()
+        guard let day = activeDay(for: normalizedDate, timeZone: timeZone),
+              now >= normalizedDate,
+              now < day.decisionLog.prayerWindow.fajrStart else {
+            return false
+        }
+
+        let session = ensureWakeSession(for: day)
+        let cancelled = await alarmScheduler.cancelEvents(day: day, now: now) { event in
+            event.deliveryKinds.contains(.wake)
+                || event.deliveryKinds.contains(.boundary)
+                || event.type == .fajrBoundaryNotice
+        }
+        if let session {
+            _ = wakeSessionStore.confirmEarlyAwake(
+                wakeSessionID: session.wakeSessionID,
+                mode: .fajr,
+                cancelledScheduledEventIDs: cancelled.map(\.id),
+                now: now
+            )
+        }
+        alarmConfigStore.updateOverride(for: normalizedDate, timeZone: timeZone) { override in
+            override.skipDay = false
+            override.dateAlarmOverride = nil
+            override.quickWakeModeOverride = .fajr
+            override.underlyingWakeModeBeforeQuiet = nil
+            override.earlyWakePurposeOverride = nil
+            override.alarmDetailFastTypeOverride = nil
+            override.suhoorEnabled = false
+            override.reminderEnabled = false
+            override.fajrEnabled = false
+            override.alarmDetailAudioPlanOverride = .fajrAdhan
+            override.wakeStateOverride = .inFajr
+            override.wakeAnchorTypeOverride = .fajrEnd
+            override.wakeDeltaOverrideMinutes = WakeStateSelectionResolver.defaultFajrDeltaMinutes
+            override.fixedWakeTimeOverrideMinutesFromMidnight = nil
+            override.bypassLatestWakeCap = true
+            override.quietOverlay = false
+            override.updatedAt = now
+            if override.createdAt == nil {
+                override.createdAt = now
+            }
+            override.overrideSource = .heroQuickMode
+            override.notes = "Early Fajr awake confirmed; same-morning Fajr delivery silenced."
+        }
+        await rescheduleDay(normalizedDate, preferCached: false)
+        refreshCurrentMorningHomeSnapshot(timeZone: timeZone)
+        return true
+    }
+
     private func ensureWakeSession(for day: ActiveAlarmDay) -> WakeSession? {
         if let session = wakeSessionStore.session(for: day.dateKey) {
             return session
@@ -2062,6 +2278,16 @@ final class ScheduleManager: ObservableObject {
             return nil
         }
         return wakeSessionStore.upsertScheduledSession(from: draft, now: timeProvider.now())
+    }
+
+    private func fallbackFastIntentSnapshot(for day: ActiveAlarmDay) -> FastIntentSnapshot {
+        let primaryIntent = day.tagResult.computedPrimaryIntent == .other
+            ? FastPrimaryIntent.voluntary
+            : day.tagResult.computedPrimaryIntent
+        return FastIntentSnapshot(
+            primaryIntent: primaryIntent,
+            secondaryTags: day.tagResult.computedSecondaryTags
+        )
     }
 
     @discardableResult
