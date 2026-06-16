@@ -69,6 +69,47 @@ struct SchedulingIdentifierSet: Equatable, Sendable {
         )
     }
 
+    static func forExpectedDeliveries(_ records: [ExpectedDeliveryRecord]) -> SchedulingIdentifierSet {
+        SchedulingIdentifierSet(
+            notificationIdentifiers: records.map(\.notificationIdentifier),
+            alarmIdentifiers: records.flatMap { record in
+                [
+                    record.alarmIdentifier,
+                    DateHelpers.stableUUID(from: "\(record.notificationIdentifier).alarmKit")
+                ]
+            }
+        )
+    }
+
+    static func forWakeSessionDate(
+        dateKey: String,
+        schedule: DaySchedule,
+        events: [ScheduledEvent] = []
+    ) -> SchedulingIdentifierSet {
+        forSchedule(schedule, events: events).union(
+            SchedulingIdentifierSet(
+                notificationIdentifiers: (1...WakeSessionPlanner.maximumWakeCheckCount).map {
+                    "\(WakeSessionPlanner.wakeCheckEventID(dateKey: dateKey, index: $0)).wake"
+                } + [
+                    "\(dateKey).wakeAlarm.wake",
+                    "\(dateKey).fajrBoundaryNotice.boundary"
+                ],
+                alarmIdentifiers: (1...WakeSessionPlanner.maximumWakeCheckCount).flatMap { index in
+                    let notificationID = "\(WakeSessionPlanner.wakeCheckEventID(dateKey: dateKey, index: index)).wake"
+                    return [
+                        DateHelpers.stableUUID(from: notificationID),
+                        DateHelpers.stableUUID(from: "\(notificationID).alarmKit")
+                    ]
+                } + [
+                    DateHelpers.stableUUID(from: "\(dateKey).wakeAlarm.wake"),
+                    DateHelpers.stableUUID(from: "\(dateKey).wakeAlarm.wake.alarmKit"),
+                    DateHelpers.stableUUID(from: "\(dateKey).fajrBoundaryNotice.boundary"),
+                    DateHelpers.stableUUID(from: "\(dateKey).fajrBoundaryNotice.boundary.alarmKit")
+                ]
+            )
+        )
+    }
+
     static func forUpcoming(days: Int, now: Date = Date(), timeZone: TimeZone = .current) -> SchedulingIdentifierSet {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = timeZone

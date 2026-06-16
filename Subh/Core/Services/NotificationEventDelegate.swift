@@ -3,6 +3,7 @@ import UserNotifications
 
 final class NotificationEventDelegate: NSObject, UNUserNotificationCenterDelegate {
     static let shared = NotificationEventDelegate()
+    var wakeEventRecorder: (@MainActor @Sendable (_ identifier: String, _ isResponse: Bool, _ timestamp: Date) -> Void)?
 
     private override init() {}
 
@@ -13,6 +14,9 @@ final class NotificationEventDelegate: NSObject, UNUserNotificationCenterDelegat
     ) {
         let id = notification.request.identifier
         EventTimelineLog.shared.record(category: "notifications", message: "willPresent id=\(id)")
+        Task { @MainActor [wakeEventRecorder] in
+            wakeEventRecorder?(id, false, Date())
+        }
         completionHandler([.banner, .sound])
     }
 
@@ -23,6 +27,9 @@ final class NotificationEventDelegate: NSObject, UNUserNotificationCenterDelegat
     ) {
         let id = response.notification.request.identifier
         EventTimelineLog.shared.record(category: "notifications", message: "didReceive id=\(id) action=\(response.actionIdentifier)")
+        Task { @MainActor [wakeEventRecorder] in
+            wakeEventRecorder?(id, true, Date())
+        }
         completionHandler()
     }
 }

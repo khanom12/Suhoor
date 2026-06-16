@@ -578,6 +578,31 @@ final class WakeSessionStore: ObservableObject {
     }
 
     @discardableResult
+    func recordPlatformAlarmStopped(
+        wakeSessionID: String,
+        scheduledEventID: String?,
+        now: Date = Date()
+    ) -> WakeSession? {
+        guard var session = sessionsByID[wakeSessionID] else { return nil }
+        if let scheduledEventID {
+            appendUnique(&session.stoppedScheduledEventIDs, value: scheduledEventID)
+        }
+        let record = appendRecord(
+            dateKey: session.dateKey,
+            wakeSessionID: wakeSessionID,
+            type: .alarmStopped,
+            timestamp: now,
+            scheduledEventID: scheduledEventID,
+            isTest: session.isTest,
+            scenarioID: session.scenarioID
+        )
+        appendUnique(&session.operationalLogIDs, value: record.id)
+        session.updatedAt = now
+        updateSession(session)
+        return session
+    }
+
+    @discardableResult
     func confirmAwake(
         wakeSessionID: String,
         mode: WakeSessionMode,

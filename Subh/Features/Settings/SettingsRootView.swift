@@ -289,7 +289,8 @@ struct SettingsRootView: View {
             "Notifications: \(notificationPermissionText)",
             "Next scheduled wake: \(nextScheduledWakeText)",
             "Last schedule update: \(scheduleManager.lastUpdatedText)",
-            "Delivery check: \(scheduleManager.deliveryReconciliationSummaryText)"
+            "Delivery check: \(scheduleManager.deliveryReconciliationSummaryText)",
+            "Delivery repair: \(scheduleManager.deliveryRepairSummaryText)"
         ].joined(separator: "\n")
     }
 

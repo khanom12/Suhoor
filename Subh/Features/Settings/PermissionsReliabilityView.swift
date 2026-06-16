@@ -22,6 +22,8 @@ struct PermissionsReliabilityView: View {
                 reliabilityRow(title: "Last schedule update", value: scheduleManager.lastUpdatedText)
                 AppGroupDivider()
                 reliabilityRow(title: "Delivery check", value: scheduleManager.deliveryReconciliationSummaryText)
+                AppGroupDivider()
+                reliabilityRow(title: "Delivery repair", value: scheduleManager.deliveryRepairSummaryText)
             }
 
             if scheduleManager.schedulingMode == .notifications {

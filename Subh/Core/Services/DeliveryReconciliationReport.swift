@@ -76,6 +76,18 @@ struct ScheduledAlarmDelivery: Equatable, Sendable {
     let fireDate: Date?
 }
 
+enum ObservedAlarmDeliveryState: String, Equatable, Sendable {
+    case scheduled
+    case fired
+    case stopped
+}
+
+struct ObservedAlarmKitDelivery: Equatable, Sendable {
+    let id: UUID
+    let fireDate: Date?
+    let state: ObservedAlarmDeliveryState
+}
+
 enum DeliveryReconciliationCategory: String, Codable, Sendable {
     case matched
     case missingExpected

@@ -93,4 +93,31 @@ struct SchedulingIdentifiers {
     static func isTestIdentifier(_ identifier: String) -> Bool {
         identifier.hasPrefix("test.")
     }
+
+    static func isSubhOwnedNotificationIdentifier(_ identifier: String) -> Bool {
+        if identifier.hasPrefix("suhoor-") || identifier.hasPrefix("suhoor.") {
+            return true
+        }
+        if identifier.hasPrefix("reminder-")
+            || identifier.hasPrefix("fajr-")
+            || identifier.hasPrefix("iftar-notification-")
+            || identifier.hasPrefix("iftar-alarm-")
+            || identifier.hasPrefix("iftar-adhan-") {
+            return true
+        }
+        return parsedEventIdentifier(from: identifier) != nil
+    }
+
+    static func parsedEventIdentifier(
+        from identifier: String
+    ) -> (eventID: String, deliveryKind: ScheduleEventKind)? {
+        let parts = identifier.split(separator: ".").map(String.init)
+        guard parts.count >= 2,
+              let kind = ScheduleEventKind(rawValue: parts.last ?? "") else {
+            return nil
+        }
+        let eventID = parts.dropLast().joined(separator: ".")
+        guard !eventID.isEmpty else { return nil }
+        return (eventID, kind)
+    }
 }

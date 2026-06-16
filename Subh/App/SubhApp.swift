@@ -18,6 +18,13 @@ struct SubhApp: App {
         let resetMode = DeveloperInstallReset.configuredMode()
         let didReset = DeveloperInstallReset.resetIfNeeded(mode: resetMode) {
             UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
+            let didCleanAlarmKit = DebugInstallAlarmKitCleanup.cancelSubhOwnedDeliveries(days: 30)
+            if !didCleanAlarmKit {
+                EventTimelineLog.shared.record(
+                    category: "startup",
+                    message: "Debug install reset AlarmKit cleanup verification limited."
+                )
+            }
         }
         EventTimelineLog.shared.record(
             category: "startup",
@@ -56,6 +63,13 @@ struct SubhApp: App {
         _locationService = StateObject(wrappedValue: locationService)
         _scheduleManager = StateObject(wrappedValue: scheduleManager)
         UNUserNotificationCenter.current().delegate = NotificationEventDelegate.shared
+        NotificationEventDelegate.shared.wakeEventRecorder = { [weak scheduleManager] identifier, isResponse, timestamp in
+            scheduleManager?.recordPlatformNotificationWakeEvent(
+                identifier: identifier,
+                isResponse: isResponse,
+                timestamp: timestamp
+            )
+        }
     }
 
     var body: some Scene {

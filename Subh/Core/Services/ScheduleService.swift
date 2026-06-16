@@ -32,6 +32,7 @@ final class ScheduleManager: ObservableObject {
     @Published private(set) var bootstrapState: AppBootstrapState = .welcome
     @Published private(set) var hijriAdjustmentChanges: [HijriAdjustmentChange] = []
     @Published private(set) var lastDeliveryReconciliationReport: DeliveryReconciliationReport?
+    @Published private(set) var lastDeliveryRepairResult: DeliveryRepairResult?
 
     private let settingsStore: SuhoorSettingsStore
     private let alarmConfigStore: AlarmConfigStore
@@ -55,6 +56,7 @@ final class ScheduleManager: ObservableObject {
     private let adjustedHijriCalendar: AdjustedHijriCalendar
     private let hijriAdjustmentChangeStore: HijriAdjustmentChangeStore
     private let alarmDeliveryLedger: AlarmDeliveryLedgerStore
+    private let expectedDeliveryPlanStore: ExpectedDeliveryPlanStore
 
     private var alarmKitScheduler: AlarmKitScheduler?
     private let notificationScheduler = NotificationScheduler()
@@ -187,7 +189,8 @@ final class ScheduleManager: ObservableObject {
         hijriAdjustmentChangeStore: HijriAdjustmentChangeStore = HijriAdjustmentChangeStore(),
         cacheStore: ScheduleCacheStore = ScheduleCacheStore(),
         timeProvider: any TimeProviding = SystemTimeProvider(),
-        alarmDeliveryLedger: AlarmDeliveryLedgerStore? = nil
+        alarmDeliveryLedger: AlarmDeliveryLedgerStore? = nil,
+        expectedDeliveryPlanStore: ExpectedDeliveryPlanStore? = nil
     ) {
         let resolvedFastTagStore = fastTagStore ?? FastTagStore(loadPersistedData: usesLegacyContexts)
         let resolvedFastLogStore = fastLogStore ?? FastLogStore(loadPersistedData: usesLegacyContexts)
@@ -219,6 +222,8 @@ final class ScheduleManager: ObservableObject {
         self.hijriAdjustmentChangeStore = hijriAdjustmentChangeStore
         self.cacheStore = cacheStore
         self.alarmDeliveryLedger = alarmDeliveryLedger ?? .shared
+        self.expectedDeliveryPlanStore = expectedDeliveryPlanStore
+            ?? ExpectedDeliveryPlanStore(defaults: alarmConfigStore.storageDefaults)
         let hijriCalendarService = HijriCalendarService(adjustmentStore: hijriAdjustmentStore)
         let adjustedHijriCalendar = AdjustedHijriCalendar(calendarService: hijriCalendarService)
         self.adjustedHijriCalendar = adjustedHijriCalendar
@@ -242,6 +247,11 @@ final class ScheduleManager: ObservableObject {
             alarmCoordinator: resolvedCoordinator
         )
         self.alarmScheduler = AlarmScheduler(routineScheduler: routineScheduler)
+        if #available(iOS 26.0, *), let resolvedAlarmKit {
+            resolvedAlarmKit.alarmUpdateRecorder = { [weak self] deliveries, timestamp in
+                self?.recordPlatformAlarmKitUpdate(deliveries: deliveries, timestamp: timestamp)
+            }
+        }
         let cache = cacheStore.load()
         let expectedWakeRuleSignature = ScheduleCacheStore.wakeRuleSignature(for: alarmConfigStore.defaults)
         let expectedCalculationSignature = ScheduleCacheStore.calculationSignature(for: settingsStore.settings)
@@ -775,8 +785,13 @@ final class ScheduleManager: ObservableObject {
     var deliveryDiagnosticsText: String {
         [
             lastDeliveryReconciliationReport?.diagnosticsText ?? "Delivery check: not checked",
+            lastDeliveryRepairResult?.diagnosticsText ?? "Delivery repair: not checked",
             alarmDeliveryLedger.diagnosticsText()
         ].joined(separator: "\n")
+    }
+
+    var deliveryRepairSummaryText: String {
+        lastDeliveryRepairResult?.summaryText ?? "Not checked"
     }
 
     var usesNotificationFallback: Bool {
@@ -1855,6 +1870,7 @@ final class ScheduleManager: ObservableObject {
             normalizedDate: normalizedDate,
             timeZone: timeZone
         )
+        _ = await cancelWakeSessionDateDeliveries(for: day, now: timeProvider.now())
         let isRamadan = Self.isRamadanAlarmDetailDay(day)
 
         alarmConfigStore.updateOverride(for: normalizedDate, timeZone: timeZone) { override in
@@ -1900,11 +1916,7 @@ final class ScheduleManager: ObservableObject {
         let now = timeProvider.now()
         guard now >= finalThirdStart, now < prayerWindow.fajrStart else { return }
 
-        let cancelled = await alarmScheduler.cancelWakeSessionEvents(
-            day: day,
-            wakeSessionID: session.wakeSessionID,
-            now: now
-        )
+        let cancelled = await cancelWakeSessionDateDeliveries(for: day, now: now)
         _ = wakeSessionStore.cancelForMorning(
             wakeSessionID: session.wakeSessionID,
             reason: "switchedToFajrDuringSuhoorWindow",
@@ -2038,12 +2050,8 @@ final class ScheduleManager: ObservableObject {
               let session = ensureWakeSession(for: day) else {
             return false
         }
-        let cancelled = await alarmScheduler.cancelWakeSessionEvents(
-            day: day,
-            wakeSessionID: session.wakeSessionID,
-            now: timeProvider.now()
-        )
         let now = timeProvider.now()
+        let cancelled = await cancelWakeSessionDateDeliveries(for: day, now: now)
         _ = wakeSessionStore.confirmAwake(
             wakeSessionID: session.wakeSessionID,
             mode: mode,
@@ -2054,6 +2062,18 @@ final class ScheduleManager: ObservableObject {
         return true
     }
 
+    private func cancelWakeSessionDateDeliveries(
+        for day: ActiveAlarmDay,
+        now: Date
+    ) async -> [ScheduledEvent] {
+        let persisted = expectedDeliveryPlanStore.records(for: day.dateKey)
+        return await alarmScheduler.cancelWakeSessionDate(
+            day: day,
+            persistedExpectedDeliveries: persisted,
+            now: now
+        )
+    }
+
     private func ensureWakeSession(for day: ActiveAlarmDay) -> WakeSession? {
         if let session = wakeSessionStore.session(for: day.dateKey) {
             return session
@@ -2062,6 +2082,72 @@ final class ScheduleManager: ObservableObject {
             return nil
         }
         return wakeSessionStore.upsertScheduledSession(from: draft, now: timeProvider.now())
+    }
+
+    func recordPlatformNotificationWakeEvent(identifier: String, isResponse: Bool, timestamp: Date) {
+        guard let parsed = SchedulingIdentifiers.parsedEventIdentifier(from: identifier),
+              parsed.deliveryKind == .wake else {
+            return
+        }
+        let records = expectedDeliveryPlanStore.records()
+        guard let record = records.first(where: { $0.notificationIdentifier == identifier }) else {
+            return
+        }
+        recordPlatformWakeEvent(record: record, isStopped: isResponse, timestamp: timestamp)
+    }
+
+    func recordPlatformAlarmKitUpdate(deliveries: [ObservedAlarmKitDelivery], timestamp: Date) {
+        let records = expectedDeliveryPlanStore.records()
+        for delivery in deliveries {
+            guard let record = records.first(where: { $0.alarmIdentifier == delivery.id }) else {
+                continue
+            }
+            switch delivery.state {
+            case .fired:
+                recordPlatformWakeEvent(record: record, isStopped: false, timestamp: timestamp)
+            case .stopped:
+                recordPlatformWakeEvent(record: record, isStopped: true, timestamp: timestamp)
+            case .scheduled:
+                continue
+            }
+        }
+    }
+
+    private func recordPlatformWakeEvent(
+        record: ExpectedDeliveryRecord,
+        isStopped: Bool,
+        timestamp: Date
+    ) {
+        guard record.deliveryKind == .wake else { return }
+        let wakeSessionID = record.wakeSessionID
+            ?? wakeSessionStore.session(for: record.dateKey)?.wakeSessionID
+        guard let wakeSessionID else { return }
+
+        if isStopped {
+            _ = wakeSessionStore.recordPlatformAlarmStopped(
+                wakeSessionID: wakeSessionID,
+                scheduledEventID: record.eventID,
+                now: timestamp
+            )
+            return
+        }
+
+        switch record.eventType {
+        case .wakeAlarm:
+            _ = wakeSessionStore.recordPrimaryAlarmFired(
+                wakeSessionID: wakeSessionID,
+                scheduledEventID: record.eventID,
+                now: timestamp
+            )
+        case .wakeFollowUp:
+            _ = wakeSessionStore.recordWakeCheckFired(
+                wakeSessionID: wakeSessionID,
+                scheduledEventID: record.eventID,
+                now: timestamp
+            )
+        default:
+            break
+        }
     }
 
     @discardableResult
@@ -3087,6 +3173,14 @@ final class ScheduleManager: ObservableObject {
             alarmKitVerificationAvailable: alarmKitVerificationAvailable(for: mode)
         )
         lastDeliveryReconciliationReport = report.deliveryReport
+        let previousExpectedRecords = expectedDeliveryPlanStore.records()
+        let expectedRecords = DeliveryRepairCoordinator.expectedRecords(
+            snapshot: snapshot,
+            settings: settings,
+            mode: mode,
+            now: now
+        )
+        expectedDeliveryPlanStore.replace(with: expectedRecords)
 
         EventTimelineLog.shared.record(
             category: "schedule-diagnostics",
@@ -3100,6 +3194,18 @@ final class ScheduleManager: ObservableObject {
             timestamp: now
         )
 
+        let repairResult = await repairDeliveryDriftIfNeeded(
+            snapshot: snapshot,
+            settings: settings,
+            mode: mode,
+            report: report.deliveryReport,
+            previousExpectedRecords: previousExpectedRecords,
+            currentExpectedRecords: expectedRecords,
+            reason: reason,
+            timestamp: now
+        )
+        lastDeliveryRepairResult = repairResult
+
         guard report.shouldWarn else { return }
 
         Logging.scheduler.error("Alarm pipeline warning: \(report.deliveryReport.summaryText)")
@@ -3107,6 +3213,41 @@ final class ScheduleManager: ObservableObject {
             category: "schedule-diagnostics",
             message: "warning=\(report.warningCode)"
         )
+    }
+
+    private func repairDeliveryDriftIfNeeded(
+        snapshot: ActiveAlarmWindowSnapshot,
+        settings: AppSettings,
+        mode: SchedulingMode,
+        report: DeliveryReconciliationReport,
+        previousExpectedRecords: [ExpectedDeliveryRecord],
+        currentExpectedRecords: [ExpectedDeliveryRecord],
+        reason: String,
+        timestamp: Date
+    ) async -> DeliveryRepairResult {
+        guard mode != .none else { return .empty }
+        guard report.hasWarnings else { return .empty }
+        let staleAlarmScope = Set(
+            SchedulingIdentifierSet
+                .forUpcoming(days: scheduledActiveDayLimit, now: timestamp)
+                .union(.forExpectedDeliveries(previousExpectedRecords + currentExpectedRecords))
+                .alarmIdentifiers
+        )
+        let result = await alarmScheduler.repairDeliveries(
+            days: snapshot.scheduledDays,
+            settings: settings,
+            mode: mode,
+            report: report,
+            staleAlarmScope: staleAlarmScope
+        )
+        recordDeliveryRepairLedger(result: result, reason: reason, timestamp: timestamp)
+        if result.hasWork {
+            EventTimelineLog.shared.record(
+                category: "schedule-repair",
+                message: result.summaryText
+            )
+        }
+        return result
     }
 
     private func pendingAlarmKitDeliveries(for mode: SchedulingMode) -> [ScheduledAlarmDelivery] {
@@ -3203,6 +3344,32 @@ final class ScheduleManager: ObservableObject {
             )
         }
         alarmDeliveryLedger.record(entries)
+    }
+
+    private func recordDeliveryRepairLedger(
+        result: DeliveryRepairResult,
+        reason: String,
+        timestamp: Date
+    ) {
+        guard result.hasWork else { return }
+        alarmDeliveryLedger.record(
+            AlarmDeliveryLedgerEntry(
+                timestamp: timestamp,
+                action: .repairDecision,
+                dateKey: nil,
+                eventID: nil,
+                eventType: nil,
+                deliveryKind: nil,
+                fireDate: nil,
+                channel: schedulingMode.rawValue,
+                platformIdentifier: nil,
+                permissionMode: permissionSummary.isEmpty ? schedulingMode.rawValue : permissionSummary,
+                wakeRuleSignature: ScheduleCacheStore.wakeRuleSignature(for: alarmConfigStore.defaults),
+                refreshReason: reason,
+                result: result.summaryText,
+                message: "cancelledUnexpected=\(result.cancelledUnexpected) rescheduledMissing=\(result.rescheduledMissing) rescheduledMismatched=\(result.rescheduledMismatched) verificationUnavailable=\(result.verificationUnavailable) failed=\(result.failed)"
+            )
+        )
     }
 
     static func resolveBootstrapState(

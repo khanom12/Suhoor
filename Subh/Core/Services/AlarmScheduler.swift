@@ -126,6 +126,115 @@ final class AlarmScheduler {
         return events
     }
 
+    @discardableResult
+    func cancelWakeSessionDate(
+        day: ActiveAlarmDay,
+        persistedExpectedDeliveries: [ExpectedDeliveryRecord],
+        now: Date = Date()
+    ) async -> [ScheduledEvent] {
+        let events = day.scheduledEvents.filter { event in
+            guard event.fireDate > now else { return false }
+            return event.deliveryKinds.contains(.wake)
+                || event.wakeSessionRole == .primaryWake
+                || event.wakeSessionRole == .wakeCheck
+        }
+        let identifiers = SchedulingIdentifierSet
+            .forWakeSessionDate(dateKey: day.dateKey, schedule: day.schedule, events: day.scheduledEvents)
+            .union(.forExpectedDeliveries(persistedExpectedDeliveries))
+        await routineScheduler.cancelIdentifiers(identifiers)
+
+        let cancelledEventIDs = Set(events.map(\.id))
+        let persistedEventIDs = Set(persistedExpectedDeliveries.map(\.eventID))
+        lastPlannedEvents = lastPlannedEvents.filter { _, plan in
+            !cancelledEventIDs.contains(plan.event.id) && !persistedEventIDs.contains(plan.event.id)
+        }
+        return events
+    }
+
+    @discardableResult
+    func repairDeliveries(
+        days: [ActiveAlarmDay],
+        settings: AppSettings,
+        mode: SchedulingMode,
+        report: DeliveryReconciliationReport,
+        staleAlarmScope: Set<UUID>
+    ) async -> DeliveryRepairResult {
+        let nextPlans = buildPlannedEvents(
+            days: days,
+            settings: settings,
+            mode: mode
+        )
+        let missingNotifications = Set(report.missingNotificationIdentifiers)
+        let mismatchedNotifications = Set(report.mismatchedNotificationIdentifiers)
+        let duplicateNotifications = Set(report.duplicateNotificationIdentifiers)
+        let missingAlarms = Set(report.missingAlarmIdentifiers)
+        let mismatchedAlarms = Set(report.mismatchedAlarmIdentifiers)
+        let duplicateAlarms = Set(report.duplicateAlarmIdentifiers)
+
+        let unexpectedNotifications = report.unexpectedNotificationIdentifiers
+            .filter(SchedulingIdentifiers.isSubhOwnedNotificationIdentifier)
+        let unexpectedAlarms = report.unexpectedAlarmIdentifiers
+            .filter { staleAlarmScope.contains($0) }
+
+        let cancelIdentifiers = SchedulingIdentifierSet(
+            notificationIdentifiers: Array(mismatchedNotifications.union(duplicateNotifications)) + unexpectedNotifications,
+            alarmIdentifiers: Array(mismatchedAlarms.union(duplicateAlarms)) + unexpectedAlarms
+        )
+        await routineScheduler.cancelIdentifiers(cancelIdentifiers)
+
+        var rescheduledMissing = 0
+        var rescheduledMismatched = 0
+        var failed = 0
+        var repairedPlanIDs: [String] = []
+
+        for plan in nextPlans.values.sorted(by: { $0.fireDate < $1.fireDate }) {
+            let shouldRescheduleMissing: Bool
+            let shouldRescheduleMismatched: Bool
+            switch plan.channel {
+            case .notification:
+                shouldRescheduleMissing = missingNotifications.contains(plan.planID)
+                shouldRescheduleMismatched = mismatchedNotifications.contains(plan.planID)
+                    || duplicateNotifications.contains(plan.planID)
+            case .alarmKit:
+                let alarmID = SchedulingIdentifiers.alarmID(
+                    for: plan.event,
+                    deliveryKind: plan.kind,
+                    channel: .alarmKit
+                )
+                shouldRescheduleMissing = missingAlarms.contains(alarmID)
+                shouldRescheduleMismatched = mismatchedAlarms.contains(alarmID)
+                    || duplicateAlarms.contains(alarmID)
+            }
+
+            guard shouldRescheduleMissing || shouldRescheduleMismatched else { continue }
+            if await schedule(plan, settings: settings) {
+                repairedPlanIDs.append(plan.planID)
+                if shouldRescheduleMissing {
+                    rescheduledMissing += 1
+                } else {
+                    rescheduledMismatched += 1
+                }
+            } else {
+                failed += 1
+            }
+        }
+
+        for id in repairedPlanIDs {
+            if let plan = nextPlans[id] {
+                lastPlannedEvents[id] = plan
+            }
+        }
+
+        return DeliveryRepairResult(
+            cancelledUnexpected: unexpectedNotifications.count + unexpectedAlarms.count,
+            rescheduledMissing: rescheduledMissing,
+            rescheduledMismatched: rescheduledMismatched,
+            leftUnchanged: max(0, report.expectedDeliveryCount - rescheduledMissing - rescheduledMismatched),
+            verificationUnavailable: DeliveryRepairCoordinator.verificationUnavailableCount(in: report),
+            failed: failed
+        )
+    }
+
     private func reconcile(
         to nextPlans: [String: PlannedScheduledEvent],
         settings: AppSettings?,

@@ -9,6 +9,7 @@ final class AlarmKitScheduler {
     private let alarmManager = AlarmManager.shared
     private let isRunningOnSimulator = ProcessInfo.processInfo.environment["SIMULATOR_DEVICE_NAME"] != nil
     private var updatesTask: Task<Void, Never>?
+    var alarmUpdateRecorder: (@MainActor @Sendable (_ deliveries: [ObservedAlarmKitDelivery], _ timestamp: Date) -> Void)?
 
     init() {
         startObservingAlarmUpdates()
@@ -143,12 +144,12 @@ final class AlarmKitScheduler {
         return alarms.map { alarm in
             ScheduledAlarmDelivery(
                 id: alarm.id,
-                fireDate: scheduleInfo(for: alarm.schedule).1
+                fireDate: Self.scheduleInfo(for: alarm.schedule).1
             )
         }
     }
 
-    private func scheduleInfo(for schedule: Alarm.Schedule?) -> (String, Date?) {
+    private static func scheduleInfo(for schedule: Alarm.Schedule?) -> (String, Date?) {
         guard let schedule else { return ("None", nil) }
         switch schedule {
         case .fixed(let date):
@@ -193,7 +194,28 @@ final class AlarmKitScheduler {
             for await alarms in alarmManager.alarmUpdates {
                 let ids = alarms.map { $0.id.uuidString }.joined(separator: ", ")
                 EventTimelineLog.shared.record(category: "alarmkit", message: "Alarm updates: \(ids)")
+                let deliveries = alarms.map { alarm in
+                    ObservedAlarmKitDelivery(
+                        id: alarm.id,
+                        fireDate: Self.scheduleInfo(for: alarm.schedule).1,
+                        state: Self.observedState(for: alarm)
+                    )
+                }
+                Task { @MainActor [weak self] in
+                    self?.alarmUpdateRecorder?(deliveries, Date())
+                }
             }
+        }
+    }
+
+    private static func observedState(for alarm: Alarm) -> ObservedAlarmDeliveryState {
+        switch String(describing: alarm.state).lowercased() {
+        case let value where value.contains("fire"):
+            return .fired
+        case let value where value.contains("stop"):
+            return .stopped
+        default:
+            return .scheduled
         }
     }
 }

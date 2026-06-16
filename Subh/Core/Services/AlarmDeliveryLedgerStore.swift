@@ -4,6 +4,7 @@ enum AlarmDeliveryLedgerAction: String, Codable, Sendable {
     case scheduleDecision
     case cancelDecision
     case reconciliation
+    case repairDecision
 }
 
 struct AlarmDeliveryLedgerEntry: Identifiable, Codable, Equatable, Sendable {

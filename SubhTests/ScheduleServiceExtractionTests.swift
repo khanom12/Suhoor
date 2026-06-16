@@ -1699,6 +1699,234 @@ struct ScheduleServiceExtractionTests {
     }
 
     @Test
+    @MainActor
+    func alarmSchedulerRepairCancelsStaleAlarmKitWakeCheckOnColdStart() async {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let activeDay = Self.makeSchedulerActiveDay(
+            date: DateHelpers.startOfDay(Date().addingTimeInterval(2 * 24 * 60 * 60), in: timeZone),
+            timeZone: timeZone
+        )
+        let expected = DeliveryReconciliation.plan(
+            snapshot: Self.snapshot(for: activeDay),
+            settings: .default,
+            mode: .alarmKit,
+            now: Date()
+        ).expectedDeliveries
+        let staleWakeCheckIdentifier = DateHelpers.stableUUID(
+            from: "\(WakeSessionPlanner.wakeCheckEventID(dateKey: activeDay.dateKey, index: 1)).wake.alarmKit"
+        )
+        let report = DeliveryReconciliation.report(
+            mode: .alarmKit,
+            generatedAt: Date(),
+            expectedDeliveries: expected,
+            pendingNotifications: [],
+            pendingAlarms: expected.map { ScheduledAlarmDelivery(id: $0.alarmIdentifier, fireDate: $0.fireDate) }
+                + [ScheduledAlarmDelivery(id: staleWakeCheckIdentifier, fireDate: activeDay.schedule.fajrDate.addingTimeInterval(90 * 60))]
+        )
+        let routineScheduler = RecordingRoutineScheduler()
+        let scheduler = AlarmScheduler(routineScheduler: routineScheduler)
+
+        let result = await scheduler.repairDeliveries(
+            days: [activeDay],
+            settings: .default,
+            mode: .alarmKit,
+            report: report,
+            staleAlarmScope: Set(SchedulingIdentifierSet.forWakeSessionDate(
+                dateKey: activeDay.dateKey,
+                schedule: activeDay.schedule,
+                events: activeDay.scheduledEvents
+            ).alarmIdentifiers)
+        )
+
+        #expect(result.cancelledUnexpected == 1)
+        #expect(routineScheduler.cancelledIdentifierSets.contains { $0.alarmIdentifiers.contains(staleWakeCheckIdentifier) })
+        #expect(routineScheduler.scheduledEventIdentifiers.isEmpty)
+    }
+
+    @Test
+    @MainActor
+    func alarmSchedulerRepairReschedulesMissingNotificationDelivery() async {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let activeDay = Self.makeSchedulerActiveDay(
+            date: DateHelpers.startOfDay(Date().addingTimeInterval(2 * 24 * 60 * 60), in: timeZone),
+            timeZone: timeZone
+        )
+        let expected = DeliveryReconciliation.plan(
+            snapshot: Self.snapshot(for: activeDay),
+            settings: .default,
+            mode: .notifications,
+            now: Date()
+        ).expectedDeliveries
+        let report = DeliveryReconciliation.report(
+            mode: .notifications,
+            generatedAt: Date(),
+            expectedDeliveries: expected,
+            pendingNotifications: [],
+            pendingAlarms: []
+        )
+        let routineScheduler = RecordingRoutineScheduler()
+        let scheduler = AlarmScheduler(routineScheduler: routineScheduler)
+
+        let result = await scheduler.repairDeliveries(
+            days: [activeDay],
+            settings: .default,
+            mode: .notifications,
+            report: report,
+            staleAlarmScope: []
+        )
+
+        #expect(result.rescheduledMissing == expected.count)
+        #expect(routineScheduler.scheduledEventIdentifiers == expected.map(\.notificationIdentifier))
+        #expect(routineScheduler.scheduledCanUseAlarmKit == expected.map { _ in false })
+    }
+
+    @Test
+    @MainActor
+    func alarmSchedulerRepairCancelsAndReschedulesMismatchedAlarmKitDelivery() async {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let activeDay = Self.makeSchedulerActiveDay(
+            date: DateHelpers.startOfDay(Date().addingTimeInterval(2 * 24 * 60 * 60), in: timeZone),
+            timeZone: timeZone
+        )
+        let expected = DeliveryReconciliation.plan(
+            snapshot: Self.snapshot(for: activeDay),
+            settings: .default,
+            mode: .alarmKit,
+            now: Date()
+        ).expectedDeliveries
+        let report = DeliveryReconciliation.report(
+            mode: .alarmKit,
+            generatedAt: Date(),
+            expectedDeliveries: expected,
+            pendingNotifications: [],
+            pendingAlarms: expected.map {
+                ScheduledAlarmDelivery(id: $0.alarmIdentifier, fireDate: $0.fireDate.addingTimeInterval(10 * 60))
+            }
+        )
+        let routineScheduler = RecordingRoutineScheduler()
+        let scheduler = AlarmScheduler(routineScheduler: routineScheduler)
+
+        let result = await scheduler.repairDeliveries(
+            days: [activeDay],
+            settings: .default,
+            mode: .alarmKit,
+            report: report,
+            staleAlarmScope: []
+        )
+
+        #expect(result.rescheduledMismatched == expected.count)
+        #expect(routineScheduler.cancelledIdentifierSets.contains { $0.alarmIdentifiers.contains(expected[0].alarmIdentifier) })
+        #expect(routineScheduler.scheduledCanUseAlarmKit == expected.map { _ in true })
+    }
+
+    @Test
+    @MainActor
+    func alarmSchedulerRepairIgnoresUnexpectedNonSubhNotificationDelivery() async {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let activeDay = Self.makeSchedulerActiveDay(
+            date: DateHelpers.startOfDay(Date().addingTimeInterval(2 * 24 * 60 * 60), in: timeZone),
+            timeZone: timeZone
+        )
+        let expected = DeliveryReconciliation.plan(
+            snapshot: Self.snapshot(for: activeDay),
+            settings: .default,
+            mode: .notifications,
+            now: Date()
+        ).expectedDeliveries
+        let report = DeliveryReconciliation.report(
+            mode: .notifications,
+            generatedAt: Date(),
+            expectedDeliveries: expected,
+            pendingNotifications: expected.map { PendingNotificationDelivery(identifier: $0.notificationIdentifier, fireDate: $0.fireDate) }
+                + [PendingNotificationDelivery(identifier: "external.calendar.alert", fireDate: activeDay.schedule.wakeDate)],
+            pendingAlarms: []
+        )
+        let routineScheduler = RecordingRoutineScheduler()
+        let scheduler = AlarmScheduler(routineScheduler: routineScheduler)
+
+        let result = await scheduler.repairDeliveries(
+            days: [activeDay],
+            settings: .default,
+            mode: .notifications,
+            report: report,
+            staleAlarmScope: []
+        )
+
+        #expect(result.cancelledUnexpected == 0)
+        #expect(routineScheduler.cancelledIdentifierSets.allSatisfy { !$0.notificationIdentifiers.contains("external.calendar.alert") })
+    }
+
+    @Test
+    @MainActor
+    func awakeConfirmationCancellationIncludesPersistedAndDeterministicWakeIdentifiers() async {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let activeDay = Self.makeSchedulerActiveDay(
+            date: DateHelpers.startOfDay(Date().addingTimeInterval(2 * 24 * 60 * 60), in: timeZone),
+            timeZone: timeZone
+        )
+        let persistedWakeCheckID = "\(WakeSessionPlanner.wakeCheckEventID(dateKey: activeDay.dateKey, index: 2)).wake"
+        let persisted = ExpectedDeliveryRecord(
+            delivery: ExpectedAlarmDelivery(
+                dateKey: activeDay.dateKey,
+                eventID: WakeSessionPlanner.wakeCheckEventID(dateKey: activeDay.dateKey, index: 2),
+                eventType: .wakeFollowUp,
+                deliveryKind: .wake,
+                fireDate: activeDay.schedule.fajrDate.addingTimeInterval(30 * 60),
+                channel: .alarmKit,
+                notificationIdentifier: persistedWakeCheckID,
+                alarmIdentifier: DateHelpers.stableUUID(from: "\(persistedWakeCheckID).prior-mode")
+            ),
+            wakeSessionID: WakeSessionPlanner.wakeSessionID(for: activeDay.dateKey),
+            generatedAt: Date()
+        )
+        let routineScheduler = RecordingRoutineScheduler()
+        let scheduler = AlarmScheduler(routineScheduler: routineScheduler)
+
+        _ = await scheduler.cancelWakeSessionDate(
+            day: activeDay,
+            persistedExpectedDeliveries: [persisted],
+            now: activeDay.schedule.wakeDate.addingTimeInterval(-60)
+        )
+
+        let cancelled = routineScheduler.cancelledIdentifierSets.flatMap(\.notificationIdentifiers)
+        #expect(cancelled.contains("\(activeDay.dateKey).wakeAlarm.wake"))
+        #expect(cancelled.contains(persistedWakeCheckID))
+        #expect(cancelled.contains("\(WakeSessionPlanner.wakeCheckEventID(dateKey: activeDay.dateKey, index: 1)).wake"))
+    }
+
+    @Test
+    @MainActor
+    func platformStoppedFactDoesNotConfirmAwakeOrPrayer() {
+        let store = WakeSessionStore(loadPersistedData: false)
+        let draft = Self.makeWakeSessionDraft(mode: .fajr)
+        let primaryScheduledEventID = draft.primaryScheduledEventID ?? "\(draft.dateKey).wakeAlarm"
+        let session = store.upsertScheduledSession(from: draft, now: Date())
+
+        _ = store.recordPrimaryAlarmFired(
+            wakeSessionID: session.wakeSessionID,
+            scheduledEventID: primaryScheduledEventID,
+            now: draft.plannedWakeTime
+        )
+        let stopped = store.recordPlatformAlarmStopped(
+            wakeSessionID: session.wakeSessionID,
+            scheduledEventID: primaryScheduledEventID,
+            now: draft.plannedWakeTime.addingTimeInterval(60)
+        )
+
+        #expect(stopped?.status == .primaryAlarmFired)
+        #expect(stopped?.confirmedAt == nil)
+        #expect(stopped?.stoppedScheduledEventIDs == [primaryScheduledEventID])
+        #expect(store.morningLog(for: draft.dateKey)?.fajrWakeOutcome != .confirmedAwakeForFajr)
+        #expect(store.morningLog(for: draft.dateKey)?.fajrPrayerOutcome != .fajrPrayerConfirmed)
+    }
+
+    @Test
+    func debugInstallAlarmKitCleanupReportsVerificationLimitedWhenUnavailable() {
+        let cleaned = DebugInstallAlarmKitCleanup.cancelSubhOwnedDeliveries(days: 1)
+        #expect(cleaned == false)
+    }
+
+    @Test
     func deliveryPlanSkipsPastEventsWithoutMissingWarning() {
         let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
         let now = Self.makeDate(year: 2026, month: 5, day: 3, hour: 12, timeZone: timeZone)
@@ -4328,6 +4556,16 @@ struct ScheduleServiceExtractionTests {
             scheduledEvents: activeDay.scheduledEvents + [reminder, boundary],
             decisionLog: activeDay.decisionLog,
             dailyCompletion: activeDay.dailyCompletion
+        )
+    }
+
+    private static func snapshot(for activeDay: ActiveAlarmDay) -> ActiveAlarmWindowSnapshot {
+        ActiveAlarmWindowSnapshot(
+            generatedAt: Date(),
+            visibleDays: [activeDay],
+            scheduledDays: [activeDay],
+            visibleHorizonDays: 7,
+            scheduledHorizonDays: 7
         )
     }
 
