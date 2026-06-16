@@ -544,37 +544,11 @@ final class WakeSessionStore: ObservableObject {
         scheduledEventID: String?,
         now: Date = Date()
     ) -> WakeSession? {
-        guard var session = sessionsByID[wakeSessionID] else { return nil }
-        if let scheduledEventID {
-            appendUnique(&session.stoppedScheduledEventIDs, value: scheduledEventID)
-        }
-        if !session.status.isTerminal {
-            session.status = .confirmedAwake
-            session.confirmedWakeMode = session.mode
-            session.confirmedAt = now
-            session.acknowledgementSource = .systemAlarmDismiss
-            updateMorningLog(dateKey: session.dateKey, now: now) { log in
-                switch session.mode {
-                case .fajr:
-                    log.fajrWakeOutcome = .confirmedAwakeForFajr
-                case .suhoor:
-                    log.suhoorWakeOutcome = .confirmedAwakeForSuhoor
-                }
-            }
-        }
-        let record = appendRecord(
-            dateKey: session.dateKey,
+        recordPlatformAlarmStopped(
             wakeSessionID: wakeSessionID,
-            type: .alarmStopped,
-            timestamp: now,
             scheduledEventID: scheduledEventID,
-            isTest: session.isTest,
-            scenarioID: session.scenarioID
+            now: now
         )
-        appendUnique(&session.operationalLogIDs, value: record.id)
-        session.updatedAt = now
-        updateSession(session)
-        return session
     }
 
     @discardableResult
@@ -956,24 +930,21 @@ final class WakeSessionStore: ObservableObject {
 enum WakeSessionPlanner {
     struct WakeCheckConfiguration: Equatable, Sendable {
         let intervalMinutes: Int
-        let maximumCount: Int
         let cutoffBufferMinutes: Int
 
         static let production = WakeCheckConfiguration(
             intervalMinutes: 5,
-            maximumCount: 5,
             cutoffBufferMinutes: 5
         )
 
         static let compressedTest = WakeCheckConfiguration(
             intervalMinutes: 1,
-            maximumCount: 3,
             cutoffBufferMinutes: 1
         )
     }
 
     static let wakeCheckIntervalMinutes = WakeCheckConfiguration.production.intervalMinutes
-    static let maximumWakeCheckCount = WakeCheckConfiguration.production.maximumCount
+    static let wakeCheckCancellationLookaheadCount = 48
     static let latestWakeBufferMinutes = 5
     static let latestNewSessionBufferMinutes = 6
 
@@ -995,6 +966,7 @@ enum WakeSessionPlanner {
         now: Date = .distantPast,
         configuration: WakeCheckConfiguration = .production
     ) -> [ScheduledEvent] {
+        guard configuration.intervalMinutes > 0 else { return [] }
         guard let cutoff = wakeCheckCutoff(
             mode: mode,
             prayerWindow: prayerWindow,
@@ -1003,27 +975,33 @@ enum WakeSessionPlanner {
             return []
         }
 
-        return (1...configuration.maximumCount).compactMap { index in
-            let wakeCheckTime = primaryWakeTime.addingTimeInterval(
+        var events: [ScheduledEvent] = []
+        var index = 1
+        var wakeCheckTime = primaryWakeTime.addingTimeInterval(
+            TimeInterval(configuration.intervalMinutes * 60)
+        )
+        while wakeCheckTime <= cutoff {
+            if wakeCheckTime > now {
+                events.append(ScheduledEvent(
+                    id: wakeCheckEventID(dateKey: dateKey, index: index),
+                    type: .wakeFollowUp,
+                    dateKey: dateKey,
+                    fireDate: wakeCheckTime,
+                    relativeTo: .wakeAlarm(offsetMinutes: index * configuration.intervalMinutes),
+                    isUserVisible: true,
+                    affectsCompletion: false,
+                    deliveryKinds: [.wake],
+                    soundRole: soundRole,
+                    wakeSessionID: wakeSessionID,
+                    wakeSessionRole: .wakeCheck
+                ))
+            }
+            index += 1
+            wakeCheckTime = primaryWakeTime.addingTimeInterval(
                 TimeInterval(index * configuration.intervalMinutes * 60)
             )
-            guard wakeCheckTime <= cutoff, wakeCheckTime > now else {
-                return nil
-            }
-            return ScheduledEvent(
-                id: wakeCheckEventID(dateKey: dateKey, index: index),
-                type: .wakeFollowUp,
-                dateKey: dateKey,
-                fireDate: wakeCheckTime,
-                relativeTo: .wakeAlarm(offsetMinutes: index * configuration.intervalMinutes),
-                isUserVisible: true,
-                affectsCompletion: false,
-                deliveryKinds: [.wake],
-                soundRole: soundRole,
-                wakeSessionID: wakeSessionID,
-                wakeSessionRole: .wakeCheck
-            )
         }
+        return events
     }
 
     static func wakeSessionDraft(for day: ActiveAlarmDay) -> WakeSessionDraft? {

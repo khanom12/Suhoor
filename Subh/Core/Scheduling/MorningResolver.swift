@@ -347,7 +347,8 @@ enum MorningScheduleResolver {
             fixedWakeTimeCompatibilityMinutesFromMidnight: selectedPlan.fixedWakeTimeCompatibilityMinutesFromMidnight,
             reminderEnabled: input.effectiveConfig.reminderEnabled,
             wakeAlarmEnabled: input.effectiveConfig.suhoorEnabled,
-            wakeFollowUpEnabled: input.effectiveConfig.suhoorEnabled,
+            wakeFollowUpEnabled: input.effectiveConfig.suhoorEnabled
+                && input.stateSnapshot.settings.wakeAttemptMode == .repeatUntilAwake,
             fajrBoundaryNoticeEnabled: input.effectiveConfig.fajrEnabled,
             iftarReminderEnabled: iftarReminderEnabled,
             resolvedWakeState: wakeResolution.resolvedWakeState,

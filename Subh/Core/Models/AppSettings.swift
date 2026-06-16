@@ -16,6 +16,7 @@ struct AppSettings: Codable, Equatable, Sendable {
     var reserveBeforeEndMinutes: Int
     var snoozeEnabled: Bool
     var snoozeMinutes: Int
+    var wakeAttemptMode: WakeAttemptMode
     var label: String
     var calculationMethod: CalculationMethod
     var fajrAdjustmentMinutes: Int
@@ -49,6 +50,7 @@ struct AppSettings: Codable, Equatable, Sendable {
         reserveBeforeEndMinutes: 15,
         snoozeEnabled: true,
         snoozeMinutes: 5,
+        wakeAttemptMode: .repeatUntilAwake,
         label: "Subh",
         calculationMethod: CalculationMethod.defaultForTimeZone(TimeZone.current),
         fajrAdjustmentMinutes: 0,
@@ -66,6 +68,40 @@ struct AppSettings: Codable, Equatable, Sendable {
         pausePrayerPrompts: false,
         pauseFastingPrompts: false
     )
+}
+
+enum WakeAttemptMode: String, Codable, CaseIterable, Identifiable, Sendable {
+    case singleAlarmOnly
+    case repeatUntilAwake
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .singleAlarmOnly:
+            return "Single alarm only"
+        case .repeatUntilAwake:
+            return "Repeat until I'm awake"
+        }
+    }
+
+    var settingsSubtitle: String {
+        switch self {
+        case .singleAlarmOnly:
+            return "Single alarm only"
+        case .repeatUntilAwake:
+            return "Every 5 minutes until you're awake"
+        }
+    }
+
+    var detailText: String {
+        switch self {
+        case .singleAlarmOnly:
+            return "Subh will ring once for each wake session."
+        case .repeatUntilAwake:
+            return "Subh will ring every 5 minutes until you tap I'm Awake, or until the wake window ends."
+        }
+    }
 }
 
 struct HijriSpecialDaySettings: Codable, Equatable, Sendable {
@@ -122,6 +158,7 @@ extension AppSettings {
         case wakeAlarmsPausedIndefinitely
         case snoozeEnabled
         case snoozeMinutes
+        case wakeAttemptMode
         case quietPeriodEnabled
         case pausePrayerPrompts
         case pauseFastingPrompts
@@ -196,7 +233,9 @@ extension AppSettings {
             try container.decodeIfPresent(Int.self, forKey: .reserveBeforeEndMinutes) ?? 15
         )
         snoozeEnabled = try container.decodeIfPresent(Bool.self, forKey: .snoozeEnabled) ?? true
-        snoozeMinutes = try container.decodeIfPresent(Int.self, forKey: .snoozeMinutes) ?? 5
+        snoozeMinutes = 5
+        wakeAttemptMode = try container.decodeIfPresent(WakeAttemptMode.self, forKey: .wakeAttemptMode)
+            ?? (snoozeEnabled ? .repeatUntilAwake : .singleAlarmOnly)
         label = try container.decodeIfPresent(String.self, forKey: .label) ?? "Subh"
         calculationMethod = try container.decodeIfPresent(CalculationMethod.self, forKey: .calculationMethod)
             ?? CalculationMethod.defaultForTimeZone(TimeZone.current)
@@ -231,8 +270,9 @@ extension AppSettings {
         try container.encode(postFajrWakeSoundSelectionGlobal, forKey: .postFajrWakeSoundSelectionGlobal)
         try container.encode(fixedWakeSoundSelectionGlobal, forKey: .fixedWakeSoundSelectionGlobal)
         try container.encode(max(1, reserveBeforeEndMinutes), forKey: .reserveBeforeEndMinutes)
-        try container.encode(snoozeEnabled, forKey: .snoozeEnabled)
-        try container.encode(snoozeMinutes, forKey: .snoozeMinutes)
+        try container.encode(wakeAttemptMode == .repeatUntilAwake, forKey: .snoozeEnabled)
+        try container.encode(5, forKey: .snoozeMinutes)
+        try container.encode(wakeAttemptMode, forKey: .wakeAttemptMode)
         try container.encode(label, forKey: .label)
         try container.encode(calculationMethod, forKey: .calculationMethod)
         try container.encode(fajrAdjustmentMinutes, forKey: .fajrAdjustmentMinutes)

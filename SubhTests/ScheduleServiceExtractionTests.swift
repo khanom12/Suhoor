@@ -563,6 +563,39 @@ struct ScheduleServiceExtractionTests {
     }
 
     @Test
+    func repeatWakeAttemptsAreDerivedFromFajrBoundaryWithoutAttemptCap() throws {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let prayerWindow = Self.makePrayerWindow(timeZone: timeZone)
+        let fajrEnd = try #require(prayerWindow.fajrEnd)
+
+        func attemptFireDates(minutesBeforeEnd: Int) -> [Date] {
+            let primaryWake = fajrEnd.addingTimeInterval(-TimeInterval(minutesBeforeEnd * 60))
+            let wakeChecks = WakeSessionPlanner.wakeCheckEvents(
+                dateKey: "2026-05-01",
+                wakeSessionID: WakeSessionPlanner.wakeSessionID(for: "2026-05-01"),
+                mode: .fajr,
+                primaryWakeTime: primaryWake,
+                prayerWindow: prayerWindow,
+                soundRole: .inFajrWake
+            )
+            return [primaryWake] + wakeChecks.map(\.fireDate)
+        }
+
+        #expect(attemptFireDates(minutesBeforeEnd: 30) == [30, 25, 20, 15, 10, 5].map {
+            fajrEnd.addingTimeInterval(-TimeInterval($0 * 60))
+        })
+        #expect(attemptFireDates(minutesBeforeEnd: 45) == [45, 40, 35, 30, 25, 20, 15, 10, 5].map {
+            fajrEnd.addingTimeInterval(-TimeInterval($0 * 60))
+        })
+        #expect(attemptFireDates(minutesBeforeEnd: 10) == [10, 5].map {
+            fajrEnd.addingTimeInterval(-TimeInterval($0 * 60))
+        })
+        #expect(attemptFireDates(minutesBeforeEnd: 5) == [5].map {
+            fajrEnd.addingTimeInterval(-TimeInterval($0 * 60))
+        })
+    }
+
+    @Test
     func suhoorWakeChecksUseFajrBeginCutoff() {
         let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
         let prayerWindow = Self.makePrayerWindow(timeZone: timeZone)
@@ -612,6 +645,61 @@ struct ScheduleServiceExtractionTests {
     }
 
     @Test
+    func wakeAttemptModeControlsMaterializedWakeChecks() throws {
+        let repeatSnapshot = try Self.makeResolvedMorningSnapshot(wakeAttemptMode: .repeatUntilAwake)
+        let singleSnapshot = try Self.makeResolvedMorningSnapshot(wakeAttemptMode: .singleAlarmOnly)
+
+        let repeatWakeEvents = repeatSnapshot.materializedEvents.filter { $0.deliveryKinds.contains(.wake) }
+        let singleWakeEvents = singleSnapshot.materializedEvents.filter { $0.deliveryKinds.contains(.wake) }
+
+        #expect(repeatWakeEvents.contains { $0.wakeSessionRole == .primaryWake })
+        #expect(repeatWakeEvents.filter { $0.wakeSessionRole == .wakeCheck }.count == 5)
+        #expect(singleWakeEvents.filter { $0.wakeSessionRole == .primaryWake }.count == 1)
+        #expect(singleWakeEvents.filter { $0.wakeSessionRole == .wakeCheck }.isEmpty)
+    }
+
+    @Test
+    func suhoorWakeAttemptsUseSelectedModeWhileFajrStartNoticeStaysSingleShot() throws {
+        let repeatSnapshot = try Self.makeResolvedMorningSnapshot(
+            wakeAttemptMode: .repeatUntilAwake,
+            defaultConfig: .legacySuhoorFactoryDefault
+        )
+        let singleSnapshot = try Self.makeResolvedMorningSnapshot(
+            wakeAttemptMode: .singleAlarmOnly,
+            defaultConfig: .legacySuhoorFactoryDefault
+        )
+
+        #expect(repeatSnapshot.resolvedBehaviorProfile.resolvedWakeState == .preFajr)
+        #expect(repeatSnapshot.materializedEvents.filter { $0.wakeSessionRole == .wakeCheck }.count == 5)
+        #expect(singleSnapshot.materializedEvents.filter { $0.wakeSessionRole == .wakeCheck }.isEmpty)
+        #expect(repeatSnapshot.materializedEvents.filter { $0.type == .fajrBoundaryNotice }.count == 1)
+        #expect(repeatSnapshot.materializedEvents.filter { $0.type == .fajrBoundaryNotice }.allSatisfy {
+            $0.deliveryKinds == [.boundary] && $0.wakeSessionRole == .checkpoint
+        })
+    }
+
+    @Test
+    @MainActor
+    func wakeAttemptModePersistsAndMigratesFromLegacySnoozeSetting() throws {
+        let decoder = JSONDecoder()
+        let legacySingle = try decoder.decode(AppSettings.self, from: Data(#"{"snoozeEnabled":false,"snoozeMinutes":15}"#.utf8))
+        let legacyRepeat = try decoder.decode(AppSettings.self, from: Data(#"{"snoozeEnabled":true,"snoozeMinutes":15}"#.utf8))
+        var explicitSingle = AppSettings.default
+        explicitSingle.wakeAttemptMode = .singleAlarmOnly
+        explicitSingle.snoozeEnabled = false
+        explicitSingle.snoozeMinutes = 5
+
+        let reloaded = try decoder.decode(AppSettings.self, from: JSONEncoder().encode(explicitSingle))
+
+        #expect(legacySingle.wakeAttemptMode == .singleAlarmOnly)
+        #expect(legacySingle.snoozeMinutes == 5)
+        #expect(legacyRepeat.wakeAttemptMode == .repeatUntilAwake)
+        #expect(reloaded.wakeAttemptMode == .singleAlarmOnly)
+        #expect(reloaded.snoozeEnabled == false)
+        #expect(reloaded.snoozeMinutes == 5)
+    }
+
+    @Test
     @MainActor
     func confirmingAwakeCancelsPendingWakeChecks() async {
         let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
@@ -638,7 +726,7 @@ struct ScheduleServiceExtractionTests {
 
     @Test
     @MainActor
-    func alarmStopConfirmsWakeSessionWithSystemSource() {
+    func alarmStopRecordsDismissalWithoutAwakeConfirmation() {
         let store = WakeSessionStore(loadPersistedData: false)
         let draft = Self.makeWakeSessionDraft(mode: .fajr)
         store.upsertScheduledSession(from: draft, now: draft.plannedWakeTime.addingTimeInterval(-60))
@@ -649,11 +737,33 @@ struct ScheduleServiceExtractionTests {
             now: draft.plannedWakeTime
         )
 
-        #expect(session?.status == .confirmedAwake)
-        #expect(session?.confirmedAt == draft.plannedWakeTime)
-        #expect(session?.acknowledgementSource == .systemAlarmDismiss)
-        #expect(store.morningLog(for: draft.dateKey)?.fajrWakeOutcome == .confirmedAwakeForFajr)
+        #expect(session?.status == .scheduled)
+        #expect(session?.confirmedAt == nil)
+        #expect(session?.acknowledgementSource == nil)
+        #expect(draft.primaryScheduledEventID.map { session?.stoppedScheduledEventIDs.contains($0) == true } == true)
+        #expect(session?.wakeCheckScheduledEventIDs == draft.wakeCheckScheduledEventIDs)
+        #expect(store.morningLog(for: draft.dateKey)?.fajrWakeOutcome == .unconfirmed)
         #expect(store.morningLog(for: draft.dateKey)?.records.contains { $0.type == .alarmStopped } == true)
+    }
+
+    @Test
+    @MainActor
+    func singleAlarmDismissalRemainsUnconfirmedWithoutCreatingWakeChecks() {
+        let store = WakeSessionStore(loadPersistedData: false)
+        let draft = Self.makeWakeSessionDraft(mode: .fajr, includeWakeChecks: false)
+        store.upsertScheduledSession(from: draft, now: draft.plannedWakeTime.addingTimeInterval(-60))
+
+        let session = store.recordAlarmStopped(
+            wakeSessionID: draft.wakeSessionID,
+            scheduledEventID: draft.primaryScheduledEventID,
+            now: draft.plannedWakeTime
+        )
+
+        #expect(session?.status == .scheduled)
+        #expect(session?.confirmedAt == nil)
+        #expect(session?.wakeCheckScheduledEventIDs.isEmpty == true)
+        #expect(store.morningLog(for: draft.dateKey)?.fajrWakeOutcome == .unconfirmed)
+        #expect(store.morningLog(for: draft.dateKey)?.fastCompletionOutcome == .unconfirmed)
     }
 
     @Test
@@ -808,6 +918,25 @@ struct ScheduleServiceExtractionTests {
     }
 
     @Test
+    @MainActor
+    func singleAlarmAwakeConfirmationRecordsAcknowledgementWithoutWakeChecks() {
+        let store = WakeSessionStore(loadPersistedData: false)
+        let draft = Self.makeWakeSessionDraft(mode: .fajr, includeWakeChecks: false)
+        store.upsertScheduledSession(from: draft)
+
+        let session = store.confirmAwake(
+            wakeSessionID: draft.wakeSessionID,
+            mode: .fajr,
+            cancelledScheduledEventIDs: draft.wakeCheckScheduledEventIDs
+        )
+
+        #expect(session?.status == .confirmedAwake)
+        #expect(session?.wakeCheckScheduledEventIDs.isEmpty == true)
+        #expect(store.morningLog(for: draft.dateKey)?.fajrWakeOutcome == .confirmedAwakeForFajr)
+        #expect(store.morningLog(for: draft.dateKey)?.fajrPrayerOutcome == .unconfirmed)
+    }
+
+    @Test
     func coldReconciliationCancelsStaleWakeCheckIdentifiers() {
         let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
         let date = Self.makeDate(year: 2026, month: 5, day: 1, timeZone: timeZone)
@@ -848,7 +977,6 @@ struct ScheduleServiceExtractionTests {
         let wakeCheckFireDates = plan.wakeCheckEvents.map { $0.fireDate }
         #expect(wakeCheckFireDates == (1...5).map { plan.primaryWakeTime.addingTimeInterval(TimeInterval($0 * 5 * 60)) })
         #expect(WakeSessionPlanner.wakeCheckIntervalMinutes == 5)
-        #expect(WakeSessionPlanner.maximumWakeCheckCount == 5)
         #expect(session.isTest)
         #expect(store.morningLog(for: plan.dateKey)?.isTest == true)
     }
@@ -880,7 +1008,7 @@ struct ScheduleServiceExtractionTests {
 
     @Test
     @MainActor
-    func wakeSessionLabAlarmStopConfirmsAwakeAndLeavesChecksPending() async throws {
+    func wakeSessionLabAlarmStopRecordsDismissalAndLeavesChecksPending() async throws {
         let store = WakeSessionStore(loadPersistedData: false)
         let harness = WakeSessionTestingHarness(wakeSessionStore: store)
 
@@ -888,10 +1016,11 @@ struct ScheduleServiceExtractionTests {
 
         let plan = try #require(harness.activePlan)
         let session = try #require(store.session(id: plan.wakeSessionID))
-        #expect(session.status == WakeSessionStatus.confirmedAwake)
-        #expect(session.confirmedAt != nil)
-        #expect(session.acknowledgementSource == .systemAlarmDismiss)
+        #expect(session.status == WakeSessionStatus.primaryAlarmFired)
+        #expect(session.confirmedAt == nil)
+        #expect(session.acknowledgementSource == nil)
         #expect(harness.pendingTestAlarms.contains { $0.role == WakeSessionTestAlarmRole.wakeCheck })
+        #expect(store.morningLog(for: plan.dateKey)?.fajrWakeOutcome == .unconfirmed)
         #expect(store.morningLog(for: plan.dateKey)?.records.contains { $0.type == .alarmStopped } == true)
     }
 
@@ -4600,6 +4729,7 @@ struct ScheduleServiceExtractionTests {
 
     private static func makeWakeSessionDraft(
         mode: WakeSessionMode,
+        includeWakeChecks: Bool = true,
         timeZone: TimeZone = TimeZone(identifier: "America/Toronto") ?? .current
     ) -> WakeSessionDraft {
         let date = makeDate(year: 2026, month: 5, day: 1, timeZone: timeZone)
@@ -4613,14 +4743,14 @@ struct ScheduleServiceExtractionTests {
             plannedWakeTime = prayerWindow.fajrStart.addingTimeInterval(-30 * 60)
         }
         let primaryEventID = "\(dateKey).wakeAlarm"
-        let wakeChecks = WakeSessionPlanner.wakeCheckEvents(
+        let wakeChecks = includeWakeChecks ? WakeSessionPlanner.wakeCheckEvents(
             dateKey: dateKey,
             wakeSessionID: WakeSessionPlanner.wakeSessionID(for: dateKey),
             mode: mode,
             primaryWakeTime: plannedWakeTime,
             prayerWindow: prayerWindow,
             soundRole: mode == .suhoor ? .preFajrWake : .inFajrWake
-        )
+        ) : []
         return WakeSessionDraft(
             wakeSessionID: WakeSessionPlanner.wakeSessionID(for: dateKey),
             dateKey: dateKey,
@@ -4915,6 +5045,63 @@ struct ScheduleServiceExtractionTests {
                 hasDayOverride: hasDayOverride
             )
         )
+    }
+
+    private static func makeResolvedMorningSnapshot(
+        wakeAttemptMode: WakeAttemptMode,
+        date: Date? = nil,
+        defaultConfig: DefaultAlarmConfig = .default,
+        timeZone: TimeZone = TimeZone(identifier: "America/Toronto") ?? .current
+    ) throws -> ResolvedDaySnapshot {
+        let day = date ?? makeDate(year: 2026, month: 5, day: 1, timeZone: timeZone)
+        let dateKey = DateHelpers.dayIdentifier(for: day, timeZone: timeZone)
+        var settings = AppSettings.default
+        settings.isConfigured = true
+        settings.wakeAttemptMode = wakeAttemptMode
+        settings.snoozeEnabled = wakeAttemptMode == .repeatUntilAwake
+        settings.snoozeMinutes = 5
+        let suiteName = "ScheduleServiceExtractionTests.MorningSnapshot.\(wakeAttemptMode.rawValue).\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName) ?? .standard
+        defaults.removePersistentDomain(forName: suiteName)
+        let planStore = MorningPlanStore(
+            defaults: defaults,
+            legacySettings: settings,
+            defaultConfig: defaultConfig
+        )
+        let effectiveConfig = ActiveDayResolver.effectiveConfig(
+            for: day,
+            settings: settings,
+            defaultConfig: defaultConfig,
+            overridesByDay: [:],
+            additionalDefaultsActive: true,
+            timeZone: timeZone
+        )
+        let snapshot = MorningStateSnapshot(
+            settings: settings,
+            defaultConfig: defaultConfig,
+            morningPlanState: planStore.state,
+            dateAssignments: [],
+            completionRecords: [],
+            qadaLedgerSnapshot: QadaLedgerSnapshot(
+                trackingStartDateKey: "2026-01-01",
+                baselineOwed: 0,
+                completed: 0,
+                remaining: 0
+            ),
+            coordinate: CLLocationCoordinate2D(latitude: 43.6532, longitude: -79.3832),
+            timeZone: timeZone,
+            locationDescription: "Toronto",
+            fastTagSelections: [:],
+            overridesByDateKey: [:]
+        )
+        return try #require(MorningScheduleResolver.resolve(input: MorningScheduleResolutionInput(
+            date: day,
+            dateKey: dateKey,
+            provenances: [defaultDailyPlanProvenance()],
+            effectiveConfig: effectiveConfig,
+            tagResult: .empty,
+            stateSnapshot: snapshot
+        )))
     }
 
     private static func nextTenTagTitles(

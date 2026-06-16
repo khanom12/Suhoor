@@ -360,6 +360,36 @@ struct AlarmBehaviorSettingsView: View {
             }
 
             SettingsGroup(
+                title: "Wake Attempts",
+                supportingText: "Wake attempts control whether Subh rings once or keeps trying every 5 minutes until you confirm you are awake."
+            ) {
+                SettingsRow {
+                    SettingsSummaryRow(
+                        title: "Wake Attempts",
+                        subtitle: normalizedDraftSettings.wakeAttemptMode.settingsSubtitle,
+                        systemImage: normalizedDraftSettings.wakeAttemptMode == .repeatUntilAwake
+                            ? "alarm.waves.left.and.right"
+                            : "alarm"
+                    )
+                }
+                AppGroupDivider()
+                SettingsRow {
+                    Picker("Wake Attempts", selection: wakeAttemptModeBinding) {
+                        ForEach(WakeAttemptMode.allCases) { mode in
+                            Text(mode.title).tag(mode)
+                        }
+                    }
+                }
+                AppGroupDivider()
+                SettingsRow {
+                    Text(normalizedDraftSettings.wakeAttemptMode.detailText)
+                        .font(AppTypography.rowBody)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            SettingsGroup(
                 title: "Wake Sounds",
                 supportingText: "Choose the sound used before Fajr, at Fajr start, during Fajr, after Fajr, and for fixed wakes."
             ) {
@@ -456,9 +486,22 @@ struct AlarmBehaviorSettingsView: View {
         })
     }
 
+    private var wakeAttemptModeBinding: Binding<WakeAttemptMode> {
+        Binding(get: {
+            draftSettings.wakeAttemptMode
+        }, set: { newValue in
+            draftSettings.wakeAttemptMode = newValue
+            draftSettings.snoozeEnabled = newValue == .repeatUntilAwake
+            draftSettings.snoozeMinutes = 5
+            scheduleDraftCommit()
+        })
+    }
+
     private var normalizedDraftSettings: AppSettings {
         var settings = draftSettings
         settings.reserveBeforeEndMinutes = max(1, settings.reserveBeforeEndMinutes)
+        settings.snoozeEnabled = settings.wakeAttemptMode == .repeatUntilAwake
+        settings.snoozeMinutes = 5
         return settings
     }
 

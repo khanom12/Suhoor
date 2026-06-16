@@ -1351,23 +1351,30 @@ final class WakeSessionTestingHarness: ObservableObject {
             return []
         }
 
-        return (1...configuration.maximumCount).compactMap { index in
-            let fireDate = primaryWakeTime.addingTimeInterval(TimeInterval(index * configuration.intervalMinutes * 60))
-            guard fireDate <= cutoff, fireDate > now else { return nil }
-            return ScheduledEvent(
-                id: SchedulingIdentifiers.testWakeCheckEventID(scenarioID: scenarioID, index: index),
-                type: .wakeFollowUp,
-                dateKey: dateKey,
-                fireDate: fireDate,
-                relativeTo: .wakeAlarm(offsetMinutes: index * configuration.intervalMinutes),
-                isUserVisible: true,
-                affectsCompletion: false,
-                deliveryKinds: [.wake],
-                soundRole: mode == .suhoor ? .preFajrWake : .inFajrWake,
-                wakeSessionID: wakeSessionID,
-                wakeSessionRole: .wakeCheck
-            )
+        guard configuration.intervalMinutes > 0 else { return [] }
+        var events: [ScheduledEvent] = []
+        var index = 1
+        var fireDate = primaryWakeTime.addingTimeInterval(TimeInterval(configuration.intervalMinutes * 60))
+        while fireDate <= cutoff {
+            if fireDate > now {
+                events.append(ScheduledEvent(
+                    id: SchedulingIdentifiers.testWakeCheckEventID(scenarioID: scenarioID, index: index),
+                    type: .wakeFollowUp,
+                    dateKey: dateKey,
+                    fireDate: fireDate,
+                    relativeTo: .wakeAlarm(offsetMinutes: index * configuration.intervalMinutes),
+                    isUserVisible: true,
+                    affectsCompletion: false,
+                    deliveryKinds: [.wake],
+                    soundRole: mode == .suhoor ? .preFajrWake : .inFajrWake,
+                    wakeSessionID: wakeSessionID,
+                    wakeSessionRole: .wakeCheck
+                ))
+            }
+            index += 1
+            fireDate = primaryWakeTime.addingTimeInterval(TimeInterval(index * configuration.intervalMinutes * 60))
         }
+        return events
     }
 
     private func makeMappingPlan(
@@ -1843,9 +1850,12 @@ final class WakeSessionTestingHarness: ObservableObject {
             primaryAlarmTime: plan.primaryWakeTime,
             followUpAlarmTimes: plan.wakeCheckEvents.map(\.fireDate),
             cutoffBoundary: cutoff,
-            omittedFollowUpReason: plan.wakeCheckEvents.count < WakeSessionPlanner.maximumWakeCheckCount
-                ? "Later follow-up alarms would be outside the allowed cutoff."
-                : nil
+            omittedFollowUpReason: {
+                guard let cutoff, let lastWakeCheck = plan.wakeCheckEvents.last else { return nil }
+                return lastWakeCheck.fireDate < cutoff
+                    ? "Later follow-up alarms would be outside the allowed cutoff."
+                    : nil
+            }()
         )
     }
 

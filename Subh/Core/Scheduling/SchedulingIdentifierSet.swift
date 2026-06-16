@@ -88,13 +88,13 @@ struct SchedulingIdentifierSet: Equatable, Sendable {
     ) -> SchedulingIdentifierSet {
         forSchedule(schedule, events: events).union(
             SchedulingIdentifierSet(
-                notificationIdentifiers: (1...WakeSessionPlanner.maximumWakeCheckCount).map {
+                notificationIdentifiers: (1...WakeSessionPlanner.wakeCheckCancellationLookaheadCount).map {
                     "\(WakeSessionPlanner.wakeCheckEventID(dateKey: dateKey, index: $0)).wake"
                 } + [
                     "\(dateKey).wakeAlarm.wake",
                     "\(dateKey).fajrBoundaryNotice.boundary"
                 ],
-                alarmIdentifiers: (1...WakeSessionPlanner.maximumWakeCheckCount).flatMap { index in
+                alarmIdentifiers: (1...WakeSessionPlanner.wakeCheckCancellationLookaheadCount).flatMap { index in
                     let notificationID = "\(WakeSessionPlanner.wakeCheckEventID(dateKey: dateKey, index: index)).wake"
                     return [
                         DateHelpers.stableUUID(from: notificationID),
@@ -170,7 +170,7 @@ struct SchedulingIdentifierSet: Equatable, Sendable {
     }
 
     private static func wakeCheckEventStubs(for schedule: DaySchedule) -> [ScheduledEvent] {
-        (1...WakeSessionPlanner.maximumWakeCheckCount).map { index in
+        (1...WakeSessionPlanner.wakeCheckCancellationLookaheadCount).map { index in
             ScheduledEvent(
                 id: WakeSessionPlanner.wakeCheckEventID(dateKey: schedule.id, index: index),
                 type: .wakeFollowUp,
