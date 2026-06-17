@@ -99,6 +99,19 @@ struct WakeSession: Codable, Equatable, Identifiable, Sendable {
         status.isConfirmedAwake
     }
 
+    func isProtectedFromScheduleRewrite(replacingWith draft: WakeSessionDraft, now: Date) -> Bool {
+        if status == .cancelledForMorning && mode != draft.mode {
+            return false
+        }
+        if status != .scheduled {
+            return true
+        }
+        if !firedScheduledEventIDs.isEmpty || !stoppedScheduledEventIDs.isEmpty {
+            return true
+        }
+        return plannedWakeTime <= now
+    }
+
     init(draft: WakeSessionDraft, now: Date) {
         self.wakeSessionID = draft.wakeSessionID
         self.dateKey = draft.dateKey
@@ -436,6 +449,9 @@ final class WakeSessionStore: ObservableObject {
     @discardableResult
     func upsertScheduledSession(from draft: WakeSessionDraft, now: Date = Date()) -> WakeSession {
         let existing = sessionsByID[draft.wakeSessionID]
+        if let existing, existing.isProtectedFromScheduleRewrite(replacingWith: draft, now: now) {
+            return existing
+        }
         let isNew = existing == nil
         var session = existing ?? WakeSession(draft: draft, now: now)
         session.apply(draft: draft, now: now)

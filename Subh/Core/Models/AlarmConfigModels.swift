@@ -233,7 +233,7 @@ struct DefaultAlarmConfig: Codable, Equatable, Sendable {
         defaultWakeDeltaMinutes: 30,
         defaultLatestWakeCapMinutesFromMidnight: nil,
         defaultSuhoorTimeMode: .relativeToFajrMinusMinutes,
-        defaultSuhoorOffsetMinutes: 30,
+        defaultSuhoorOffsetMinutes: 60,
         defaultReminderTimeMode: .beforeFajr,
         defaultReminderMinutesBeforeFajr: 10,
         defaultReminderFixedTimeMinutes: 0,
@@ -511,6 +511,7 @@ struct EffectiveDailyConfig: Codable, Equatable, Sendable {
     let fajrEnabled: Bool
     let iftarEnabled: Bool
     let defaultWakeRule: MorningWakeRule
+    let defaultSuhoorWakeRule: MorningWakeRule
     let resolvedWakeRule: MorningWakeRule
     let wakeRuleWasOverridden: Bool
     let dateAlarmOverride: DateAlarmOverride
@@ -545,6 +546,7 @@ struct EffectiveDailyConfig: Codable, Equatable, Sendable {
         case fajrEnabled
         case iftarEnabled
         case defaultWakeRule
+        case defaultSuhoorWakeRule
         case resolvedWakeRule
         case wakeRuleWasOverridden
         case dateAlarmOverride
@@ -576,6 +578,7 @@ struct EffectiveDailyConfig: Codable, Equatable, Sendable {
         fajrEnabled: Bool,
         iftarEnabled: Bool,
         defaultWakeRule: MorningWakeRule = DefaultAlarmConfig.default.defaultWakeRule,
+        defaultSuhoorWakeRule: MorningWakeRule = DefaultAlarmConfig.default.defaultSuhoorMorningWakeRule,
         resolvedWakeRule: MorningWakeRule = DefaultAlarmConfig.default.defaultWakeRule,
         wakeRuleWasOverridden: Bool = false,
         dateAlarmOverride: DateAlarmOverride = .none,
@@ -605,6 +608,7 @@ struct EffectiveDailyConfig: Codable, Equatable, Sendable {
         self.fajrEnabled = fajrEnabled
         self.iftarEnabled = iftarEnabled
         self.defaultWakeRule = defaultWakeRule
+        self.defaultSuhoorWakeRule = defaultSuhoorWakeRule
         self.resolvedWakeRule = resolvedWakeRule
         self.wakeRuleWasOverridden = wakeRuleWasOverridden
         self.dateAlarmOverride = dateAlarmOverride
@@ -630,7 +634,12 @@ struct EffectiveDailyConfig: Codable, Equatable, Sendable {
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         let fallbackWakeRule = DefaultAlarmConfig.default.defaultWakeRule
+        let fallbackSuhoorWakeRule = DefaultAlarmConfig.default.defaultSuhoorMorningWakeRule
         let decodedDefaultWakeRule = try container.decodeIfPresent(MorningWakeRule.self, forKey: .defaultWakeRule)
+        let decodedDefaultSuhoorWakeRule = try container.decodeIfPresent(
+            MorningWakeRule.self,
+            forKey: .defaultSuhoorWakeRule
+        )
         let decodedResolvedWakeRule = try container.decodeIfPresent(MorningWakeRule.self, forKey: .resolvedWakeRule)
         let decodedQuickWakeMode = try container.decodeIfPresent(QuickWakeMode.self, forKey: .quickWakeModeOverride)
         let decodedDateAlarmOverride = try container.decodeIfPresent(DateAlarmOverride.self, forKey: .dateAlarmOverride)
@@ -645,6 +654,7 @@ struct EffectiveDailyConfig: Codable, Equatable, Sendable {
             fajrEnabled: try container.decode(Bool.self, forKey: .fajrEnabled),
             iftarEnabled: try container.decode(Bool.self, forKey: .iftarEnabled),
             defaultWakeRule: decodedDefaultWakeRule ?? fallbackWakeRule,
+            defaultSuhoorWakeRule: decodedDefaultSuhoorWakeRule ?? fallbackSuhoorWakeRule,
             resolvedWakeRule: decodedResolvedWakeRule ?? decodedDefaultWakeRule ?? fallbackWakeRule,
             wakeRuleWasOverridden: try container.decodeIfPresent(Bool.self, forKey: .wakeRuleWasOverridden)
                 ?? false,
@@ -683,6 +693,7 @@ struct EffectiveDailyConfig: Codable, Equatable, Sendable {
         try container.encode(fajrEnabled, forKey: .fajrEnabled)
         try container.encode(iftarEnabled, forKey: .iftarEnabled)
         try container.encode(defaultWakeRule, forKey: .defaultWakeRule)
+        try container.encode(defaultSuhoorWakeRule, forKey: .defaultSuhoorWakeRule)
         try container.encode(resolvedWakeRule, forKey: .resolvedWakeRule)
         try container.encode(wakeRuleWasOverridden, forKey: .wakeRuleWasOverridden)
         try container.encode(dateAlarmOverride, forKey: .dateAlarmOverride)
@@ -752,7 +763,7 @@ extension DefaultAlarmConfig {
     }
 
     var defaultWakeRule: MorningWakeRule {
-        MorningWakeRule(
+        defaultFajrWakeRule.morningWakeRule ?? MorningWakeRule(
             state: defaultWakeState.asWakeRuleState,
             anchorType: normalizedDefaultWakeAnchorType,
             deltaMinutes: max(0, defaultWakeDeltaMinutes),
@@ -761,6 +772,67 @@ extension DefaultAlarmConfig {
             bypassLatestWakeCap: false,
             isLegacyFixedWakeCompatibility: defaultSuhoorTimeMode == .fixedTime
         )
+    }
+
+    var defaultFajrWakeRule: DefaultWakeRule {
+        get {
+            DefaultWakeRule(
+                purpose: .fajr,
+                wakeRule: MorningWakeRule(
+                    state: defaultWakeState.asWakeRuleState,
+                    anchorType: normalizedDefaultWakeAnchorType,
+                    deltaMinutes: max(0, defaultWakeDeltaMinutes)
+                )
+            ) ?? .defaultFajr
+        }
+        set {
+            guard newValue.purpose == .fajr, newValue.morningWakeRule != nil else { return }
+            switch (newValue.anchor, newValue.direction) {
+            case (.fajrStart, .at), (.fajrStart, .after):
+                defaultWakeState = .inFajr
+                defaultWakeAnchorType = .fajrStart
+                defaultWakeDeltaMinutes = newValue.direction == .at ? 0 : newValue.offsetMinutes
+            case (.fajrEnd, .before):
+                defaultWakeState = .inFajr
+                defaultWakeAnchorType = .fajrEnd
+                defaultWakeDeltaMinutes = newValue.offsetMinutes
+            default:
+                break
+            }
+            defaultSuhoorTimeMode = .relativeToFajrMinusMinutes
+            defaultLatestWakeCapMinutesFromMidnight = nil
+        }
+    }
+
+    var defaultSuhoorWakeRule: DefaultWakeRule {
+        get {
+            DefaultWakeRule(
+                purpose: .suhoor,
+                anchor: .fajrStart,
+                direction: .before,
+                offsetMinutes: max(0, defaultSuhoorOffsetMinutes)
+            )
+        }
+        set {
+            guard newValue.purpose == .suhoor,
+                  newValue.anchor == .fajrStart,
+                  newValue.direction == .before else { return }
+            defaultSuhoorTimeMode = .relativeToFajrMinusMinutes
+            defaultSuhoorOffsetMinutes = max(1, newValue.offsetMinutes)
+        }
+    }
+
+    var defaultSuhoorMorningWakeRule: MorningWakeRule {
+        defaultSuhoorWakeRule.morningWakeRule ?? DefaultWakeRule.defaultSuhoor.morningWakeRule!
+    }
+
+    mutating func applyDefaultWakeRule(_ rule: DefaultWakeRule) {
+        switch rule.purpose {
+        case .fajr:
+            defaultFajrWakeRule = rule
+        case .suhoor:
+            defaultSuhoorWakeRule = rule
+        }
     }
 }
 

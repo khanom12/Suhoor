@@ -122,7 +122,7 @@ struct WakeTimeResolution: Codable, Equatable, Sendable {
     let minutesBeforeFajrBegin: Int?
 }
 
-enum WakePurpose: String, Codable, CaseIterable, Identifiable, Sendable {
+enum WakePurpose: String, Codable, CaseIterable, Identifiable, Hashable, Sendable {
     case fajr
     case suhoor
 

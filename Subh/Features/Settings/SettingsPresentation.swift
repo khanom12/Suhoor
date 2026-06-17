@@ -222,6 +222,7 @@ enum SettingsDestination: String, CaseIterable, Identifiable {
     case location
     case prayerTimes
     case hijriCalendarCorrections
+    case defaultWakeTimes
     case alarmBehavior
     case permissionsReliability
     case quietPeriod
@@ -237,8 +238,10 @@ enum SettingsDestination: String, CaseIterable, Identifiable {
             return Strings.Settings.prayerTimesTitle
         case .hijriCalendarCorrections:
             return Strings.Settings.hijriCalendarTitle
+        case .defaultWakeTimes:
+            return "Default Wake Times"
         case .alarmBehavior:
-            return "Wake Sounds & Reserve"
+            return "Wake Sounds & Attempts"
         case .permissionsReliability:
             return "Wake delivery & reliability"
         case .quietPeriod:
@@ -256,6 +259,8 @@ enum SettingsDestination: String, CaseIterable, Identifiable {
             return "moon.stars"
         case .hijriCalendarCorrections:
             return "calendar.badge.clock"
+        case .defaultWakeTimes:
+            return "alarm"
         case .alarmBehavior:
             return "speaker.wave.3"
         case .permissionsReliability:
@@ -292,7 +297,7 @@ enum SettingsDestinationGroup: CaseIterable, Identifiable {
         case .calendarTimes:
             return Strings.Settings.calendarTimesGroup
         case .morningRules:
-            return "Morning Rules"
+            return "Wake Alarms"
         case .appHealth:
             return Strings.Settings.appHealthGroup
         case .about:
@@ -305,7 +310,7 @@ enum SettingsDestinationGroup: CaseIterable, Identifiable {
         case .calendarTimes:
             return [.location, .prayerTimes, .hijriCalendarCorrections]
         case .morningRules:
-            return [.alarmBehavior]
+            return [.defaultWakeTimes, .alarmBehavior]
         case .appHealth:
             return [.permissionsReliability, .quietPeriod]
         case .about:

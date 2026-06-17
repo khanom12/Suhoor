@@ -589,6 +589,13 @@ enum ProductSurfacePresentation {
         }
     }
 
+    static func defaultWakeTimesSummary(for defaults: DefaultAlarmConfig) -> String {
+        [
+            defaults.defaultFajrWakeRule.conciseSummary,
+            defaults.defaultSuhoorWakeRule.conciseSummary
+        ].joined(separator: " · ")
+    }
+
     static func soundSummaryText(settings: AppSettings) -> String {
         let defaultSettings = AppSettings.default
         let isCustom = settings.preFajrWakeSoundSelectionGlobal != defaultSettings.preFajrWakeSoundSelectionGlobal

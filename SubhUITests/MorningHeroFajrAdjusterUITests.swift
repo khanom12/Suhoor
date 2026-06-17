@@ -121,7 +121,7 @@ final class MorningHeroFajrAdjusterUITests: XCTestCase {
             .press(forDuration: 0.15, thenDragTo: trackRight)
 
         XCTAssertTrue(fajrWindow.waitForExistence(timeout: 4))
-        XCTAssertEqual(relation.label, "As Fajr begins")
+        XCTAssertEqual(relation.label, "5 min before Fajr begins")
     }
 
     func testMorningHeroQuickWakeModeSelectorUpdatesResolvedState() {

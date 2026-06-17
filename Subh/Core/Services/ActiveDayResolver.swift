@@ -454,6 +454,7 @@ final class ActiveDayResolver {
                 return target >= calendar.startOfDay(for: start) && target <= calendar.startOfDay(for: end)
             }()
         let defaultWakeRule = defaultConfig.defaultWakeRule
+        let defaultSuhoorWakeRule = defaultConfig.defaultSuhoorMorningWakeRule
         let overrideWakeRule = override?.resolvedWakeRule(defaults: defaultConfig)
         let resolvedWakeRule = overrideWakeRule ?? defaultWakeRule
         let dateAlarmOverride = resolvedDateAlarmOverride(from: override)
@@ -510,6 +511,7 @@ final class ActiveDayResolver {
             fajrEnabled: fajrEnabled,
             iftarEnabled: iftarEnabled,
             defaultWakeRule: defaultWakeRule,
+            defaultSuhoorWakeRule: defaultSuhoorWakeRule,
             resolvedWakeRule: resolvedWakeRule,
             wakeRuleWasOverridden: overrideWakeRule != nil,
             dateAlarmOverride: dateAlarmOverride,

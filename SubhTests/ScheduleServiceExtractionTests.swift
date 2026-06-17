@@ -7,6 +7,282 @@ import Testing
 @Suite
 struct ScheduleServiceExtractionTests {
     @Test
+    func defaultWakeRulesExposeExpectedDefaults() {
+        let defaults = DefaultAlarmConfig.default
+
+        #expect(defaults.defaultFajrWakeRule == DefaultWakeRule.defaultFajr)
+        #expect(defaults.defaultSuhoorWakeRule == DefaultWakeRule.defaultSuhoor)
+        #expect(defaults.defaultWakeRule.state == .inFajr)
+        #expect(defaults.defaultWakeRule.anchorType == .fajrEnd)
+        #expect(defaults.defaultWakeRule.deltaMinutes == 30)
+        #expect(defaults.defaultSuhoorMorningWakeRule.state == .preFajr)
+        #expect(defaults.defaultSuhoorMorningWakeRule.anchorType == .fajrStart)
+        #expect(defaults.defaultSuhoorMorningWakeRule.deltaMinutes == 60)
+    }
+
+    @Test
+    func defaultWakeTimesSettingsPresentationUsesWakeAlarmsEntryPoint() {
+        let defaults = DefaultAlarmConfig.default
+        let summary = ProductSurfacePresentation.defaultWakeTimesSummary(for: defaults)
+        let publicCopy = [
+            SettingsDestinationGroup.morningRules.title,
+            SettingsDestination.defaultWakeTimes.title,
+            summary
+        ].joined(separator: " ")
+
+        #expect(SettingsDestinationGroup.morningRules.destinations.first == .defaultWakeTimes)
+        #expect(SettingsDestination.defaultWakeTimes.title == "Default Wake Times")
+        #expect(summary == "Fajr 30m before end · Suhoor 60m before start")
+        #expect(!publicCopy.localizedCaseInsensitiveContains("anchor"))
+        #expect(!publicCopy.localizedCaseInsensitiveContains("offset"))
+        #expect(!publicCopy.localizedCaseInsensitiveContains("delta"))
+        #expect(!publicCopy.localizedCaseInsensitiveContains("reserve"))
+        #expect(!publicCopy.localizedCaseInsensitiveContains("guardrail"))
+    }
+
+    @Test
+    func defaultWakeRuleResolverResolvesSupportedRules() throws {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let window = Self.makePrayerWindow(
+            year: 2026,
+            month: 4,
+            day: 10,
+            fajrStartHour: 5,
+            fajrStartMinute: 0,
+            fajrEndHour: 6,
+            fajrEndMinute: 30,
+            timeZone: timeZone
+        )
+
+        let fajrAtStart = DefaultWakeRuleValidator.resolveDefaultWakeTime(
+            rule: DefaultWakeRule(purpose: .fajr, anchor: .fajrStart, direction: .at, offsetMinutes: 0),
+            prayerWindow: window,
+            purpose: .fajr
+        )
+        let fajrAfterStart = DefaultWakeRuleValidator.resolveDefaultWakeTime(
+            rule: DefaultWakeRule(purpose: .fajr, anchor: .fajrStart, direction: .after, offsetMinutes: 15),
+            prayerWindow: window,
+            purpose: .fajr
+        )
+        let fajrBeforeEnd = DefaultWakeRuleValidator.resolveDefaultWakeTime(
+            rule: DefaultWakeRule(purpose: .fajr, anchor: .fajrEnd, direction: .before, offsetMinutes: 30),
+            prayerWindow: window,
+            purpose: .fajr
+        )
+        let suhoorBeforeStart = DefaultWakeRuleValidator.resolveDefaultWakeTime(
+            rule: DefaultWakeRule(purpose: .suhoor, anchor: .fajrStart, direction: .before, offsetMinutes: 60),
+            prayerWindow: window,
+            purpose: .suhoor
+        )
+
+        #expect(fajrAtStart.wakeTime == window.fajrStart)
+        #expect(fajrAfterStart.wakeTime == window.fajrStart.addingTimeInterval(15 * 60))
+        #expect(fajrBeforeEnd.wakeTime == window.fajrEnd?.addingTimeInterval(-30 * 60))
+        #expect(suhoorBeforeStart.wakeTime == window.fajrStart.addingTimeInterval(-60 * 60))
+    }
+
+    @Test
+    func defaultWakeRuleValidationRejectsInvalidCombinationsAndUnsafeFajrValues() {
+        let shortestWindow = 90
+
+        let invalidSuhoor = DefaultWakeRule(
+            purpose: .suhoor,
+            anchor: .fajrEnd,
+            direction: .before,
+            offsetMinutes: 30
+        )
+        let tooLateAfterStart = DefaultWakeRule(
+            purpose: .fajr,
+            anchor: .fajrStart,
+            direction: .after,
+            offsetMinutes: 81
+        )
+        let tooCloseToEnd = DefaultWakeRule(
+            purpose: .fajr,
+            anchor: .fajrEnd,
+            direction: .before,
+            offsetMinutes: 5
+        )
+        let beforeWindow = DefaultWakeRule(
+            purpose: .fajr,
+            anchor: .fajrEnd,
+            direction: .before,
+            offsetMinutes: 91
+        )
+
+        #expect(!DefaultWakeRuleValidator.validate(rule: invalidSuhoor, shortestFajrWindowMinutes: nil).isValid)
+        #expect(!DefaultWakeRuleValidator.validate(rule: tooLateAfterStart, shortestFajrWindowMinutes: shortestWindow).isValid)
+        #expect(!DefaultWakeRuleValidator.validate(rule: tooCloseToEnd, shortestFajrWindowMinutes: shortestWindow).isValid)
+        #expect(!DefaultWakeRuleValidator.validate(rule: beforeWindow, shortestFajrWindowMinutes: shortestWindow).isValid)
+        #expect(DefaultWakeRuleValidator.validate(rule: .defaultFajr, shortestFajrWindowMinutes: shortestWindow).isValid)
+        #expect(DefaultWakeRuleValidator.validate(rule: .defaultSuhoor, shortestFajrWindowMinutes: nil).isValid)
+    }
+
+    @Test
+    func nextTwelveMonthValidationUsesDeterministicPrayerWindows() {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let startDate = Self.makeDate(year: 2026, month: 1, day: 1, timeZone: timeZone)
+        let settings = AppSettings.default
+        let coordinate = CLLocationCoordinate2D(latitude: 43.6532, longitude: -79.3832)
+
+        let result = DefaultWakeRuleValidator.validate(
+            rule: DefaultWakeRule.defaultFajr,
+            startDate: startDate,
+            timeZone: timeZone,
+            coordinate: coordinate,
+            settings: settings,
+            calculator: PrayerTimeCalculator(),
+            horizonDays: 365
+        )
+
+        #expect(result.isValid)
+        #expect(result.shortestFajrWindowMinutes != nil)
+        #expect((result.longestFajrWindowMinutes ?? 0) >= (result.shortestFajrWindowMinutes ?? 0))
+    }
+
+    @Test
+    func compressedFajrWindowCanMoveSavedDefaultToNeedsReview() {
+        let commonDefault = DefaultWakeRule(
+            purpose: .fajr,
+            anchor: .fajrEnd,
+            direction: .before,
+            offsetMinutes: 45
+        )
+
+        #expect(DefaultWakeRuleValidator.validate(rule: commonDefault, shortestFajrWindowMinutes: 90).isValid)
+        let compressed = DefaultWakeRuleValidator.validate(rule: commonDefault, shortestFajrWindowMinutes: 35)
+        #expect(!compressed.isValid)
+        #expect(compressed.safeFallbackRule?.anchor == .fajrEnd)
+        #expect(compressed.safeFallbackRule?.offsetMinutes == 35)
+    }
+
+    @Test
+    func generatedSuhoorPlanConsumesDefaultSuhoorRule() {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let date = Self.makeDate(year: 2026, month: 4, day: 10, timeZone: timeZone)
+        let key = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
+        var defaults = DefaultAlarmConfig.default
+        defaults.defaultSuhoorWakeRule = DefaultWakeRule(
+            purpose: .suhoor,
+            anchor: .fajrStart,
+            direction: .before,
+            offsetMinutes: 90
+        )
+        let config = ActiveDayResolver.effectiveConfig(
+            for: date,
+            settings: .default,
+            defaultConfig: defaults,
+            overridesByDay: [:],
+            additionalDefaultsActive: true,
+            timeZone: timeZone
+        )
+        let defaultPlan = MorningPlan(
+            id: "default-daily",
+            title: "Daily morning plan",
+            kind: .defaultDaily,
+            wakeRule: defaults.defaultWakeRule,
+            wakeAnchorType: defaults.defaultWakeRule.compatibilityWakeAnchorType,
+            wakeDelta: defaults.defaultWakeRule.compatibilityWakeDelta,
+            fixedWakeTimeCompatibilityMinutesFromMidnight: nil,
+            reminderEnabled: true,
+            wakeAlarmEnabled: true,
+            fajrBoundaryNoticeEnabled: true,
+            iftarReminderEnabled: true
+        )
+        let state = MorningPlanState(
+            schemaVersion: 2,
+            activationMode: .dailyActive,
+            defaultDailyPlan: defaultPlan,
+            lastMigrationAt: nil
+        )
+        let tagResult = TagComputationResult(
+            computedPrimaryIntent: .voluntary,
+            computedSecondaryTags: [],
+            secondaryDetails: [:],
+            suppressedSecondaryTags: []
+        )
+
+        let resolution = MorningPlanResolver.resolve(
+            dateKey: key,
+            provenances: [],
+            effectiveConfig: config,
+            tagResult: tagResult,
+            morningPlanState: state
+        )
+
+        #expect(resolution.selectedPlan.kind == .generatedObservance)
+        #expect(resolution.selectedPlan.wakeRule.state == .preFajr)
+        #expect(resolution.selectedPlan.wakeRule.anchorType == .fajrStart)
+        #expect(resolution.selectedPlan.wakeRule.deltaMinutes == 90)
+    }
+
+    @Test
+    func manualWakeOverrideWinsAfterDefaultChange() {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let date = Self.makeDate(year: 2026, month: 4, day: 10, timeZone: timeZone)
+        var override = DailyAlarmOverride(date: date, timeZone: timeZone)
+        override.wakeStateOverride = .fixedWake
+        override.fixedWakeTimeOverrideMinutesFromMidnight = 300
+        override.overrideSource = .alarmDetail
+
+        var firstDefaults = DefaultAlarmConfig.default
+        firstDefaults.defaultFajrWakeRule = DefaultWakeRule.defaultFajr
+        var secondDefaults = DefaultAlarmConfig.default
+        secondDefaults.defaultFajrWakeRule = DefaultWakeRule(
+            purpose: .fajr,
+            anchor: .fajrStart,
+            direction: .at,
+            offsetMinutes: 0
+        )
+
+        let firstConfig = ActiveDayResolver.effectiveConfig(
+            for: date,
+            settings: .default,
+            defaultConfig: firstDefaults,
+            overridesByDay: [override.dateKey: override],
+            additionalDefaultsActive: true,
+            timeZone: timeZone
+        )
+        let secondConfig = ActiveDayResolver.effectiveConfig(
+            for: date,
+            settings: .default,
+            defaultConfig: secondDefaults,
+            overridesByDay: [override.dateKey: override],
+            additionalDefaultsActive: true,
+            timeZone: timeZone
+        )
+
+        #expect(firstConfig.wakeRuleWasOverridden)
+        #expect(secondConfig.wakeRuleWasOverridden)
+        #expect(firstConfig.resolvedWakeRule.fixedWakeTimeMinutesFromMidnight == 300)
+        #expect(secondConfig.resolvedWakeRule.fixedWakeTimeMinutesFromMidnight == 300)
+    }
+
+    @Test
+    @MainActor
+    func protectedWakeSessionIsNotRewrittenByScheduleRefresh() {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let date = Self.makeDate(year: 2026, month: 4, day: 10, timeZone: timeZone)
+        let firstWake = Self.makeDate(year: 2026, month: 4, day: 10, hour: 5, minute: 45, timeZone: timeZone)
+        let secondWake = Self.makeDate(year: 2026, month: 4, day: 10, hour: 5, minute: 15, timeZone: timeZone)
+        let now = Self.makeDate(year: 2026, month: 4, day: 10, hour: 5, minute: 50, timeZone: timeZone)
+        let store = WakeSessionStore(defaults: UserDefaults(suiteName: "SubhTests.ProtectedWakeSession")!, loadPersistedData: false)
+        let firstDraft = Self.makeWakeSessionDraft(date: date, wakeTime: firstWake, timeZone: timeZone)
+        let secondDraft = Self.makeWakeSessionDraft(date: date, wakeTime: secondWake, timeZone: timeZone)
+
+        let session = store.upsertScheduledSession(from: firstDraft, now: firstWake.addingTimeInterval(-3600))
+        _ = store.recordPrimaryAlarmFired(
+            wakeSessionID: session.wakeSessionID,
+            scheduledEventID: session.primaryScheduledEventID,
+            now: now
+        )
+        let preserved = store.upsertScheduledSession(from: secondDraft, now: now)
+
+        #expect(preserved.plannedWakeTime == firstWake)
+        #expect(preserved.status == .primaryAlarmFired)
+    }
+
+    @Test
     @MainActor
     func refreshCoordinatorMergesRequestsUsingLatestReason() async {
         var received: [PendingScheduleRefresh] = []
@@ -662,11 +938,13 @@ struct ScheduleServiceExtractionTests {
     func suhoorWakeAttemptsUseSelectedModeWhileFajrStartNoticeStaysSingleShot() throws {
         let repeatSnapshot = try Self.makeResolvedMorningSnapshot(
             wakeAttemptMode: .repeatUntilAwake,
-            defaultConfig: .legacySuhoorFactoryDefault
+            defaultConfig: Self.suhoorThirtyMinuteDefaultConfig,
+            tagResult: Self.voluntaryFastTagResult
         )
         let singleSnapshot = try Self.makeResolvedMorningSnapshot(
             wakeAttemptMode: .singleAlarmOnly,
-            defaultConfig: .legacySuhoorFactoryDefault
+            defaultConfig: Self.suhoorThirtyMinuteDefaultConfig,
+            tagResult: Self.voluntaryFastTagResult
         )
 
         #expect(repeatSnapshot.resolvedBehaviorProfile.resolvedWakeState == .preFajr)
@@ -815,8 +1093,8 @@ struct ScheduleServiceExtractionTests {
         #expect(log?.records.contains { $0.type == .fajrPrayerConfirmed } == false)
 
         _ = store.upsertScheduledSession(from: draft)
-        #expect(store.session(for: draft.dateKey)?.status == .scheduled)
-        #expect(store.session(for: draft.dateKey)?.quietReason == nil)
+        #expect(store.session(for: draft.dateKey)?.status == .quietMorning)
+        #expect(store.session(for: draft.dateKey)?.quietReason == "test")
     }
 
     @Test
@@ -1679,7 +1957,8 @@ struct ScheduleServiceExtractionTests {
         let activeDay = try Self.makeResolvedSchedulerActiveDay(
             wakeAttemptMode: .repeatUntilAwake,
             date: DateHelpers.startOfDay(Date().addingTimeInterval(2 * 24 * 60 * 60), in: timeZone),
-            defaultConfig: .legacySuhoorFactoryDefault,
+            defaultConfig: Self.suhoorThirtyMinuteDefaultConfig,
+            tagResult: Self.voluntaryFastTagResult,
             timeZone: timeZone
         )
         let wakeEvents = activeDay.scheduledEvents.filter { $0.deliveryKinds.contains(.wake) }
@@ -5088,6 +5367,61 @@ struct ScheduleServiceExtractionTests {
         )
     }
 
+    private static func makePrayerWindow(
+        year: Int,
+        month: Int,
+        day: Int,
+        fajrStartHour: Int,
+        fajrStartMinute: Int,
+        fajrEndHour: Int,
+        fajrEndMinute: Int,
+        timeZone: TimeZone
+    ) -> DailyPrayerWindow {
+        DailyPrayerWindow(
+            date: makeDate(year: year, month: month, day: day, timeZone: timeZone),
+            fajrStart: makeDate(
+                year: year,
+                month: month,
+                day: day,
+                hour: fajrStartHour,
+                minute: fajrStartMinute,
+                timeZone: timeZone
+            ),
+            fajrEnd: makeDate(
+                year: year,
+                month: month,
+                day: day,
+                hour: fajrEndHour,
+                minute: fajrEndMinute,
+                timeZone: timeZone
+            ),
+            maghrib: makeDate(year: year, month: month, day: day, hour: 19, minute: 30, timeZone: timeZone)
+        )
+    }
+
+    private static func makeWakeSessionDraft(
+        date: Date,
+        wakeTime: Date,
+        timeZone: TimeZone
+    ) -> WakeSessionDraft {
+        let dateKey = DateHelpers.dayIdentifier(for: date, timeZone: timeZone)
+        let fajrBegins = DateHelpers.startOfDay(date, in: timeZone).addingTimeInterval(5 * 60 * 60)
+        return WakeSessionDraft(
+            wakeSessionID: "\(dateKey).wake-session",
+            dateKey: dateKey,
+            morningDate: DateHelpers.startOfDay(date, in: timeZone),
+            mode: .fajr,
+            finalThirdStart: nil,
+            fajrBegins: fajrBegins,
+            fajrEnds: fajrBegins.addingTimeInterval(90 * 60),
+            plannedWakeTime: wakeTime,
+            primaryAlarmID: "\(dateKey).wakeAlarm",
+            primaryScheduledEventID: "\(dateKey).wakeAlarm",
+            wakeCheckIDs: ["\(dateKey).wakeCheck.1"],
+            wakeCheckScheduledEventIDs: ["\(dateKey).wakeCheck.1"]
+        )
+    }
+
     private static func weekdayInitial(for date: Date, timeZone: TimeZone) -> String {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = timeZone
@@ -5248,10 +5582,31 @@ struct ScheduleServiceExtractionTests {
         )
     }
 
+    private static var suhoorThirtyMinuteDefaultConfig: DefaultAlarmConfig {
+        var config = DefaultAlarmConfig.default
+        config.defaultSuhoorWakeRule = DefaultWakeRule(
+            purpose: .suhoor,
+            anchor: .fajrStart,
+            direction: .before,
+            offsetMinutes: 30
+        )
+        return config
+    }
+
+    private static var voluntaryFastTagResult: TagComputationResult {
+        TagComputationResult(
+            computedPrimaryIntent: .voluntary,
+            computedSecondaryTags: [],
+            secondaryDetails: [:],
+            suppressedSecondaryTags: []
+        )
+    }
+
     private static func makeResolvedMorningSnapshot(
         wakeAttemptMode: WakeAttemptMode,
         date: Date? = nil,
         defaultConfig: DefaultAlarmConfig = .default,
+        tagResult: TagComputationResult = .empty,
         timeZone: TimeZone = TimeZone(identifier: "America/Toronto") ?? .current
     ) throws -> ResolvedDaySnapshot {
         let day = date ?? makeDate(year: 2026, month: 5, day: 1, timeZone: timeZone)
@@ -5300,7 +5655,7 @@ struct ScheduleServiceExtractionTests {
             dateKey: dateKey,
             provenances: [defaultDailyPlanProvenance()],
             effectiveConfig: effectiveConfig,
-            tagResult: .empty,
+            tagResult: tagResult,
             stateSnapshot: snapshot
         )))
     }
@@ -5309,6 +5664,7 @@ struct ScheduleServiceExtractionTests {
         wakeAttemptMode: WakeAttemptMode,
         date: Date,
         defaultConfig: DefaultAlarmConfig = .default,
+        tagResult: TagComputationResult = .empty,
         timeZone: TimeZone = TimeZone(identifier: "America/Toronto") ?? .current
     ) throws -> ActiveAlarmDay {
         let normalizedDay = DateHelpers.startOfDay(date, in: timeZone)
@@ -5357,7 +5713,7 @@ struct ScheduleServiceExtractionTests {
             dateKey: dateKey,
             provenances: [defaultDailyPlanProvenance()],
             effectiveConfig: effectiveConfig,
-            tagResult: .empty,
+            tagResult: tagResult,
             stateSnapshot: snapshot
         )))
         return LegacyResolvedDayAdapter.makeActiveAlarmDay(
@@ -5366,7 +5722,7 @@ struct ScheduleServiceExtractionTests {
             provenances: [defaultDailyPlanProvenance()],
             isImplicitRamadan: false,
             isExplicitOneOff: false,
-            tagResult: .empty,
+            tagResult: tagResult,
             sourceSummaryText: "Every day",
             settings: settings,
             locationDescription: "Toronto",

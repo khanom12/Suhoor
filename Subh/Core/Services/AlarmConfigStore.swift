@@ -671,6 +671,7 @@ final class AlarmConfigStore: ObservableObject {
         let skipDay = override?.skipDay ?? false
         let dateAlarmOverride = resolvedDateAlarmOverride(from: override)
         let defaultWakeRule = defaults.defaultWakeRule
+        let defaultSuhoorWakeRule = defaults.defaultSuhoorMorningWakeRule
         let overrideWakeRule = override?.resolvedWakeRule(defaults: defaults)
         let resolvedWakeRule = overrideWakeRule ?? defaultWakeRule
 
@@ -732,6 +733,7 @@ final class AlarmConfigStore: ObservableObject {
             fajrEnabled: fajrEnabled,
             iftarEnabled: iftarEnabled,
             defaultWakeRule: defaultWakeRule,
+            defaultSuhoorWakeRule: defaultSuhoorWakeRule,
             resolvedWakeRule: resolvedWakeRule,
             wakeRuleWasOverridden: overrideWakeRule != nil,
             dateAlarmOverride: dateAlarmOverride,

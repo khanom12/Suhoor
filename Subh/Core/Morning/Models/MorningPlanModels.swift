@@ -202,6 +202,153 @@ enum WakeDeltaRelation: String, Codable, CaseIterable, Identifiable, Sendable {
     var id: String { rawValue }
 }
 
+enum DefaultWakeAnchor: String, Codable, CaseIterable, Identifiable, Hashable, Sendable {
+    case fajrStart
+    case fajrEnd
+
+    var id: String { rawValue }
+
+    var wakeAnchorType: WakeAnchorType {
+        switch self {
+        case .fajrStart:
+            return .fajrStart
+        case .fajrEnd:
+            return .fajrEnd
+        }
+    }
+
+    var displayName: String {
+        switch self {
+        case .fajrStart:
+            return "Fajr begins"
+        case .fajrEnd:
+            return "Fajr ends"
+        }
+    }
+}
+
+enum DefaultWakeOffsetDirection: String, Codable, Equatable, Hashable, Sendable {
+    case before
+    case at
+    case after
+}
+
+struct DefaultWakeRule: Codable, Equatable, Hashable, Sendable {
+    var purpose: WakePurpose
+    var anchor: DefaultWakeAnchor
+    var direction: DefaultWakeOffsetDirection
+    var offsetMinutes: Int
+
+    init(
+        purpose: WakePurpose,
+        anchor: DefaultWakeAnchor,
+        direction: DefaultWakeOffsetDirection,
+        offsetMinutes: Int
+    ) {
+        self.purpose = purpose
+        self.anchor = anchor
+        self.direction = direction
+        self.offsetMinutes = max(0, offsetMinutes)
+    }
+
+    static let defaultFajr = DefaultWakeRule(
+        purpose: .fajr,
+        anchor: .fajrEnd,
+        direction: .before,
+        offsetMinutes: 30
+    )
+
+    static let defaultSuhoor = DefaultWakeRule(
+        purpose: .suhoor,
+        anchor: .fajrStart,
+        direction: .before,
+        offsetMinutes: 60
+    )
+
+    var morningWakeRule: MorningWakeRule? {
+        switch (purpose, anchor, direction) {
+        case (.fajr, .fajrStart, .at), (.fajr, .fajrStart, .after):
+            return MorningWakeRule(
+                state: .inFajr,
+                anchorType: .fajrStart,
+                deltaMinutes: direction == .at ? 0 : offsetMinutes
+            )
+        case (.fajr, .fajrEnd, .before):
+            return MorningWakeRule(
+                state: .inFajr,
+                anchorType: .fajrEnd,
+                deltaMinutes: offsetMinutes
+            )
+        case (.suhoor, .fajrStart, .before):
+            return MorningWakeRule(
+                state: .preFajr,
+                anchorType: .fajrStart,
+                deltaMinutes: offsetMinutes
+            )
+        default:
+            return nil
+        }
+    }
+
+    init?(purpose: WakePurpose, wakeRule: MorningWakeRule) {
+        switch (purpose, wakeRule.state, wakeRule.anchorType ?? .fajrStart) {
+        case (.fajr, .inFajr, .fajrStart):
+            self.init(
+                purpose: .fajr,
+                anchor: .fajrStart,
+                direction: wakeRule.deltaMinutes == 0 ? .at : .after,
+                offsetMinutes: wakeRule.deltaMinutes
+            )
+        case (.fajr, .inFajr, .fajrEnd):
+            self.init(
+                purpose: .fajr,
+                anchor: .fajrEnd,
+                direction: .before,
+                offsetMinutes: wakeRule.deltaMinutes
+            )
+        case (.suhoor, .preFajr, .fajrStart):
+            self.init(
+                purpose: .suhoor,
+                anchor: .fajrStart,
+                direction: .before,
+                offsetMinutes: wakeRule.deltaMinutes
+            )
+        default:
+            return nil
+        }
+    }
+
+    var conciseSummary: String {
+        switch (purpose, anchor, direction, offsetMinutes) {
+        case (.fajr, .fajrStart, .at, _):
+            return "Fajr at start"
+        case (.fajr, .fajrStart, .after, let minutes):
+            return "Fajr \(minutes)m after start"
+        case (.fajr, .fajrEnd, .before, let minutes):
+            return "Fajr \(minutes)m before end"
+        case (.suhoor, .fajrStart, .before, let minutes):
+            return "Suhoor \(minutes)m before start"
+        default:
+            return "Needs review"
+        }
+    }
+
+    var optionText: String {
+        switch (purpose, anchor, direction, offsetMinutes) {
+        case (.fajr, .fajrStart, .at, _):
+            return "At Fajr begins"
+        case (.fajr, .fajrStart, .after, let minutes):
+            return "\(minutes) minutes after Fajr begins"
+        case (.fajr, .fajrEnd, .before, let minutes):
+            return "\(minutes) minutes before Fajr ends"
+        case (.suhoor, .fajrStart, .before, let minutes):
+            return "\(minutes) minutes before Fajr begins"
+        default:
+            return "Needs review"
+        }
+    }
+}
+
 struct WakeDelta: Codable, Equatable, Hashable, Sendable {
     let relation: WakeDeltaRelation
     let minutes: Int

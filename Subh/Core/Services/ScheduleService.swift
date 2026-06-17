@@ -2395,6 +2395,83 @@ final class ScheduleManager: ObservableObject {
         )
     }
 
+    func defaultWakeValidation(
+        for rule: DefaultWakeRule,
+        timeZone: TimeZone = .current
+    ) -> DefaultWakeRuleValidationResult? {
+        if rule.purpose == .suhoor {
+            return DefaultWakeRuleValidator.validate(rule: rule, shortestFajrWindowMinutes: nil)
+        }
+        guard let coordinate = currentCoordinate() else { return nil }
+        return DefaultWakeRuleValidator.validate(
+            rule: rule,
+            startDate: timeProvider.now(),
+            timeZone: timeZone,
+            coordinate: coordinate,
+            settings: settingsStore.settings,
+            calculator: calculator
+        )
+    }
+
+    func updateDefaultWakeTimes(
+        fajrRule: DefaultWakeRule,
+        suhoorRule: DefaultWakeRule,
+        timeZone: TimeZone = .current
+    ) async -> Bool {
+        guard DefaultWakeRuleValidator.validate(rule: suhoorRule, shortestFajrWindowMinutes: nil).isValid else {
+            return false
+        }
+        if let fajrValidation = defaultWakeValidation(for: fajrRule, timeZone: timeZone),
+           !fajrValidation.isValid {
+            return false
+        }
+
+        freezeProtectedDefaultBasedMorningsBeforeDefaultChange(timeZone: timeZone)
+        alarmConfigStore.defaults.applyDefaultWakeRule(fajrRule)
+        alarmConfigStore.defaults.applyDefaultWakeRule(suhoorRule)
+        await refreshSchedules(force: true, reason: .settingsChanged)
+        return true
+    }
+
+    private func freezeProtectedDefaultBasedMorningsBeforeDefaultChange(timeZone: TimeZone) {
+        let now = timeProvider.now()
+        for day in activeWindowSnapshot.visibleDays {
+            guard shouldFreezeBeforeDefaultWakeChange(day, now: now, timeZone: timeZone) else { continue }
+            alarmConfigStore.updateOverride(for: day.date, timeZone: timeZone) { override in
+                MorningDateIntentReducer.commitWakeAdjustment(
+                    minutesFromMidnight: DateHelpers.minutesFromMidnight(for: day.schedule.wakeDate, timeZone: timeZone),
+                    override: &override,
+                    now: now
+                )
+                override.overrideSource = .migration
+                override.notes = "Preserved existing wake time during default wake time change."
+            }
+        }
+    }
+
+    private func shouldFreezeBeforeDefaultWakeChange(
+        _ day: ActiveAlarmDay,
+        now: Date,
+        timeZone: TimeZone
+    ) -> Bool {
+        if day.effectiveConfig.wakeRuleWasOverridden || day.effectiveConfig.hasOverrides {
+            return false
+        }
+        if day.date < DateHelpers.startOfToday(in: timeZone, now: now) {
+            return false
+        }
+        guard let session = wakeSessionStore.session(for: day.dateKey) else {
+            return false
+        }
+        if session.status != .scheduled {
+            return true
+        }
+        if !session.firedScheduledEventIDs.isEmpty || !session.stoppedScheduledEventIDs.isEmpty {
+            return true
+        }
+        return session.plannedWakeTime <= now
+    }
+
     func scheduleTomorrowActivation() async -> ActivationScheduleResult {
         let timeZone = TimeZone.current
         let tomorrow = DateHelpers.startOfTomorrow(in: timeZone, now: timeProvider.now())

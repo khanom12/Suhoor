@@ -44,6 +44,7 @@ enum MorningPlanResolver {
                 title: "Qada day",
                 kind: .qadaAssignment,
                 defaultPlan: defaultPlan,
+                effectiveConfig: effectiveConfig,
                 enablesIftar: true
             )
             candidates.insert(.init(id: qadaPlan.id, title: qadaPlan.title, kind: qadaPlan.kind), at: 0)
@@ -61,6 +62,7 @@ enum MorningPlanResolver {
                 title: "\(tagResult.computedPrimaryIntent.shortTitle) fast",
                 kind: .generatedObservance,
                 defaultPlan: defaultPlan,
+                effectiveConfig: effectiveConfig,
                 enablesIftar: true
             )
             candidates.insert(.init(id: fastPlan.id, title: fastPlan.title, kind: fastPlan.kind), at: 0)
@@ -115,25 +117,17 @@ enum MorningPlanResolver {
         title: String,
         kind: MorningPlanKind,
         defaultPlan: MorningPlan,
+        effectiveConfig: EffectiveDailyConfig,
         enablesIftar: Bool
     ) -> MorningPlan {
-        let wakeRule = MorningWakeRule(
-            state: .preFajr,
-            anchorType: .fajrStart,
-            deltaMinutes: WakeStateSelectionResolver.defaultSuhoorDeltaMinutes,
-            latestWakeCapMinutesFromMidnight: defaultPlan.wakeRule.latestWakeCapMinutesFromMidnight,
-            bypassLatestWakeCap: true
-        )
+        let wakeRule = effectiveConfig.defaultSuhoorWakeRule
         return MorningPlan(
             id: "\(idPrefix)-\(dateKey)",
             title: title,
             kind: kind,
             wakeRule: wakeRule,
-            wakeAnchorType: .fajrStart,
-            wakeDelta: WakeDelta(
-                relation: .before,
-                minutes: WakeStateSelectionResolver.defaultSuhoorDeltaMinutes
-            ),
+            wakeAnchorType: wakeRule.compatibilityWakeAnchorType,
+            wakeDelta: wakeRule.compatibilityWakeDelta,
             fixedWakeTimeCompatibilityMinutesFromMidnight: nil,
             reminderEnabled: defaultPlan.reminderEnabled,
             wakeAlarmEnabled: defaultPlan.wakeAlarmEnabled,

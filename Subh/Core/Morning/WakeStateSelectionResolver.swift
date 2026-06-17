@@ -2,7 +2,7 @@ import Foundation
 
 enum WakeStateSelectionResolver {
     static let defaultFajrDeltaMinutes = 30
-    static let defaultSuhoorDeltaMinutes = 30
+    static let defaultSuhoorDeltaMinutes = 60
 
     static func selectedMode(for day: ActiveAlarmDay) -> QuickWakeMode {
         if let explicitMode = day.effectiveConfig.quickWakeModeOverride {

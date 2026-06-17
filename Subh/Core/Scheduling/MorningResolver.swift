@@ -21,6 +21,7 @@ struct WakeResolutionResult: Sendable {
 
 enum MorningScheduleResolver {
     static let resolverVersion = 1
+    static let minimumFajrEndSafetyBufferMinutes = 10
 
     static func resolve(
         input: MorningScheduleResolutionInput,
@@ -291,18 +292,23 @@ enum MorningScheduleResolver {
                 ?? anchor.date
         }
 
-        let candidateState = classifyWakeState(candidateWakeTime, prayerWindow: prayerWindow)
+        let guardedCandidateWakeTime = applyDefaultFajrSafetyIfNeeded(
+            candidateWakeTime: candidateWakeTime,
+            wakeRule: wakeRule,
+            prayerWindow: prayerWindow
+        )
+        let candidateState = classifyWakeState(guardedCandidateWakeTime, prayerWindow: prayerWindow)
         let latestWakeCapDate = wakeRule.latestWakeCapMinutesFromMidnight
             .map { dateFromMidnight(for: day, minutes: $0, timeZone: timeZone) }
         let finalWakeTime: Date
         let latestWakeCapApplied: Bool
         if wakeRule.usesLatestWakeCap,
            let latestWakeCapDate,
-           latestWakeCapDate < candidateWakeTime {
+           latestWakeCapDate < guardedCandidateWakeTime {
             finalWakeTime = latestWakeCapDate
             latestWakeCapApplied = true
         } else {
-            finalWakeTime = candidateWakeTime
+            finalWakeTime = guardedCandidateWakeTime
             latestWakeCapApplied = false
         }
 
@@ -315,6 +321,28 @@ enum MorningScheduleResolver {
             latestWakeCapApplied: latestWakeCapApplied,
             latestWakeCapShiftedState: candidateState != resolvedWakeState
         )
+    }
+
+    private static func applyDefaultFajrSafetyIfNeeded(
+        candidateWakeTime: Date,
+        wakeRule: MorningWakeRule,
+        prayerWindow: DailyPrayerWindow
+    ) -> Date {
+        guard !wakeRule.bypassLatestWakeCap,
+              wakeRule.state == .inFajr,
+              let fajrEnd = prayerWindow.fajrEnd else {
+            return candidateWakeTime
+        }
+
+        let latestSafeWake = fajrEnd.addingTimeInterval(TimeInterval(-minimumFajrEndSafetyBufferMinutes * 60))
+        let earliestSafeWake = prayerWindow.fajrStart
+        if candidateWakeTime < earliestSafeWake {
+            return earliestSafeWake
+        }
+        if candidateWakeTime > latestSafeWake {
+            return latestSafeWake
+        }
+        return candidateWakeTime
     }
 
     private static func resolveWakeDelta(anchor: WakeAnchor, wakeTime: Date) -> WakeDelta {
@@ -660,21 +688,130 @@ enum MorningScheduleResolver {
     }
 }
 
+struct DefaultWakeResolution: Equatable, Sendable {
+    let wakeTime: Date?
+    let isValid: Bool
+    let summary: String
+    let reason: String?
+    let adjustedWakeTime: Date?
+}
+
 struct DefaultWakeRuleValidationResult: Equatable, Sendable {
     let isValid: Bool
     let firstInvalidDateKey: String?
     let message: String?
     let capPulledIntoPreFajrCount: Int
+    let shortestFajrWindowMinutes: Int?
+    let longestFajrWindowMinutes: Int?
+    let safeFallbackRule: DefaultWakeRule?
 
     static let valid = DefaultWakeRuleValidationResult(
         isValid: true,
         firstInvalidDateKey: nil,
         message: nil,
-        capPulledIntoPreFajrCount: 0
+        capPulledIntoPreFajrCount: 0,
+        shortestFajrWindowMinutes: nil,
+        longestFajrWindowMinutes: nil,
+        safeFallbackRule: nil
     )
 }
 
 enum DefaultWakeRuleValidator {
+    static let minimumFajrEndSafetyBufferMinutes = MorningScheduleResolver.minimumFajrEndSafetyBufferMinutes
+
+    static func resolveDefaultWakeTime(
+        rule: DefaultWakeRule,
+        prayerWindow: DailyPrayerWindow,
+        purpose: WakePurpose
+    ) -> DefaultWakeResolution {
+        let validation = validate(rule: rule, shortestFajrWindowMinutes: fajrWindowMinutes(prayerWindow))
+        guard rule.purpose == purpose, validation.isValid else {
+            return DefaultWakeResolution(
+                wakeTime: nil,
+                isValid: false,
+                summary: rule.optionText,
+                reason: validation.message ?? "This wake time needs review.",
+                adjustedWakeTime: nil
+            )
+        }
+
+        let wakeTime: Date?
+        switch (purpose, rule.anchor, rule.direction) {
+        case (.fajr, .fajrStart, .at):
+            wakeTime = prayerWindow.fajrStart
+        case (.fajr, .fajrStart, .after):
+            wakeTime = Calendar.current.date(byAdding: .minute, value: rule.offsetMinutes, to: prayerWindow.fajrStart)
+        case (.fajr, .fajrEnd, .before):
+            wakeTime = prayerWindow.fajrEnd.flatMap {
+                Calendar.current.date(byAdding: .minute, value: -rule.offsetMinutes, to: $0)
+            }
+        case (.suhoor, .fajrStart, .before):
+            wakeTime = Calendar.current.date(byAdding: .minute, value: -rule.offsetMinutes, to: prayerWindow.fajrStart)
+        default:
+            wakeTime = nil
+        }
+
+        return DefaultWakeResolution(
+            wakeTime: wakeTime,
+            isValid: wakeTime != nil,
+            summary: rule.optionText,
+            reason: wakeTime == nil ? "Prayer times were unavailable for this day." : nil,
+            adjustedWakeTime: nil
+        )
+    }
+
+    static func validate(
+        rule: DefaultWakeRule,
+        shortestFajrWindowMinutes: Int?
+    ) -> DefaultWakeRuleValidationResult {
+        guard rule.morningWakeRule != nil else {
+            return invalid(message: invalidCombinationMessage(for: rule), fallback: fallbackRule(for: rule, shortestWindow: shortestFajrWindowMinutes))
+        }
+
+        switch (rule.purpose, rule.anchor, rule.direction) {
+        case (.fajr, .fajrStart, .at):
+            guard let shortestFajrWindowMinutes else { return .valid }
+            return shortestFajrWindowMinutes >= minimumFajrEndSafetyBufferMinutes
+                ? .valid
+                : invalid(
+                    message: "Your Fajr wake default needs review.",
+                    fallback: fallbackRule(for: rule, shortestWindow: shortestFajrWindowMinutes)
+                )
+        case (.fajr, .fajrStart, .after):
+            guard let shortestFajrWindowMinutes else { return .valid }
+            let maxAfterStart = shortestFajrWindowMinutes - minimumFajrEndSafetyBufferMinutes
+            guard rule.offsetMinutes <= maxAfterStart else {
+                return invalid(
+                    message: "Your current Fajr times create a shorter Fajr window on some days.",
+                    fallback: fallbackRule(for: rule, shortestWindow: shortestFajrWindowMinutes)
+                )
+            }
+            return .valid
+        case (.fajr, .fajrEnd, .before):
+            guard let shortestFajrWindowMinutes else { return .valid }
+            guard rule.offsetMinutes >= minimumFajrEndSafetyBufferMinutes else {
+                return invalid(
+                    message: "Keep at least 10 minutes before Fajr ends.",
+                    fallback: fallbackRule(for: rule, shortestWindow: shortestFajrWindowMinutes)
+                )
+            }
+            guard rule.offsetMinutes <= shortestFajrWindowMinutes else {
+                return invalid(
+                    message: "Your current Fajr times create a shorter Fajr window on some days.",
+                    fallback: fallbackRule(for: rule, shortestWindow: shortestFajrWindowMinutes)
+                )
+            }
+            return .valid
+        case (.suhoor, .fajrStart, .before):
+            guard rule.offsetMinutes > 0 else {
+                return invalid(message: "Choose a time before Fajr begins.", fallback: .defaultSuhoor)
+            }
+            return .valid
+        default:
+            return invalid(message: invalidCombinationMessage(for: rule), fallback: fallbackRule(for: rule, shortestWindow: shortestFajrWindowMinutes))
+        }
+    }
+
     static func validate(
         startDate: Date,
         timeZone: TimeZone,
@@ -684,24 +821,35 @@ enum DefaultWakeRuleValidator {
         calculator: PrayerTimeCalculator = PrayerTimeCalculator(),
         horizonDays: Int = 365
     ) -> DefaultWakeRuleValidationResult {
+        return validate(
+            rule: defaultConfig.defaultFajrWakeRule,
+            startDate: startDate,
+            timeZone: timeZone,
+            coordinate: coordinate,
+            settings: settings,
+            calculator: calculator,
+            horizonDays: horizonDays
+        )
+    }
+
+    static func validate(
+        rule: DefaultWakeRule,
+        startDate: Date,
+        timeZone: TimeZone,
+        coordinate: CLLocationCoordinate2D,
+        settings: AppSettings,
+        calculator: PrayerTimeCalculator = PrayerTimeCalculator(),
+        horizonDays: Int = 365
+    ) -> DefaultWakeRuleValidationResult {
+        if rule.purpose == .suhoor {
+            return validate(rule: rule, shortestFajrWindowMinutes: nil)
+        }
+
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = timeZone
         let normalizedStart = calendar.startOfDay(for: startDate)
-        var capPulledIntoPreFajrCount = 0
-        let defaultWakeRule = defaultConfig.defaultWakeRule
-        let validationPlan = MorningPlan(
-            id: "validator",
-            title: "Validator plan",
-            kind: .defaultDaily,
-            wakeRule: defaultWakeRule,
-            wakeAnchorType: defaultWakeRule.compatibilityWakeAnchorType,
-            wakeDelta: defaultWakeRule.compatibilityWakeDelta,
-            fixedWakeTimeCompatibilityMinutesFromMidnight: defaultWakeRule.fixedWakeTimeMinutesFromMidnight,
-            reminderEnabled: defaultConfig.reminderEnabledDefault,
-            wakeAlarmEnabled: defaultConfig.suhoorEnabledDefault,
-            fajrBoundaryNoticeEnabled: defaultConfig.fajrEnabledDefault,
-            iftarReminderEnabled: defaultConfig.iftarEnabledDefault
-        )
+        var shortestWindow: Int?
+        var longestWindow: Int?
 
         for dayOffset in 0..<max(1, horizonDays) {
             guard let day = calendar.date(byAdding: .day, value: dayOffset, to: normalizedStart) else {
@@ -719,79 +867,96 @@ enum DefaultWakeRuleValidator {
                     isValid: false,
                     firstInvalidDateKey: key,
                     message: "Prayer times were unavailable for \(key).",
-                    capPulledIntoPreFajrCount: capPulledIntoPreFajrCount
+                    capPulledIntoPreFajrCount: 0,
+                    shortestFajrWindowMinutes: shortestWindow,
+                    longestFajrWindowMinutes: longestWindow,
+                    safeFallbackRule: fallbackRule(for: rule, shortestWindow: shortestWindow)
                 )
             }
-
-            let wakeAnchor = MorningScheduleResolver.resolveWakeAnchor(
-                prayerWindow: prayerWindow,
-                day: day,
-                wakeRule: defaultWakeRule,
-                timeZone: timeZone
-            )
-            let wakeResolution = MorningScheduleResolver.resolveWakeTime(
-                day: day,
-                prayerWindow: prayerWindow,
-                anchor: wakeAnchor,
-                selectedPlan: validationPlan,
-                timeZone: timeZone
-            )
-
-            if wakeResolution.latestWakeCapApplied,
-               wakeResolution.resolvedWakeState == .preFajr,
-               defaultConfig.defaultWakeState == .inFajr {
-                capPulledIntoPreFajrCount += 1
-            }
-
-            let key = DateHelpers.dayIdentifier(for: day, timeZone: timeZone)
-            let fajrEnd = prayerWindow.fajrEnd ?? prayerWindow.fajrStart
-
-            switch defaultWakeRule.state {
-            case .preFajr:
-                if wakeResolution.candidateWakeTime >= prayerWindow.fajrStart {
-                    return DefaultWakeRuleValidationResult(
-                        isValid: false,
-                        firstInvalidDateKey: key,
-                        message: "Suhoor defaults must resolve before Fajr starts.",
-                        capPulledIntoPreFajrCount: capPulledIntoPreFajrCount
-                    )
-                }
-            case .inFajr:
-                if defaultWakeRule.anchorType == .fajrEnd {
-                    if wakeResolution.candidateWakeTime < prayerWindow.fajrStart {
-                        return DefaultWakeRuleValidationResult(
-                            isValid: false,
-                            firstInvalidDateKey: key,
-                            message: "End-anchored in-Fajr wakes must stay inside the raw Fajr window.",
-                            capPulledIntoPreFajrCount: capPulledIntoPreFajrCount
-                        )
-                    }
-                } else {
-                    let reserveCutoff = fajrEnd.addingTimeInterval(TimeInterval(-settings.clampedReserveBeforeEndMinutes * 60))
-                    if wakeResolution.candidateWakeTime > reserveCutoff {
-                        return DefaultWakeRuleValidationResult(
-                            isValid: false,
-                            firstInvalidDateKey: key,
-                            message: "Start-anchored in-Fajr wakes must preserve the reserve before Fajr ends.",
-                            capPulledIntoPreFajrCount: capPulledIntoPreFajrCount
-                        )
-                    }
-                }
-            case .postFajr, .fixedWake:
+            guard let window = fajrWindowMinutes(prayerWindow) else {
+                let key = DateHelpers.dayIdentifier(for: day, timeZone: timeZone)
                 return DefaultWakeRuleValidationResult(
                     isValid: false,
                     firstInvalidDateKey: key,
-                    message: "Defaults may only use Suhoor or In-Fajr wake states.",
-                    capPulledIntoPreFajrCount: capPulledIntoPreFajrCount
+                    message: "Your Fajr wake default needs review.",
+                    capPulledIntoPreFajrCount: 0,
+                    shortestFajrWindowMinutes: shortestWindow,
+                    longestFajrWindowMinutes: longestWindow,
+                    safeFallbackRule: fallbackRule(for: rule, shortestWindow: shortestWindow)
+                )
+            }
+            shortestWindow = min(shortestWindow ?? window, window)
+            longestWindow = max(longestWindow ?? window, window)
+        }
+
+        var result = validate(rule: rule, shortestFajrWindowMinutes: shortestWindow)
+        result = DefaultWakeRuleValidationResult(
+            isValid: result.isValid,
+            firstInvalidDateKey: result.isValid ? nil : DateHelpers.dayIdentifier(for: normalizedStart, timeZone: timeZone),
+            message: result.message,
+            capPulledIntoPreFajrCount: result.capPulledIntoPreFajrCount,
+            shortestFajrWindowMinutes: shortestWindow,
+            longestFajrWindowMinutes: longestWindow,
+            safeFallbackRule: result.safeFallbackRule
+        )
+        return result
+    }
+
+    static func fajrWindowMinutes(_ prayerWindow: DailyPrayerWindow) -> Int? {
+        guard let fajrEnd = prayerWindow.fajrEnd else { return nil }
+        return max(0, Int(round(fajrEnd.timeIntervalSince(prayerWindow.fajrStart) / 60)))
+    }
+
+    private static func invalid(
+        message: String,
+        fallback: DefaultWakeRule?
+    ) -> DefaultWakeRuleValidationResult {
+        DefaultWakeRuleValidationResult(
+            isValid: false,
+            firstInvalidDateKey: nil,
+            message: message,
+            capPulledIntoPreFajrCount: 0,
+            shortestFajrWindowMinutes: nil,
+            longestFajrWindowMinutes: nil,
+            safeFallbackRule: fallback
+        )
+    }
+
+    private static func invalidCombinationMessage(for rule: DefaultWakeRule) -> String {
+        switch rule.purpose {
+        case .fajr:
+            return "Choose a Fajr wake time that stays within the Fajr window."
+        case .suhoor:
+            return "Suhoor wake times must be before Fajr begins."
+        }
+    }
+
+    private static func fallbackRule(
+        for rule: DefaultWakeRule,
+        shortestWindow: Int?
+    ) -> DefaultWakeRule? {
+        switch rule.purpose {
+        case .suhoor:
+            return .defaultSuhoor
+        case .fajr:
+            guard let shortestWindow else { return .defaultFajr }
+            switch rule.anchor {
+            case .fajrStart:
+                let safeAfterStart = max(0, shortestWindow - minimumFajrEndSafetyBufferMinutes)
+                return DefaultWakeRule(
+                    purpose: .fajr,
+                    anchor: .fajrStart,
+                    direction: safeAfterStart == 0 ? .at : .after,
+                    offsetMinutes: min(rule.offsetMinutes, safeAfterStart)
+                )
+            case .fajrEnd:
+                return DefaultWakeRule(
+                    purpose: .fajr,
+                    anchor: .fajrEnd,
+                    direction: .before,
+                    offsetMinutes: min(max(rule.offsetMinutes, minimumFajrEndSafetyBufferMinutes), shortestWindow)
                 )
             }
         }
-
-        return DefaultWakeRuleValidationResult(
-            isValid: true,
-            firstInvalidDateKey: nil,
-            message: nil,
-            capPulledIntoPreFajrCount: capPulledIntoPreFajrCount
-        )
     }
 }
