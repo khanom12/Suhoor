@@ -2428,27 +2428,22 @@ final class ScheduleManager: ObservableObject {
             )
         }
 
+        guard let dayToSchedule = activeWindowSnapshot.byDateKey[result.schedule.id]
+            ?? activeDayResolver.buildActiveDayIfNeeded(
+                for: tomorrow,
+                timeZone: timeZone,
+                preferCached: false
+            )
+        else {
+            return ActivationScheduleResult(
+                success: false,
+                message: "Wake preview unavailable. Check location.",
+                schedule: result.schedule
+            )
+        }
+
         let scheduled = await alarmScheduler.scheduleDay(
-            day: activeWindowSnapshot.byDateKey[result.schedule.id]
-                ?? ActiveAlarmDay(
-                    date: result.schedule.date,
-                    dateKey: result.schedule.id,
-                    schedule: result.schedule,
-                    effectiveConfig: result.config,
-                    provenances: [],
-                    isImplicitRamadan: false,
-                    isExplicitOneOff: false,
-                    tagResult: .empty,
-                    primaryDisplay: result.config.primaryDisplay(schedule: result.schedule),
-                    sourceSummaryText: "",
-                    resolvedDayContext: .standard,
-                    scheduledEvents: RuleDecisionLog.compatibilityFallback(
-                        dateKey: result.schedule.id,
-                        schedule: result.schedule,
-                        resolvedDayContext: .standard,
-                        primaryDisplay: result.config.primaryDisplay(schedule: result.schedule)
-                    ).materializedEvents
-                ),
+            day: dayToSchedule,
             settings: settingsStore.settings,
             canUseAlarmKit: canUseAlarmKit
         )
@@ -3524,27 +3519,10 @@ final class ScheduleManager: ObservableObject {
         if let existing = activeWindowSnapshot.byDateKey[key] {
             return existing
         }
-        guard let result = activeDayResolver.scheduleAndConfig(for: date, builder: dayScheduleBuilder, timeZone: timeZone) else {
-            return nil
-        }
-        return ActiveAlarmDay(
-            date: result.schedule.date,
-            dateKey: result.schedule.id,
-            schedule: result.schedule,
-            effectiveConfig: result.config,
-            provenances: [],
-            isImplicitRamadan: false,
-            isExplicitOneOff: false,
-            tagResult: .empty,
-            primaryDisplay: result.config.primaryDisplay(schedule: result.schedule),
-            sourceSummaryText: "",
-            resolvedDayContext: .standard,
-            scheduledEvents: RuleDecisionLog.compatibilityFallback(
-                dateKey: result.schedule.id,
-                schedule: result.schedule,
-                resolvedDayContext: .standard,
-                primaryDisplay: result.config.primaryDisplay(schedule: result.schedule)
-            ).materializedEvents
+        return activeDayResolver.buildActiveDayIfNeeded(
+            for: date,
+            timeZone: timeZone,
+            preferCached: false
         )
     }
 

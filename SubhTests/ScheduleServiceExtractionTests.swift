@@ -1567,6 +1567,196 @@ struct ScheduleServiceExtractionTests {
     }
 
     @Test
+    @MainActor
+    func alarmSchedulerSchedulesEveryRepeatFajrWakeAttemptThroughNotifications() async throws {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        var defaultConfig = DefaultAlarmConfig.default
+        defaultConfig.defaultWakeDeltaMinutes = 45
+        let activeDay = try Self.makeResolvedSchedulerActiveDay(
+            wakeAttemptMode: .repeatUntilAwake,
+            date: DateHelpers.startOfDay(Date().addingTimeInterval(2 * 24 * 60 * 60), in: timeZone),
+            defaultConfig: defaultConfig,
+            timeZone: timeZone
+        )
+        let wakeEvents = activeDay.scheduledEvents.filter { $0.deliveryKinds.contains(.wake) }
+        let routineScheduler = RecordingRoutineScheduler()
+        let scheduler = AlarmScheduler(routineScheduler: routineScheduler)
+
+        let scheduled = await scheduler.scheduleDay(
+            day: activeDay,
+            settings: .default,
+            canUseAlarmKit: false
+        )
+        let scheduledWakeEvents = routineScheduler.scheduledEvents.filter { $0.deliveryKinds.contains(.wake) }
+
+        #expect(scheduled)
+        #expect(wakeEvents.count == 9)
+        #expect(wakeEvents.filter { $0.wakeSessionRole == .wakeCheck }.count == 8)
+        #expect(scheduledWakeEvents.map(\.id) == wakeEvents.map(\.id))
+        #expect(routineScheduler.scheduledCanUseAlarmKitByEventID(for: wakeEvents).allSatisfy { $0 == false })
+    }
+
+    @Test
+    @MainActor
+    func alarmSchedulerSchedulesEveryRepeatFajrWakeAttemptThroughAlarmKit() async throws {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let activeDay = try Self.makeResolvedSchedulerActiveDay(
+            wakeAttemptMode: .repeatUntilAwake,
+            date: DateHelpers.startOfDay(Date().addingTimeInterval(2 * 24 * 60 * 60), in: timeZone),
+            timeZone: timeZone
+        )
+        let wakeEvents = activeDay.scheduledEvents.filter { $0.deliveryKinds.contains(.wake) }
+        let routineScheduler = RecordingRoutineScheduler()
+        let scheduler = AlarmScheduler(routineScheduler: routineScheduler)
+
+        let scheduled = await scheduler.scheduleDay(
+            day: activeDay,
+            settings: .default,
+            canUseAlarmKit: true
+        )
+
+        #expect(scheduled)
+        #expect(wakeEvents.count == 6)
+        #expect(wakeEvents.filter { $0.wakeSessionRole == .wakeCheck }.count == 5)
+        #expect(routineScheduler.scheduledEvents.filter { $0.deliveryKinds.contains(.wake) }.map(\.id) == wakeEvents.map(\.id))
+        #expect(routineScheduler.scheduledCanUseAlarmKitByEventID(for: wakeEvents).allSatisfy { $0 == true })
+    }
+
+    @Test
+    @MainActor
+    func alarmSchedulerSchedulesSingleWakeAttemptOnlyWhenConfigured() async throws {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let activeDay = try Self.makeResolvedSchedulerActiveDay(
+            wakeAttemptMode: .singleAlarmOnly,
+            date: DateHelpers.startOfDay(Date().addingTimeInterval(2 * 24 * 60 * 60), in: timeZone),
+            timeZone: timeZone
+        )
+        let wakeEvents = activeDay.scheduledEvents.filter { $0.deliveryKinds.contains(.wake) }
+        let routineScheduler = RecordingRoutineScheduler()
+        let scheduler = AlarmScheduler(routineScheduler: routineScheduler)
+
+        let scheduled = await scheduler.scheduleDay(
+            day: activeDay,
+            settings: .default,
+            canUseAlarmKit: false
+        )
+
+        #expect(scheduled)
+        #expect(wakeEvents.count == 1)
+        #expect(wakeEvents[0].wakeSessionRole == .primaryWake)
+        #expect(routineScheduler.scheduledEvents.filter { $0.deliveryKinds.contains(.wake) }.map(\.id) == wakeEvents.map(\.id))
+    }
+
+    @Test
+    @MainActor
+    func alarmSchedulerMixedModeRoutesEveryRepeatWakeAttemptToAlarmKit() async throws {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let activeDay = try Self.makeResolvedSchedulerActiveDay(
+            wakeAttemptMode: .repeatUntilAwake,
+            date: DateHelpers.startOfDay(Date().addingTimeInterval(2 * 24 * 60 * 60), in: timeZone),
+            timeZone: timeZone
+        )
+        let wakeEvents = activeDay.scheduledEvents.filter { $0.deliveryKinds.contains(.wake) }
+        let routineScheduler = RecordingRoutineScheduler()
+        let scheduler = AlarmScheduler(routineScheduler: routineScheduler)
+
+        let scheduled = await scheduler.scheduleDay(
+            day: activeDay,
+            settings: .default,
+            mode: .mixed
+        )
+
+        #expect(scheduled)
+        #expect(wakeEvents.count == 6)
+        #expect(routineScheduler.scheduledEvents.filter { $0.deliveryKinds.contains(.wake) }.map(\.id) == wakeEvents.map(\.id))
+        #expect(routineScheduler.scheduledCanUseAlarmKitByEventID(for: wakeEvents).allSatisfy { $0 == true })
+    }
+
+    @Test
+    @MainActor
+    func alarmSchedulerSchedulesSuhoorRepeatAttemptsButKeepsFajrStartSingleShot() async throws {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let activeDay = try Self.makeResolvedSchedulerActiveDay(
+            wakeAttemptMode: .repeatUntilAwake,
+            date: DateHelpers.startOfDay(Date().addingTimeInterval(2 * 24 * 60 * 60), in: timeZone),
+            defaultConfig: .legacySuhoorFactoryDefault,
+            timeZone: timeZone
+        )
+        let wakeEvents = activeDay.scheduledEvents.filter { $0.deliveryKinds.contains(.wake) }
+        let boundaryEvents = activeDay.scheduledEvents.filter { $0.deliveryKinds.contains(.boundary) }
+        let routineScheduler = RecordingRoutineScheduler()
+        let scheduler = AlarmScheduler(routineScheduler: routineScheduler)
+
+        let scheduled = await scheduler.scheduleDay(
+            day: activeDay,
+            settings: .default,
+            canUseAlarmKit: false
+        )
+
+        #expect(scheduled)
+        #expect(wakeEvents.count == 6)
+        #expect(wakeEvents.last?.fireDate == activeDay.schedule.fajrDate.addingTimeInterval(-5 * 60))
+        #expect(boundaryEvents.count == 1)
+        #expect(boundaryEvents[0].wakeSessionRole == .checkpoint)
+        #expect(routineScheduler.scheduledEvents.filter { $0.deliveryKinds.contains(.wake) }.map(\.id) == wakeEvents.map(\.id))
+        #expect(routineScheduler.scheduledEvents.filter { $0.deliveryKinds.contains(.boundary) }.count == 1)
+    }
+
+    @Test
+    func expectedDeliveryPlanStorePersistsWakeAttemptSequence() throws {
+        let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
+        let now = Self.makeDate(year: 2026, month: 5, day: 1, hour: 0, timeZone: timeZone)
+        let repeatDay = try Self.makeResolvedSchedulerActiveDay(
+            wakeAttemptMode: .repeatUntilAwake,
+            date: now.addingTimeInterval(2 * 24 * 60 * 60),
+            timeZone: timeZone
+        )
+        let singleDay = try Self.makeResolvedSchedulerActiveDay(
+            wakeAttemptMode: .singleAlarmOnly,
+            date: now.addingTimeInterval(3 * 24 * 60 * 60),
+            timeZone: timeZone
+        )
+        let repeatExpected = DeliveryReconciliation.plan(
+            snapshot: Self.snapshot(for: repeatDay),
+            settings: .default,
+            mode: .notifications,
+            now: now
+        ).expectedDeliveries.filter { $0.deliveryKind == .wake }
+        let singleExpected = DeliveryReconciliation.plan(
+            snapshot: Self.snapshot(for: singleDay),
+            settings: .default,
+            mode: .notifications,
+            now: now
+        ).expectedDeliveries.filter { $0.deliveryKind == .wake }
+        let suiteName = "ScheduleServiceExtractionTests.ExpectedDeliveryPlan.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName) ?? .standard
+        defaults.removePersistentDomain(forName: suiteName)
+        let store = ExpectedDeliveryPlanStore(defaults: defaults)
+
+        store.replace(with:
+            repeatExpected.map { delivery in
+                ExpectedDeliveryRecord(
+                    delivery: delivery,
+                    wakeSessionID: repeatDay.scheduledEvents.first(where: { $0.id == delivery.eventID })?.wakeSessionID,
+                    generatedAt: now
+                )
+            }
+            + singleExpected.map { delivery in
+                ExpectedDeliveryRecord(
+                    delivery: delivery,
+                    wakeSessionID: singleDay.scheduledEvents.first(where: { $0.id == delivery.eventID })?.wakeSessionID,
+                    generatedAt: now
+                )
+            }
+        )
+
+        #expect(repeatExpected.count == 6)
+        #expect(singleExpected.count == 1)
+        #expect(store.records(for: repeatDay.dateKey).filter { $0.deliveryKind == .wake }.map(\.eventID) == repeatExpected.map(\.eventID))
+        #expect(store.records(for: singleDay.dateKey).filter { $0.deliveryKind == .wake }.map(\.eventID) == singleExpected.map(\.eventID))
+    }
+
+    @Test
     func deliveryPlanUsesNotificationsFallbackForActiveFastWhenAlarmKitUnavailable() {
         let timeZone = TimeZone(identifier: "America/Toronto") ?? .current
         let now = Self.makeDate(year: 2026, month: 5, day: 1, hour: 0, timeZone: timeZone)
@@ -4561,6 +4751,7 @@ struct ScheduleServiceExtractionTests {
     private final class RecordingRoutineScheduler: RoutineScheduling {
         var cancelledIdentifierSets: [SchedulingIdentifierSet] = []
         var scheduledEventIdentifiers: [String] = []
+        var scheduledEvents: [ScheduledEvent] = []
         var scheduledCanUseAlarmKit: [Bool] = []
         var scheduledFireDates: [Date] = []
         var cancelledEventIdentifiers: [String] = []
@@ -4576,6 +4767,7 @@ struct ScheduleServiceExtractionTests {
             now: Date
         ) async -> Bool {
             scheduledEventIdentifiers.append(identifier)
+            scheduledEvents.append(event)
             scheduledCanUseAlarmKit.append(canUseAlarmKit)
             scheduledFireDates.append(event.fireDate)
             return true
@@ -4596,6 +4788,15 @@ struct ScheduleServiceExtractionTests {
 
         func cancelAllUpcoming(days: Int) async {
             cancelAllUpcomingDays.append(days)
+        }
+
+        func scheduledCanUseAlarmKitByEventID(for events: [ScheduledEvent]) -> [Bool] {
+            events.compactMap { expectedEvent in
+                guard let index = scheduledEvents.firstIndex(where: { $0.id == expectedEvent.id }) else {
+                    return nil
+                }
+                return scheduledCanUseAlarmKit[index]
+            }
         }
     }
 
@@ -5102,6 +5303,75 @@ struct ScheduleServiceExtractionTests {
             tagResult: .empty,
             stateSnapshot: snapshot
         )))
+    }
+
+    private static func makeResolvedSchedulerActiveDay(
+        wakeAttemptMode: WakeAttemptMode,
+        date: Date,
+        defaultConfig: DefaultAlarmConfig = .default,
+        timeZone: TimeZone = TimeZone(identifier: "America/Toronto") ?? .current
+    ) throws -> ActiveAlarmDay {
+        let normalizedDay = DateHelpers.startOfDay(date, in: timeZone)
+        let dateKey = DateHelpers.dayIdentifier(for: normalizedDay, timeZone: timeZone)
+        var settings = AppSettings.default
+        settings.isConfigured = true
+        settings.wakeAttemptMode = wakeAttemptMode
+        settings.snoozeEnabled = wakeAttemptMode == .repeatUntilAwake
+        settings.snoozeMinutes = 5
+        let suiteName = "ScheduleServiceExtractionTests.ActiveDay.\(wakeAttemptMode.rawValue).\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName) ?? .standard
+        defaults.removePersistentDomain(forName: suiteName)
+        let planStore = MorningPlanStore(
+            defaults: defaults,
+            legacySettings: settings,
+            defaultConfig: defaultConfig
+        )
+        let effectiveConfig = ActiveDayResolver.effectiveConfig(
+            for: normalizedDay,
+            settings: settings,
+            defaultConfig: defaultConfig,
+            overridesByDay: [:],
+            additionalDefaultsActive: true,
+            timeZone: timeZone
+        )
+        let snapshot = MorningStateSnapshot(
+            settings: settings,
+            defaultConfig: defaultConfig,
+            morningPlanState: planStore.state,
+            dateAssignments: [],
+            completionRecords: [],
+            qadaLedgerSnapshot: QadaLedgerSnapshot(
+                trackingStartDateKey: "2026-01-01",
+                baselineOwed: 0,
+                completed: 0,
+                remaining: 0
+            ),
+            coordinate: CLLocationCoordinate2D(latitude: 43.6532, longitude: -79.3832),
+            timeZone: timeZone,
+            locationDescription: "Toronto",
+            fastTagSelections: [:],
+            overridesByDateKey: [:]
+        )
+        let resolvedSnapshot = try #require(MorningScheduleResolver.resolve(input: MorningScheduleResolutionInput(
+            date: normalizedDay,
+            dateKey: dateKey,
+            provenances: [defaultDailyPlanProvenance()],
+            effectiveConfig: effectiveConfig,
+            tagResult: .empty,
+            stateSnapshot: snapshot
+        )))
+        return LegacyResolvedDayAdapter.makeActiveAlarmDay(
+            snapshot: resolvedSnapshot,
+            effectiveConfig: effectiveConfig,
+            provenances: [defaultDailyPlanProvenance()],
+            isImplicitRamadan: false,
+            isExplicitOneOff: false,
+            tagResult: .empty,
+            sourceSummaryText: "Every day",
+            settings: settings,
+            locationDescription: "Toronto",
+            timeZone: timeZone
+        )
     }
 
     private static func nextTenTagTitles(

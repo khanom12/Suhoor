@@ -1885,9 +1885,10 @@ struct ScheduleManagerHijriTests {
             return
         }
         let endWake = manager.activeDay(for: target.date, timeZone: timeZone)?.schedule.wakeDate
+        let latestValidWake = fajrEnd.addingTimeInterval(-5 * 60)
         #expect(endWake ?? .distantPast >= fajrStart)
-        #expect(endWake ?? .distantFuture <= fajrEnd)
-        #expect(endDisplay.detailText == "As Fajr ends")
+        #expect(endWake ?? .distantFuture <= latestValidWake)
+        #expect(endDisplay.detailText == "5 min before Fajr ends")
         #expect(endDisplay.relationTone == .urgentRed)
         #expect(endDisplay.fajrWindowVisualMode == .interactiveWithinFajrWindow)
         #expect(endDisplay.wakeAdjustmentEnabled)
