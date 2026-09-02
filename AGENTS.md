@@ -282,6 +282,8 @@ Work is not done until:
 - Prefer skills for narrow tasks such as time-calculation QA, mobile release checks, analytics review, content audits, or design-system sweeps.
 - Add subdirectory `AGENTS.md` files only when a folder has genuinely local rules.
 - Do not bloat the root file with narrow process detail that belongs in a skill or local instruction file.
+- For substantive Fajr Now website, landing-page, positioning, marketing-copy, or marketing-design work, use `.codex/skills/fajr-landing-page/SKILL.md` as the orchestration workflow. It coordinates the project-scoped `product-marketing`, `customer-research`, `copywriting`, `copy-editing`, `cro`, `marketing-psychology`, and `frontend-design` skills in that order.
+- Claude sessions should enter the same workflow through `.claude/skills/fajr-landing-page/SKILL.md`; the Codex files remain the canonical specialist definitions.
 
 ## PR and review expectations
 PR summaries should usually include:
